@@ -1,0 +1,35 @@
+services:
+  proton:
+    image: d.timeplus.com/timeplus-io/proton:latest
+    container_name: proton
+    ports:
+      - "3218:3218"   # HTTP query API (used by AgentShield)
+      - "8463:8463"   # Native TCP protocol
+    volumes:
+      - proton-data:/var/lib/proton
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3218/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  agentshield:
+    build: .
+    container_name: agentshield
+    ports:
+      - "8080:8080"
+    environment:
+      TIMEPLUS_HOST: proton
+      TIMEPLUS_PORT: 3218
+      TIMEPLUS_USER: default
+      TIMEPLUS_PASSWORD: ""
+      SERVER_PORT: 8080
+    depends_on:
+      proton:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  proton-data:
