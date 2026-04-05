@@ -1,3 +1,5 @@
+import { ndjsonStreamParser } from '@timeplus/proton-javascript-driver'
+
 const BASE = '/api'
 
 async function get(path) {
@@ -42,4 +44,21 @@ export const api = {
   getSettings: () => get('/settings'),
   updateSettings: (data) => put('/settings', data),
   generateConfig: (data) => post('/onboarding/generate', data),
+
+  // Streams rows from Proton/Timeplus via the backend proxy.
+  // Connection config lives server-side (config.yaml / env vars).
+  // Pass an AbortSignal via options.signal to cancel the stream.
+  async *protonQuery(sql, { signal } = {}) {
+    const res = await fetch(`${BASE}/proton/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sql }),
+      signal,
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || `HTTP ${res.status}`)
+    }
+    yield* ndjsonStreamParser(res.body.getReader())
+  },
 }

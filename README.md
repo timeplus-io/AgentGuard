@@ -8,14 +8,32 @@ Built on [Timeplus Proton](https://github.com/timeplus-io/proton) — a streamin
 
 ## Quick Start
 
-### Docker (recommended)
+### Docker Compose (recommended)
+
+Starts AgentShield + Proton together. AgentShield waits for Proton to be healthy before starting.
+
+```bash
+docker compose up --build
+```
+
+Open [http://localhost:8080](http://localhost:8080).
+
+To stop and remove volumes:
+```bash
+docker compose down -v
+```
+
+### Docker (standalone)
+
+Builds a single image with the frontend compiled in. Requires a separately running Proton instance.
 
 ```bash
 docker build -t agentshield .
-docker run -p 8080:8080 agentshield
+docker run -p 8080:8080 \
+  -e TIMEPLUS_HOST=proton.example.com \
+  -e TIMEPLUS_USER=default \
+  agentshield
 ```
-
-Open [http://localhost:8080](http://localhost:8080) — the Go server serves both the API and the compiled frontend.
 
 ### Local Development
 
@@ -40,6 +58,51 @@ Open [http://localhost:5173](http://localhost:5173) — it redirects to `/dashbo
 
 ---
 
+## Configuration
+
+AgentShield is configured via **config file**, **environment variables**, or **CLI flags** (highest precedence wins).
+
+### Config file
+
+Copy `config.yaml` to the working directory (or pass `--config <path>`):
+
+```yaml
+server:
+  port: 8080
+
+timeplus:
+  host: localhost
+  port: 3218
+  user: default
+  password: ""
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `SERVER_PORT` | `8080` | HTTP port the server listens on |
+| `TIMEPLUS_HOST` | `localhost` | Proton/Timeplus hostname |
+| `TIMEPLUS_PORT` | `3218` | Proton HTTP query port |
+| `TIMEPLUS_USER` | `default` | Proton username |
+| `TIMEPLUS_PASSWORD` | _(empty)_ | Proton password |
+
+### CLI flags
+
+```
+./server --help
+
+Flags:
+  --config string             config file path
+  --port int                  server port (default 8080)
+  --timeplus-host string      Proton/Timeplus host (default "localhost")
+  --timeplus-port int         Proton/Timeplus HTTP port (default 3218)
+  --timeplus-user string      Proton username (default "default")
+  --timeplus-password string  Proton password
+```
+
+---
+
 ## Features
 
 | Page | Route | Description |
@@ -50,7 +113,7 @@ Open [http://localhost:5173](http://localhost:5173) — it redirects to `/dashbo
 | Threats | `/threats` | Filterable threat feed by severity and category |
 | Cost Governance | `/cost` | Spend trends, token breakdown, per-model costs, budget policies, anomaly history |
 | Rule Packs | `/rules` | Toggle pre-built detection rules (Prompt Injection Shield, DLP Sentinel, etc.) |
-| Investigate | `/investigate` | Ad-hoc streaming SQL console against agent telemetry streams |
+| Investigate | `/investigate` | Ad-hoc streaming SQL console backed by Proton |
 | Onboarding | `/onboarding` | 4-step wizard to connect an OpenClaw or Claude Code agent |
 | Settings | `/settings` | Organization config, integrations (Slack, PagerDuty), user RBAC |
 
@@ -60,36 +123,38 @@ Open [http://localhost:5173](http://localhost:5173) — it redirects to `/dashbo
 
 ```
 agentshield/
-  backend/        Go/Gin REST API (mock data, port 8080)
-  frontend/       React + Vite SPA (port 5173 in dev)
-  spec/           UI designs (code.html + screen.png per page) and PRD
-  docs/           Design specs and implementation plans
-  Dockerfile      Multi-stage build — frontend + backend in a single image
+  backend/              Go/Gin REST API (port 8080)
+  frontend/             React + Vite SPA (port 5173 in dev)
+  config.yaml           Default configuration file
+  Dockerfile            Multi-stage build — frontend + backend in a single image
+  docker-compose.yaml   Full stack: AgentShield + Proton
 ```
 
 ### Backend
 
 ```
 backend/
-  cmd/server/main.go          Gin router, CORS, route registration
-  internal/models/models.go   All shared struct definitions
-  internal/mock/data.go       In-memory mock data (agents, threats, costs, rules, settings)
-  internal/handlers/          One handler file per resource
+  cmd/server/main.go            Cobra CLI, Viper config, Gin router
+  internal/config/config.go     Config struct loaded from file / env / flags
+  internal/models/models.go     Shared struct definitions
+  internal/mock/data.go         In-memory mock data (agents, threats, costs, rules, settings)
+  internal/handlers/            One handler file per resource
+    proton.go                   Proton query proxy — streams NDJSON to the browser
 ```
 
-The backend currently serves **mock data** — no database or Timeplus connection required. All data lives in package-level vars in `internal/mock/data.go`. Rule pack toggles persist for the server session.
+Mock data is used for all pages except the SQL Console, which proxies queries directly to Proton. The proxy avoids browser CORS restrictions — the frontend sends SQL to `/api/proton/query` and the backend forwards it to Proton using the server-side connection config.
 
 ### Frontend
 
 ```
 frontend/src/
   api/client.js       All fetch calls — pages never call fetch directly
-  components/         Sidebar, TopNav, Footer, Toggle, Badge
+  components/         Sidebar, TopNav, Footer, Toggle, Badge, PageHeader
   pages/              One component per route
   App.jsx             React Router v6 — / redirects to /dashboard
 ```
 
-The Vite dev server proxies `/api/*` to `http://localhost:8080`, so no CORS configuration is needed during development.
+The Vite dev server proxies `/api/*` to `http://localhost:8080`. The SQL Console uses `@timeplus/proton-javascript-driver`'s `ndjsonStreamParser` to consume the streamed response.
 
 ---
 
@@ -106,6 +171,7 @@ The Vite dev server proxies `/api/*` to `http://localhost:8080`, so no CORS conf
 | `POST` | `/api/rules/:id/toggle` | Toggle a rule pack on/off |
 | `GET` | `/api/investigate/tables` | Available stream schemas |
 | `POST` | `/api/investigate/query` | Execute mock SQL query `{"query": "SELECT ..."}` |
+| `POST` | `/api/proton/query` | Proxy streaming SQL to Proton `{"sql": "SELECT ..."}` — returns NDJSON |
 | `GET` | `/api/settings` | Settings |
 | `PUT` | `/api/settings` | Update settings |
 | `POST` | `/api/onboarding/generate` | Generate agent config `{"agent_type": "openclaw"\|"claude_code", "endpoint": "..."}` |
@@ -114,9 +180,11 @@ The Vite dev server proxies `/api/*` to `http://localhost:8080`, so no CORS conf
 
 ## Tech Stack
 
-**Frontend:** React 18, Vite, React Router v6, Tailwind CSS, Recharts, Material Symbols Outlined, Inter
+**Frontend:** React 18, Vite, React Router v6, Tailwind CSS, Recharts, `@timeplus/proton-javascript-driver`, Inter
 
-**Backend:** Go 1.21, Gin, gin-contrib/cors
+**Backend:** Go 1.23, Gin, Cobra, Viper
+
+**Database:** [Timeplus Proton](https://github.com/timeplus-io/proton) (streaming SQL engine)
 
 ---
 

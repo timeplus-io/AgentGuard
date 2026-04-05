@@ -1,0 +1,8 @@
+server:
+  port: 8080
+
+timeplus:
+  host: localhost
+  port: 3218
+  user: default
+  password: ""
