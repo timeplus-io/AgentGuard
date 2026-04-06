@@ -14,8 +14,8 @@ PORT        := 8080
 
 all: build
 
-## build: compile backend + build frontend
-build: backend-build frontend-build
+## build: full production build — frontend → embed → single binary
+build: frontend-build web-sync backend-build
 
 ## dev: start backend and frontend dev servers in parallel
 dev:
@@ -26,13 +26,18 @@ dev:
 
 # ── Backend ──────────────────────────────────────────────────────────────────
 
-## backend-build: compile Go binary (CGO_ENABLED=0 for macOS 26+ compatibility)
+## backend-build: compile Go binary with embedded frontend (CGO_ENABLED=0 for macOS 26+)
 backend-build:
-	cd backend && CGO_ENABLED=0 go build -o server cmd/server/main.go
+	cd backend && CGO_ENABLED=0 go build -tags embed -o server cmd/server/main.go
 
 ## backend-run: build and start the backend server on :8080
 backend-run: backend-build
 	./$(BINARY)
+
+## web-sync: copy frontend build output into the backend embed directory
+web-sync:
+	mkdir -p backend/internal/web/dist
+	cp -r frontend/dist/. backend/internal/web/dist/
 
 ## backend-tidy: sync Go module dependencies
 backend-tidy:
@@ -40,7 +45,7 @@ backend-tidy:
 
 ## backend-check: compile check without producing a binary
 backend-check:
-	cd backend && CGO_ENABLED=0 go build ./...
+	cd backend && CGO_ENABLED=0 go build -tags embed ./...
 
 ## backend-clean: remove compiled binary
 backend-clean:

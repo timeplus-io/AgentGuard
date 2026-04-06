@@ -2,7 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
+	"mime"
+	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -10,6 +15,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/timeplus/agentshield/internal/config"
 	"github.com/timeplus/agentshield/internal/handlers"
+	"github.com/timeplus/agentshield/internal/web"
 )
 
 func main() {
@@ -31,10 +37,9 @@ func newRootCmd() *cobra.Command {
 	flags.Int("port", 8080, "server port")
 	flags.String("timeplus-host", "localhost", "Proton/Timeplus host")
 	flags.Int("timeplus-port", 3218, "Proton/Timeplus HTTP port")
-	flags.String("timeplus-user", "", "Proton/Timeplus username")
+	flags.String("timeplus-user", "default", "Proton/Timeplus username")
 	flags.String("timeplus-password", "", "Proton/Timeplus password")
 
-	// Bind flags → viper keys so Load() sees them
 	viper.BindPFlag("server.port", flags.Lookup("port"))
 	viper.BindPFlag("timeplus.host", flags.Lookup("timeplus-host"))
 	viper.BindPFlag("timeplus.port", flags.Lookup("timeplus-port"))
@@ -55,6 +60,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
+	}
+
+	frontendFS, err := web.FS()
+	if err != nil {
+		return fmt.Errorf("loading frontend assets: %w", err)
 	}
 
 	fmt.Printf("AgentShield starting on :%d\n", cfg.Server.Port)
@@ -85,12 +95,31 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.POST("/proton/query", handlers.ProtonQueryHandler(cfg))
 	}
 
-	// Serve frontend static files
-	r.Static("/assets", "./public/assets")
-	r.Static("/static", "./public/static")
-	r.StaticFile("/favicon.ico", "./public/favicon.ico")
+	// Serve the SPA. Read files directly from the fs.FS to avoid http.FileServer's
+	// directory-traversal checks. Unknown paths fall back to index.html so that
+	// React Router can handle client-side navigation.
 	r.NoRoute(func(c *gin.Context) {
-		c.File("./public/index.html")
+		name := strings.TrimPrefix(c.Request.URL.Path, "/")
+		if name == "" {
+			name = "index.html"
+		}
+
+		data, err := fs.ReadFile(frontendFS, name)
+		if err != nil {
+			// Not a static asset — serve index.html for SPA routing.
+			data, err = fs.ReadFile(frontendFS, "index.html")
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			name = "index.html"
+		}
+
+		mimeType := mime.TypeByExtension(filepath.Ext(name))
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+		c.Data(http.StatusOK, mimeType, data)
 	})
 
 	return r.Run(fmt.Sprintf(":%d", cfg.Server.Port))
