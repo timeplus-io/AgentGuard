@@ -43,6 +43,7 @@ SELECT
     count()                     AS event_count,
     count(DISTINCT session_key) AS session_count
 FROM table(agentshield_hook_events)
+WHERE agent_id != ''
 GROUP BY agent_id, deployment_id, deployment_name
 ORDER BY last_seen DESC`
 
