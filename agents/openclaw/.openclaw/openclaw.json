@@ -245,6 +245,11 @@
     }
   },
   "plugins": {
+    "load": {
+      "paths": [
+        "/home/node/.openclaw/agentshield-plugin"
+      ]
+    },
     "entries": {
       "ollama": {
         "enabled": true
@@ -254,7 +259,6 @@
       },
       "agentshield": {
         "enabled": true,
-        "path": "/home/node/.openclaw/agentshield-plugin/dist/index.js",
         "config": {
           "timeplusUrl": "http://host.docker.internal:3218",
           "stream": "agentshield_hook_events",
