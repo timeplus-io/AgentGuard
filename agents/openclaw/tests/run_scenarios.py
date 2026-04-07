@@ -20,15 +20,13 @@ import time
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 OPENCLAW_URL = "http://localhost:18789"
-TIMEPLUS_URL = "http://localhost:3218"
-TIMEPLUS_USER = "proton"
-TIMEPLUS_PASSWORD = "timeplus@t+"
 
 # Config file is relative to the agents/openclaw/ directory (parent of tests/).
 _CONFIG_FILE = os.path.join(os.path.dirname(__file__), "..", ".openclaw", "openclaw.json")
@@ -51,7 +49,22 @@ def _load_openclaw_token() -> str:
         )
 
 
+def _load_proton_config() -> tuple[str, str, str]:
+    """Read Proton URL, username, and password from openclaw.json plugin config."""
+    config_path = Path(__file__).parent.parent / ".openclaw" / "openclaw.json"
+    with config_path.open() as f:
+        data = json.load(f)
+    plugin_cfg = data["plugins"]["entries"]["agentshield"]["config"]
+    url = plugin_cfg.get("timeplusUrl", "http://localhost:3218")
+    # timeplusUrl uses host.docker.internal inside Docker — remap to localhost for host-side Python
+    url = url.replace("host.docker.internal", "localhost")
+    user = plugin_cfg.get("username", "proton")
+    password = plugin_cfg.get("password", "")
+    return url, user, password
+
+
 OPENCLAW_TOKEN = _load_openclaw_token()
+TIMEPLUS_URL, TIMEPLUS_USER, TIMEPLUS_PASSWORD = _load_proton_config()
 
 FLUSH_WAIT_S = 5       # seconds to wait for agentshield batch flush
 REPLY_TIMEOUT_S = 120  # seconds to wait for OpenClaw to reply
