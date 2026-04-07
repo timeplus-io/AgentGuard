@@ -76,7 +76,9 @@ data["plugins"]["entries"]["agentshield"] = {
         "flushMs": 2000,
         "batchSize": 50,
         "username": "proton",
-        "password": "timeplus@t+"
+        "password": "timeplus@t+",
+        "deploymentId": "local",
+        "deploymentName": "Local Dev"
     }
 }
 
