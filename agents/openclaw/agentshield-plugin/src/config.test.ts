@@ -55,6 +55,18 @@ describe("resolveConfig", () => {
     expect(cfg.batchSize).toBe(10);
   });
 
+  it("treats empty-string AGENTSHIELD_TIMEPLUS_URL as unset, falls back to default", () => {
+    process.env.AGENTSHIELD_TIMEPLUS_URL = "";
+    const cfg = resolveConfig();
+    expect(cfg.timeplusUrl).toBe("http://localhost:3218");
+  });
+
+  it("falls back to default flushMs when env var is not a valid positive number", () => {
+    process.env.AGENTSHIELD_FLUSH_MS = "not-a-number";
+    const cfg = resolveConfig();
+    expect(cfg.flushMs).toBe(2000);
+  });
+
   it("flushMs and batchSize are numbers, not strings", () => {
     process.env.AGENTSHIELD_FLUSH_MS = "3000";
     process.env.AGENTSHIELD_BATCH_SIZE = "25";

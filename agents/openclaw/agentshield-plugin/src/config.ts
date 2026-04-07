@@ -15,24 +15,33 @@ const DEFAULTS: AgentShieldConfig = {
 export function resolveConfig(
   pluginConfig?: Record<string, unknown>,
 ): AgentShieldConfig {
-  return {
-    timeplusUrl:
-      process.env.AGENTSHIELD_TIMEPLUS_URL ??
-      (pluginConfig?.timeplusUrl as string) ??
-      DEFAULTS.timeplusUrl,
-    stream:
-      process.env.AGENTSHIELD_STREAM ??
-      (pluginConfig?.stream as string) ??
-      DEFAULTS.stream,
-    flushMs: Number(
-      process.env.AGENTSHIELD_FLUSH_MS ??
-        pluginConfig?.flushMs ??
-        DEFAULTS.flushMs,
-    ),
-    batchSize: Number(
-      process.env.AGENTSHIELD_BATCH_SIZE ??
-        pluginConfig?.batchSize ??
-        DEFAULTS.batchSize,
-    ),
-  };
+  const timeplusUrl =
+    (process.env.AGENTSHIELD_TIMEPLUS_URL || undefined) ??
+    (pluginConfig?.timeplusUrl as string | undefined) ??
+    DEFAULTS.timeplusUrl;
+
+  const stream =
+    (process.env.AGENTSHIELD_STREAM || undefined) ??
+    (pluginConfig?.stream as string | undefined) ??
+    DEFAULTS.stream;
+
+  const rawFlushMs = Number(
+    (process.env.AGENTSHIELD_FLUSH_MS || undefined) ??
+      pluginConfig?.flushMs ??
+      DEFAULTS.flushMs,
+  );
+  const flushMs =
+    Number.isFinite(rawFlushMs) && rawFlushMs > 0 ? rawFlushMs : DEFAULTS.flushMs;
+
+  const rawBatchSize = Number(
+    (process.env.AGENTSHIELD_BATCH_SIZE || undefined) ??
+      pluginConfig?.batchSize ??
+      DEFAULTS.batchSize,
+  );
+  const batchSize =
+    Number.isFinite(rawBatchSize) && rawBatchSize > 0
+      ? rawBatchSize
+      : DEFAULTS.batchSize;
+
+  return { timeplusUrl, stream, flushMs, batchSize };
 }
