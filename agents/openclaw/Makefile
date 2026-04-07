@@ -2,7 +2,7 @@ PWD := $(shell pwd)
 CONFIG_FILE := .openclaw/openclaw.json
 IMAGE := ghcr.io/openclaw/openclaw:2026.4.5
 
-.PHONY: workspace init run start configure url devices approve clean install-plugin build-plugin deploy-plugin
+.PHONY: workspace init run start configure url devices approve clean install-plugin build-plugin deploy-plugin test
 
 workspace:
 	# Create the folder and the nested workspace
@@ -64,7 +64,10 @@ data["plugins"].setdefault("load", {}).setdefault("paths", [])
 if "/home/node/.openclaw/agentshield-plugin" not in data["plugins"]["load"]["paths"]:
     data["plugins"]["load"]["paths"].append("/home/node/.openclaw/agentshield-plugin")
 
-# 5. Enable the agentshield plugin with Timeplus config
+# 5. Enable the OpenAI-compatible HTTP endpoint (needed for automated testing)
+data.setdefault("gateway", {}).setdefault("http", {}).setdefault("endpoints", {})["chatCompletions"] = {"enabled": True}
+
+# 6. Enable the agentshield plugin with Timeplus config
 data["plugins"]["entries"]["agentshield"] = {
     "enabled": True,
     "config": {
@@ -125,6 +128,9 @@ build-plugin: install-plugin
 	cd agentshield-plugin && npm run build
 
 deploy-plugin: build-plugin start
+
+test:
+	python3 tests/run_scenarios.py
 
 clean:
 	docker stop openclaw || true
