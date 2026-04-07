@@ -1,4 +1,5 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { AgentShieldConfig } from "./config.js";
 import type { HookEvent, TimeplusClient } from "./timeplus-client.js";
 
 // Minimal structural type covering the optional identity fields common across
@@ -26,13 +27,15 @@ function safeStringify(value: unknown): string {
   }
 }
 
-export function baseEvent(hookName: string, ctx: BaseCtx): HookEvent {
+export function baseEvent(hookName: string, ctx: BaseCtx, config: AgentShieldConfig): HookEvent {
   return {
     hook_name: hookName,
     event_time: new Date().toISOString(),
     session_id: ctx.sessionId ?? "",
     run_id: ctx.runId ?? "",
     agent_id: ctx.agentId ?? "",
+    deployment_id: config.deploymentId,
+    deployment_name: config.deploymentName,
     session_key: ctx.sessionKey ?? "",
     tool_name: "",
     provider: "",
@@ -46,32 +49,33 @@ export function baseEvent(hookName: string, ctx: BaseCtx): HookEvent {
 export function registerAllHooks(
   api: OpenClawPluginApi,
   client: TimeplusClient,
+  config: AgentShieldConfig,
 ): void {
   // ── Agent lifecycle ──────────────────────────────────────────────────────
 
   api.on("before_model_resolve", (event, ctx) => {
-    const base = baseEvent("before_model_resolve", ctx);
+    const base = baseEvent("before_model_resolve", ctx, config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("before_prompt_build", (event, ctx) => {
-    const base = baseEvent("before_prompt_build", ctx);
+    const base = baseEvent("before_prompt_build", ctx, config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("before_agent_start", (event, ctx) => {
-    const base = baseEvent("before_agent_start", ctx);
+    const base = baseEvent("before_agent_start", ctx, config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("before_agent_reply", (event, ctx) => {
-    const base = baseEvent("before_agent_reply", ctx);
+    const base = baseEvent("before_agent_reply", ctx, config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   // llm_input / llm_output: event carries provider, model, runId, sessionId
   api.on("llm_input", (event, ctx) => {
-    const base = baseEvent("llm_input", ctx);
+    const base = baseEvent("llm_input", ctx, config);
     client.enqueue({
       ...base,
       run_id: event.runId,
@@ -83,7 +87,7 @@ export function registerAllHooks(
   });
 
   api.on("llm_output", (event, ctx) => {
-    const base = baseEvent("llm_output", ctx);
+    const base = baseEvent("llm_output", ctx, config);
     client.enqueue({
       ...base,
       run_id: event.runId,
@@ -95,29 +99,29 @@ export function registerAllHooks(
   });
 
   api.on("agent_end", (event, ctx) => {
-    const base = baseEvent("agent_end", ctx);
+    const base = baseEvent("agent_end", ctx, config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("before_compaction", (event, ctx) => {
-    const base = baseEvent("before_compaction", ctx);
+    const base = baseEvent("before_compaction", ctx, config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("after_compaction", (event, ctx) => {
-    const base = baseEvent("after_compaction", ctx);
+    const base = baseEvent("after_compaction", ctx, config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("before_reset", (event, ctx) => {
-    const base = baseEvent("before_reset", ctx);
+    const base = baseEvent("before_reset", ctx, config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   // ── Tool hooks ───────────────────────────────────────────────────────────
 
   api.on("before_tool_call", (event, ctx) => {
-    const base = baseEvent("before_tool_call", ctx);
+    const base = baseEvent("before_tool_call", ctx, config);
     client.enqueue({
       ...base,
       tool_name: ctx.toolName,
@@ -126,7 +130,7 @@ export function registerAllHooks(
   });
 
   api.on("after_tool_call", (event, ctx) => {
-    const base = baseEvent("after_tool_call", ctx);
+    const base = baseEvent("after_tool_call", ctx, config);
     client.enqueue({
       ...base,
       tool_name: ctx.toolName,
@@ -136,7 +140,7 @@ export function registerAllHooks(
 
   api.on("tool_result_persist", (event, ctx) => {
     // PluginHookToolResultPersistContext: agentId?, sessionKey?, toolName?, toolCallId?
-    const base = baseEvent("tool_result_persist", toBase(ctx));
+    const base = baseEvent("tool_result_persist", toBase(ctx), config);
     client.enqueue({
       ...base,
       tool_name: ctx.toolName ?? "",
@@ -148,19 +152,19 @@ export function registerAllHooks(
 
   api.on("before_message_write", (event, ctx) => {
     // ctx: { agentId?: string; sessionKey?: string } — subset of BaseCtx
-    const base = baseEvent("before_message_write", toBase(ctx));
+    const base = baseEvent("before_message_write", toBase(ctx), config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   // ── Session lifecycle ────────────────────────────────────────────────────
 
   api.on("session_start", (event, ctx) => {
-    const base = baseEvent("session_start", ctx);
+    const base = baseEvent("session_start", ctx, config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("session_end", (event, ctx) => {
-    const base = baseEvent("session_end", ctx);
+    const base = baseEvent("session_end", ctx, config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
@@ -169,36 +173,36 @@ export function registerAllHooks(
   // No agentId/sessionKey/sessionId — cast via toBase()
 
   api.on("message_received", (event, ctx) => {
-    const base = baseEvent("message_received", toBase(ctx));
+    const base = baseEvent("message_received", toBase(ctx), config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("message_sending", (event, ctx) => {
-    const base = baseEvent("message_sending", toBase(ctx));
+    const base = baseEvent("message_sending", toBase(ctx), config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("message_sent", (event, ctx) => {
-    const base = baseEvent("message_sent", toBase(ctx));
+    const base = baseEvent("message_sent", toBase(ctx), config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   // ── Inbound / dispatch ───────────────────────────────────────────────────
 
   api.on("inbound_claim", (event, ctx) => {
-    const base = baseEvent("inbound_claim", toBase(ctx));
+    const base = baseEvent("inbound_claim", toBase(ctx), config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("before_dispatch", (event, ctx) => {
     // PluginHookBeforeDispatchContext has sessionKey? but no agentId/sessionId
-    const base = baseEvent("before_dispatch", toBase(ctx));
+    const base = baseEvent("before_dispatch", toBase(ctx), config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("reply_dispatch", (event, ctx) => {
     // PluginHookReplyDispatchContext: cfg, dispatcher, abortSignal, etc. — no identity fields
-    const base = baseEvent("reply_dispatch", toBase(ctx));
+    const base = baseEvent("reply_dispatch", toBase(ctx), config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
@@ -209,7 +213,7 @@ export function registerAllHooks(
   // into event_data alongside the spawn event for security traceability.
 
   api.on("subagent_spawning", (event, ctx) => {
-    const base = baseEvent("subagent_spawning", toBase(ctx));
+    const base = baseEvent("subagent_spawning", toBase(ctx), config);
     client.enqueue({
       ...base,
       event_data: safeStringify({ ...event, _ctx: { childSessionKey: ctx.childSessionKey, requesterSessionKey: ctx.requesterSessionKey } }),
@@ -217,7 +221,7 @@ export function registerAllHooks(
   });
 
   api.on("subagent_delivery_target", (event, ctx) => {
-    const base = baseEvent("subagent_delivery_target", toBase(ctx));
+    const base = baseEvent("subagent_delivery_target", toBase(ctx), config);
     client.enqueue({
       ...base,
       event_data: safeStringify({ ...event, _ctx: { childSessionKey: ctx.childSessionKey, requesterSessionKey: ctx.requesterSessionKey } }),
@@ -225,7 +229,7 @@ export function registerAllHooks(
   });
 
   api.on("subagent_spawned", (event, ctx) => {
-    const base = baseEvent("subagent_spawned", toBase(ctx));
+    const base = baseEvent("subagent_spawned", toBase(ctx), config);
     client.enqueue({
       ...base,
       event_data: safeStringify({ ...event, _ctx: { childSessionKey: ctx.childSessionKey, requesterSessionKey: ctx.requesterSessionKey } }),
@@ -233,7 +237,7 @@ export function registerAllHooks(
   });
 
   api.on("subagent_ended", (event, ctx) => {
-    const base = baseEvent("subagent_ended", toBase(ctx));
+    const base = baseEvent("subagent_ended", toBase(ctx), config);
     client.enqueue({
       ...base,
       event_data: safeStringify({ ...event, _ctx: { childSessionKey: ctx.childSessionKey, requesterSessionKey: ctx.requesterSessionKey } }),
@@ -244,12 +248,12 @@ export function registerAllHooks(
   // PluginHookGatewayContext: { port? } — no identity fields
 
   api.on("gateway_start", (event, ctx) => {
-    const base = baseEvent("gateway_start", toBase(ctx));
+    const base = baseEvent("gateway_start", toBase(ctx), config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 
   api.on("gateway_stop", async (event, ctx) => {
-    const base = baseEvent("gateway_stop", toBase(ctx));
+    const base = baseEvent("gateway_stop", toBase(ctx), config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
     await client.close();
   });
@@ -258,7 +262,7 @@ export function registerAllHooks(
   // PluginHookBeforeInstallContext: { targetType, requestKind, origin? }
 
   api.on("before_install", (event, ctx) => {
-    const base = baseEvent("before_install", toBase(ctx));
+    const base = baseEvent("before_install", toBase(ctx), config);
     client.enqueue({ ...base, event_data: safeStringify(event) });
   });
 }

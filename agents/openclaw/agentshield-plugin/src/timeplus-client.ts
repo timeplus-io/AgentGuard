@@ -6,6 +6,8 @@ export type HookEvent = {
   session_id: string;
   run_id: string;
   agent_id: string;
+  deployment_id: string;
+  deployment_name: string;
   session_key: string;
   tool_name: string;
   provider: string;
@@ -23,6 +25,7 @@ export type TimeplusClient = {
 
 const COLUMNS: (keyof HookEvent)[] = [
   "hook_name", "event_time", "session_id", "run_id", "agent_id",
+  "deployment_id", "deployment_name",
   "session_key", "tool_name", "provider", "model",
   "hook_decision", "block_reason", "event_data",
 ];

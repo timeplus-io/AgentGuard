@@ -16,6 +16,8 @@ function makeEvent(hookName: string): HookEvent {
     session_id: "sess-1",
     run_id: "run-1",
     agent_id: "main",
+    deployment_id: "default",
+    deployment_name: "Default",
     session_key: "agent:main:main",
     tool_name: "",
     provider: "",
@@ -65,6 +67,7 @@ describe("TimeplusClient", () => {
     };
     expect(body.columns).toEqual([
       "hook_name", "event_time", "session_id", "run_id", "agent_id",
+      "deployment_id", "deployment_name",
       "session_key", "tool_name", "provider", "model",
       "hook_decision", "block_reason", "event_data",
     ]);
