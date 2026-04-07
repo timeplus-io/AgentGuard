@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -28,6 +29,9 @@ func ListAgents(cfg *config.Config) gin.HandlerFunc {
 		limit, err := strconv.Atoi(limitStr)
 		if err != nil || limit < 1 {
 			limit = 15
+		}
+		if limit > 200 {
+			limit = 200
 		}
 
 		sql := `
@@ -132,7 +136,13 @@ func rowToAgent(row map[string]any) models.Agent {
 	var lastSeen time.Time
 	switch v := row["last_seen"].(type) {
 	case float64:
+		// Unix seconds (rare format)
 		lastSeen = time.Unix(int64(v), 0)
+	case json.Number:
+		// Numeric timestamp — try as seconds
+		if n, err := v.Float64(); err == nil {
+			lastSeen = time.Unix(int64(n), 0)
+		}
 	case string:
 		if v != "" {
 			t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", v)
@@ -154,6 +164,10 @@ func rowToAgent(row map[string]any) models.Agent {
 	switch v := row["event_count"].(type) {
 	case float64:
 		eventCount = int(v)
+	case json.Number:
+		if n, err := v.Int64(); err == nil {
+			eventCount = int(n)
+		}
 	case int:
 		eventCount = v
 	}
@@ -162,6 +176,10 @@ func rowToAgent(row map[string]any) models.Agent {
 	switch v := row["session_count"].(type) {
 	case float64:
 		sessionCount = int(v)
+	case json.Number:
+		if n, err := v.Int64(); err == nil {
+			sessionCount = int(n)
+		}
 	case int:
 		sessionCount = v
 	}

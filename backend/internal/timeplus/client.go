@@ -46,7 +46,9 @@ func Query(cfg *config.TimeplusConfig, sql string) ([]Row, error) {
 	var result struct {
 		Data []Row `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	dec := json.NewDecoder(resp.Body)
+	dec.UseNumber()
+	if err := dec.Decode(&result); err != nil {
 		return nil, fmt.Errorf("proton query: decode: %w", err)
 	}
 	return result.Data, nil
