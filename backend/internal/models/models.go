@@ -1,18 +1,14 @@
 package models
 
+import "time"
+
 type Agent struct {
-	ID             string  `json:"id"`
-	Status         string  `json:"status"` // ACTIVE, THROTTLED, SUSPENDED
-	HealthIndex    int     `json:"health_index"`
-	HealthLabel    string  `json:"health_label"` // OPTIMAL, STRESSED, CRITICAL
-	Throughput     int     `json:"throughput"`
-	Region         string  `json:"region"`
-	InstanceType   string  `json:"instance_type"`
-	LastAction     string  `json:"last_action"`
-	LastActionTime string  `json:"last_action_time"`
-	Type           string  `json:"type"` // openclaw, claude_code
-	Sessions       int     `json:"sessions"`
-	TotalCost      float64 `json:"total_cost"`
+	AgentID        string    `json:"agent_id"`
+	DeploymentID   string    `json:"deployment_id"`
+	DeploymentName string    `json:"deployment_name"`
+	LastSeen       time.Time `json:"last_seen"`
+	EventCount     int       `json:"event_count"`
+	SessionCount   int       `json:"session_count"`
 }
 
 type Threat struct {
