@@ -10,7 +10,7 @@
 
 ## 1. Stream Schema Extension
 
-Drop and recreate `agentshield_hook_events` with two new columns appended. No backward compatibility — stream is always recreated from the DDL on backend startup.
+Add two new columns to `agentshield_hook_events`. The old stream must be dropped **manually once** before deploying this version — this is a one-time operator action, not done in code. After that, the backend creates it with `CREATE STREAM IF NOT EXISTS` on startup as before.
 
 ### Updated DDL
 
@@ -34,7 +34,7 @@ CREATE STREAM IF NOT EXISTS agentshield_hook_events
 )
 ```
 
-The backend `Init()` function drops the existing stream then recreates it. The `ddlAgentShieldHookEvents` constant in `backend/internal/timeplus/init.go` is updated to match.
+The `ddlAgentShieldHookEvents` constant in `backend/internal/timeplus/init.go` is updated to include the two new columns. `Init()` continues to use `CREATE STREAM IF NOT EXISTS` — no drop logic is added to code.
 
 ---
 
