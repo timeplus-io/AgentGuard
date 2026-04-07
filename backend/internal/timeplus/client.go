@@ -6,9 +6,12 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/timeplus/agentshield/internal/config"
 )
+
+var protonHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
 // Row is a single result row from a Proton query.
 type Row = map[string]any
@@ -29,7 +32,7 @@ func Query(cfg *config.TimeplusConfig, sql string) ([]Row, error) {
 		req.SetBasicAuth(cfg.User, cfg.Password)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := protonHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("proton query: %w", err)
 	}

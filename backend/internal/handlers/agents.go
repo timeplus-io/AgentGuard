@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/timeplus/agentshield/internal/models"
 	"github.com/timeplus/agentshield/internal/timeplus"
 )
+
+var idPartRe = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
 func ListAgents(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -47,11 +50,7 @@ ORDER BY last_seen DESC`
 
 		agents := make([]models.Agent, 0, len(rows))
 		for _, row := range rows {
-			a, parseErr := rowToAgent(row)
-			if parseErr != nil {
-				continue // skip malformed rows
-			}
-			agents = append(agents, a)
+			agents = append(agents, rowToAgent(row))
 		}
 
 		total := len(agents)
@@ -90,6 +89,11 @@ func GetAgent(cfg *config.Config) gin.HandlerFunc {
 		deploymentID := parts[0]
 		agentID := parts[1]
 
+		if !idPartRe.MatchString(deploymentID) || !idPartRe.MatchString(agentID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format, expected deploymentId__agentId"})
+			return
+		}
+
 		sql := fmt.Sprintf(`
 SELECT
     agent_id,
@@ -115,33 +119,34 @@ LIMIT 1`,
 			return
 		}
 
-		a, err := rowToAgent(rows[0])
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse agent data"})
-			return
-		}
+		a := rowToAgent(rows[0])
 		c.JSON(http.StatusOK, a)
 	}
 }
 
-func rowToAgent(row map[string]any) (models.Agent, error) {
+func rowToAgent(row map[string]any) models.Agent {
 	agentID, _ := row["agent_id"].(string)
 	deploymentID, _ := row["deployment_id"].(string)
 	deploymentName, _ := row["deployment_name"].(string)
 
 	var lastSeen time.Time
-	if ls, ok := row["last_seen"].(string); ok && ls != "" {
-		t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", ls)
-		if err != nil {
-			// Proton returns various time formats; try RFC3339 fallback.
-			t, err = time.Parse(time.RFC3339Nano, ls)
+	switch v := row["last_seen"].(type) {
+	case float64:
+		lastSeen = time.Unix(int64(v), 0)
+	case string:
+		if v != "" {
+			t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", v)
 			if err != nil {
-				lastSeen = time.Time{}
+				// Proton returns various time formats; try RFC3339 fallback.
+				t, err = time.Parse(time.RFC3339Nano, v)
+				if err != nil {
+					lastSeen = time.Time{}
+				} else {
+					lastSeen = t
+				}
 			} else {
 				lastSeen = t
 			}
-		} else {
-			lastSeen = t
 		}
 	}
 
@@ -168,5 +173,5 @@ func rowToAgent(row map[string]any) (models.Agent, error) {
 		LastSeen:       lastSeen,
 		EventCount:     eventCount,
 		SessionCount:   sessionCount,
-	}, nil
+	}
 }
