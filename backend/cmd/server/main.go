@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/timeplus/agentshield/internal/config"
 	"github.com/timeplus/agentshield/internal/handlers"
+	"github.com/timeplus/agentshield/internal/timeplus"
 	"github.com/timeplus/agentshield/internal/web"
 )
 
@@ -39,12 +40,14 @@ func newRootCmd() *cobra.Command {
 	flags.Int("timeplus-port", 3218, "Proton/Timeplus HTTP port")
 	flags.String("timeplus-user", "default", "Proton/Timeplus username")
 	flags.String("timeplus-password", "", "Proton/Timeplus password")
+	flags.Int("timeplus-native-port", 8463, "Proton/Timeplus native TCP port")
 
 	viper.BindPFlag("server.port", flags.Lookup("port"))
 	viper.BindPFlag("timeplus.host", flags.Lookup("timeplus-host"))
 	viper.BindPFlag("timeplus.port", flags.Lookup("timeplus-port"))
 	viper.BindPFlag("timeplus.user", flags.Lookup("timeplus-user"))
 	viper.BindPFlag("timeplus.password", flags.Lookup("timeplus-password"))
+	viper.BindPFlag("timeplus.native-port", flags.Lookup("timeplus-native-port"))
 
 	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if cfgFile, _ := flags.GetString("config"); cfgFile != "" {
@@ -68,7 +71,12 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("AgentShield starting on :%d\n", cfg.Server.Port)
-	fmt.Printf("Proton endpoint: %s:%d\n", cfg.Timeplus.Host, cfg.Timeplus.Port)
+	fmt.Printf("Proton endpoint: %s:%d (native: %d)\n", cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort)
+
+	if err := timeplus.Init(&cfg.Timeplus); err != nil {
+		fmt.Printf("warning: timeplus init failed: %v\n", err)
+		// Non-fatal — server continues without OTel resources pre-provisioned.
+	}
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
