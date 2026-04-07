@@ -2,7 +2,7 @@ PWD := $(shell pwd)
 CONFIG_FILE := .openclaw/openclaw.json
 IMAGE := ghcr.io/openclaw/openclaw:2026.4.5
 
-.PHONY: workspace init run start configure url devices approve clean install-plugin build-plugin
+.PHONY: workspace init run start configure url devices approve clean install-plugin build-plugin deploy-plugin
 
 workspace:
 	# Create the folder and the nested workspace
@@ -105,6 +105,8 @@ install-plugin:
 
 build-plugin: install-plugin
 	cd agentshield-plugin && npm run build
+
+deploy-plugin: build-plugin start
 
 clean:
 	docker stop openclaw || true
