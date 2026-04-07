@@ -61,6 +61,7 @@ export function resolveConfig(
     (pluginConfig?.password as string | undefined) ??
     DEFAULTS.password;
 
+  // config-only: no env var override — deployment identity is set at installation time
   const deploymentId =
     (pluginConfig?.deploymentId as string | undefined) ??
     DEFAULTS.deploymentId;
