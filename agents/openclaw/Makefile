@@ -105,6 +105,7 @@ install-plugin:
 
 build-plugin: install-plugin
 	cd agentshield-plugin && npm run build
+	cp agentshield-plugin/openclaw.plugin.json agentshield-plugin/dist/openclaw.plugin.json
 
 deploy-plugin: build-plugin start
 
