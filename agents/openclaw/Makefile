@@ -26,6 +26,7 @@ run:
 		-p 18789:18789 \
 		-v "$(PWD)/.openclaw":/home/node/.openclaw \
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
+		-v "$(PWD)/agentshield-plugin":/home/node/.openclaw/agentshield-plugin \
 		--restart unless-stopped \
 		$(IMAGE) \
 		node dist/index.js gateway run
@@ -75,6 +76,7 @@ start:
 		-p 18789:18789 \
 		-v "$(PWD)/.openclaw":/home/node/.openclaw \
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
+		-v "$(PWD)/agentshield-plugin":/home/node/.openclaw/agentshield-plugin \
 		-e HOME=/home/node \
 		--restart unless-stopped \
 		$(IMAGE) \
