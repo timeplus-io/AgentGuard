@@ -8,10 +8,11 @@ import (
 )
 
 type TimeplusConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
+	Host       string
+	Port       int
+	NativePort int
+	User       string
+	Password   string
 }
 
 type ServerConfig struct {
@@ -35,6 +36,7 @@ func Load() (*Config, error) {
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("timeplus.host", "localhost")
 	v.SetDefault("timeplus.port", 3218)
+	v.SetDefault("timeplus.native-port", 8463)
 	v.SetDefault("timeplus.user", "default")
 	v.SetDefault("timeplus.password", "")
 
@@ -61,6 +63,7 @@ func Load() (*Config, error) {
 	cfg.Server.Port = v.GetInt("server.port")
 	cfg.Timeplus.Host = v.GetString("timeplus.host")
 	cfg.Timeplus.Port = v.GetInt("timeplus.port")
+	cfg.Timeplus.NativePort = v.GetInt("timeplus.native-port")
 	cfg.Timeplus.User = v.GetString("timeplus.user")
 	cfg.Timeplus.Password = v.GetString("timeplus.password")
 

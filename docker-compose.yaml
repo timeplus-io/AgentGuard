@@ -1,19 +1,23 @@
 services:
-  proton:
-    image: d.timeplus.com/timeplus-io/proton:latest
-    container_name: proton
+  timeplus:
+    image: timeplus/timeplus-enterprise:3.2.1
+    platform: linux/amd64
+    container_name: timeplus
     ports:
       - "3218:3218"   # HTTP query API (used by AgentShield)
       - "8463:8463"   # Native TCP protocol
+      - "4317:4317"   # OTLP gRPC (OpenClaw telemetry)
+      - "4318:4318"   # OTLP HTTP (OpenClaw telemetry)
+      - "8000:8000"   # Timeplus Enterprise web console
     volumes:
-      - proton-data:/var/lib/proton
+      - timeplus-data:/timeplus/data/
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3218/"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/3218' 2>/dev/null || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 10
-      start_period: 10s
+      start_period: 30s
 
   agentshield:
     build: .
@@ -21,15 +25,16 @@ services:
     ports:
       - "8080:8080"
     environment:
-      TIMEPLUS_HOST: proton
+      TIMEPLUS_HOST: timeplus
       TIMEPLUS_PORT: 3218
-      TIMEPLUS_USER: default
-      TIMEPLUS_PASSWORD: ""
+      TIMEPLUS_NATIVE_PORT: 8463
+      TIMEPLUS_USER: "proton"
+      TIMEPLUS_PASSWORD: "timeplus@t+"
       SERVER_PORT: 8080
     depends_on:
-      proton:
+      timeplus:
         condition: service_healthy
     restart: unless-stopped
 
 volumes:
-  proton-data:
+  timeplus-data:

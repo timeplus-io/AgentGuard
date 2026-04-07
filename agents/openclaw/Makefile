@@ -1,7 +1,8 @@
 PWD := $(shell pwd)
 CONFIG_FILE := .openclaw/openclaw.json
+IMAGE := ghcr.io/openclaw/openclaw:2026.4.5
 
-.PHONY: workspace init run start fix url devices approve clean
+.PHONY: workspace init run start configure url devices approve clean
 
 workspace:
 	# Create the folder and the nested workspace
@@ -16,7 +17,7 @@ init:
 		-v "$(PWD)/.openclaw":/home/node/.openclaw \
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
 		-e HOME=/home/node \
-		ghcr.io/openclaw/openclaw:latest \
+		$(IMAGE) \
 		node dist/index.js onboard
 
 run:
@@ -26,34 +27,47 @@ run:
 		-v "$(PWD)/.openclaw":/home/node/.openclaw \
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
 		--restart unless-stopped \
-		ghcr.io/openclaw/openclaw:latest \
+		$(IMAGE) \
 		node dist/index.js gateway run
 
 
-define FIX_SCRIPT
-import json
+define CONFIGURE_SCRIPT
+import json, sys
 path = "$(CONFIG_FILE)"
 with open(path, "r") as f:
     data = json.load(f)
 
-# Use bind mode string (replaces legacy IP alias e.g. "0.0.0.0")
-data["gateway"]["bind"] = "lan"
+# 1. Ensure gateway binds to all interfaces (required for Docker port mapping)
+data.setdefault("gateway", {})["bind"] = "lan"
 
-# Remove unrecognized root-level keys from older config versions
-data.pop("remote", None)
+# 2. Enable diagnostics + OTel exporter (sends traces/metrics to Timeplus)
+data["diagnostics"] = {
+    "enabled": True,
+    "otel": {
+        "enabled": True,
+        "endpoint": "http://host.docker.internal:4318",
+        "traces": True,
+        "metrics": True,
+        "logs": True,
+        "serviceName": "openclaw",
+        "sampleRate": 1,
+        "flushIntervalMs": 3000
+    }
+}
+
+# 3. Enable the diagnostics-otel plugin
+data.setdefault("plugins", {}).setdefault("entries", {})["diagnostics-otel"] = {"enabled": True}
 
 with open(path, "w") as f:
     json.dump(data, f, indent=2)
+print("Config updated:", path)
 endef
-export FIX_SCRIPT
+export CONFIGURE_SCRIPT
 
-fix:
-	@echo "🔧 Syncing Gateway and Remote tokens (Array Mode)..."
-	@python3 -c "$$FIX_SCRIPT"
-	@echo "✅ Config patched. Remote is now an array."
+configure:
+	@python3 -c "$$CONFIGURE_SCRIPT"
 
-
-start: fix
+start:
 	docker stop openclaw || true
 	docker rm openclaw || true
 	docker run -d \
@@ -63,7 +77,7 @@ start: fix
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
 		-e HOME=/home/node \
 		--restart unless-stopped \
-		ghcr.io/openclaw/openclaw:latest \
+		$(IMAGE) \
 		node dist/index.js gateway run
 
 url:
