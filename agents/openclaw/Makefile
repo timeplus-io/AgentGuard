@@ -59,6 +59,24 @@ data["diagnostics"] = {
 # 3. Enable the diagnostics-otel plugin
 data.setdefault("plugins", {}).setdefault("entries", {})["diagnostics-otel"] = {"enabled": True}
 
+# 4. Register the agentshield plugin load path
+data["plugins"].setdefault("load", {}).setdefault("paths", [])
+if "/home/node/.openclaw/agentshield-plugin" not in data["plugins"]["load"]["paths"]:
+    data["plugins"]["load"]["paths"].append("/home/node/.openclaw/agentshield-plugin")
+
+# 5. Enable the agentshield plugin with Timeplus config
+data["plugins"]["entries"]["agentshield"] = {
+    "enabled": True,
+    "config": {
+        "timeplusUrl": "http://host.docker.internal:3218",
+        "stream": "agentshield_hook_events",
+        "flushMs": 2000,
+        "batchSize": 50,
+        "username": "proton",
+        "password": "timeplus@t+"
+    }
+}
+
 with open(path, "w") as f:
     json.dump(data, f, indent=2)
 print("Config updated:", path)

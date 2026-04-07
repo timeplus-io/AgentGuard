@@ -16,6 +16,12 @@
       },
       "batchSize": {
         "type": "number"
+      },
+      "username": {
+        "type": "string"
+      },
+      "password": {
+        "type": "string"
       }
     }
   }

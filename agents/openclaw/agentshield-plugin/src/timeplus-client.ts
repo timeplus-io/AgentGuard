@@ -29,6 +29,7 @@ const COLUMNS: (keyof HookEvent)[] = [
 
 async function postBatch(
   url: string,
+  authHeader: string,
   batch: HookEvent[],
 ): Promise<void> {
   const body = JSON.stringify({
@@ -37,7 +38,10 @@ async function postBatch(
   });
   const resp = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": authHeader,
+    },
     body,
   });
   if (!resp.ok) {
@@ -47,6 +51,7 @@ async function postBatch(
 
 export function createTimeplusClient(config: AgentShieldConfig): TimeplusClient {
   const url = `${config.timeplusUrl}/proton/v1/ingest/streams/${config.stream}`;
+  const authHeader = `Basic ${btoa(`${config.username}:${config.password}`)}`;
   const queue: HookEvent[] = [];
   let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -57,11 +62,11 @@ export function createTimeplusClient(config: AgentShieldConfig): TimeplusClient 
     // preventing the same events from being sent twice.
     const batch = queue.splice(0, queue.length);
     try {
-      await postBatch(url, batch);
+      await postBatch(url, authHeader, batch);
     } catch {
       // retry once immediately, then drop the batch
       try {
-        await postBatch(url, batch);
+        await postBatch(url, authHeader, batch);
       } catch (err) {
         console.error("[agentshield] Failed to flush batch, dropping:", err);
       }

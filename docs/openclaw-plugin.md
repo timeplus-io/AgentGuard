@@ -43,6 +43,8 @@ Config is resolved by merging two sources, with **environment variables taking p
 | `stream` | `agentshield_hook_events` |
 | `flushMs` | `2000` |
 | `batchSize` | `50` |
+| `username` | `default` |
+| `password` | `` (empty) |
 
 All fields are optional. The plugin works out of the box with zero configuration.
 
@@ -75,6 +77,8 @@ All fields are optional. The plugin works out of the box with zero configuration
 | `AGENTSHIELD_STREAM` | `stream` |
 | `AGENTSHIELD_FLUSH_MS` | `flushMs` |
 | `AGENTSHIELD_BATCH_SIZE` | `batchSize` |
+| `AGENTSHIELD_USERNAME` | `username` |
+| `AGENTSHIELD_PASSWORD` | `password` |
 
 ---
 

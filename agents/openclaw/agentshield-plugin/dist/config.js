@@ -3,6 +3,8 @@ const DEFAULTS = {
     stream: "agentshield_hook_events",
     flushMs: 2000,
     batchSize: 50,
+    username: "proton",
+    password: "",
 };
 export function resolveConfig(pluginConfig) {
     const timeplusUrl = (process.env.AGENTSHIELD_TIMEPLUS_URL || undefined) ??
@@ -21,6 +23,12 @@ export function resolveConfig(pluginConfig) {
     const batchSize = Number.isFinite(rawBatchSize) && rawBatchSize > 0
         ? rawBatchSize
         : DEFAULTS.batchSize;
-    return { timeplusUrl, stream, flushMs, batchSize };
+    const username = (process.env.AGENTSHIELD_USERNAME || undefined) ??
+        pluginConfig?.username ??
+        DEFAULTS.username;
+    const password = (process.env.AGENTSHIELD_PASSWORD || undefined) ??
+        pluginConfig?.password ??
+        DEFAULTS.password;
+    return { timeplusUrl, stream, flushMs, batchSize, username, password };
 }
 //# sourceMappingURL=config.js.map
