@@ -1,0 +1,22 @@
+{
+  "id": "agentshield",
+  "enabledByDefault": false,
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "timeplusUrl": {
+        "type": "string"
+      },
+      "stream": {
+        "type": "string"
+      },
+      "flushMs": {
+        "type": "number"
+      },
+      "batchSize": {
+        "type": "number"
+      }
+    }
+  }
+}
