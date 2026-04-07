@@ -27,6 +27,9 @@ func Init(cfg *config.TimeplusConfig) error {
 	if err := createOTelInput(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating input: %w", err)
 	}
+	if err := createAgentShieldStreams(ctx, conn); err != nil {
+		return fmt.Errorf("timeplus init: creating agentshield streams: %w", err)
+	}
 	return nil
 }
 
@@ -122,6 +125,10 @@ func createOTelStreams(ctx context.Context, conn proton.Conn) error {
 
 func createOTelInput(ctx context.Context, conn proton.Conn) error {
 	return execIfNotExists(ctx, conn, "input", "openclaw_otel_input", ddlOTelInput)
+}
+
+func createAgentShieldStreams(ctx context.Context, conn proton.Conn) error {
+	return execIfNotExists(ctx, conn, "stream", "agentshield_hook_events", ddlAgentShieldHookEvents)
 }
 
 // ── DDL statements ────────────────────────────────────────────────────────────
@@ -269,6 +276,23 @@ CREATE STREAM otel_metrics_histogram
   exemplars_span_id            array(string)                                 CODEC(ZSTD(1)),
   exemplars_trace_id           array(string)                                 CODEC(ZSTD(1)),
   aggregation_temporality      int32                                         CODEC(ZSTD(1))
+)`
+
+const ddlAgentShieldHookEvents = `
+CREATE STREAM agentshield_hook_events
+(
+  hook_name     low_cardinality(string),
+  event_time    datetime64(3),
+  session_id    string,
+  run_id        string,
+  agent_id      string,
+  session_key   string,
+  tool_name     string,
+  provider      string,
+  model         string,
+  hook_decision low_cardinality(string),
+  block_reason  string,
+  event_data    string
 )`
 
 const ddlOTelInput = `
