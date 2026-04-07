@@ -52,6 +52,9 @@ export function createTimeplusClient(config: AgentShieldConfig): TimeplusClient 
 
   async function flush(): Promise<void> {
     if (queue.length === 0) return;
+    // Splice synchronously before the first await so any concurrent flush()
+    // call that enters after this point sees an empty queue and returns early,
+    // preventing the same events from being sent twice.
     const batch = queue.splice(0, queue.length);
     try {
       await postBatch(url, batch);
@@ -72,6 +75,9 @@ export function createTimeplusClient(config: AgentShieldConfig): TimeplusClient 
   function enqueue(event: HookEvent): void {
     queue.push(event);
     if (queue.length >= config.batchSize) {
+      // Deliberate tradeoff: if a flush is already in-flight, its splice has
+      // already drained the queue so this call returns early. New events will
+      // be picked up on the next timer tick — acceptable for low-to-moderate volume.
       void flush();
     }
   }

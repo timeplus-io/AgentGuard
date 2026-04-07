@@ -95,6 +95,7 @@ describe("TimeplusClient", () => {
   });
 
   it("retries once on failure then drops the batch", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     fetchMock
       .mockResolvedValueOnce({ ok: false, status: 500 })
       .mockResolvedValueOnce({ ok: false, status: 500 });
@@ -105,14 +106,19 @@ describe("TimeplusClient", () => {
 
     // Should have tried twice (initial + 1 retry)
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    // console.error should have been called exactly once for the dropped batch
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    consoleSpy.mockRestore();
     await client.close();
   });
 
   it("never throws even when fetch rejects completely", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     fetchMock.mockRejectedValue(new Error("network error"));
     const client = createTimeplusClient(BASE_CONFIG);
     client.enqueue(makeEvent("gateway_stop"));
     await expect(client.flush()).resolves.toBeUndefined();
+    consoleSpy.mockRestore();
     await client.close();
   });
 
@@ -135,6 +141,22 @@ describe("TimeplusClient", () => {
       (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
     ) as { data: string[][] };
     expect(body.data).toHaveLength(3);
+    await client.close();
+  });
+
+  it("flushes automatically when the timer fires", async () => {
+    const client = createTimeplusClient(BASE_CONFIG);
+    // enqueue one event (below batchSize so it doesn't trigger immediate flush)
+    client.enqueue(makeEvent("timer_test"));
+    expect(fetchMock).not.toHaveBeenCalled();
+    // advance fake timers by flushMs to trigger the background interval
+    await vi.advanceTimersByTimeAsync(BASE_CONFIG.flushMs);
+    // fetch should have been called exactly once
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string,
+    ) as { data: string[][] };
+    expect(body.data[0][0]).toBe("timer_test");
     await client.close();
   });
 });
