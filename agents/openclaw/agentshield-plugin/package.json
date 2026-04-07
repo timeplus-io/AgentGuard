@@ -4,6 +4,9 @@
   "description": "AgentShield security monitoring plugin for OpenClaw",
   "type": "module",
   "main": "./dist/index.js",
+  "openclaw": {
+    "extensions": ["./dist/index.js"]
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
