@@ -64,7 +64,7 @@ func ListEvents(cfg *config.Config) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid since: use RFC3339"})
 				return
 			}
-			where = append(where, fmt.Sprintf("event_time >= '%s'", t.UTC().Format("2006-01-02 15:04:05")))
+			where = append(where, fmt.Sprintf("event_time >= '%s'", t.UTC().Format("2006-01-02 15:04:05.999999999")))
 		}
 
 		if until := c.Query("until"); until != "" {
@@ -73,7 +73,7 @@ func ListEvents(cfg *config.Config) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid until: use RFC3339"})
 				return
 			}
-			where = append(where, fmt.Sprintf("event_time <= '%s'", t.UTC().Format("2006-01-02 15:04:05")))
+			where = append(where, fmt.Sprintf("event_time <= '%s'", t.UTC().Format("2006-01-02 15:04:05.999999999")))
 		}
 
 		whereClause := strings.Join(where, "\n  AND ")
