@@ -1,5 +1,6 @@
 const COLUMNS = [
     "hook_name", "event_time", "session_id", "run_id", "agent_id",
+    "deployment_id", "deployment_name",
     "session_key", "tool_name", "provider", "model",
     "hook_decision", "block_reason", "event_data",
 ];

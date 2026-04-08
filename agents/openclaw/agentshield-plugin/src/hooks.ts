@@ -78,24 +78,25 @@ export function registerAllHooks(
     const base = baseEvent("llm_input", ctx, config);
     client.enqueue({
       ...base,
-      run_id: event.runId,
-      session_id: event.sessionId,
+      run_id: event.runId ?? base.run_id,
       provider: event.provider,
       model: event.model,
       event_data: safeStringify(event),
     });
   });
 
-  api.on("llm_output", (event, ctx) => {
+  api.on("llm_output", async (event, ctx) => {
     const base = baseEvent("llm_output", ctx, config);
     client.enqueue({
       ...base,
-      run_id: event.runId,
-      session_id: event.sessionId,
+      run_id: event.runId ?? base.run_id,
       provider: event.provider,
       model: event.model,
       event_data: safeStringify(event),
     });
+    // llm_output is the terminal hook of every agent turn — flush immediately
+    // so events appear in Timeplus without waiting for the periodic timer.
+    await client.flush();
   });
 
   api.on("agent_end", (event, ctx) => {
@@ -236,12 +237,14 @@ export function registerAllHooks(
     });
   });
 
-  api.on("subagent_ended", (event, ctx) => {
+  api.on("subagent_ended", async (event, ctx) => {
     const base = baseEvent("subagent_ended", toBase(ctx), config);
     client.enqueue({
       ...base,
       event_data: safeStringify({ ...event, _ctx: { childSessionKey: ctx.childSessionKey, requesterSessionKey: ctx.requesterSessionKey } }),
     });
+    // sub-agent turns also need an immediate flush on completion
+    await client.flush();
   });
 
   // ── Gateway hooks ────────────────────────────────────────────────────────

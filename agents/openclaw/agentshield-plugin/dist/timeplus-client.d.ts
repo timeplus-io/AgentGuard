@@ -5,6 +5,8 @@ export type HookEvent = {
     session_id: string;
     run_id: string;
     agent_id: string;
+    deployment_id: string;
+    deployment_name: string;
     session_key: string;
     tool_name: string;
     provider: string;
