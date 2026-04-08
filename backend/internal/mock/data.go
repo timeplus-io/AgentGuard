@@ -64,24 +64,6 @@ var CostAnomalies = []models.CostAnomaly{
 	{ID: "ca-003", Title: "Cache Hit Rate Drop", Description: "Global cache hit rate dropped from 68% to 10%, increasing costs by ~$420", TimeAgo: "2d ago", Severity: "warning"},
 }
 
-var Rules = []models.RulePack{
-	{ID: "rp-001", Name: "Prompt Injection Shield", Description: "Detects and blocks direct and indirect prompt injection attacks, jailbreak attempts, and goal hijacking across all message surfaces.", Icon: "shield", Enabled: true, Version: "v2.4.1", Blocks24h: 47},
-	{ID: "rp-002", Name: "DLP Sentinel", Description: "Prevents exfiltration of PII, credentials, source code, and other sensitive data through LLM outputs, tool calls, and memory writes.", Icon: "lock", Enabled: true, Version: "v1.8.3", Blocks24h: 12},
-	{ID: "rp-003", Name: "Privilege Guard", Description: "Monitors and restricts privilege escalation attempts through tool abuse, shell escapes, and unauthorized API access.", Icon: "key", Enabled: false, Version: "v1.2.0", Blocks24h: 0},
-	{ID: "rp-004", Name: "Supply Chain Watch", Description: "Validates package integrity, detects dependency tampering, and flags malicious or unexpected third-party code execution.", Icon: "link", Enabled: true, Version: "v1.5.7", Blocks24h: 3},
-	{ID: "rp-005", Name: "Cost Sentinel", Description: "Enforces token budgets, detects anomalous spend patterns, and prevents runaway LLM cost from unbounded agent loops.", Icon: "dollar", Enabled: false, Version: "v1.1.2", Blocks24h: 0},
-	{ID: "rp-006", Name: "Compliance Logger", Description: "Ensures comprehensive audit trail coverage for SOC2, HIPAA, and ISO 27001 compliance with tamper-proof event logging.", Icon: "clipboard", Enabled: true, Version: "v3.0.1", Blocks24h: 0},
-}
-
-var EnforcementEvents = []models.EnforcementEvent{
-	{RuleName: "Prompt Injection Shield", Message: "Blocked jailbreak attempt on AS-OMEGA-1102 via crafted system prompt override", Source: "AS-OMEGA-1102", TimeAgo: "3m ago", Severity: "critical"},
-	{RuleName: "DLP Sentinel", Message: "Prevented PII exfiltration: SSN pattern detected in tool output for AS-IOTA-3309", Source: "AS-IOTA-3309", TimeAgo: "15m ago", Severity: "critical"},
-	{RuleName: "Prompt Injection Shield", Message: "Indirect injection via uploaded PDF neutralized on AS-DELTA-9012", Source: "AS-DELTA-9012", TimeAgo: "47m ago", Severity: "warning"},
-	{RuleName: "Supply Chain Watch", Message: "Flagged npm package 'lodash-utils-v2' with known malicious payload on AS-GAMMA-5503", Source: "AS-GAMMA-5503", TimeAgo: "1h ago", Severity: "warning"},
-	{RuleName: "DLP Sentinel", Message: "Source code exfiltration blocked: 3 files matched proprietary code patterns", Source: "AS-SIGMA-4421", TimeAgo: "2h ago", Severity: "warning"},
-	{RuleName: "Compliance Logger", Message: "Audit record created for all 18 threat events in the last 24h", Source: "global", TimeAgo: "6h ago", Severity: "info"},
-}
-
 var MockSettings = models.SettingsResponse{
 	OrgName:        "Timeplus Security",
 	OtelEndpoint:   "https://otel.timeplus.io:4317",
