@@ -344,10 +344,9 @@ func ListCatalog(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// ReinstallRule re-inserts a previously deleted (uninstalled) rule and creates its MV.
-// It reads the original data from the builtin catalog — so it always reinstalls
-// the canonical version, not whatever custom SQL may have been in the stream.
-func ReinstallRule(cfg *config.Config) gin.HandlerFunc {
+// InstallRule installs a builtin rule from the catalog. Works for both
+// first-time installs and rules that were previously uninstalled.
+func InstallRule(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
@@ -385,7 +384,7 @@ func ReinstallRule(cfg *config.Config) gin.HandlerFunc {
 			log.Printf("rules: reinstall create MV %s: %v", id, err)
 		}
 
-		c.JSON(http.StatusOK, gin.H{"reinstalled": true, "rule_id": id})
+		c.JSON(http.StatusOK, gin.H{"installed": true, "rule_id": id})
 	}
 }
 

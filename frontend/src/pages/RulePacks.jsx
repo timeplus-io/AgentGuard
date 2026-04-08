@@ -37,7 +37,7 @@ export default function RulePacks() {
   const [density, setDensity] = useState(0)
   const [recentDetections, setRecentDetections] = useState([])
   const [confirmToggle, setConfirmToggle] = useState(null) // { id, newVal, name }
-  const [reinstalling, setReinstalling] = useState(null) // rule id being reinstalled
+  const [installing, setInstalling] = useState(null) // rule id being reinstalled
 
   const loadRules = () =>
     api.listRules().then(data => {
@@ -103,10 +103,10 @@ export default function RulePacks() {
       .catch(() => {})
   }
 
-  const handleReinstall = async (id) => {
-    setReinstalling(id)
+  const handleInstall = async (id) => {
+    setInstalling(id)
     try {
-      await api.reinstallRule(id)
+      await api.installRule(id)
       await Promise.all([
         loadRules(),
         api.getRulesCatalog().then(data => setCatalog(data.catalog || [])),
@@ -114,7 +114,7 @@ export default function RulePacks() {
     } catch {
       // silently ignore — user can retry
     } finally {
-      setReinstalling(null)
+      setInstalling(null)
     }
   }
 
@@ -219,7 +219,7 @@ export default function RulePacks() {
 
           {uninstalledCatalog.length > 0 && (
             <section>
-              <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-4">Available to Reinstall</h4>
+              <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-4">Available to Install</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 {uninstalledCatalog.map(entry => (
                   <div key={entry.id} className="bg-[#1d1a25]/60 border border-dashed border-zinc-700/40 p-5 rounded-sm flex flex-col gap-4">
@@ -238,11 +238,11 @@ export default function RulePacks() {
                       <p className="text-xs text-zinc-600 leading-relaxed line-clamp-2">{entry.description}</p>
                     </div>
                     <button
-                      onClick={() => handleReinstall(entry.id)}
-                      disabled={reinstalling === entry.id}
+                      onClick={() => handleInstall(entry.id)}
+                      disabled={installing === entry.id}
                       className="mt-auto w-full px-3 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] disabled:opacity-50 transition-opacity"
                     >
-                      {reinstalling === entry.id ? 'Installing…' : 'Reinstall'}
+                      {installing === entry.id ? 'Installing…' : 'Install'}
                     </button>
                   </div>
                 ))}

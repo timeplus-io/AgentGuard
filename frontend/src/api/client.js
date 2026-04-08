@@ -62,7 +62,7 @@ export const api = {
   getRule: (id) => get(`/rules/${id}`),
   toggleRule: (id) => post(`/rules/${id}/toggle`, {}),
   upgradeRule: (id, querySql) => post(`/rules/${id}/upgrade`, { query_sql: querySql }),
-  reinstallRule: (id) => post(`/rules/${id}/reinstall`, {}),
+  installRule: (id) => post(`/rules/${id}/install`, {}),
   uninstallRule: (id) =>
     fetch(`${BASE}/rules/${id}`, { method: 'DELETE' })
       .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() }),

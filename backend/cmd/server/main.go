@@ -103,7 +103,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.GET("/rules/mv-status", handlers.MVStatus(cfg))
 		api.POST("/rules/sync", handlers.SyncMVs(cfg))
 		api.GET("/rules/:id", handlers.GetRule(cfg))
-		api.POST("/rules/:id/reinstall", handlers.ReinstallRule(cfg))
+		api.POST("/rules/:id/install", handlers.InstallRule(cfg))
 		api.POST("/rules/:id/toggle", handlers.ToggleRule(cfg))
 		api.POST("/rules/:id/upgrade", handlers.UpgradeRule(cfg))
 		api.DELETE("/rules/:id", handlers.UninstallRule(cfg))
