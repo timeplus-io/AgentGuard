@@ -190,7 +190,7 @@ def scenario_7(model: str | None):
     hook_rows = tpq(f"""
         SELECT hook_name, event_time, agent_id
         FROM table(agentshield_hook_events)
-        WHERE hook_name IN ('llm_input', 'llm_output')
+        WHERE hook_name = 'llm_input'
           AND lower(event_data) LIKE '%ignore previous instructions%'
           AND event_time >= '{t_start}'
         ORDER BY event_time DESC

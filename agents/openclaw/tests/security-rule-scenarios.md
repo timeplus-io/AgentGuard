@@ -38,9 +38,10 @@ tpq "SELECT event_time, rule_id, rule_name, severity, hook_name, message
 ## Scenario 7 — Prompt Injection Shield (rp-001)
 
 **Rule:** rp-001 Prompt Injection Shield  
-**Hook monitored:** `llm_input`, `llm_output`  
+**Hook monitored:** `llm_input` only  
 **How it triggers:** The user message is embedded verbatim into the `llm_input`
-event_data. Patterns in the message are matched by the MV.
+event_data. Patterns in the message are matched by the MV. LLM output is not
+scanned — injection attempts must be present in the inbound message.
 
 **Prompt to send:**
 
@@ -64,7 +65,7 @@ rp-001 patterns, all in the `llm_input` event_data.
 ```sql
 SELECT hook_name, event_time, agent_id
 FROM table(agentshield_hook_events)
-WHERE hook_name IN ('llm_input', 'llm_output')
+WHERE hook_name = 'llm_input'
   AND lower(event_data) LIKE '%ignore previous instructions%'
   AND event_time > now() - interval 5 minute
 ORDER BY event_time DESC

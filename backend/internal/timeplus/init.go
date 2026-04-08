@@ -181,7 +181,7 @@ var builtinRuleData = []builtinRule{
 		severity:    "critical",
 		category:    "prompt_injection",
 		fpRate:      "medium",
-		hookSources: "llm_input,llm_output",
+		hookSources: "llm_input",
 		querySQL: `SELECT
   event_time                AS detected_at,
   'rp-001'                  AS rule_id,
@@ -196,7 +196,7 @@ var builtinRuleData = []builtinRule{
   concat('Potential prompt injection in ', hook_name, ' from agent ', agent_id) AS message,
   event_data
 FROM agentshield_hook_events
-WHERE hook_name IN ('llm_input', 'llm_output')
+WHERE hook_name = 'llm_input'
   AND (
        lower(event_data) LIKE '%ignore previous instructions%'
     OR lower(event_data) LIKE '%ignore all previous%'
