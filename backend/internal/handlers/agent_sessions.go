@@ -75,7 +75,7 @@ func parseInt(v any) int {
 	return 0
 }
 
-// parseBool handles Proton's countIf(...) result (returned as 0/1).
+// parseBool handles Proton's count_if(...) result (returned as 0/1).
 func parseBool(v any) bool {
 	return parseInt(v) != 0
 }
@@ -110,8 +110,8 @@ func ListSessions(cfg *config.Config) gin.HandlerFunc {
 		sql := fmt.Sprintf(`
 SELECT
     session_id,
-    anyIf(session_key, session_key != '') AS session_key,
-    count(DISTINCT run_id)                AS run_count,
+    any_if(session_key, session_key != '') AS session_key,
+    count_distinct(run_id)                AS run_count,
     count()                               AS event_count,
     min(event_time)                       AS first_seen,
     max(event_time)                       AS last_seen
@@ -175,8 +175,8 @@ SELECT
     max(event_time)                         AS end_time,
     count()                                 AS event_count,
     any(model)                              AS model,
-    countIf(hook_name = 'before_tool_call') AS tool_count,
-    countIf(hook_decision = 'block')        AS block_count
+    count_if(hook_name = 'before_tool_call') AS tool_count,
+    count_if(hook_decision = 'block')        AS block_count
 FROM table(agentshield_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'

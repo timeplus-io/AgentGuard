@@ -38,7 +38,7 @@ SELECT
     deployment_name,
     max(event_time)             AS last_seen,
     count()                     AS event_count,
-    count(DISTINCT session_key) AS session_count
+    count_distinct(session_key) AS session_count
 FROM table(agentshield_hook_events)
 WHERE agent_id != ''
 GROUP BY agent_id, deployment_id, deployment_name
@@ -95,7 +95,7 @@ SELECT
     deployment_name,
     max(event_time)             AS last_seen,
     count()                     AS event_count,
-    count(DISTINCT session_key) AS session_count
+    count_distinct(session_key) AS session_count
 FROM table(agentshield_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
