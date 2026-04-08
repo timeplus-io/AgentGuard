@@ -110,17 +110,18 @@ func ListSessions(cfg *config.Config) gin.HandlerFunc {
 		sql := fmt.Sprintf(`
 SELECT
     session_id,
-    any(session_key)       AS session_key,
-    count(DISTINCT run_id) AS run_count,
-    count()                AS event_count,
-    min(event_time)        AS first_seen,
-    max(event_time)        AS last_seen
+    anyIf(session_key, session_key != '') AS session_key,
+    count(DISTINCT run_id)                AS run_count,
+    count()                               AS event_count,
+    min(event_time)                       AS first_seen,
+    max(event_time)                       AS last_seen
 FROM table(agentshield_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
   AND session_id    != ''
-  AND session_key   LIKE 'agent:%%'
 GROUP BY session_id
+HAVING session_key NOT LIKE 'temp:%%'
+   AND session_id  NOT LIKE 'slug-generator-%%'
 ORDER BY last_seen DESC`,
 			deploymentID, agentID)
 
