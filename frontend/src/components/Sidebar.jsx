@@ -7,7 +7,6 @@ const navItems = [
   { label: 'Cost', to: '/cost', icon: 'payments' },
   { label: 'Rules', to: '/rules', icon: 'rule' },
   { label: 'Investigate', to: '/investigate', icon: 'search' },
-  { label: 'Settings', to: '/settings', icon: 'settings' },
 ]
 
 export default function Sidebar() {
