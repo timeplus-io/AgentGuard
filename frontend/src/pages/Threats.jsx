@@ -166,11 +166,13 @@ export default function Threats() {
                   {filtered.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-12 text-center text-zinc-500 text-xs">
-                        {connected ? 'Connecting to threat stream…' : 'No threats detected in the last 24h.'}
+                        {threats.length > 0
+                          ? 'No threats match the current filters.'
+                          : connected ? 'Connecting to threat stream…' : 'No threats detected in the last 24h.'}
                       </td>
                     </tr>
-                  ) : filtered.map((t) => (
-                    <tr key={`${t.detected_at}-${t.rule_id}-${t.agent_id}`} className="hover:bg-[#2c2834] transition-colors">
+                  ) : filtered.map((t, i) => (
+                    <tr key={`${t.detected_at}-${t.rule_id}-${t.agent_id}-${i}`} className="hover:bg-[#2c2834] transition-colors">
                       <td className="px-6 py-4"><SeverityBadge severity={t.severity} /></td>
                       <td className="px-6 py-4">
                         <p className="text-xs font-semibold text-[#e7dff0]">{t.rule_name}</p>
