@@ -182,9 +182,9 @@ export default function Threats() {
                 </span>
               )}
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-96">
               <table className="w-full text-left border-collapse">
-                <thead className="bg-[#2c2834]/50">
+                <thead className="bg-[#2c2834] sticky top-0 z-10">
                   <tr>
                     {['Severity', 'Rule / Message', 'Agent', 'Session', 'Hook', 'Time'].map(h => (
                       <th key={h} className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{h}</th>
