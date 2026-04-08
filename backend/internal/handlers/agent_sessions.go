@@ -114,8 +114,8 @@ func ListSessions(cfg *config.Config) gin.HandlerFunc {
 		sql := fmt.Sprintf(`
 SELECT
     session_id,
-    any_if(session_key, session_key != '') AS session_key,
-    count_distinct(run_id)                AS run_count,
+    any_if(session_key, session_key != '')              AS session_key,
+    count_distinct(if(run_id != '', run_id, null))      AS run_count,
     count()                               AS event_count,
     min(event_time)                       AS first_seen,
     max(event_time)                       AS last_seen
