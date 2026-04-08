@@ -53,6 +53,58 @@ type AgentListResponse struct {
 	Limit  int     `json:"limit"`
 }
 
+// Session represents one chat/API/cron/sub-agent session for an agent.
+type Session struct {
+	SessionID   string    `json:"session_id"`
+	SessionKey  string    `json:"session_key"`
+	SessionType string    `json:"session_type"`
+	RunCount    int       `json:"run_count"`
+	EventCount  int       `json:"event_count"`
+	FirstSeen   time.Time `json:"first_seen"`
+	LastSeen    time.Time `json:"last_seen"`
+}
+
+// Run represents one user→agent turn within a session.
+type Run struct {
+	RunID      string    `json:"run_id"`
+	StartTime  time.Time `json:"start_time"`
+	EndTime    time.Time `json:"end_time"`
+	EventCount int       `json:"event_count"`
+	Model      string    `json:"model"`
+	ToolCount  int       `json:"tool_count"`
+	HasBlock   bool      `json:"has_block"`
+}
+
+// SessionDetail is returned by GET /agents/:id/sessions/:session_id.
+type SessionDetail struct {
+	SessionID   string `json:"session_id"`
+	SessionKey  string `json:"session_key"`
+	SessionType string `json:"session_type"`
+	Runs        []Run  `json:"runs"`
+}
+
+// HookEvent is one row returned by GET /agents/:id/events.
+type HookEvent struct {
+	HookName     string    `json:"hook_name"`
+	EventTime    time.Time `json:"event_time"`
+	RunID        string    `json:"run_id"`
+	SessionID    string    `json:"session_id"`
+	ToolName     string    `json:"tool_name"`
+	Provider     string    `json:"provider"`
+	Model        string    `json:"model"`
+	HookDecision string    `json:"hook_decision"`
+	BlockReason  string    `json:"block_reason"`
+	EventData    string    `json:"event_data"`
+}
+
+// EventsResponse is returned by GET /agents/:id/events.
+type EventsResponse struct {
+	Events []HookEvent `json:"events"`
+	Total  int         `json:"total"`
+	Page   int         `json:"page"`
+	Limit  int         `json:"limit"`
+}
+
 type ThreatListResponse struct {
 	Threats []Threat `json:"threats"`
 	Total   int      `json:"total"`
