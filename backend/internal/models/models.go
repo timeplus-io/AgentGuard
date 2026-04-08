@@ -259,28 +259,50 @@ type CostResponse struct {
 }
 
 type RulePack struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Icon        string `json:"icon"`
-	Enabled     bool   `json:"enabled"`
-	Version     string `json:"version"`
-	Blocks24h   int    `json:"blocks_24h"`
-}
-
-type EnforcementEvent struct {
-	RuleName string `json:"rule_name"`
-	Message  string `json:"message"`
-	Source   string `json:"source"`
-	TimeAgo  string `json:"time_ago"`
-	Severity string `json:"severity"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Version           string `json:"version"`
+	Description       string `json:"description"`
+	QuerySQL          string `json:"query_sql"`
+	Enabled           bool   `json:"enabled"`
+	Severity          string `json:"severity"`
+	Category          string `json:"category"`
+	RequiredTelemetry string `json:"required_telemetry"`
+	FPRate            string `json:"fp_rate"`
+	HookSources       string `json:"hook_sources"`
+	Detections24h     int    `json:"detections_24h"`
+	LatestVersion     string `json:"latest_version,omitempty"`
 }
 
 type RulesResponse struct {
-	RulePacks         []RulePack         `json:"rule_packs"`
-	TotalBlocks24h    int                `json:"total_blocks_24h"`
-	ActiveRuleDensity int                `json:"active_rule_density"`
-	RecentEnforcement []EnforcementEvent `json:"recent_enforcement"`
+	RulePacks          []RulePack      `json:"rule_packs"`
+	TotalDetections24h int             `json:"total_detections_24h"`
+	ActiveRuleDensity  int             `json:"active_rule_density"`
+	RecentDetections   []SecurityEvent `json:"recent_detections"`
+}
+
+type SecurityEvent struct {
+	RuleID     string `json:"rule_id"`
+	RuleName   string `json:"rule_name"`
+	Severity   string `json:"severity"`
+	AgentID    string `json:"agent_id"`
+	HookName   string `json:"hook_name"`
+	Message    string `json:"message"`
+	DetectedAt string `json:"detected_at"`
+}
+
+type RuleDetailResponse struct {
+	RulePack
+	RecentDetections []SecurityEvent `json:"recent_detections"`
+}
+
+type AlertWebhookPayload struct {
+	RuleID     string `json:"rule_id"`
+	RuleName   string `json:"rule_name"`
+	Severity   string `json:"severity"`
+	AgentID    string `json:"agent_id"`
+	Message    string `json:"message"`
+	DetectedAt string `json:"detected_at"`
 }
 
 type QueryResult struct {

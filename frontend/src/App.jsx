@@ -5,9 +5,9 @@ import AgentDetail from './pages/AgentDetail'
 import Threats from './pages/Threats'
 import CostGovernance from './pages/CostGovernance'
 import RulePacks from './pages/RulePacks'
+import RuleDetail from './pages/RuleDetail'
 import Investigate from './pages/Investigate'
 import Onboarding from './pages/Onboarding'
-import Settings from './pages/Settings'
 
 export default function App() {
   return (
@@ -20,9 +20,10 @@ export default function App() {
         <Route path="/threats" element={<Threats />} />
         <Route path="/cost" element={<CostGovernance />} />
         <Route path="/rules" element={<RulePacks />} />
+        <Route path="/rules/:id" element={<RuleDetail />} />
         <Route path="/investigate" element={<Investigate />} />
         <Route path="/onboarding" element={<Onboarding />} />
-        <Route path="/settings" element={<Settings />} />
+
       </Routes>
     </BrowserRouter>
   )

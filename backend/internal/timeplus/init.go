@@ -22,13 +22,31 @@ func Init(cfg *config.TimeplusConfig) error {
 	ctx := context.Background()
 
 	if err := createOTelStreams(ctx, conn); err != nil {
-		return fmt.Errorf("timeplus init: creating streams: %w", err)
+		return fmt.Errorf("timeplus init: creating otel streams: %w", err)
 	}
 	if err := createOTelInput(ctx, conn); err != nil {
-		return fmt.Errorf("timeplus init: creating input: %w", err)
+		return fmt.Errorf("timeplus init: creating otel input: %w", err)
 	}
 	if err := createAgentShieldStreams(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating agentshield streams: %w", err)
+	}
+	if err := createSecurityStreams(ctx, conn); err != nil {
+		return fmt.Errorf("timeplus init: creating security streams: %w", err)
+	}
+	if err := seedBuiltinRules(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning seeding rules: %v", err)
+	}
+	if err := dropLegacyMVs(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning dropping legacy MVs: %v", err)
+	}
+	if err := createNotifyUDF(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning creating UDF: %v", err)
+	}
+	if err := createNotifierAlert(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning creating alert: %v", err)
+	}
+	if err := startupSyncMVs(cfg, ctx, conn); err != nil {
+		log.Printf("timeplus init: warning syncing MVs: %v", err)
 	}
 	return nil
 }
@@ -85,9 +103,10 @@ func inputExists(ctx context.Context, conn proton.Conn, name string) (bool, erro
 func execIfNotExists(ctx context.Context, conn proton.Conn, kind, name, ddl string) error {
 	var exists bool
 	var err error
-	if kind == "stream" {
+	switch kind {
+	case "stream", "view":
 		exists, err = streamExists(ctx, conn, name)
-	} else {
+	default:
 		exists, err = inputExists(ctx, conn, name)
 	}
 	if err != nil {
@@ -129,6 +148,297 @@ func createOTelInput(ctx context.Context, conn proton.Conn) error {
 
 func createAgentShieldStreams(ctx context.Context, conn proton.Conn) error {
 	return execIfNotExists(ctx, conn, "stream", "agentshield_hook_events", ddlAgentShieldHookEvents)
+}
+
+func createSecurityStreams(ctx context.Context, conn proton.Conn) error {
+	if err := execIfNotExists(ctx, conn, "stream", "agentshield_security_events", ddlSecurityEvents); err != nil {
+		return err
+	}
+	return execIfNotExists(ctx, conn, "stream", "agentshield_rules", ddlRulesStream)
+}
+
+// ── Builtin rules ─────────────────────────────────────────────────────────────
+
+type builtinRule struct {
+	ruleID            string
+	name              string
+	version           string
+	description       string
+	querySQL          string
+	severity          string
+	category          string
+	requiredTelemetry string
+	fpRate            string
+	hookSources       string
+}
+
+var builtinRuleData = []builtinRule{
+	{
+		ruleID:      "rp-001",
+		name:        "Prompt Injection Shield",
+		version:     "1.0.0",
+		description: "Detects direct and indirect prompt injection attacks, jailbreak attempts, and goal hijacking across all message surfaces.",
+		severity:    "critical",
+		category:    "prompt_injection",
+		fpRate:      "medium",
+		hookSources: "llm_input,llm_output",
+		querySQL: `SELECT
+  event_time                AS detected_at,
+  'rp-001'                  AS rule_id,
+  'Prompt Injection Shield' AS rule_name,
+  'critical'                AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  hook_name,
+  ''                        AS tool_name,
+  concat('Potential prompt injection in ', hook_name, ' from agent ', agent_id) AS message,
+  event_data
+FROM agentshield_hook_events
+WHERE hook_name IN ('llm_input', 'llm_output')
+  AND (
+       lower(event_data) LIKE '%ignore previous instructions%'
+    OR lower(event_data) LIKE '%ignore all previous%'
+    OR lower(event_data) LIKE '%jailbreak%'
+    OR lower(event_data) LIKE '%disregard your%'
+    OR lower(event_data) LIKE '%you are now a%'
+    OR lower(event_data) LIKE '%forget everything%'
+    OR lower(event_data) LIKE '%new instructions:%'
+  )`,
+	},
+	{
+		ruleID:            "rp-002",
+		name:              "DLP Sentinel",
+		version:           "1.0.0",
+		description:       "Scans outbound agent communication for PII, API keys, and sensitive internal documentation leaks.",
+		severity:          "critical",
+		category:          "dlp",
+		requiredTelemetry: "content_capture",
+		fpRate:            "low",
+		hookSources:       "tool_result_persist,after_tool_call,llm_output",
+		querySQL: `SELECT
+  event_time     AS detected_at,
+  'rp-002'       AS rule_id,
+  'DLP Sentinel' AS rule_name,
+  'critical'     AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  hook_name,
+  tool_name,
+  concat('Sensitive data in ', hook_name, if(tool_name != '', concat(' (', tool_name, ')'), ''), ' from agent ', agent_id) AS message,
+  event_data
+FROM agentshield_hook_events
+WHERE hook_name IN ('tool_result_persist', 'after_tool_call', 'llm_output')
+  AND (
+       match(event_data, '[0-9]{3}-[0-9]{2}-[0-9]{4}')
+    OR lower(event_data) LIKE '%api_key%'
+    OR lower(event_data) LIKE '%secret_key%'
+    OR lower(event_data) LIKE '%bearer %'
+    OR lower(event_data) LIKE '%sk-ant-%'
+    OR lower(event_data) LIKE '%ghp_%'
+    OR lower(event_data) LIKE '%private_key%'
+    OR lower(event_data) LIKE '%aws_secret%'
+  )`,
+	},
+	{
+		ruleID:      "rp-003",
+		name:        "Privilege Guard",
+		version:     "1.0.0",
+		description: "Monitors privilege escalation attempts through tool abuse, shell escapes, and dangerous system commands.",
+		severity:    "warning",
+		category:    "privilege",
+		fpRate:      "low",
+		hookSources: "before_tool_call,after_tool_call",
+		querySQL: `SELECT
+  event_time        AS detected_at,
+  'rp-003'          AS rule_id,
+  'Privilege Guard' AS rule_name,
+  'warning'         AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  hook_name,
+  tool_name,
+  concat('Dangerous tool call: ', tool_name, ' by agent ', agent_id) AS message,
+  event_data
+FROM agentshield_hook_events
+WHERE hook_name IN ('before_tool_call', 'after_tool_call')
+  AND (
+       lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
+    OR lower(event_data) LIKE '%sudo %'
+    OR lower(event_data) LIKE '%rm -rf%'
+    OR lower(event_data) LIKE '%chmod %'
+    OR lower(event_data) LIKE '%/etc/passwd%'
+    OR lower(event_data) LIKE '%/etc/shadow%'
+  )`,
+	},
+	{
+		ruleID:      "rp-004",
+		name:        "Supply Chain Watch",
+		version:     "1.0.0",
+		description: "Monitors external model dependencies and third-party library calls for anomalous behavior.",
+		severity:    "warning",
+		category:    "supply_chain",
+		fpRate:      "high",
+		hookSources: "before_install,before_tool_call,after_tool_call",
+		querySQL: `SELECT
+  event_time           AS detected_at,
+  'rp-004'             AS rule_id,
+  'Supply Chain Watch' AS rule_name,
+  'warning'            AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  hook_name,
+  tool_name,
+  concat('Package install by agent ', agent_id, ' via ', if(tool_name != '', tool_name, hook_name)) AS message,
+  event_data
+FROM agentshield_hook_events
+WHERE hook_name = 'before_install'
+   OR (
+       hook_name IN ('before_tool_call', 'after_tool_call')
+    AND (
+           lower(event_data) LIKE '%npm install%'
+        OR lower(event_data) LIKE '%pip install%'
+        OR lower(event_data) LIKE '%yarn add%'
+        OR lower(event_data) LIKE '%cargo install%'
+        OR lower(event_data) LIKE '%apt-get install%'
+        OR lower(event_data) LIKE '%brew install%'
+    )
+  )`,
+	},
+}
+
+func seedBuiltinRules(ctx context.Context, conn proton.Conn) error {
+	row := conn.QueryRow(ctx, "SELECT count() FROM table(agentshield_rules)")
+	var count uint64
+	if err := row.Scan(&count); err != nil {
+		return fmt.Errorf("seed check: %w", err)
+	}
+	if count > 0 {
+		log.Printf("timeplus: rules already seeded (%d records), skipping", count)
+		return nil
+	}
+
+	batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)")
+	if err != nil {
+		return fmt.Errorf("seed prepare: %w", err)
+	}
+
+	now := time.Now()
+	for _, r := range builtinRuleData {
+		if err := batch.Append(
+			r.ruleID, r.name, r.version, r.description, r.querySQL,
+			true, false, r.severity, r.category, r.requiredTelemetry,
+			r.fpRate, r.hookSources, now,
+		); err != nil {
+			return fmt.Errorf("seed append %s: %w", r.ruleID, err)
+		}
+	}
+	if err := batch.Send(); err != nil {
+		return fmt.Errorf("seed send: %w", err)
+	}
+	log.Printf("timeplus: seeded %d built-in rules", len(builtinRuleData))
+	return nil
+}
+
+func dropLegacyMVs(ctx context.Context, conn proton.Conn) error {
+	legacy := []string{
+		"mv_security_prompt_injection",
+		"mv_security_dlp",
+		"mv_security_privilege_guard",
+		"mv_security_supply_chain",
+	}
+	for _, name := range legacy {
+		exists, err := streamExists(ctx, conn, name)
+		if err != nil || !exists {
+			continue
+		}
+		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", name)); err != nil {
+			log.Printf("timeplus: warning dropping legacy MV %s: %v", name, err)
+		} else {
+			log.Printf("timeplus: dropped legacy MV %s", name)
+		}
+	}
+	return nil
+}
+
+func createNotifyUDF(ctx context.Context, conn proton.Conn) error {
+	if err := conn.Exec(ctx, ddlNotifyUDF); err != nil {
+		return fmt.Errorf("create UDF: %w", err)
+	}
+	log.Printf("timeplus: UDF notify_agentshield_udf created/updated")
+	return nil
+}
+
+func createNotifierAlert(ctx context.Context, conn proton.Conn) error {
+	if err := conn.Exec(ctx, ddlNotifierAlert); err != nil {
+		return fmt.Errorf("create alert: %w", err)
+	}
+	log.Printf("timeplus: alert agentshield_notifier created")
+	return nil
+}
+
+const sqlStartupRules = `
+SELECT
+  rule_id,
+  arg_max(query_sql, updated_at) AS query_sql,
+  arg_max(enabled,   updated_at) AS enabled
+FROM table(agentshield_rules)
+GROUP BY rule_id
+HAVING arg_max(deleted, updated_at) = false`
+
+func startupSyncMVs(cfg *config.TimeplusConfig, ctx context.Context, conn proton.Conn) error {
+	rows, err := conn.Query(ctx, sqlStartupRules)
+	if err != nil {
+		return fmt.Errorf("startup sync query: %w", err)
+	}
+	defer rows.Close()
+
+	type ruleRow struct {
+		ruleID   string
+		querySQL string
+		enabled  bool
+	}
+	var rules []ruleRow
+	for rows.Next() {
+		var r ruleRow
+		if err := rows.Scan(&r.ruleID, &r.querySQL, &r.enabled); err != nil {
+			log.Printf("timeplus: startup sync scan error: %v", err)
+			continue
+		}
+		rules = append(rules, r)
+	}
+
+	for _, r := range rules {
+		mvName := MVName(r.ruleID)
+		exists, _ := streamExists(ctx, conn, mvName)
+		if r.enabled {
+			if !exists {
+				ddl := fmt.Sprintf("CREATE MATERIALIZED VIEW %s INTO agentshield_security_events AS %s", mvName, r.querySQL)
+				if err := conn.Exec(ctx, ddl); err != nil {
+					log.Printf("timeplus: startup create MV %s: %v", mvName, err)
+				} else {
+					log.Printf("timeplus: startup created MV %s", mvName)
+				}
+			} else {
+				if err := conn.Exec(ctx, fmt.Sprintf("SYSTEM RESUME MATERIALIZED VIEW %s PERMANENT", mvName)); err != nil {
+					log.Printf("timeplus: startup resume MV %s: %v", mvName, err)
+				}
+			}
+		} else if exists {
+			if err := conn.Exec(ctx, fmt.Sprintf("SYSTEM PAUSE MATERIALIZED VIEW %s PERMANENT", mvName)); err != nil {
+				log.Printf("timeplus: startup pause MV %s: %v", mvName, err)
+			}
+		}
+	}
+	log.Printf("timeplus: startup sync complete for %d rules", len(rules))
+	return nil
 }
 
 // ── DDL statements ────────────────────────────────────────────────────────────
@@ -296,6 +606,74 @@ CREATE STREAM agentshield_hook_events
   block_reason     string,
   event_data       string
 )`
+
+const ddlSecurityEvents = `
+CREATE STREAM agentshield_security_events
+(
+  detected_at   datetime64(3),
+  rule_id       low_cardinality(string),
+  rule_name     low_cardinality(string),
+  severity      low_cardinality(string),
+  agent_id      string,
+  deployment_id low_cardinality(string),
+  session_id    string,
+  run_id        string,
+  hook_name     low_cardinality(string),
+  tool_name     string,
+  message       string,
+  event_data    string
+)`
+
+const ddlRulesStream = `
+CREATE STREAM agentshield_rules
+(
+  rule_id            low_cardinality(string),
+  name               string,
+  version            string,
+  description        string,
+  query_sql          string,
+  enabled            bool,
+  deleted            bool,
+  severity           low_cardinality(string),
+  category           low_cardinality(string),
+  required_telemetry string,
+  fp_rate            low_cardinality(string),
+  hook_sources       string,
+  updated_at         datetime64(3)
+)`
+
+const ddlNotifyUDF = `CREATE OR REPLACE FUNCTION notify_agentshield_udf(
+  rule_id string, rule_name string, severity string,
+  agent_id string, deployment_id string, session_id string,
+  hook_name string, tool_name string, message string, detected_at string
+) RETURNS string LANGUAGE PYTHON AS $$
+import requests
+def notify_agentshield_udf(rule_ids, rule_names, severities,
+                            agent_ids, deployment_ids, session_ids,
+                            hook_names, tool_names, messages, detected_ats):
+    for i in range(len(rule_ids)):
+        try:
+            requests.post("http://agentshield:8080/api/alerts/webhook", json={
+                "rule_id": rule_ids[i],
+                "rule_name": rule_names[i],
+                "severity": severities[i],
+                "agent_id": agent_ids[i],
+                "message": messages[i],
+                "detected_at": detected_ats[i]
+            }, timeout=3)
+        except Exception:
+            pass
+    return rule_ids
+$$`
+
+const ddlNotifierAlert = `CREATE ALERT IF NOT EXISTS agentshield_notifier
+  BATCH 1 EVENTS WITH TIMEOUT 5s
+  LIMIT 10 ALERTS PER 1m
+  CALL notify_agentshield_udf
+AS SELECT
+  rule_id, rule_name, severity, agent_id, deployment_id,
+  session_id, hook_name, tool_name, message, detected_at
+FROM agentshield_security_events`
 
 const ddlOTelInput = `
 CREATE INPUT openclaw_otel_input
