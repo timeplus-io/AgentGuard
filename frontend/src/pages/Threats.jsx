@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import Footer from '../components/Footer'
@@ -204,7 +205,13 @@ export default function Threats() {
                     <tr key={`${t.detected_at}-${t.rule_id}-${t.agent_id}-${i}`} className="hover:bg-[#2c2834] transition-colors">
                       <td className="px-6 py-4"><SeverityBadge severity={t.severity} /></td>
                       <td className="px-6 py-4">
-                        <p className="text-xs font-semibold text-[#e7dff0]">{t.rule_name}</p>
+                        {t.rule_id ? (
+                          <Link to={`/rules/${t.rule_id}`} className="text-xs font-semibold text-[#e7dff0] hover:text-[#ffb0cf] transition-colors">
+                            {t.rule_name}
+                          </Link>
+                        ) : (
+                          <p className="text-xs font-semibold text-[#e7dff0]">{t.rule_name}</p>
+                        )}
                         <p className="text-[10px] text-zinc-500 font-medium max-w-xs truncate">{t.message}</p>
                       </td>
                       <td className="px-6 py-4">

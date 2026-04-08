@@ -12,8 +12,8 @@ import { NotificationsProvider } from './components/NotificationsProvider'
 
 export default function App() {
   return (
-    <NotificationsProvider>
     <BrowserRouter>
+    <NotificationsProvider>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
@@ -27,7 +27,7 @@ export default function App() {
         <Route path="/onboarding" element={<Onboarding />} />
 
       </Routes>
-    </BrowserRouter>
     </NotificationsProvider>
+    </BrowserRouter>
   )
 }

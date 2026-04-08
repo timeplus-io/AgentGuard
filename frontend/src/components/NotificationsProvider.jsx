@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 
 const NotificationsContext = createContext(null)
 
@@ -50,9 +51,12 @@ function Toast({ n, onDismiss }) {
               {n.agent_id}
             </code>
           )}
-          <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full ml-auto ${s.badge}`}>
-            {s.label}
-          </span>
+          <Link
+            to="/threats"
+            className="text-[10px] font-semibold text-[#ffb0cf] hover:underline underline-offset-2 ml-auto"
+          >
+            View threats →
+          </Link>
         </div>
       </div>
     </div>
