@@ -14,12 +14,18 @@ import (
 
 var idPartRe = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
-// filteredSessionCountSQL is a subquery returning per-agent session counts
-// using the same filters as ListSessions (excludes internal/empty sessions).
+// filteredSessionCountSQL is a subquery returning per-agent session counts,
+// run counts, and tool call counts using the same filters as ListSessions
+// (excludes internal/temp sessions and sessions with no actual run activity).
 const filteredSessionCountSQL = `
-SELECT agent_id, deployment_id, count() AS session_count
+SELECT agent_id, deployment_id,
+       count()                         AS session_count,
+       sum(run_count)                  AS run_count,
+       sum(tool_call_count)            AS tool_call_count
 FROM (
-    SELECT agent_id, deployment_id, session_id
+    SELECT agent_id, deployment_id, session_id,
+           count_distinct(if(run_id != '', run_id, null)) AS run_count,
+           count_if(hook_name = 'before_tool_call')       AS tool_call_count
     FROM table(agentshield_hook_events)
     WHERE session_id != ''
     GROUP BY agent_id, deployment_id, session_id
@@ -48,7 +54,9 @@ func ListAgents(cfg *config.Config) gin.HandlerFunc {
 
 		sql := fmt.Sprintf(`
 SELECT agent_id, deployment_id, deployment_name, last_seen, event_count,
-       coalesce(session_count, 0) AS session_count
+       coalesce(session_count, 0)   AS session_count,
+       coalesce(run_count, 0)       AS run_count,
+       coalesce(tool_call_count, 0) AS tool_call_count
 FROM (
     SELECT agent_id, deployment_id,
            any(deployment_name) AS deployment_name,
@@ -107,7 +115,9 @@ func GetAgent(cfg *config.Config) gin.HandlerFunc {
 
 		sql := fmt.Sprintf(`
 SELECT agent_id, deployment_id, deployment_name, last_seen, event_count,
-       coalesce(session_count, 0) AS session_count
+       coalesce(session_count, 0)   AS session_count,
+       coalesce(run_count, 0)       AS run_count,
+       coalesce(tool_call_count, 0) AS tool_call_count
 FROM (
     SELECT agent_id, deployment_id,
            any(deployment_name) AS deployment_name,
@@ -119,9 +129,14 @@ FROM (
     GROUP BY agent_id, deployment_id
 ) AS agents
 LEFT JOIN (
-    SELECT agent_id, deployment_id, count() AS session_count
+    SELECT agent_id, deployment_id,
+           count()                                         AS session_count,
+           sum(run_count)                                  AS run_count,
+           sum(tool_call_count)                            AS tool_call_count
     FROM (
-        SELECT agent_id, deployment_id, session_id
+        SELECT agent_id, deployment_id, session_id,
+               count_distinct(if(run_id != '', run_id, null)) AS run_count,
+               count_if(hook_name = 'before_tool_call')       AS tool_call_count
         FROM table(agentshield_hook_events)
         WHERE deployment_id = '%s'
           AND agent_id      = '%s'
@@ -158,5 +173,7 @@ func rowToAgent(row map[string]any) models.Agent {
 		LastSeen:       parseTime(row["last_seen"]),
 		EventCount:     parseInt(row["event_count"]),
 		SessionCount:   parseInt(row["session_count"]),
+		RunCount:       parseInt(row["run_count"]),
+		ToolCallCount:  parseInt(row["tool_call_count"]),
 	}
 }

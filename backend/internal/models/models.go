@@ -9,6 +9,8 @@ type Agent struct {
 	LastSeen       time.Time `json:"last_seen"`
 	EventCount     int       `json:"event_count"`
 	SessionCount   int       `json:"session_count"`
+	RunCount       int       `json:"run_count"`
+	ToolCallCount  int       `json:"tool_call_count"`
 }
 
 type Threat struct {

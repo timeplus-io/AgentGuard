@@ -268,10 +268,10 @@ export default function AgentDetail() {
   const endEvent = Math.min(page * limit, eventsTotal)
 
   const metrics = [
-    { label: 'Total Events', value: '—', icon: 'bolt' },
-    { label: 'Sessions', value: sessions.length > 0 ? sessions.length : '—', icon: 'layers' },
-    { label: 'Runs', value: sessionDetail ? sessionDetail.runs?.length ?? '—' : '—', icon: 'sync_alt' },
-    { label: 'Blocks', value: '—', icon: 'block' },
+    { label: 'Total Events',    value: agent ? agent.event_count     : '—', icon: 'bolt' },
+    { label: 'Total Sessions',  value: agent ? agent.session_count   : '—', icon: 'layers' },
+    { label: 'Total Runs',      value: agent ? agent.run_count       : '—', icon: 'sync_alt' },
+    { label: 'Total Tool Calls',value: agent ? agent.tool_call_count : '—', icon: 'handyman' },
   ]
 
   const agentName = agent?.agent_id ?? id
