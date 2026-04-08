@@ -162,30 +162,12 @@ func GetSession(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// Fetch session metadata (key) for the session_type label.
-		metaSQL := fmt.Sprintf(`
-SELECT session_key
-FROM table(agentshield_hook_events)
-WHERE deployment_id = '%s'
-  AND agent_id      = '%s'
-  AND session_id    = '%s'
-LIMIT 1`,
-			deploymentID, agentID, sessionID)
-
-		metaRows, err := timeplus.Query(&cfg.Timeplus, metaSQL)
-		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
-			return
-		}
-		if len(metaRows) == 0 {
-			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
-			return
-		}
-		sessionKey := parseStr(metaRows[0]["session_key"])
-
-		// Fetch runs for this session.
+		// Single query: fetch session_key alongside per-run aggregates.
+		// any(session_key) returns the same value for all rows in the group (session_key
+		// is constant within a session), so this is safe and eliminates a round-trip.
 		runsSQL := fmt.Sprintf(`
 SELECT
+    any(session_key)                        AS session_key,
     run_id,
     min(event_time)                         AS start_time,
     max(event_time)                         AS end_time,
@@ -194,17 +176,25 @@ SELECT
     countIf(hook_name = 'before_tool_call') AS tool_count,
     countIf(hook_decision = 'block')        AS block_count
 FROM table(agentshield_hook_events)
-WHERE session_id = '%s'
-  AND run_id     != ''
+WHERE deployment_id = '%s'
+  AND agent_id      = '%s'
+  AND session_id    = '%s'
+  AND run_id        != ''
 GROUP BY run_id
 ORDER BY start_time ASC`,
-			sessionID)
+			deploymentID, agentID, sessionID)
 
 		runsRows, err := timeplus.Query(&cfg.Timeplus, runsSQL)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
+		if len(runsRows) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			return
+		}
+
+		sessionKey := parseStr(runsRows[0]["session_key"])
 
 		runs := make([]models.Run, 0, len(runsRows))
 		for _, row := range runsRows {

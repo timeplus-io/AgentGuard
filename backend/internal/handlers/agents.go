@@ -1,13 +1,10 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
-	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentshield/internal/config"
@@ -85,16 +82,8 @@ ORDER BY last_seen DESC`
 
 func GetAgent(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := c.Param("id")
-		parts := strings.SplitN(id, "__", 2)
-		if len(parts) != 2 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format, expected deploymentId__agentId"})
-			return
-		}
-		deploymentID := parts[0]
-		agentID := parts[1]
-
-		if !idPartRe.MatchString(deploymentID) || !idPartRe.MatchString(agentID) {
+		deploymentID, agentID, ok := splitAgentID(c.Param("id"))
+		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format, expected deploymentId__agentId"})
 			return
 		}
@@ -130,67 +119,12 @@ LIMIT 1`,
 }
 
 func rowToAgent(row map[string]any) models.Agent {
-	agentID, _ := row["agent_id"].(string)
-	deploymentID, _ := row["deployment_id"].(string)
-	deploymentName, _ := row["deployment_name"].(string)
-
-	var lastSeen time.Time
-	switch v := row["last_seen"].(type) {
-	case float64:
-		// Unix seconds (rare format)
-		lastSeen = time.Unix(int64(v), 0)
-	case json.Number:
-		// Numeric timestamp — try as seconds
-		if n, err := v.Float64(); err == nil {
-			lastSeen = time.Unix(int64(n), 0)
-		}
-	case string:
-		if v != "" {
-			t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", v)
-			if err != nil {
-				// Proton returns various time formats; try RFC3339 fallback.
-				t, err = time.Parse(time.RFC3339Nano, v)
-				if err != nil {
-					lastSeen = time.Time{}
-				} else {
-					lastSeen = t
-				}
-			} else {
-				lastSeen = t
-			}
-		}
-	}
-
-	eventCount := 0
-	switch v := row["event_count"].(type) {
-	case float64:
-		eventCount = int(v)
-	case json.Number:
-		if n, err := v.Int64(); err == nil {
-			eventCount = int(n)
-		}
-	case int:
-		eventCount = v
-	}
-
-	sessionCount := 0
-	switch v := row["session_count"].(type) {
-	case float64:
-		sessionCount = int(v)
-	case json.Number:
-		if n, err := v.Int64(); err == nil {
-			sessionCount = int(n)
-		}
-	case int:
-		sessionCount = v
-	}
-
 	return models.Agent{
-		AgentID:        agentID,
-		DeploymentID:   deploymentID,
-		DeploymentName: deploymentName,
-		LastSeen:       lastSeen,
-		EventCount:     eventCount,
-		SessionCount:   sessionCount,
+		AgentID:        parseStr(row["agent_id"]),
+		DeploymentID:   parseStr(row["deployment_id"]),
+		DeploymentName: parseStr(row["deployment_name"]),
+		LastSeen:       parseTime(row["last_seen"]),
+		EventCount:     parseInt(row["event_count"]),
+		SessionCount:   parseInt(row["session_count"]),
 	}
 }
