@@ -32,12 +32,14 @@ export default function Threats() {
     const activityCtrl = new AbortController()
 
     async function streamThreats() {
-      setConnected(true)
+      let first = true
       // seek_to='-24h' causes Proton to replay last 24h first, then continue live —
       // all on the same connection, no phase switch needed.
       for await (const row of api.protonQuery(SQL_THREATS, { signal: threatCtrl.signal })) {
+        if (first) { setConnected(true); first = false }
         setThreats(prev => [row, ...prev].slice(0, 100))
       }
+      setConnected(false)
     }
 
     async function streamActivity() {
@@ -58,8 +60,9 @@ export default function Threats() {
   const filtered = threats.filter(t => {
     if (severity !== 'All' && t.severity?.toLowerCase() !== severity.toLowerCase()) return false
     if (category !== 'All Categories') {
-      const catMap = { 'Injection': 'rp-001', 'Exfiltration': 'rp-002', 'Supply Chain': 'rp-004' }
-      if (catMap[category] && t.rule_id !== catMap[category]) return false
+      const catMap = { Injection: 'rp-001', Exfiltration: 'rp-002', 'Supply Chain': 'rp-004' }
+      const mappedId = catMap[category]
+      if (!mappedId || t.rule_id !== mappedId) return false
     }
     return true
   })
