@@ -22,16 +22,17 @@ SETTINGS seek_to='-1h'`
 
 function formatTs(ts) {
   if (!ts) return '—'
-  try { return new Date(ts.replace(' ', 'T')).toLocaleString() } catch { return ts }
+  try {
+    return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts).toLocaleString()
+  } catch { return String(ts) }
 }
 
 function formatEvtTime(ts) {
   if (!ts) return ''
   try {
-    return new Date(ts.replace(' ', 'T')).toLocaleTimeString([], {
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
-    })
-  } catch { return ts }
+    return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
+      .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch { return String(ts) }
 }
 
 function formatActivity(evt) {
@@ -84,7 +85,7 @@ export default function Threats() {
     if (category !== 'All Categories') {
       const catMap = { Injection: 'rp-001', Exfiltration: 'rp-002', 'Supply Chain': 'rp-004' }
       const mappedId = catMap[category]
-      if (!mappedId || t.rule_id !== mappedId) return false
+      if (!mappedId || !t.rule_id?.startsWith(mappedId)) return false
     }
     return true
   })
@@ -165,11 +166,11 @@ export default function Threats() {
                   {filtered.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-12 text-center text-zinc-500 text-xs">
-                        {connected ? 'No threats detected yet.' : 'Connecting to threat stream…'}
+                        {connected ? 'Connecting to threat stream…' : 'No threats detected in the last 24h.'}
                       </td>
                     </tr>
-                  ) : filtered.map((t, i) => (
-                    <tr key={i} className="hover:bg-[#2c2834] transition-colors">
+                  ) : filtered.map((t) => (
+                    <tr key={`${t.detected_at}-${t.rule_id}-${t.agent_id}`} className="hover:bg-[#2c2834] transition-colors">
                       <td className="px-6 py-4"><SeverityBadge severity={t.severity} /></td>
                       <td className="px-6 py-4">
                         <p className="text-xs font-semibold text-[#e7dff0]">{t.rule_name}</p>
@@ -180,7 +181,11 @@ export default function Threats() {
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-xs text-zinc-400 font-mono">
-                          {t.session_id ? t.session_id.slice(0, 12) + '…' : '—'}
+                          {t.session_id
+                            ? t.session_id.length > 12
+                              ? t.session_id.slice(0, 12) + '…'
+                              : t.session_id
+                            : '—'}
                         </span>
                       </td>
                       <td className="px-6 py-4">
@@ -208,8 +213,8 @@ export default function Threats() {
             <div className="space-y-3">
               {liveActivity.length === 0 ? (
                 <p className="text-xs text-zinc-600">Waiting for agent activity…</p>
-              ) : liveActivity.map((evt, i) => (
-                <div key={i} className="flex items-start gap-4">
+              ) : liveActivity.map((evt) => (
+                <div key={`${evt.event_time}-${evt.agent_id}-${evt.hook_name}`} className="flex items-start gap-4">
                   <span className="text-[10px] font-mono text-[#ffb0cf] py-0.5 whitespace-nowrap flex-shrink-0">
                     {formatEvtTime(evt.event_time)}
                   </span>
