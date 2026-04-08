@@ -50,7 +50,7 @@ func ListEvents(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		if sid != "" {
-			if !uuidRe.MatchString(sid) {
+			if !idPartRe.MatchString(sid) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session_id"})
 				return
 			}

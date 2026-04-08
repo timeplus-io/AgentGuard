@@ -110,7 +110,7 @@ func ListSessions(cfg *config.Config) gin.HandlerFunc {
 		sql := fmt.Sprintf(`
 SELECT
     session_id,
-    session_key,
+    any(session_key)       AS session_key,
     count(DISTINCT run_id) AS run_count,
     count()                AS event_count,
     min(event_time)        AS first_seen,
@@ -119,7 +119,7 @@ FROM table(agentshield_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
   AND session_id    != ''
-GROUP BY session_id, session_key
+GROUP BY session_id
 ORDER BY last_seen DESC`,
 			deploymentID, agentID)
 
@@ -157,7 +157,7 @@ func GetSession(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		sessionID := c.Param("session_id")
-		if !uuidRe.MatchString(sessionID) {
+		if !idPartRe.MatchString(sessionID) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session_id format"})
 			return
 		}
