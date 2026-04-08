@@ -92,14 +92,26 @@ export default function Threats() {
     }
   }, [timeRange])
 
-  const filtered = threats.filter(t => {
-    if (severity !== 'All' && t.severity?.toLowerCase() !== severity.toLowerCase()) return false
-    if (category !== 'All Categories') {
-      const catMap = { Injection: 'rp-001', Exfiltration: 'rp-002', 'Supply Chain': 'rp-004' }
-      const mappedId = catMap[category]
-      if (!mappedId || !t.rule_id?.startsWith(mappedId)) return false
-    }
-    return true
+  const filtered = threats
+    .filter(t => {
+      if (severity !== 'All' && t.severity?.toLowerCase() !== severity.toLowerCase()) return false
+      if (category !== 'All Categories') {
+        const catMap = { Injection: 'rp-001', Exfiltration: 'rp-002', 'Supply Chain': 'rp-004' }
+        const mappedId = catMap[category]
+        if (!mappedId || !t.rule_id?.startsWith(mappedId)) return false
+      }
+      return true
+    })
+    .sort((a, b) => {
+      const ta = new Date(typeof a.detected_at === 'string' ? a.detected_at.replace(' ', 'T') : a.detected_at)
+      const tb = new Date(typeof b.detected_at === 'string' ? b.detected_at.replace(' ', 'T') : b.detected_at)
+      return tb - ta
+    })
+
+  const sortedActivity = [...liveActivity].sort((a, b) => {
+    const ta = new Date(typeof a.event_time === 'string' ? a.event_time.replace(' ', 'T') : a.event_time)
+    const tb = new Date(typeof b.event_time === 'string' ? b.event_time.replace(' ', 'T') : b.event_time)
+    return tb - ta
   })
 
   return (
@@ -201,8 +213,8 @@ export default function Threats() {
                           : connected ? 'Connecting to threat stream…' : 'No threats detected in the selected time range.'}
                       </td>
                     </tr>
-                  ) : filtered.map((t, i) => (
-                    <tr key={`${t.detected_at}-${t.rule_id}-${t.agent_id}-${i}`} className="hover:bg-[#2c2834] transition-colors">
+                  ) : filtered.map((t) => (
+                    <tr key={`${t.detected_at}-${t.rule_id}-${t.agent_id}`} className="hover:bg-[#2c2834] transition-colors">
                       <td className="px-6 py-4"><SeverityBadge severity={t.severity} /></td>
                       <td className="px-6 py-4">
                         {t.rule_id ? (
@@ -247,17 +259,17 @@ export default function Threats() {
             <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-6 flex items-center gap-3">
               <span className="w-2 h-2 rounded-full bg-[#ffb0cf] shadow-[0_0_10px_#ffb0cf] animate-pulse" />
               Live Agent Activity
-              {liveActivity.length > 0 && (
+              {sortedActivity.length > 0 && (
                 <span className="ml-auto text-[10px] text-zinc-600 font-normal normal-case tracking-normal">
-                  latest {liveActivity.length}
+                  latest {sortedActivity.length}
                 </span>
               )}
             </h3>
             <div className="space-y-3 h-64 overflow-y-auto pr-1">
-              {liveActivity.length === 0 ? (
+              {sortedActivity.length === 0 ? (
                 <p className="text-xs text-zinc-600">Waiting for agent activity…</p>
-              ) : liveActivity.map((evt, i) => (
-                <div key={`${evt.event_time}-${evt.agent_id}-${evt.hook_name}-${i}`} className="flex items-start gap-4">
+              ) : sortedActivity.map((evt) => (
+                <div key={`${evt.event_time}-${evt.agent_id}-${evt.hook_name}`} className="flex items-start gap-4">
                   <span className="text-[10px] font-mono text-[#ffb0cf] py-0.5 whitespace-nowrap flex-shrink-0">
                     {formatEvtTime(evt.event_time)}
                   </span>
