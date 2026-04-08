@@ -9,9 +9,10 @@ const plugin = {
     activate: async (api) => {
         const config = resolveConfig(api.pluginConfig);
         const client = createTimeplusClient(config);
-        registerAllHooks(api, client);
+        registerAllHooks(api, client, config);
         api.logger.info(`[agentshield] active — streaming to ${config.timeplusUrl}/proton/v1/ingest/streams/${config.stream} ` +
-            `(flush every ${config.flushMs}ms, batch size ${config.batchSize})`);
+            `(flush every ${config.flushMs}ms, batch size ${config.batchSize}) ` +
+            `deployment=${config.deploymentId}`);
     },
 };
 export default plugin;

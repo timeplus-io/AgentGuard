@@ -5,6 +5,8 @@ export type AgentShieldConfig = {
   batchSize: number;
   username: string;
   password: string;
+  deploymentId: string;
+  deploymentName: string;
 };
 
 const DEFAULTS: AgentShieldConfig = {
@@ -14,6 +16,8 @@ const DEFAULTS: AgentShieldConfig = {
   batchSize: 50,
   username: "proton",
   password: "",
+  deploymentId: "default",
+  deploymentName: "Default",
 };
 
 export function resolveConfig(
@@ -57,5 +61,14 @@ export function resolveConfig(
     (pluginConfig?.password as string | undefined) ??
     DEFAULTS.password;
 
-  return { timeplusUrl, stream, flushMs, batchSize, username, password };
+  // config-only: no env var override — deployment identity is set at installation time
+  const deploymentId =
+    (pluginConfig?.deploymentId as string | undefined) ??
+    DEFAULTS.deploymentId;
+
+  const deploymentName =
+    (pluginConfig?.deploymentName as string | undefined) ??
+    DEFAULTS.deploymentName;
+
+  return { timeplusUrl, stream, flushMs, batchSize, username, password, deploymentId, deploymentName };
 }

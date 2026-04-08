@@ -32,6 +32,15 @@ export const api = {
   getDashboard: () => get('/dashboard'),
   listAgents: (page = 1, limit = 15) => get(`/agents?page=${page}&limit=${limit}`),
   getAgent: (id) => get(`/agents/${id}`),
+  listSessions: (agentId, params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return get(`/agents/${agentId}/sessions${q ? '?' + q : ''}`)
+  },
+  getSession: (agentId, sessionId) => get(`/agents/${agentId}/sessions/${sessionId}`),
+  listEvents: (agentId, params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return get(`/agents/${agentId}/events${q ? '?' + q : ''}`)
+  },
   listThreats: (params = {}) => {
     const q = new URLSearchParams(params).toString()
     return get(`/threats${q ? '?' + q : ''}`)

@@ -27,7 +27,11 @@ var availableTables = []models.TableInfo{
 	{
 		Name: "hook_events",
 		Type: "streaming",
-		Columns: []string{"event_id", "timestamp", "hook_type", "agent_id", "session_id", "payload_hash", "action_taken", "rule_id", "severity"},
+		Columns: []string{
+			"hook_name", "event_time", "session_id", "run_id", "agent_id",
+			"deployment_id", "deployment_name", "session_key", "tool_name",
+			"provider", "model", "hook_decision", "block_reason", "event_data",
+		},
 	},
 }
 

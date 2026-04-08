@@ -22,6 +22,12 @@
       },
       "password": {
         "type": "string"
+      },
+      "deploymentId": {
+        "type": "string"
+      },
+      "deploymentName": {
+        "type": "string"
       }
     }
   }

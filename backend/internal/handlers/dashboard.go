@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,18 +11,6 @@ import (
 func GetDashboard(c *gin.Context) {
 	// Compute KPIs from mock data
 	totalAgents := len(mock.Agents)
-	activeCount := 0
-	suspendedCount := 0
-	totalCost := 0.0
-	for _, a := range mock.Agents {
-		if a.Status == "ACTIVE" {
-			activeCount++
-		}
-		if a.Status == "SUSPENDED" {
-			suspendedCount++
-		}
-		totalCost += a.TotalCost
-	}
 
 	criticalThreats := 0
 	for _, t := range mock.Threats {
@@ -63,10 +50,10 @@ func GetDashboard(c *gin.Context) {
 	resp := models.DashboardResponse{
 		KPIs: models.KPIData{
 			TotalAgents:         totalAgents,
-			AgentsDelta:         fmt.Sprintf("+%d active, %d suspended", activeCount, suspendedCount),
+			AgentsDelta:         "",
 			ActiveThreats:       len(mock.Threats),
 			CriticalEscalations: criticalThreats,
-			TotalCost24h:        fmt.Sprintf("$%.2f", totalCost/7),
+			TotalCost24h:        "$0.00",
 			CostStatus:          "within budget",
 			ComplianceCoverage:  94.7,
 			ComplianceLabel:     "SOC2 + HIPAA",

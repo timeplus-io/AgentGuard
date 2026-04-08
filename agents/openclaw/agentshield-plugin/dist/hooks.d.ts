@@ -1,4 +1,5 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { AgentShieldConfig } from "./config.js";
 import type { HookEvent, TimeplusClient } from "./timeplus-client.js";
 type BaseCtx = {
     agentId?: string;
@@ -6,7 +7,7 @@ type BaseCtx = {
     sessionId?: string;
     runId?: string;
 };
-export declare function baseEvent(hookName: string, ctx: BaseCtx): HookEvent;
-export declare function registerAllHooks(api: OpenClawPluginApi, client: TimeplusClient): void;
+export declare function baseEvent(hookName: string, ctx: BaseCtx, config: AgentShieldConfig): HookEvent;
+export declare function registerAllHooks(api: OpenClawPluginApi, client: TimeplusClient, config: AgentShieldConfig): void;
 export {};
 //# sourceMappingURL=hooks.d.ts.map

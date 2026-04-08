@@ -5,6 +5,8 @@ const DEFAULTS = {
     batchSize: 50,
     username: "proton",
     password: "",
+    deploymentId: "default",
+    deploymentName: "Default",
 };
 export function resolveConfig(pluginConfig) {
     const timeplusUrl = (process.env.AGENTSHIELD_TIMEPLUS_URL || undefined) ??
@@ -29,6 +31,11 @@ export function resolveConfig(pluginConfig) {
     const password = (process.env.AGENTSHIELD_PASSWORD || undefined) ??
         pluginConfig?.password ??
         DEFAULTS.password;
-    return { timeplusUrl, stream, flushMs, batchSize, username, password };
+    // config-only: no env var override — deployment identity is set at installation time
+    const deploymentId = pluginConfig?.deploymentId ??
+        DEFAULTS.deploymentId;
+    const deploymentName = pluginConfig?.deploymentName ??
+        DEFAULTS.deploymentName;
+    return { timeplusUrl, stream, flushMs, batchSize, username, password, deploymentId, deploymentName };
 }
 //# sourceMappingURL=config.js.map

@@ -2,7 +2,7 @@ PWD := $(shell pwd)
 CONFIG_FILE := .openclaw/openclaw.json
 IMAGE := ghcr.io/openclaw/openclaw:2026.4.5
 
-.PHONY: workspace init run start configure url devices approve clean install-plugin build-plugin deploy-plugin test
+.PHONY: workspace init run start configure add-agents url devices approve clean install-plugin build-plugin deploy-plugin test
 
 workspace:
 	# Create the folder and the nested workspace
@@ -76,7 +76,9 @@ data["plugins"]["entries"]["agentshield"] = {
         "flushMs": 2000,
         "batchSize": 50,
         "username": "proton",
-        "password": "timeplus@t+"
+        "password": "timeplus@t+",
+        "deploymentId": "local",
+        "deploymentName": "Local Dev"
     }
 }
 
@@ -88,6 +90,16 @@ export CONFIGURE_SCRIPT
 
 configure:
 	@python3 -c "$$CONFIGURE_SCRIPT"
+
+add-agents:
+	# Create an 'analyst' agent with its own isolated workspace.
+	# Idempotent: safe to re-run — openclaw skips creation if already present.
+	mkdir -p .openclaw/workspace-analyst
+	docker exec openclaw node dist/index.js agents add analyst \
+		--workspace /home/node/.openclaw/workspace-analyst \
+		--non-interactive 2>&1 | grep -v "already exists" || true
+	@echo "Agents:"
+	@docker exec openclaw node dist/index.js agents list
 
 start:
 	docker stop openclaw || true

@@ -76,4 +76,16 @@ describe("resolveConfig", () => {
     expect(cfg.flushMs).toBe(3000);
     expect(cfg.batchSize).toBe(25);
   });
+
+  it("returns default deploymentId and deploymentName when called with no arguments", () => {
+    const cfg = resolveConfig();
+    expect(cfg.deploymentId).toBe("default");
+    expect(cfg.deploymentName).toBe("Default");
+  });
+
+  it("applies pluginConfig deploymentId and deploymentName over defaults", () => {
+    const cfg = resolveConfig({ deploymentId: "prod", deploymentName: "Production" });
+    expect(cfg.deploymentId).toBe("prod");
+    expect(cfg.deploymentName).toBe("Production");
+  });
 });

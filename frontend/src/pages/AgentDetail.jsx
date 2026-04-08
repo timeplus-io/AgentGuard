@@ -1,237 +1,494 @@
-import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import Footer from '../components/Footer'
 import { api } from '../api/client'
 
-const pulseHeights = [40, 60, 80, 40, 100, 70, 50, 90, 30, 100, 60, 80]
+// ── helpers ───────────────────────────────────────────────────────────────────
 
-const staticTimeline = [
-  {
-    id: 1,
-    color: 'bg-[#ffb0cf] shadow-[0_0_8px_#ffb0cf]',
-    borderHover: 'hover:border-[#ffb0cf]',
-    title: 'Security Policy Check',
-    titleColor: 'text-[#e7dff0]',
-    time: '14:22:01.442',
-    desc: <>Verified request against <span className="text-[#ffb0cf]">Global-Inbound-Ruleset-V4</span>. No violations detected in prompt injection scan.</>,
-    meta: [{ icon: 'timer', text: '12ms' }, { icon: 'database', text: 'metadata_ref: 0x44A' }],
-    error: null,
-  },
-  {
-    id: 2,
-    color: 'bg-[#ffb4ab] shadow-[0_0_8px_#ffb4ab]',
-    borderHover: 'hover:border-[#ffb4ab]',
-    title: 'Model Hallucination Alert',
-    titleColor: 'text-[#ffb4ab]',
-    time: '14:18:55.201',
-    desc: 'Output entropy exceeded defined threshold (0.84). Content flagged for RAG re-verification. High variance in token probability.',
-    meta: [],
-    error: '"Error: Confidence score below 0.7. Automated corrective prompt injected."',
-  },
-  {
-    id: 3,
-    color: 'bg-[#ffb0cf]/40 shadow-[0_0_4px_#ffb0cf66]',
-    borderHover: 'hover:border-[#ffb0cf]',
-    title: 'Context Window Compression',
-    titleColor: 'text-[#e7dff0]',
-    time: '14:05:12.889',
-    desc: 'Successfully compressed 8k history tokens into 256 summarization tokens using recursive summarizer module.',
-    meta: [],
-    error: null,
-  },
-]
+function fmtTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const hh = String(d.getUTCHours()).padStart(2, '0')
+  const mm = String(d.getUTCMinutes()).padStart(2, '0')
+  const ss = String(d.getUTCSeconds()).padStart(2, '0')
+  const ms = String(d.getUTCMilliseconds()).padStart(3, '0')
+  return `${hh}:${mm}:${ss}.${ms} UTC`
+}
+
+function dotColor(event) {
+  if (event.hook_decision === 'block') return '#ffb4ab'
+  const n = event.hook_name
+  if (n === 'llm_input' || n === 'llm_output') return '#ffb0cf'
+  if (n === 'before_tool_call' || n === 'after_tool_call' || n === 'tool_result_persist') return '#93c5fd'
+  if (n === 'before_agent_start' || n === 'agent_end') return '#a1a1aa'
+  return '#52525b'
+}
+
+function sessionTypeIcon(type) {
+  switch (type) {
+    case 'Web UI':    return 'language'
+    case 'HTTP API':  return 'api'
+    case 'Cron':      return 'schedule'
+    case 'Sub-agent': return 'account_tree'
+    default:          return 'help_outline'
+  }
+}
+
+function safeParse(str) {
+  try { return JSON.parse(str) } catch { return null }
+}
+
+function toISOSafe(localDt) {
+  if (!localDt) return null
+  const d = new Date(localDt)
+  return isNaN(d) ? null : d.toISOString()
+}
+
+// ── EventDetail: structured detail panel per hook type ────────────────────────
+
+function KVRow({ label, value }) {
+  if (value == null || value === '') return null
+  return (
+    <div className="grid grid-cols-[130px_1fr] gap-2 py-1 border-b border-[#574149]/10 last:border-0">
+      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</span>
+      <span className="text-xs font-mono text-[#e7dff0] break-all">{String(value)}</span>
+    </div>
+  )
+}
+
+function EventDetail({ event }) {
+  const data = safeParse(event.event_data) || {}
+  const hook = event.hook_name
+  const isBlock = event.hook_decision === 'block'
+
+  if (isBlock) {
+    const rule = data.rule ?? data.ruleName ?? data.rule_name ?? data.ruleId ?? ''
+    return (
+      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#ffb4ab]/20 space-y-0.5">
+        <KVRow label="Block Reason" value={event.block_reason} />
+        <KVRow label="Rule" value={rule} />
+      </div>
+    )
+  }
+
+  if (hook === 'llm_input') {
+    const msgCount = Array.isArray(data.messages) ? data.messages.length : (data.messageCount ?? data.message_count ?? '')
+    return (
+      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
+        <KVRow label="Provider" value={event.provider} />
+        <KVRow label="Model" value={event.model} />
+        <KVRow label="Run ID" value={event.run_id} />
+        <KVRow label="Session ID" value={event.session_id} />
+        {msgCount !== '' && <KVRow label="Messages" value={msgCount} />}
+      </div>
+    )
+  }
+
+  if (hook === 'llm_output') {
+    const finish = data.finishReason ?? data.finish_reason ?? data.stop_reason ?? ''
+    return (
+      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
+        <KVRow label="Provider" value={event.provider} />
+        <KVRow label="Model" value={event.model} />
+        <KVRow label="Run ID" value={event.run_id} />
+        <KVRow label="Finish Reason" value={finish} />
+      </div>
+    )
+  }
+
+  if (hook === 'before_tool_call' || hook === 'after_tool_call') {
+    const input = data.input ?? data.tool_input ?? data.args ?? {}
+    return (
+      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
+        <KVRow label="Tool Name" value={event.tool_name} />
+        <KVRow label="Run ID" value={event.run_id} />
+        {typeof input === 'object'
+          ? Object.entries(input).map(([k, v]) => (
+              <KVRow key={k} label={k} value={typeof v === 'object' ? JSON.stringify(v) : v} />
+            ))
+          : <KVRow label="Input" value={input} />
+        }
+      </div>
+    )
+  }
+
+  if (hook === 'tool_result_persist') {
+    const raw = data.result ?? data.output ?? data.content ?? JSON.stringify(data)
+    const preview = String(raw).slice(0, 200)
+    return (
+      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
+        <KVRow label="Tool Name" value={event.tool_name} />
+        <KVRow label="Result" value={preview + (String(raw).length > 200 ? '…' : '')} />
+      </div>
+    )
+  }
+
+  if (hook === 'before_agent_start' || hook === 'agent_end') {
+    const duration = data.duration_ms ?? data.duration ?? data.elapsed_ms ?? data.elapsed ?? ''
+    return (
+      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
+        <KVRow label="Run ID" value={event.run_id} />
+        <KVRow label="Session ID" value={event.session_id} />
+        {duration !== '' && <KVRow label="Duration" value={`${duration}ms`} />}
+      </div>
+    )
+  }
+
+  // fallback: all non-empty top-level fields from event_data
+  const entries = Object.entries(data).filter(([, v]) => v != null && v !== '' && v !== false)
+  return (
+    <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
+      {entries.length === 0
+        ? <span className="text-[10px] text-zinc-600">No structured data</span>
+        : entries.map(([k, v]) => (
+            <KVRow key={k} label={k} value={typeof v === 'object' ? JSON.stringify(v) : v} />
+          ))
+      }
+    </div>
+  )
+}
+
+// ── EventRow ──────────────────────────────────────────────────────────────────
+
+function EventRow({ event }) {
+  const [expanded, setExpanded] = useState(false)
+  const color = dotColor(event)
+  const subtitle = [event.provider, event.model, event.tool_name, event.hook_decision]
+    .filter(Boolean).join(' · ')
+
+  return (
+    <div className="group flex gap-4 px-6 py-4 hover:bg-[#2c2834]/50 transition-all border-l-2 border-transparent hover:border-[#574149]/40">
+      <div className="flex flex-col items-center pt-1">
+        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+        <div className="w-px flex-1 bg-[#574149]/20 my-2" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between items-start gap-4">
+          <span className="text-xs font-medium text-[#e7dff0]">{event.hook_name}</span>
+          <span className="text-[10px] text-zinc-500 font-mono shrink-0">{fmtTime(event.event_time)}</span>
+        </div>
+        {subtitle && <p className="text-[11px] text-zinc-500 mt-0.5">{subtitle}</p>}
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="mt-1 flex items-center gap-1 text-[10px] text-zinc-500 hover:text-[#ffb0cf] transition-colors"
+        >
+          <span className="material-symbols-outlined text-[12px]">
+            {expanded ? 'expand_less' : 'expand_more'}
+          </span>
+          Event Details
+        </button>
+        {expanded && <EventDetail event={event} />}
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AgentDetail() {
   const { id } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedSession = searchParams.get('session')
+  const selectedRun = searchParams.get('run_id')
+
   const [agent, setAgent] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [sessions, setSessions] = useState([])
+  const [sessionDetail, setSessionDetail] = useState(null)
+  const [events, setEvents] = useState([])
+  const [eventsTotal, setEventsTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(100)
+  const [since, setSince] = useState('')
+  const [until, setUntil] = useState('')
+
+  const [loadingAgent, setLoadingAgent] = useState(true)
+  const [loadingSessions, setLoadingSessions] = useState(true)
+  const [loadingEvents, setLoadingEvents] = useState(false)
+  const [refreshTick, setRefreshTick] = useState(0)
+
+  const refresh = useCallback(() => setRefreshTick(t => t + 1), [])
 
   useEffect(() => {
+    setLoadingAgent(true)
     api.getAgent(id)
       .then(setAgent)
       .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [id])
+      .finally(() => setLoadingAgent(false))
+  }, [id, refreshTick])
 
-  const metrics = agent ? [
-    { label: 'Total Turns', value: agent.totalTurns ?? '1,402', unit: '', delta: '+12% from last session', deltaColor: 'text-[#ffb0cf]', icon: 'sync_alt', deltaIcon: 'trending_up' },
-    { label: 'Latency', value: agent.latency ?? '840', unit: 'ms', delta: 'Stable performance', deltaColor: 'text-[#ffb2b8]', icon: 'speed', deltaIcon: 'check_circle' },
-    { label: 'Success Rate', value: agent.successRate ?? '99.8', unit: '%', delta: 'Target threshold met', deltaColor: 'text-[#ffb0cf]', icon: 'verified', deltaIcon: 'shield' },
-    { label: 'Token Usage', value: agent.tokenUsage ?? '42.1', unit: 'k', delta: 'Next tier at 50k', deltaColor: 'text-zinc-400', icon: 'toll', deltaIcon: 'info' },
-  ] : [
-    { label: 'Total Turns', value: '1,402', unit: '', delta: '+12% from last session', deltaColor: 'text-[#ffb0cf]', icon: 'sync_alt', deltaIcon: 'trending_up' },
-    { label: 'Latency', value: '840', unit: 'ms', delta: 'Stable performance', deltaColor: 'text-[#ffb2b8]', icon: 'speed', deltaIcon: 'check_circle' },
-    { label: 'Success Rate', value: '99.8', unit: '%', delta: 'Target threshold met', deltaColor: 'text-[#ffb0cf]', icon: 'verified', deltaIcon: 'shield' },
-    { label: 'Token Usage', value: '42.1', unit: 'k', delta: 'Next tier at 50k', deltaColor: 'text-zinc-400', icon: 'toll', deltaIcon: 'info' },
+  useEffect(() => {
+    setLoadingSessions(true)
+    api.listSessions(id)
+      .then(setSessions)
+      .catch(() => setSessions([]))
+      .finally(() => setLoadingSessions(false))
+  }, [id, refreshTick])
+
+  useEffect(() => {
+    if (!selectedSession) { setSessionDetail(null); return }
+    api.getSession(id, selectedSession)
+      .then(setSessionDetail)
+      .catch(() => setSessionDetail(null))
+  }, [id, selectedSession, refreshTick])
+
+  useEffect(() => {
+    if (!selectedSession && !selectedRun) { setEvents([]); setEventsTotal(0); return }
+    const params = { page, limit }
+    if (selectedSession) params.session_id = selectedSession
+    if (selectedRun) params.run_id = selectedRun
+    const sinceISO = toISOSafe(since)
+    const untilISO = toISOSafe(until)
+    if (sinceISO) params.since = sinceISO
+    if (untilISO) params.until = untilISO
+
+    setLoadingEvents(true)
+    api.listEvents(id, params)
+      .then(r => { setEvents(r.events ?? []); setEventsTotal(r.total ?? 0) })
+      .catch(() => { setEvents([]); setEventsTotal(0) })
+      .finally(() => setLoadingEvents(false))
+  }, [id, selectedSession, selectedRun, page, limit, since, until, refreshTick])
+
+  const selectSession = (sid) => {
+    setPage(1)
+    setSearchParams({ session: sid })
+  }
+
+  const selectRun = (rid) => {
+    setPage(1)
+    const params = {}
+    if (selectedSession) params.session = selectedSession
+    params.run_id = rid
+    setSearchParams(params)
+  }
+
+  const isRefreshing = loadingAgent || loadingSessions || loadingEvents
+  const totalPages = Math.max(1, Math.ceil(eventsTotal / limit))
+  const startEvent = eventsTotal === 0 ? 0 : (page - 1) * limit + 1
+  const endEvent = Math.min(page * limit, eventsTotal)
+
+  const metrics = [
+    { label: 'Total Events',    value: agent ? agent.event_count     : '—', icon: 'bolt' },
+    { label: 'Total Sessions',  value: agent ? agent.session_count   : '—', icon: 'layers' },
+    { label: 'Total Runs',      value: agent ? agent.run_count       : '—', icon: 'sync_alt' },
+    { label: 'Total Tool Calls',value: agent ? agent.tool_call_count : '—', icon: 'handyman' },
   ]
+
+  const agentName = agent?.agent_id ?? id
+  const deploymentName = agent?.deployment_name ?? ''
 
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
       <Sidebar />
       <Footer />
 
-      {/* Custom TopNav for detail page */}
-      <header className="fixed top-0 right-0 left-64 h-16 bg-[#15121d] z-50 flex justify-between items-center px-8 shadow-[0_0_12px_rgba(213,63,140,0.12)] backdrop-blur-md">
+      {/* TopNav */}
+      <header className="fixed top-0 right-0 left-64 h-16 bg-[#15121d]/95 z-50 flex justify-between items-center px-8 backdrop-blur-md shadow-[0_0_12px_rgba(213,63,140,0.12)]">
         <div className="flex items-center gap-4">
           <Link to="/agents" className="text-zinc-400 hover:text-[#ffb0cf] transition-colors">
             <span className="material-symbols-outlined">arrow_back</span>
           </Link>
-          <span className="font-medium tracking-tight text-lg text-[#e7dff0]">{id || 'Shield-Core-01'}</span>
-          <span className="bg-[#ffb2b8]/10 text-[#ffb2b8] px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-tighter">Live Monitor</span>
+          <span className="font-medium tracking-tight text-lg text-[#e7dff0]">{agentName}</span>
+          {deploymentName && (
+            <span className="bg-[#2c2834] text-zinc-400 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-tighter">
+              {deploymentName}
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-6">
-          <div className="flex gap-4">
-            <button className="text-zinc-400 hover:text-[#ffb0cf] transition-colors">
-              <span className="material-symbols-outlined">monitor_heart</span>
-            </button>
-            <button className="text-zinc-400 hover:text-[#ffb0cf] transition-colors relative">
-              <span className="material-symbols-outlined">notifications</span>
-              <span className="absolute top-0 right-0 w-2 h-2 bg-[#ffb0cf] rounded-full border-2 border-[#15121d]"></span>
-            </button>
-          </div>
-          <div className="w-8 h-8 rounded-sm bg-[#2c2834] flex items-center justify-center text-[#ffb0cf] font-semibold text-xs">AS</div>
-        </div>
+        <button
+          onClick={refresh}
+          className="flex items-center gap-2 text-xs text-zinc-400 hover:text-[#ffb0cf] transition-colors px-3 py-1.5 rounded-sm hover:bg-[#2c2834]"
+        >
+          <span className={`material-symbols-outlined text-base ${isRefreshing ? 'animate-spin' : ''}`}>
+            refresh
+          </span>
+          Refresh
+        </button>
       </header>
 
-      <main className="pl-64 pt-16 pb-8 min-h-screen">
-        <div className="p-8 space-y-8">
-          {/* Metrics */}
-          <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            {metrics.map((m, i) => (
-              <div key={i} className="bg-[#2c2834] p-6 rounded relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <span className="material-symbols-outlined text-5xl">{m.icon}</span>
-                </div>
-                <p className="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-1">{m.label}</p>
-                <h2 className="text-3xl font-medium text-[#e7dff0]">
-                  {m.value}<span className="text-base text-zinc-500 ml-1">{m.unit}</span>
-                </h2>
-                <div className={`mt-4 flex items-center gap-2 text-[10px] ${m.deltaColor}`}>
-                  <span className="material-symbols-outlined text-xs">{m.deltaIcon}</span>
-                  <span>{m.delta}</span>
-                </div>
+      <main className="pl-64 pt-16 min-h-screen flex flex-col">
+        {/* Metric cards */}
+        <section className="grid grid-cols-4 gap-4 p-6 pb-4 shrink-0">
+          {metrics.map((m) => (
+            <div key={m.label} className="bg-[#2c2834] p-4 rounded relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                <span className="material-symbols-outlined text-4xl">{m.icon}</span>
               </div>
-            ))}
-          </section>
+              <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest mb-1">{m.label}</p>
+              <h2 className="text-2xl font-medium text-[#e7dff0]">{m.value}</h2>
+            </div>
+          ))}
+        </section>
 
-          {/* Main Split */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Timeline */}
-            <section className="lg:col-span-2 space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-medium text-[#e7dff0]">Real-Time Trace Timeline</h3>
-                <div className="flex gap-2">
-                  <span className="bg-[#0f0c17] text-zinc-400 text-[10px] px-3 py-1 rounded-full border border-[#574149]/10 cursor-pointer hover:border-[#ffb0cf]/40 transition-colors">Filter: Errors</span>
-                  <span className="bg-[#0f0c17] text-zinc-400 text-[10px] px-3 py-1 rounded-full border border-[#574149]/10 cursor-pointer hover:border-[#ffb0cf]/40 transition-colors">Export Logs</span>
-                </div>
-              </div>
-              <div className="bg-[#211e29] rounded-sm p-1">
-                {staticTimeline.map(item => (
-                  <div key={item.id} className={`group flex gap-6 p-6 hover:bg-[#2c2834] transition-all border-l-2 border-transparent ${item.borderHover}`}>
-                    <div className="flex flex-col items-center">
-                      <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
-                      <div className="w-px flex-1 bg-[#574149]/20 my-2"></div>
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <div className="flex justify-between items-start">
-                        <h4 className={`text-xs font-medium ${item.titleColor}`}>{item.title}</h4>
-                        <span className="text-[10px] text-zinc-500 font-mono">{item.time}</span>
-                      </div>
-                      <p className="text-xs text-zinc-400 leading-relaxed max-w-2xl">{item.desc}</p>
-                      {item.error && (
-                        <div className="bg-[#0f0c17] p-3 rounded-sm border border-[#ffb4ab]/10 text-[11px] text-[#ffb4ab]/80 font-mono mt-2">{item.error}</div>
-                      )}
-                      {item.meta.length > 0 && (
-                        <div className="flex gap-4 pt-2">
-                          {item.meta.map(m => (
-                            <span key={m.text} className="text-[10px] text-zinc-500 flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[14px]">{m.icon}</span> {m.text}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+        {/* Sessions + Timeline split */}
+        <div className="flex gap-4 px-6 pb-6 flex-1 min-h-0">
 
-            {/* Identity Panel */}
-            <aside className="space-y-6">
-              <h3 className="text-base font-medium text-[#e7dff0]">Agent Identity</h3>
-              <div className="bg-[#2c2834] rounded-sm p-6 space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-[#0f0c17] rounded-sm flex items-center justify-center border border-[#574149]/20">
-                      <span className="material-symbols-outlined text-[#ffb0cf] text-xl">memory</span>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-semibold text-[#ffb0cf] uppercase tracking-tighter">Primary Model</h4>
-                      <p className="text-xs font-medium text-[#e7dff0]">GPT-4o Sentinel Edition</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/10">
-                      <p className="text-[9px] text-zinc-500 uppercase font-semibold tracking-widest">Version</p>
-                      <p className="text-xs text-[#e7dff0] mt-1">v2.4.12-prod</p>
-                    </div>
-                    <div className="bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/10">
-                      <p className="text-[9px] text-zinc-500 uppercase font-semibold tracking-widest">Context</p>
-                      <p className="text-xs text-[#e7dff0] mt-1">128k Tokens</p>
-                    </div>
-                  </div>
+          {/* Sessions panel */}
+          <aside className="w-52 shrink-0 bg-[#211e29] rounded-sm flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#574149]/20 shrink-0">
+              <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Sessions</h3>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {loadingSessions ? (
+                <div className="flex items-center justify-center py-8">
+                  <span className="material-symbols-outlined animate-spin text-zinc-600">refresh</span>
                 </div>
-                <div className="pt-6 border-t border-[#574149]/10 space-y-4">
-                  <h5 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Active Session</h5>
-                  <div className="space-y-3">
-                    {[
-                      { label: 'Session ID', value: '#SH-8821-X99L', mono: true },
-                      { label: 'Environment', value: 'Production (AWS-US-E1)', mono: false },
-                      { label: 'Auto-Scaling', value: 'Enabled', mono: false, icon: 'check_circle' },
-                    ].map(row => (
-                      <div key={row.label} className="flex justify-between items-center text-xs">
-                        <span className="text-zinc-400">{row.label}</span>
-                        <span className={`text-[#e7dff0] ${row.mono ? 'font-mono text-[10px]' : ''} ${row.icon ? 'text-[#ffb0cf] flex items-center gap-1' : ''}`}>
-                          {row.value}
-                          {row.icon && <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>{row.icon}</span>}
+              ) : sessions.length === 0 ? (
+                <p className="text-[11px] text-zinc-600 px-4 py-4">No sessions found</p>
+              ) : (
+                sessions.map(session => {
+                  const isActive = selectedSession === session.session_id
+                  const runs = isActive && sessionDetail?.runs ? sessionDetail.runs : []
+                  return (
+                    <div key={session.session_id}>
+                      <button
+                        onClick={() => selectSession(session.session_id)}
+                        className={`w-full text-left px-4 py-3 flex items-start gap-2 border-l-2 transition-all hover:bg-[#2c2834]/50 ${
+                          isActive ? 'border-[#ffb0cf] bg-[#2c2834]/40' : 'border-transparent'
+                        }`}
+                      >
+                        <span className={`material-symbols-outlined text-base mt-0.5 shrink-0 ${isActive ? 'text-[#ffb0cf]' : 'text-zinc-500'}`}>
+                          {sessionTypeIcon(session.session_type)}
                         </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="pt-6 border-t border-[#574149]/10">
-                  <h5 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-3">Security Tags</h5>
-                  <div className="flex flex-wrap gap-2">
-                    {['Data Isolation', 'No-PII Policy', 'Encrypted-Out'].map(tag => (
-                      <span key={tag} className="bg-[#4b4754]/30 text-[#bcb6c5] px-2 py-1 rounded-full text-[10px] font-medium border border-[#574149]/20">{tag}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="pt-8 flex flex-col gap-3">
-                  <button className="w-full py-3 bg-[#0f0c17] border border-[#ffb0cf]/30 text-[#ffb0cf] text-xs font-semibold uppercase tracking-widest rounded-sm hover:bg-[#ffb0cf]/10 transition-all">
-                    Update Config
-                  </button>
-                  <button className="w-full py-3 bg-[#93000a] text-[#ffdad6] text-xs font-semibold uppercase tracking-widest rounded-sm hover:opacity-90 transition-all flex items-center justify-center gap-2">
-                    <span className="material-symbols-outlined text-[18px]">power_settings_new</span>
-                    Terminate Agent
-                  </button>
-                </div>
-              </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={`text-xs font-medium truncate ${isActive ? 'text-[#ffb0cf]' : 'text-[#e7dff0]'}`}>
+                              {session.session_type}
+                            </span>
+                            <span className="text-[9px] bg-[#574149]/30 text-zinc-400 px-1.5 py-0.5 rounded-full shrink-0">
+                              {session.run_count}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-600 truncate mt-0.5">{session.session_key}</p>
+                        </div>
+                      </button>
 
-              {/* Neural Health */}
-              <div className="bg-gradient-to-br from-[#1d1a25] to-[#0f0c17] rounded-sm p-6 border border-[#574149]/10 overflow-hidden relative group">
-                <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-[#ffb0cf] opacity-5 blur-[60px] group-hover:opacity-10 transition-opacity"></div>
-                <h5 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-4">Neural Health Pulse</h5>
-                <div className="flex items-end gap-1 h-12 mb-2">
-                  {pulseHeights.map((h, i) => (
-                    <div key={i} className="w-1 bg-[#ffb0cf] rounded-t" style={{ height: `${h}%`, opacity: h / 100 }}></div>
-                  ))}
+                      {/* Run list (accordion) */}
+                      {isActive && runs.map((run, idx) => {
+                        const isRunActive = selectedRun === run.run_id
+                        return (
+                          <button
+                            key={run.run_id}
+                            onClick={() => selectRun(run.run_id)}
+                            className={`w-full text-left pl-10 pr-4 py-2 flex items-center justify-between border-l-2 transition-all hover:bg-[#2c2834]/60 ${
+                              isRunActive ? 'border-[#ffb0cf]/60 bg-[#2c2834]/30' : 'border-transparent'
+                            }`}
+                          >
+                            <div>
+                              <span className={`text-[11px] ${isRunActive ? 'text-[#ffb0cf]' : 'text-zinc-400'}`}>
+                                Run #{idx + 1}
+                              </span>
+                              <p className="text-[9px] text-zinc-600 font-mono">{fmtTime(run.start_time)}</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {run.tool_count > 0 && (
+                                <span className="text-[9px] bg-[#93c5fd]/10 text-[#93c5fd] px-1.5 py-0.5 rounded-full">
+                                  {run.tool_count}
+                                </span>
+                              )}
+                              {run.has_block && (
+                                <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">block</span>
+                              )}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </aside>
+
+          {/* Timeline panel */}
+          <section className="flex-1 bg-[#211e29] rounded-sm flex flex-col min-w-0 overflow-hidden">
+
+            {/* Time range filter */}
+            <div className="flex items-center gap-3 px-6 py-3 border-b border-[#574149]/20 shrink-0 flex-wrap">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider shrink-0">Time Range</span>
+              <input
+                type="datetime-local"
+                value={since}
+                onChange={e => { setSince(e.target.value); setPage(1) }}
+                className="bg-[#0f0c17] border border-[#574149]/20 text-xs text-zinc-300 rounded-sm px-2 py-1 focus:outline-none focus:border-[#ffb0cf]/40"
+              />
+              <span className="text-zinc-600 text-xs">→</span>
+              <input
+                type="datetime-local"
+                value={until}
+                onChange={e => { setUntil(e.target.value); setPage(1) }}
+                className="bg-[#0f0c17] border border-[#574149]/20 text-xs text-zinc-300 rounded-sm px-2 py-1 focus:outline-none focus:border-[#ffb0cf]/40"
+              />
+              {(since || until) && (
+                <button
+                  onClick={() => { setSince(''); setUntil(''); setPage(1) }}
+                  className="text-[10px] text-zinc-500 hover:text-[#ffb0cf] transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Event list */}
+            <div className="flex-1 overflow-y-auto">
+              {!selectedSession && !selectedRun ? (
+                <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                  <span className="material-symbols-outlined text-4xl">timeline</span>
+                  <p className="text-sm">Select a session from the left to view its event timeline</p>
                 </div>
-                <p className="text-[10px] text-zinc-500">Stability: <span className="text-[#ffb2b8]">Optimal</span></p>
+              ) : loadingEvents ? (
+                <div className="flex items-center justify-center h-full">
+                  <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                </div>
+              ) : events.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                  <span className="material-symbols-outlined text-4xl">inbox</span>
+                  <p className="text-sm">No events recorded for this session</p>
+                </div>
+              ) : (
+                events.map((event, i) => (
+                  <EventRow key={`${event.run_id}-${event.hook_name}-${i}`} event={event} />
+                ))
+              )}
+            </div>
+
+            {/* Pagination */}
+            {(selectedSession || selectedRun) && eventsTotal > 0 && (
+              <div className="flex items-center justify-between px-6 py-3 border-t border-[#574149]/20 shrink-0">
+                <span className="text-[10px] text-zinc-500">
+                  Showing {startEvent}–{endEvent} of {eventsTotal} events
+                </span>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={limit}
+                    onChange={e => { setLimit(Number(e.target.value)); setPage(1) }}
+                    className="bg-[#0f0c17] border border-[#574149]/20 text-xs text-zinc-400 rounded-sm px-2 py-1 focus:outline-none"
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <button
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => p - 1)}
+                    className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-[#ffb0cf] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">chevron_left</span>
+                    Prev
+                  </button>
+                  <span className="text-[10px] text-zinc-600">{page} / {totalPages}</span>
+                  <button
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(p => p + 1)}
+                    className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-[#ffb0cf] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                    <span className="material-symbols-outlined text-sm">chevron_right</span>
+                  </button>
+                </div>
               </div>
-            </aside>
-          </div>
+            )}
+          </section>
         </div>
       </main>
     </div>

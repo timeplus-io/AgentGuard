@@ -2,20 +2,7 @@ package mock
 
 import "github.com/timeplus/agentshield/internal/models"
 
-var Agents = []models.Agent{
-	{ID: "AS-DELTA-9012", Status: "ACTIVE", HealthIndex: 98, HealthLabel: "OPTIMAL", Throughput: 1240, Region: "us-east-1a", InstanceType: "t3.large", LastAction: "Suspicious payload filtered", LastActionTime: "2m ago", Type: "claude_code", Sessions: 45, TotalCost: 1204.50},
-	{ID: "AS-SIGMA-4421", Status: "THROTTLED", HealthIndex: 64, HealthLabel: "STRESSED", Throughput: 420, Region: "eu-central-1", InstanceType: "m5.xlarge", LastAction: "Rate limiting applied", LastActionTime: "14s ago", Type: "openclaw", Sessions: 23, TotalCost: 842.30},
-	{ID: "AS-OMEGA-1102", Status: "SUSPENDED", HealthIndex: 12, HealthLabel: "CRITICAL", Throughput: 0, Region: "ap-southeast-1", InstanceType: "t3.medium", LastAction: "Manual killswitch engaged", LastActionTime: "1h ago", Type: "openclaw", Sessions: 0, TotalCost: 2105.00},
-	{ID: "AS-ALPHA-3030", Status: "ACTIVE", HealthIndex: 100, HealthLabel: "OPTIMAL", Throughput: 3892, Region: "us-west-2", InstanceType: "p3.2xlarge", LastAction: "Vector database re-indexed", LastActionTime: "5m ago", Type: "claude_code", Sessions: 89, TotalCost: 3210.75},
-	{ID: "AS-BETA-7721", Status: "ACTIVE", HealthIndex: 91, HealthLabel: "OPTIMAL", Throughput: 980, Region: "us-east-1a", InstanceType: "t3.large", LastAction: "Policy check passed", LastActionTime: "1m ago", Type: "claude_code", Sessions: 34, TotalCost: 567.20},
-	{ID: "AS-GAMMA-5503", Status: "ACTIVE", HealthIndex: 87, HealthLabel: "OPTIMAL", Throughput: 750, Region: "eu-west-1", InstanceType: "m5.large", LastAction: "Hook event processed", LastActionTime: "30s ago", Type: "openclaw", Sessions: 67, TotalCost: 890.10},
-	{ID: "AS-ZETA-2201", Status: "THROTTLED", HealthIndex: 55, HealthLabel: "STRESSED", Throughput: 210, Region: "ap-northeast-1", InstanceType: "t3.medium", LastAction: "Token budget exceeded", LastActionTime: "3m ago", Type: "openclaw", Sessions: 12, TotalCost: 445.60},
-	{ID: "AS-ETA-8834", Status: "ACTIVE", HealthIndex: 95, HealthLabel: "OPTIMAL", Throughput: 1650, Region: "us-west-2", InstanceType: "m5.xlarge", LastAction: "Threat blocked", LastActionTime: "45s ago", Type: "claude_code", Sessions: 56, TotalCost: 1567.80},
-	{ID: "AS-THETA-6612", Status: "ACTIVE", HealthIndex: 82, HealthLabel: "OPTIMAL", Throughput: 540, Region: "eu-central-1", InstanceType: "t3.large", LastAction: "Telemetry flushed", LastActionTime: "2m ago", Type: "openclaw", Sessions: 28, TotalCost: 234.90},
-	{ID: "AS-IOTA-3309", Status: "SUSPENDED", HealthIndex: 5, HealthLabel: "CRITICAL", Throughput: 0, Region: "us-east-1a", InstanceType: "t3.small", LastAction: "Prompt injection blocked", LastActionTime: "2h ago", Type: "claude_code", Sessions: 0, TotalCost: 890.00},
-	{ID: "AS-KAPPA-9981", Status: "ACTIVE", HealthIndex: 79, HealthLabel: "OPTIMAL", Throughput: 320, Region: "ap-southeast-1", InstanceType: "t3.medium", LastAction: "Config reloaded", LastActionTime: "8m ago", Type: "openclaw", Sessions: 19, TotalCost: 123.40},
-	{ID: "AS-LAMBDA-4456", Status: "ACTIVE", HealthIndex: 93, HealthLabel: "OPTIMAL", Throughput: 2100, Region: "eu-west-1", InstanceType: "m5.2xlarge", LastAction: "Baseline updated", LastActionTime: "6m ago", Type: "claude_code", Sessions: 72, TotalCost: 2890.30},
-}
+var Agents = []models.Agent{}
 
 var Threats = []models.Threat{
 	{ID: "THR-001", Severity: "Critical", Name: "Prompt Injection via User Input", Vector: "user_message", AgentID: "AS-OMEGA-1102", SessionID: "sess-9f3a2", Timestamp: "2026-04-04T10:42:00Z", TimeAgo: "3m ago", Category: "Prompt Injection"},
