@@ -2,6 +2,97 @@ package models
 
 import "time"
 
+// ── Metrics models ────────────────────────────────────────────────────────────
+
+// MetricsPeriod describes the requested time range (both fields are RFC3339).
+type MetricsPeriod struct {
+	Since string `json:"since,omitempty"`
+	Until string `json:"until,omitempty"`
+}
+
+// MetricsFilters echoes back the active dimension filters in the response.
+type MetricsFilters struct {
+	AgentID  string `json:"agent_id,omitempty"`
+	Model    string `json:"model,omitempty"`
+	ToolName string `json:"tool_name,omitempty"`
+}
+
+// TokenStats is cumulative token usage for LLM calls.
+type TokenStats struct {
+	Input      int64 `json:"input"`
+	Output     int64 `json:"output"`
+	Total      int64 `json:"total"`
+	CacheRead  int64 `json:"cache_read"`
+	CacheWrite int64 `json:"cache_write"`
+}
+
+// LLMCallStats is the success/fail breakdown for LLM API calls.
+type LLMCallStats struct {
+	Total       int     `json:"total"`
+	Success     int     `json:"success"`
+	Failed      int     `json:"failed"`
+	SuccessRate float64 `json:"success_rate"`
+}
+
+// LatencyStats holds percentile and summary latency values (in milliseconds).
+type LatencyStats struct {
+	P50     float64 `json:"p50"`
+	P95     float64 `json:"p95"`
+	P99     float64 `json:"p99"`
+	Avg     float64 `json:"avg"`
+	Min     float64 `json:"min"`
+	Max     float64 `json:"max"`
+	Samples int     `json:"samples"`
+}
+
+// LLMThroughputBucket is one time-bucket in the throughput time series.
+type LLMThroughputBucket struct {
+	Bucket       time.Time `json:"bucket"`
+	LLMCalls     int       `json:"llm_calls"`
+	InputTokens  int64     `json:"input_tokens"`
+	OutputTokens int64     `json:"output_tokens"`
+	TotalTokens  int64     `json:"total_tokens"`
+}
+
+// LLMMetrics is returned by GET /api/metrics/llm.
+type LLMMetrics struct {
+	Period      MetricsPeriod         `json:"period"`
+	Filters     MetricsFilters        `json:"filters"`
+	Tokens      TokenStats            `json:"tokens"`
+	Calls       LLMCallStats          `json:"calls"`
+	StopReasons map[string]int        `json:"stop_reasons"`
+	LatencyMs   LatencyStats          `json:"latency_ms"`
+	Throughput  []LLMThroughputBucket `json:"throughput"`
+}
+
+// ToolCallStats is the success/fail summary for tool calls.
+type ToolCallStats struct {
+	TotalCalls   int     `json:"total_calls"`
+	SuccessCalls int     `json:"success_calls"`
+	FailedCalls  int     `json:"failed_calls"`
+	SuccessRate  float64 `json:"success_rate"`
+}
+
+// ToolStat is per-tool metrics including count, success/fail, and latency.
+type ToolStat struct {
+	ToolName     string       `json:"tool_name"`
+	TotalCalls   int          `json:"total_calls"`
+	SuccessCalls int          `json:"success_calls"`
+	FailedCalls  int          `json:"failed_calls"`
+	SuccessRate  float64      `json:"success_rate"`
+	LatencyMs    LatencyStats `json:"latency_ms"`
+}
+
+// ToolMetrics is returned by GET /api/metrics/tools.
+type ToolMetrics struct {
+	Period  MetricsPeriod  `json:"period"`
+	Filters MetricsFilters `json:"filters"`
+	Summary ToolCallStats  `json:"summary"`
+	ByTool  []ToolStat     `json:"by_tool"`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 type Agent struct {
 	AgentID        string    `json:"agent_id"`
 	DeploymentID   string    `json:"deployment_id"`

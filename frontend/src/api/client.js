@@ -41,6 +41,14 @@ export const api = {
     const q = new URLSearchParams(params).toString()
     return get(`/agents/${agentId}/events${q ? '?' + q : ''}`)
   },
+  getLLMMetrics: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return get(`/metrics/llm${q ? '?' + q : ''}`)
+  },
+  getToolMetrics: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return get(`/metrics/tools${q ? '?' + q : ''}`)
+  },
   listThreats: (params = {}) => {
     const q = new URLSearchParams(params).toString()
     return get(`/threats${q ? '?' + q : ''}`)
