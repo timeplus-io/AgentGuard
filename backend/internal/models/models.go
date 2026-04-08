@@ -27,11 +27,12 @@ type TokenStats struct {
 }
 
 // LLMCallStats is the success/fail breakdown for LLM API calls.
+// SuccessRate is nil when there are no calls (avoids a misleading 100%).
 type LLMCallStats struct {
-	Total       int     `json:"total"`
-	Success     int     `json:"success"`
-	Failed      int     `json:"failed"`
-	SuccessRate float64 `json:"success_rate"`
+	Total       int      `json:"total"`
+	Success     int      `json:"success"`
+	Failed      int      `json:"failed"`
+	SuccessRate *float64 `json:"success_rate"`
 }
 
 // LatencyStats holds percentile and summary latency values (in milliseconds).
@@ -66,20 +67,22 @@ type LLMMetrics struct {
 }
 
 // ToolCallStats is the success/fail summary for tool calls.
+// SuccessRate is nil when there are no calls (avoids a misleading 100%).
 type ToolCallStats struct {
-	TotalCalls   int     `json:"total_calls"`
-	SuccessCalls int     `json:"success_calls"`
-	FailedCalls  int     `json:"failed_calls"`
-	SuccessRate  float64 `json:"success_rate"`
+	TotalCalls   int      `json:"total_calls"`
+	SuccessCalls int      `json:"success_calls"`
+	FailedCalls  int      `json:"failed_calls"`
+	SuccessRate  *float64 `json:"success_rate"`
 }
 
 // ToolStat is per-tool metrics including count, success/fail, and latency.
+// SuccessRate is nil when there are no calls.
 type ToolStat struct {
 	ToolName     string       `json:"tool_name"`
 	TotalCalls   int          `json:"total_calls"`
 	SuccessCalls int          `json:"success_calls"`
 	FailedCalls  int          `json:"failed_calls"`
-	SuccessRate  float64      `json:"success_rate"`
+	SuccessRate  *float64     `json:"success_rate"`
 	LatencyMs    LatencyStats `json:"latency_ms"`
 }
 
@@ -102,6 +105,8 @@ type Agent struct {
 	SessionCount   int       `json:"session_count"`
 	RunCount       int       `json:"run_count"`
 	ToolCallCount  int       `json:"tool_call_count"`
+	TotalTokens    int64     `json:"total_tokens"`
+	LLMCallCount   int       `json:"llm_call_count"`
 }
 
 type Threat struct {

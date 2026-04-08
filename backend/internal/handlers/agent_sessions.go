@@ -97,6 +97,32 @@ func parseStr(v any) string {
 	return s
 }
 
+// parseRFC3339 parses an RFC3339 timestamp string into Proton-compatible format.
+// Returns ("", nil) when s is empty. Returns an error when s is non-empty but invalid.
+func parseRFC3339(s string) (string, error) {
+	if s == "" {
+		return "", nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return "", err
+	}
+	return t.UTC().Format("2006-01-02 15:04:05.999999999"), nil
+}
+
+// buildTimeWhere returns SQL AND clauses for since/until Proton timestamps.
+// Each condition starts with a newline so it can be appended to an existing WHERE clause.
+func buildTimeWhere(since, until string) string {
+	out := ""
+	if since != "" {
+		out += fmt.Sprintf("\n      AND event_time >= '%s'", since)
+	}
+	if until != "" {
+		out += fmt.Sprintf("\n      AND event_time <= '%s'", until)
+	}
+	return out
+}
+
 // splitAgentID splits the compound "deploymentId__agentId" path param.
 func splitAgentID(compoundID string) (deploymentID, agentID string, ok bool) {
 	parts := strings.SplitN(compoundID, "__", 2)
@@ -110,6 +136,7 @@ func splitAgentID(compoundID string) (deploymentID, agentID string, ok bool) {
 }
 
 // ListSessions handles GET /api/agents/:id/sessions
+// Query params: since (RFC3339), until (RFC3339)
 func ListSessions(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		deploymentID, agentID, ok := splitAgentID(c.Param("id"))
@@ -117,6 +144,18 @@ func ListSessions(cfg *config.Config) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format, expected deploymentId__agentId"})
 			return
 		}
+
+		sinceStr, err := parseRFC3339(c.Query("since"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid since: use RFC3339"})
+			return
+		}
+		untilStr, err := parseRFC3339(c.Query("until"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid until: use RFC3339"})
+			return
+		}
+		timeWhere := buildTimeWhere(sinceStr, untilStr)
 
 		sql := fmt.Sprintf(`
 SELECT
@@ -129,13 +168,13 @@ SELECT
 FROM table(agentshield_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
-  AND session_id    != ''
+  AND session_id    != ''%s
 GROUP BY session_id
 HAVING session_key NOT LIKE 'temp:%%'
    AND session_id  NOT LIKE 'slug-generator-%%'
    AND count_if(run_id != '') > 0
 ORDER BY last_seen DESC`,
-			deploymentID, agentID)
+			deploymentID, agentID, timeWhere)
 
 		rows, err := timeplus.Query(&cfg.Timeplus, sql)
 		if err != nil {

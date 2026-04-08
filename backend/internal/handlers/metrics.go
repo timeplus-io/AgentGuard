@@ -182,9 +182,10 @@ WHERE %s`, combinedHooks)
 		if failedCalls < 0 {
 			failedCalls = 0
 		}
-		successRate := 1.0
+		var successRate *float64
 		if totalCalls > 0 {
-			successRate = float64(successCalls) / float64(totalCalls)
+			r := float64(successCalls) / float64(totalCalls)
+			successRate = &r
 		}
 
 		// ── Q2: stop reason breakdown ─────────────────────────────────────────
@@ -299,7 +300,7 @@ ORDER BY bucket ASC`, bfn, strings.Join(llmOutWhere, "\n  AND "))
 				Total:       totalCalls,
 				Success:     successCalls,
 				Failed:      failedCalls,
-				SuccessRate: successRate,
+				SuccessRate: successRate, // nil when totalCalls == 0
 			},
 			StopReasons: stopReasons,
 			LatencyMs:   latency,
@@ -405,9 +406,10 @@ GROUP BY tool_name`, strings.Join(latWhere, "\n  AND "))
 		var sumTotal, sumSuccess, sumFailed int
 		for _, tn := range toolOrder {
 			cr := countByTool[tn]
-			sr := 1.0
+			var sr *float64
 			if cr.total > 0 {
-				sr = float64(cr.success) / float64(cr.total)
+				r := float64(cr.success) / float64(cr.total)
+				sr = &r
 			}
 			sumTotal += cr.total
 			sumSuccess += cr.success
@@ -422,9 +424,10 @@ GROUP BY tool_name`, strings.Join(latWhere, "\n  AND "))
 			})
 		}
 
-		summaryRate := 1.0
+		var summaryRate *float64
 		if sumTotal > 0 {
-			summaryRate = float64(sumSuccess) / float64(sumTotal)
+			r := float64(sumSuccess) / float64(sumTotal)
+			summaryRate = &r
 		}
 
 		filters := models.MetricsFilters{AgentID: agentID, ToolName: toolName}

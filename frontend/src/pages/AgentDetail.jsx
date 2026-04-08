@@ -27,11 +27,13 @@ function fmtPct(rate) {
 function fmtTime(iso) {
   if (!iso) return ''
   const d = new Date(iso)
+  const yyyy = d.getUTCFullYear()
+  const mo = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(d.getUTCDate()).padStart(2, '0')
   const hh = String(d.getUTCHours()).padStart(2, '0')
   const mm = String(d.getUTCMinutes()).padStart(2, '0')
   const ss = String(d.getUTCSeconds()).padStart(2, '0')
-  const ms = String(d.getUTCMilliseconds()).padStart(3, '0')
-  return `${hh}:${mm}:${ss}.${ms} UTC`
+  return `${yyyy}-${mo}-${dd} ${hh}:${mm}:${ss} UTC`
 }
 
 function dotColor(event) {
@@ -57,10 +59,21 @@ function safeParse(str) {
   try { return JSON.parse(str) } catch { return null }
 }
 
-function toISOSafe(localDt) {
-  if (!localDt) return null
-  const d = new Date(localDt)
-  return isNaN(d) ? null : d.toISOString()
+const TIME_PRESETS = [
+  { value: '1h',  label: 'Last 1h' },
+  { value: '6h',  label: 'Last 6h' },
+  { value: '24h', label: 'Last 24h' },
+  { value: '7d',  label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: 'all', label: 'All time' },
+]
+
+function presetToISO(preset) {
+  if (!preset || preset === 'all') return null
+  const m = preset.match(/^(\d+)([hd])$/)
+  if (!m) return null
+  const secs = parseInt(m[1]) * (m[2] === 'h' ? 3600 : 86400)
+  return new Date(Date.now() - secs * 1000).toISOString()
 }
 
 // ── EventDetail: structured detail panel per hook type ────────────────────────
@@ -217,8 +230,7 @@ export default function AgentDetail() {
   const [eventsTotal, setEventsTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(100)
-  const [since, setSince] = useState('')
-  const [until, setUntil] = useState('')
+  const [timePreset, setTimePreset] = useState('24h')
 
   const [llmMetrics, setLlmMetrics] = useState(null)
   const [toolMetrics, setToolMetrics] = useState(null)
@@ -232,31 +244,43 @@ export default function AgentDetail() {
 
   useEffect(() => {
     setLoadingAgent(true)
-    api.getAgent(id)
+    const params = {}
+    const since = presetToISO(timePreset)
+    if (since) params.since = since
+    api.getAgent(id, params)
       .then(setAgent)
       .catch(() => {})
       .finally(() => setLoadingAgent(false))
-  }, [id, refreshTick])
+  }, [id, timePreset, refreshTick])
 
   useEffect(() => {
-    api.getLLMMetrics({ agent_id: id })
+    const params = { agent_id: id }
+    const since = presetToISO(timePreset)
+    if (since) params.since = since
+    api.getLLMMetrics(params)
       .then(setLlmMetrics)
       .catch(() => setLlmMetrics(null))
-  }, [id, refreshTick])
+  }, [id, timePreset, refreshTick])
 
   useEffect(() => {
-    api.getToolMetrics({ agent_id: id })
+    const params = { agent_id: id }
+    const since = presetToISO(timePreset)
+    if (since) params.since = since
+    api.getToolMetrics(params)
       .then(setToolMetrics)
       .catch(() => setToolMetrics(null))
-  }, [id, refreshTick])
+  }, [id, timePreset, refreshTick])
 
   useEffect(() => {
     setLoadingSessions(true)
-    api.listSessions(id)
+    const params = {}
+    const since = presetToISO(timePreset)
+    if (since) params.since = since
+    api.listSessions(id, params)
       .then(setSessions)
       .catch(() => setSessions([]))
       .finally(() => setLoadingSessions(false))
-  }, [id, refreshTick])
+  }, [id, timePreset, refreshTick])
 
   useEffect(() => {
     if (!selectedSession) { setSessionDetail(null); return }
@@ -270,17 +294,15 @@ export default function AgentDetail() {
     const params = { page, limit }
     if (selectedSession) params.session_id = selectedSession
     if (selectedRun) params.run_id = selectedRun
-    const sinceISO = toISOSafe(since)
-    const untilISO = toISOSafe(until)
-    if (sinceISO) params.since = sinceISO
-    if (untilISO) params.until = untilISO
+    const since = presetToISO(timePreset)
+    if (since) params.since = since
 
     setLoadingEvents(true)
     api.listEvents(id, params)
       .then(r => { setEvents(r.events ?? []); setEventsTotal(r.total ?? 0) })
       .catch(() => { setEvents([]); setEventsTotal(0) })
       .finally(() => setLoadingEvents(false))
-  }, [id, selectedSession, selectedRun, page, limit, since, until, refreshTick])
+  }, [id, selectedSession, selectedRun, page, limit, timePreset, refreshTick])
 
   const selectSession = (sid) => {
     setPage(1)
@@ -307,32 +329,34 @@ export default function AgentDetail() {
     { label: 'Total Tool Calls',value: agent ? agent.tool_call_count : '—', icon: 'handyman' },
   ]
 
-  const llmSuccessRate = llmMetrics?.calls?.success_rate
-  const toolSuccessRate = toolMetrics?.summary?.success_rate
+  const llmHasCalls = (llmMetrics?.calls?.total ?? 0) > 0
+  const toolHasCalls = (toolMetrics?.summary?.total_calls ?? 0) > 0
+  const llmSuccessRate = llmMetrics?.calls?.success_rate   // null from backend when no calls
+  const toolSuccessRate = toolMetrics?.summary?.success_rate // null from backend when no calls
   const perfMetrics = [
     {
       label: 'Total Tokens',
-      value: llmMetrics ? fmtTokens(llmMetrics.tokens?.total) : '—',
-      sub: llmMetrics ? `↑ ${fmtTokens(llmMetrics.tokens?.input)}  ↓ ${fmtTokens(llmMetrics.tokens?.output)}` : null,
+      value: llmHasCalls ? fmtTokens(llmMetrics.tokens?.total) : '—',
+      sub: llmHasCalls ? `↑ ${fmtTokens(llmMetrics.tokens?.input)}  ↓ ${fmtTokens(llmMetrics.tokens?.output)}` : null,
       icon: 'token',
     },
     {
       label: 'LLM Latency p50',
-      value: llmMetrics ? fmtLatency(llmMetrics.latency_ms?.p50) : '—',
-      sub: llmMetrics ? `p95 ${fmtLatency(llmMetrics.latency_ms?.p95)}` : null,
+      value: llmHasCalls ? fmtLatency(llmMetrics.latency_ms?.p50) : '—',
+      sub: llmHasCalls ? `p95 ${fmtLatency(llmMetrics.latency_ms?.p95)}` : null,
       icon: 'speed',
     },
     {
       label: 'LLM Success Rate',
-      value: llmMetrics ? fmtPct(llmSuccessRate) : '—',
-      sub: llmMetrics ? `${llmMetrics.calls?.success ?? 0} ok · ${llmMetrics.calls?.failed ?? 0} failed` : null,
+      value: fmtPct(llmSuccessRate),  // fmtPct(null) → '—'
+      sub: llmHasCalls ? `${llmMetrics.calls?.success ?? 0} ok · ${llmMetrics.calls?.failed ?? 0} failed` : null,
       icon: 'check_circle',
       accent: llmSuccessRate != null && llmSuccessRate < 1,
     },
     {
       label: 'Tool Success Rate',
-      value: toolMetrics ? fmtPct(toolSuccessRate) : '—',
-      sub: toolMetrics ? `${toolMetrics.summary?.success_calls ?? 0} ok · ${toolMetrics.summary?.failed_calls ?? 0} failed` : null,
+      value: fmtPct(toolSuccessRate),  // fmtPct(null) → '—'
+      sub: toolHasCalls ? `${toolMetrics.summary?.success_calls ?? 0} ok · ${toolMetrics.summary?.failed_calls ?? 0} failed` : null,
       icon: 'build_circle',
       accent: toolSuccessRate != null && toolSuccessRate < 1,
     },
@@ -359,18 +383,32 @@ export default function AgentDetail() {
             </span>
           )}
         </div>
-        <button
-          onClick={refresh}
-          className="flex items-center gap-2 text-xs text-zinc-400 hover:text-[#ffb0cf] transition-colors px-3 py-1.5 rounded-sm hover:bg-[#2c2834]"
-        >
-          <span className={`material-symbols-outlined text-base ${isRefreshing ? 'animate-spin' : ''}`}>
-            refresh
-          </span>
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-sm text-zinc-500">schedule</span>
+            <select
+              value={timePreset}
+              onChange={e => { setTimePreset(e.target.value); setPage(1) }}
+              className="bg-[#2c2834] border border-[#574149]/30 text-xs text-zinc-300 rounded-sm px-2 py-1.5 focus:outline-none focus:border-[#ffb0cf]/40 hover:border-[#574149]/60 transition-colors"
+            >
+              {TIME_PRESETS.map(p => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={refresh}
+            className="flex items-center gap-2 text-xs text-zinc-400 hover:text-[#ffb0cf] transition-colors px-3 py-1.5 rounded-sm hover:bg-[#2c2834]"
+          >
+            <span className={`material-symbols-outlined text-base ${isRefreshing ? 'animate-spin' : ''}`}>
+              refresh
+            </span>
+            Refresh
+          </button>
+        </div>
       </header>
 
-      <main className="pl-64 pt-16 min-h-screen flex flex-col">
+      <main className="pl-64 pt-16 h-screen overflow-hidden flex flex-col">
         {/* Volume metric cards */}
         <section className="grid grid-cols-4 gap-4 p-6 pb-3 shrink-0">
           {volumeMetrics.map((m) => (
@@ -438,6 +476,7 @@ export default function AgentDetail() {
                             </span>
                           </div>
                           <p className="text-[10px] text-zinc-600 truncate mt-0.5">{session.session_key}</p>
+                          <p className="text-[9px] text-zinc-700 font-mono mt-0.5">{fmtTime(session.last_seen)}</p>
                         </div>
                       </button>
 
@@ -480,32 +519,6 @@ export default function AgentDetail() {
 
           {/* Timeline panel */}
           <section className="flex-1 bg-[#211e29] rounded-sm flex flex-col min-w-0 overflow-hidden">
-
-            {/* Time range filter */}
-            <div className="flex items-center gap-3 px-6 py-3 border-b border-[#574149]/20 shrink-0 flex-wrap">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider shrink-0">Time Range</span>
-              <input
-                type="datetime-local"
-                value={since}
-                onChange={e => { setSince(e.target.value); setPage(1) }}
-                className="bg-[#0f0c17] border border-[#574149]/20 text-xs text-zinc-300 rounded-sm px-2 py-1 focus:outline-none focus:border-[#ffb0cf]/40"
-              />
-              <span className="text-zinc-600 text-xs">→</span>
-              <input
-                type="datetime-local"
-                value={until}
-                onChange={e => { setUntil(e.target.value); setPage(1) }}
-                className="bg-[#0f0c17] border border-[#574149]/20 text-xs text-zinc-300 rounded-sm px-2 py-1 focus:outline-none focus:border-[#ffb0cf]/40"
-              />
-              {(since || until) && (
-                <button
-                  onClick={() => { setSince(''); setUntil(''); setPage(1) }}
-                  className="text-[10px] text-zinc-500 hover:text-[#ffb0cf] transition-colors"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
 
             {/* Event list */}
             <div className="flex-1 overflow-y-auto">
