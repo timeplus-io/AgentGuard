@@ -508,7 +508,7 @@ func AlertWebhook(cfg *config.Config) gin.HandlerFunc {
 		}
 		log.Printf("alert: rule=%s severity=%s agent=%s msg=%s",
 			payload.RuleID, payload.Severity, payload.AgentID, payload.Message)
-		// Future: fan out to Slack/PagerDuty via settings integrations
+		GlobalAlertBroadcaster.Publish(payload)
 		c.JSON(http.StatusOK, gin.H{"received": true})
 	}
 }
