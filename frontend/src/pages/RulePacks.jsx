@@ -37,7 +37,8 @@ export default function RulePacks() {
   const [density, setDensity] = useState(0)
   const [recentDetections, setRecentDetections] = useState([])
   const [confirmToggle, setConfirmToggle] = useState(null) // { id, newVal, name }
-  const [installing, setInstalling] = useState(null) // rule id being reinstalled
+  const [confirmInstall, setConfirmInstall] = useState(null) // catalog entry
+  const [installing, setInstalling] = useState(null) // rule id being installed
 
   const loadRules = () =>
     api.listRules().then(data => {
@@ -103,6 +104,12 @@ export default function RulePacks() {
       .catch(() => {})
   }
 
+  const confirmDoInstall = async () => {
+    const entry = confirmInstall
+    setConfirmInstall(null)
+    await handleInstall(entry.id)
+  }
+
   const handleInstall = async (id) => {
     setInstalling(id)
     try {
@@ -159,6 +166,33 @@ export default function RulePacks() {
           </div>
         </div>
       )}
+      {/* Install confirmation modal */}
+      {confirmInstall && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#1d1a25] border border-[#574149]/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-6">
+            <h3 className="text-base font-semibold text-white">Install Rule Pack</h3>
+            <p className="text-sm text-zinc-400">
+              Are you sure you want to install <span className="text-[#ffb0cf] font-medium">{confirmInstall.name}</span>?
+              <span className="block mt-2 text-xs text-zinc-500">This will create a detection MV and start monitoring immediately.</span>
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmInstall(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDoInstall}
+                className="px-4 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] transition-colors"
+              >
+                Install
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="pl-64 pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
           <PageHeader
@@ -238,7 +272,7 @@ export default function RulePacks() {
                       <p className="text-xs text-zinc-600 leading-relaxed line-clamp-2">{entry.description}</p>
                     </div>
                     <button
-                      onClick={() => handleInstall(entry.id)}
+                      onClick={() => setConfirmInstall(entry)}
                       disabled={installing === entry.id}
                       className="mt-auto w-full px-3 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] disabled:opacity-50 transition-opacity"
                     >
