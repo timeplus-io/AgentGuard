@@ -325,7 +325,7 @@ func seedBuiltinRules(ctx context.Context, conn proton.Conn) error {
 		return nil
 	}
 
-	batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentshield_rules")
+	batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)")
 	if err != nil {
 		return fmt.Errorf("seed prepare: %w", err)
 	}
