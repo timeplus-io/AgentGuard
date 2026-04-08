@@ -58,7 +58,12 @@ export const api = {
   },
   getCost: () => get('/cost'),
   listRules: () => get('/rules'),
+  getRule: (id) => get(`/rules/${id}`),
   toggleRule: (id) => post(`/rules/${id}/toggle`, {}),
+  upgradeRule: (id, querySql) => post(`/rules/${id}/upgrade`, { query_sql: querySql }),
+  uninstallRule: (id) =>
+    fetch(`${BASE}/rules/${id}`, { method: 'DELETE' })
+      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() }),
   listTables: () => get('/investigate/tables'),
   runQuery: (query) => post('/investigate/query', { query }),
   getSettings: () => get('/settings'),
