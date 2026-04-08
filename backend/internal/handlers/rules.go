@@ -302,6 +302,117 @@ GROUP BY rule_id`, id)
 	}
 }
 
+// MVStatus returns the existence and enabled state of every rule's MV.
+func MVStatus(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			return
+		}
+
+		// Query all mv_rule_* views from system.tables
+		rows, _ := tp.Query(&cfg.Timeplus, `
+			SELECT name FROM system.tables
+			WHERE name LIKE 'mv_rule_%' AND database = current_database()
+		`)
+		existing := map[string]bool{}
+		for _, row := range rows {
+			if name, ok := row["name"].(string); ok {
+				existing[name] = true
+			}
+		}
+
+		type MVInfo struct {
+			RuleID      string `json:"rule_id"`
+			MVName      string `json:"mv_name"`
+			RuleEnabled bool   `json:"rule_enabled"`
+			MVExists    bool   `json:"mv_exists"`
+			Healthy     bool   `json:"healthy"`
+		}
+		result := make([]MVInfo, 0, len(packs))
+		for _, p := range packs {
+			mvName := tp.MVName(p.ID)
+			mvExists := existing[mvName]
+			result = append(result, MVInfo{
+				RuleID:      p.ID,
+				MVName:      mvName,
+				RuleEnabled: p.Enabled,
+				MVExists:    mvExists,
+				Healthy:     !p.Enabled || mvExists, // disabled rules don't need an MV
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"mvs": result})
+	}
+}
+
+// SyncMVs reconciles Proton MVs with the current rule enabled states without
+// requiring a server restart. Equivalent to the startupSyncMVs init step.
+func SyncMVs(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			return
+		}
+
+		// Query existing MVs
+		rows, _ := tp.Query(&cfg.Timeplus, `
+			SELECT name FROM system.tables
+			WHERE name LIKE 'mv_rule_%' AND database = current_database()
+		`)
+		existing := map[string]bool{}
+		for _, row := range rows {
+			if name, ok := row["name"].(string); ok {
+				existing[name] = true
+			}
+		}
+
+		type SyncResult struct {
+			RuleID string `json:"rule_id"`
+			Action string `json:"action"`
+			Error  string `json:"error,omitempty"`
+		}
+		results := make([]SyncResult, 0, len(packs))
+
+		for _, p := range packs {
+			mvName := tp.MVName(p.ID)
+			exists := existing[mvName]
+			res := SyncResult{RuleID: p.ID}
+
+			if p.Enabled {
+				if !exists {
+					if err := tp.CreateRuleMV(&cfg.Timeplus, p.ID, p.QuerySQL); err != nil {
+						res.Action = "create_failed"
+						res.Error = err.Error()
+					} else {
+						res.Action = "created"
+					}
+				} else {
+					if err := tp.ResumeRuleMV(&cfg.Timeplus, p.ID); err != nil {
+						res.Action = "resume_failed"
+						res.Error = err.Error()
+					} else {
+						res.Action = "resumed"
+					}
+				}
+			} else if exists {
+				if err := tp.PauseRuleMV(&cfg.Timeplus, p.ID); err != nil {
+					res.Action = "pause_failed"
+					res.Error = err.Error()
+				} else {
+					res.Action = "paused"
+				}
+			} else {
+				res.Action = "ok"
+			}
+			results = append(results, res)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"results": results})
+	}
+}
+
 func AlertWebhook(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var payload models.AlertWebhookPayload
