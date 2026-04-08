@@ -119,6 +119,7 @@ FROM table(agentshield_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
   AND session_id    != ''
+  AND session_key   LIKE 'agent:%%'
 GROUP BY session_id
 ORDER BY last_seen DESC`,
 			deploymentID, agentID)
