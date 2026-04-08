@@ -198,14 +198,11 @@ export default function RulePacks() {
           <PageHeader
             title="Rule Packs"
             subtitle="Configure and manage security policies enforced across all monitored AI agents."
-            actions={<>
-              <button className="px-4 py-2 bg-[#2c2834] text-[#e7dff0] text-xs font-medium rounded-sm border border-[#574149]/10 hover:bg-[#37333f] transition-colors">
-                Import Manifest
-              </button>
+            actions={
               <button className="px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-xs font-semibold rounded-sm">
                 New Custom Rule
               </button>
-            </>}
+            }
           />
 
           <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
