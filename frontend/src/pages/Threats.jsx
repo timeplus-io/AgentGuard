@@ -6,19 +6,26 @@ import PageHeader from '../components/PageHeader'
 import { SeverityBadge } from '../components/Badge'
 import { api } from '../api/client'
 
+const TIME_RANGES = [
+  { label: '1h',  value: '-1h' },
+  { label: '6h',  value: '-6h' },
+  { label: '24h', value: '-24h' },
+  { label: '7d',  value: '-7d' },
+]
+
 // Single streaming query per panel: Proton delivers historical backfill first,
 // then continues streaming live events on the same connection.
-const SQL_THREATS = `
+const sqlThreats = (range) => `
 SELECT detected_at, rule_id, rule_name, severity, agent_id,
        session_id, hook_name, tool_name, message
 FROM agentshield_security_events
-SETTINGS seek_to='-24h'`
+SETTINGS seek_to='${range}'`
 
-const SQL_ACTIVITY = `
+const sqlActivity = (range) => `
 SELECT hook_name, event_time, agent_id, tool_name, model, hook_decision
 FROM agentshield_hook_events
 WHERE hook_name IN ('llm_input', 'llm_output', 'before_tool_call', 'after_tool_call')
-SETTINGS seek_to='-1h'`
+SETTINGS seek_to='${range}'`
 
 function formatTs(ts) {
   if (!ts) return '—'
@@ -49,16 +56,20 @@ export default function Threats() {
   const [connected, setConnected] = useState(false)
   const [severity, setSeverity] = useState('All')
   const [category, setCategory] = useState('All Categories')
+  const [timeRange, setTimeRange] = useState('-24h')
 
   useEffect(() => {
+    // Clear existing data when time range changes so old backfill doesn't linger
+    setThreats([])
+    setLiveActivity([])
+    setConnected(false)
+
     const threatCtrl = new AbortController()
     const activityCtrl = new AbortController()
 
     async function streamThreats() {
       let first = true
-      // seek_to='-24h' causes Proton to replay last 24h first, then continue live —
-      // all on the same connection, no phase switch needed.
-      for await (const row of api.protonQuery(SQL_THREATS, { signal: threatCtrl.signal })) {
+      for await (const row of api.protonQuery(sqlThreats(timeRange), { signal: threatCtrl.signal })) {
         if (first) { setConnected(true); first = false }
         setThreats(prev => [row, ...prev].slice(0, 100))
       }
@@ -66,7 +77,7 @@ export default function Threats() {
     }
 
     async function streamActivity() {
-      for await (const row of api.protonQuery(SQL_ACTIVITY, { signal: activityCtrl.signal })) {
+      for await (const row of api.protonQuery(sqlActivity(timeRange), { signal: activityCtrl.signal })) {
         setLiveActivity(prev => [row, ...prev].slice(0, 20))
       }
     }
@@ -78,7 +89,7 @@ export default function Threats() {
       threatCtrl.abort()
       activityCtrl.abort()
     }
-  }, [])
+  }, [timeRange])
 
   const filtered = threats.filter(t => {
     if (severity !== 'All' && t.severity?.toLowerCase() !== severity.toLowerCase()) return false
@@ -104,6 +115,24 @@ export default function Threats() {
 
           {/* Filter Bar */}
           <section className="bg-[#211e29] rounded p-6 mb-6 flex flex-wrap items-center gap-6">
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Time Range</label>
+              <div className="flex gap-1">
+                {TIME_RANGES.map(r => (
+                  <button
+                    key={r.value}
+                    onClick={() => setTimeRange(r.value)}
+                    className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors ${
+                      timeRange === r.value
+                        ? 'bg-[#ffb0cf]/20 text-[#ffb0cf] border border-[#ffb0cf]/30'
+                        : 'bg-[#2c2834] text-zinc-400 border border-[#574149]/10 hover:text-white'
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex flex-col gap-2 flex-1 min-w-[200px]">
               <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Severity</label>
               <div className="flex gap-1">
@@ -168,7 +197,7 @@ export default function Threats() {
                       <td colSpan={6} className="px-6 py-12 text-center text-zinc-500 text-xs">
                         {threats.length > 0
                           ? 'No threats match the current filters.'
-                          : connected ? 'Connecting to threat stream…' : 'No threats detected in the last 24h.'}
+                          : connected ? 'Connecting to threat stream…' : 'No threats detected in the selected time range.'}
                       </td>
                     </tr>
                   ) : filtered.map((t, i) => (
@@ -215,8 +244,8 @@ export default function Threats() {
             <div className="space-y-3">
               {liveActivity.length === 0 ? (
                 <p className="text-xs text-zinc-600">Waiting for agent activity…</p>
-              ) : liveActivity.map((evt) => (
-                <div key={`${evt.event_time}-${evt.agent_id}-${evt.hook_name}`} className="flex items-start gap-4">
+              ) : liveActivity.map((evt, i) => (
+                <div key={`${evt.event_time}-${evt.agent_id}-${evt.hook_name}-${i}`} className="flex items-start gap-4">
                   <span className="text-[10px] font-mono text-[#ffb0cf] py-0.5 whitespace-nowrap flex-shrink-0">
                     {formatEvtTime(evt.event_time)}
                   </span>
