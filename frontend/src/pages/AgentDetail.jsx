@@ -9,11 +9,11 @@ import { api } from '../api/client'
 function fmtTime(iso) {
   if (!iso) return ''
   const d = new Date(iso)
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  const ss = String(d.getSeconds()).padStart(2, '0')
-  const ms = String(d.getMilliseconds()).padStart(3, '0')
-  return `${hh}:${mm}:${ss}.${ms}`
+  const hh = String(d.getUTCHours()).padStart(2, '0')
+  const mm = String(d.getUTCMinutes()).padStart(2, '0')
+  const ss = String(d.getUTCSeconds()).padStart(2, '0')
+  const ms = String(d.getUTCMilliseconds()).padStart(3, '0')
+  return `${hh}:${mm}:${ss}.${ms} UTC`
 }
 
 function dotColor(event) {
@@ -125,10 +125,12 @@ function EventDetail({ event }) {
   }
 
   if (hook === 'before_agent_start' || hook === 'agent_end') {
+    const duration = data.duration_ms ?? data.duration ?? data.elapsed_ms ?? data.elapsed ?? ''
     return (
       <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
         <KVRow label="Run ID" value={event.run_id} />
         <KVRow label="Session ID" value={event.session_id} />
+        {duration !== '' && <KVRow label="Duration" value={`${duration}ms`} />}
       </div>
     )
   }

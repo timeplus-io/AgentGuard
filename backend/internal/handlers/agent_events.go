@@ -85,8 +85,34 @@ func ListEvents(cfg *config.Config) gin.HandlerFunc {
 
 		whereClause := strings.Join(where, "\n  AND ")
 
-		// Fetch all matching rows for server-side pagination
-		sql := fmt.Sprintf(`
+		// Count total matching rows
+		countSQL := fmt.Sprintf(`
+SELECT count() AS total
+FROM table(agentshield_hook_events)
+WHERE %s`, whereClause)
+
+		countRows, err := timeplus.Query(&cfg.Timeplus, countSQL)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
+			return
+		}
+		total := 0
+		if len(countRows) > 0 {
+			total = parseInt(countRows[0]["total"])
+		}
+
+		if total == 0 || (page-1)*limit >= total {
+			c.JSON(http.StatusOK, models.EventsResponse{
+				Events: []models.HookEvent{},
+				Total:  total,
+				Page:   page,
+				Limit:  limit,
+			})
+			return
+		}
+
+		// Fetch one page via SQL LIMIT/OFFSET
+		pageSQL := fmt.Sprintf(`
 SELECT
     hook_name,
     event_time,
@@ -100,33 +126,18 @@ SELECT
     event_data
 FROM table(agentshield_hook_events)
 WHERE %s
-ORDER BY event_time ASC`,
-			whereClause)
+ORDER BY event_time ASC
+LIMIT %d OFFSET %d`,
+			whereClause, limit, (page-1)*limit)
 
-		rows, err := timeplus.Query(&cfg.Timeplus, sql)
+		rows, err := timeplus.Query(&cfg.Timeplus, pageSQL)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
 
-		total := len(rows)
-		start := (page - 1) * limit
-		if start >= total {
-			c.JSON(http.StatusOK, models.EventsResponse{
-				Events: []models.HookEvent{},
-				Total:  total,
-				Page:   page,
-				Limit:  limit,
-			})
-			return
-		}
-		end := start + limit
-		if end > total {
-			end = total
-		}
-
-		events := make([]models.HookEvent, 0, end-start)
-		for _, row := range rows[start:end] {
+		events := make([]models.HookEvent, 0, len(rows))
+		for _, row := range rows {
 			events = append(events, models.HookEvent{
 				HookName:     parseStr(row["hook_name"]),
 				EventTime:    parseTime(row["event_time"]),
