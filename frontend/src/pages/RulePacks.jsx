@@ -31,31 +31,38 @@ function formatTs(ts) {
 
 export default function RulePacks() {
   const [rules, setRules] = useState([])
+  const [catalog, setCatalog] = useState([])
   const [loading, setLoading] = useState(true)
   const [totalDetections, setTotalDetections] = useState(0)
   const [density, setDensity] = useState(0)
   const [recentDetections, setRecentDetections] = useState([])
   const [confirmToggle, setConfirmToggle] = useState(null) // { id, newVal, name }
+  const [reinstalling, setReinstalling] = useState(null) // rule id being reinstalled
+
+  const loadRules = () =>
+    api.listRules().then(data => {
+      if (data.rule_packs) {
+        setRules(data.rule_packs.map(r => ({
+          id: r.id,
+          icon: RULE_ICONS[r.id] || 'shield',
+          name: r.name,
+          desc: r.description,
+          enabled: r.enabled,
+          version: r.enabled ? (r.version || null) : null,
+          active: r.enabled,
+          detections24h: r.detections_24h || 0,
+        })))
+      }
+      if (data.total_detections_24h !== undefined) setTotalDetections(data.total_detections_24h)
+      if (data.active_rule_density !== undefined) setDensity(data.active_rule_density)
+      if (data.recent_detections) setRecentDetections(data.recent_detections)
+    })
 
   useEffect(() => {
-    api.listRules()
-      .then(data => {
-        if (data.rule_packs && data.rule_packs.length > 0) {
-          setRules(data.rule_packs.map(r => ({
-            id: r.id,
-            icon: RULE_ICONS[r.id] || 'shield',
-            name: r.name,
-            desc: r.description,
-            enabled: r.enabled,
-            version: r.enabled ? (r.version || null) : null,
-            active: r.enabled,
-            detections24h: r.detections_24h || 0,
-          })))
-        }
-        if (data.total_detections_24h !== undefined) setTotalDetections(data.total_detections_24h)
-        if (data.active_rule_density !== undefined) setDensity(data.active_rule_density)
-        if (data.recent_detections) setRecentDetections(data.recent_detections)
-      })
+    Promise.all([
+      loadRules(),
+      api.getRulesCatalog().then(data => setCatalog(data.catalog || [])),
+    ])
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -95,6 +102,23 @@ export default function RulePacks() {
       })
       .catch(() => {})
   }
+
+  const handleReinstall = async (id) => {
+    setReinstalling(id)
+    try {
+      await api.reinstallRule(id)
+      await Promise.all([
+        loadRules(),
+        api.getRulesCatalog().then(data => setCatalog(data.catalog || [])),
+      ])
+    } catch {
+      // silently ignore — user can retry
+    } finally {
+      setReinstalling(null)
+    }
+  }
+
+  const uninstalledCatalog = catalog.filter(e => !e.installed)
 
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
@@ -192,6 +216,39 @@ export default function RulePacks() {
               </div>
             ))}
           </section>
+
+          {uninstalledCatalog.length > 0 && (
+            <section>
+              <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-4">Available to Reinstall</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                {uninstalledCatalog.map(entry => (
+                  <div key={entry.id} className="bg-[#1d1a25]/60 border border-dashed border-zinc-700/40 p-5 rounded-sm flex flex-col gap-4">
+                    <div className="flex justify-between items-start">
+                      <div className="w-10 h-10 bg-[#0f0c17] flex items-center justify-center rounded-sm text-zinc-600">
+                        <span className="material-symbols-outlined">{RULE_ICONS[entry.id] || 'shield'}</span>
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide border ${
+                        entry.severity === 'critical'
+                          ? 'bg-[#ffb0cf]/10 text-[#ffb0cf] border-[#ffb0cf]/20'
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>{entry.severity}</span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-zinc-400 mb-1">{entry.name}</h3>
+                      <p className="text-xs text-zinc-600 leading-relaxed line-clamp-2">{entry.description}</p>
+                    </div>
+                    <button
+                      onClick={() => handleReinstall(entry.id)}
+                      disabled={reinstalling === entry.id}
+                      className="mt-auto w-full px-3 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] disabled:opacity-50 transition-opacity"
+                    >
+                      {reinstalling === entry.id ? 'Installing…' : 'Reinstall'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 bg-[#211e29] p-8 rounded-sm">

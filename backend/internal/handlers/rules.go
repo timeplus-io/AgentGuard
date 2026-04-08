@@ -302,6 +302,93 @@ GROUP BY rule_id`, id)
 	}
 }
 
+// ListCatalog returns the builtin rule catalog with each entry's installed status.
+func ListCatalog(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		installed, err := queryCurrentRulePacks(&cfg.Timeplus)
+		if err != nil {
+			log.Printf("rules: catalog query failed: %v", err)
+		}
+		installedIDs := map[string]bool{}
+		for _, p := range installed {
+			installedIDs[p.ID] = true
+		}
+
+		type CatalogItem struct {
+			ID          string `json:"id"`
+			Name        string `json:"name"`
+			Version     string `json:"version"`
+			Description string `json:"description"`
+			Severity    string `json:"severity"`
+			Category    string `json:"category"`
+			FPRate      string `json:"fp_rate"`
+			HookSources string `json:"hook_sources"`
+			Installed   bool   `json:"installed"`
+		}
+		catalog := tp.Catalog()
+		items := make([]CatalogItem, 0, len(catalog))
+		for _, e := range catalog {
+			items = append(items, CatalogItem{
+				ID:          e.ID,
+				Name:        e.Name,
+				Version:     e.Version,
+				Description: e.Description,
+				Severity:    e.Severity,
+				Category:    e.Category,
+				FPRate:      e.FPRate,
+				HookSources: e.HookSources,
+				Installed:   installedIDs[e.ID],
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"catalog": items})
+	}
+}
+
+// ReinstallRule re-inserts a previously deleted (uninstalled) rule and creates its MV.
+// It reads the original data from the builtin catalog — so it always reinstalls
+// the canonical version, not whatever custom SQL may have been in the stream.
+func ReinstallRule(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+
+		// Find in builtin catalog
+		var found *tp.CatalogEntry
+		for _, e := range tp.Catalog() {
+			if e.ID == id {
+				entry := e
+				found = &entry
+				break
+			}
+		}
+		if found == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not in builtin catalog"})
+			return
+		}
+
+		escapedSQL := strings.ReplaceAll(found.QuerySQL, "'", "''")
+		insertSQL := fmt.Sprintf(
+			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s',now64(3))`,
+			id,
+			strings.ReplaceAll(found.Name, "'", "''"),
+			found.Version,
+			strings.ReplaceAll(found.Description, "'", "''"),
+			escapedSQL,
+			found.Severity, found.Category, "",
+			found.FPRate, found.HookSources,
+		)
+		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "reinstall insert failed"})
+			return
+		}
+
+		if err := tp.CreateRuleMV(&cfg.Timeplus, id, found.QuerySQL); err != nil {
+			log.Printf("rules: reinstall create MV %s: %v", id, err)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"reinstalled": true, "rule_id": id})
+	}
+}
+
 // MVStatus returns the existence and enabled state of every rule's MV.
 func MVStatus(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
