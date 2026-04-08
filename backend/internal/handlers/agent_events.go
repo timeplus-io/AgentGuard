@@ -42,7 +42,14 @@ func ListEvents(cfg *config.Config) gin.HandlerFunc {
 			fmt.Sprintf("agent_id = '%s'", agentID),
 		}
 
-		if sid := c.Query("session_id"); sid != "" {
+		sid := c.Query("session_id")
+		rid := c.Query("run_id")
+		if sid == "" && rid == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "session_id is required unless run_id is provided"})
+			return
+		}
+
+		if sid != "" {
 			if !uuidRe.MatchString(sid) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session_id"})
 				return
@@ -50,7 +57,7 @@ func ListEvents(cfg *config.Config) gin.HandlerFunc {
 			where = append(where, fmt.Sprintf("session_id = '%s'", sid))
 		}
 
-		if rid := c.Query("run_id"); rid != "" {
+		if rid != "" {
 			if !uuidRe.MatchString(rid) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid run_id"})
 				return
