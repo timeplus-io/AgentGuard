@@ -176,7 +176,7 @@ var builtinRuleData = []builtinRule{
 	{
 		ruleID:      "rp-001",
 		name:        "Prompt Injection Shield",
-		version:     "v2.4.1",
+		version:     "1.0.0",
 		description: "Detects direct and indirect prompt injection attacks, jailbreak attempts, and goal hijacking across all message surfaces.",
 		severity:    "critical",
 		category:    "prompt_injection",
@@ -210,7 +210,7 @@ WHERE hook_name IN ('llm_input', 'llm_output')
 	{
 		ruleID:            "rp-002",
 		name:              "DLP Sentinel",
-		version:           "v1.9.0",
+		version:           "1.0.0",
 		description:       "Scans outbound agent communication for PII, API keys, and sensitive internal documentation leaks.",
 		severity:          "critical",
 		category:          "dlp",
@@ -246,7 +246,7 @@ WHERE hook_name IN ('tool_result_persist', 'after_tool_call', 'llm_output')
 	{
 		ruleID:      "rp-003",
 		name:        "Privilege Guard",
-		version:     "v1.2.0",
+		version:     "1.0.0",
 		description: "Monitors privilege escalation attempts through tool abuse, shell escapes, and dangerous system commands.",
 		severity:    "warning",
 		category:    "privilege",
@@ -279,7 +279,7 @@ WHERE hook_name IN ('before_tool_call', 'after_tool_call')
 	{
 		ruleID:      "rp-004",
 		name:        "Supply Chain Watch",
-		version:     "v3.1.2",
+		version:     "1.0.0",
 		description: "Monitors external model dependencies and third-party library calls for anomalous behavior.",
 		severity:    "warning",
 		category:    "supply_chain",

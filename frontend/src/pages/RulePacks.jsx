@@ -30,10 +30,10 @@ function formatTs(ts) {
 }
 
 const staticRules = [
-  { id: 'rp-001', icon: 'security_update_good', name: 'Prompt Injection Shield', desc: 'Advanced heuristic filtering to prevent jailbreaking attempts and unauthorized behavioral overrides in LLM agents.', enabled: true, version: 'v2.4.1', active: true, detections24h: 0 },
-  { id: 'rp-002', icon: 'data_loss_prevention', name: 'DLP Sentinel', desc: 'Scans outbound agent communication for PII, API keys, and sensitive internal documentation leaks.', enabled: true, version: 'v1.9.0', active: true, detections24h: 0 },
+  { id: 'rp-001', icon: 'security_update_good', name: 'Prompt Injection Shield', desc: 'Advanced heuristic filtering to prevent jailbreaking attempts and unauthorized behavioral overrides in LLM agents.', enabled: true, version: '1.0.0', active: true, detections24h: 0 },
+  { id: 'rp-002', icon: 'data_loss_prevention', name: 'DLP Sentinel', desc: 'Scans outbound agent communication for PII, API keys, and sensitive internal documentation leaks.', enabled: true, version: '1.0.0', active: true, detections24h: 0 },
   { id: 'rp-003', icon: 'admin_panel_settings', name: 'Privilege Guard', desc: 'Enforces strict Least Privilege access for agents. Limits tool execution to predefined namespaces.', enabled: false, version: null, active: false, detections24h: 0 },
-  { id: 'rp-004', icon: 'account_tree', name: 'Supply Chain Watch', desc: 'Monitors external model dependencies and third-party library calls for anomalous behavior.', enabled: true, version: 'v3.1.2', active: true, detections24h: 0 },
+  { id: 'rp-004', icon: 'account_tree', name: 'Supply Chain Watch', desc: 'Monitors external model dependencies and third-party library calls for anomalous behavior.', enabled: true, version: '1.0.0', active: true, detections24h: 0 },
 ]
 
 export default function RulePacks() {

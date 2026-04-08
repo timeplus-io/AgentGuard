@@ -16,10 +16,10 @@ import (
 // latestVersions is the catalog of the latest built-in rule versions.
 // If the live version differs, the UI shows an "Upgrade" button.
 var latestVersions = map[string]string{
-	"rp-001": "v2.4.1",
-	"rp-002": "v1.9.0",
-	"rp-003": "v1.2.0",
-	"rp-004": "v3.1.2",
+	"rp-001": "1.0.0",
+	"rp-002": "1.0.0",
+	"rp-003": "1.0.0",
+	"rp-004": "1.0.0",
 }
 
 const sqlCurrentRules = `
