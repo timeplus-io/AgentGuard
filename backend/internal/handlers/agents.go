@@ -14,6 +14,37 @@ import (
 
 var idPartRe = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
+// sessionCountSQL returns per-agent filtered session counts using the same
+// criteria as ListSessions: exclude internal/temp sessions and sessions with
+// no actual run activity.
+const sessionCountSQL = `
+SELECT agent_id, deployment_id, count() AS session_count
+FROM (
+    SELECT agent_id, deployment_id, session_id
+    FROM table(agentshield_hook_events)
+    WHERE session_id != ''
+    GROUP BY agent_id, deployment_id, session_id
+    HAVING any_if(session_key, session_key != '') NOT LIKE 'temp:%'
+      AND session_id NOT LIKE 'slug-generator-%'
+      AND count_if(run_id != '') > 0
+)
+GROUP BY agent_id, deployment_id`
+
+// fetchSessionCounts runs sessionCountSQL and returns a map keyed by
+// "deploymentID__agentID" → session count.
+func fetchSessionCounts(cfg *config.Config) map[string]int {
+	rows, err := timeplus.Query(&cfg.Timeplus, sessionCountSQL)
+	counts := make(map[string]int, len(rows))
+	if err != nil {
+		return counts
+	}
+	for _, row := range rows {
+		key := parseStr(row["deployment_id"]) + "__" + parseStr(row["agent_id"])
+		counts[key] = parseInt(row["session_count"])
+	}
+	return counts
+}
+
 func ListAgents(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		pageStr := c.DefaultQuery("page", "1")
@@ -36,9 +67,8 @@ SELECT
     agent_id,
     deployment_id,
     deployment_name,
-    max(event_time)             AS last_seen,
-    count()                     AS event_count,
-    count_distinct(session_key) AS session_count
+    max(event_time) AS last_seen,
+    count()         AS event_count
 FROM table(agentshield_hook_events)
 WHERE agent_id != ''
 GROUP BY agent_id, deployment_id, deployment_name
@@ -50,9 +80,13 @@ ORDER BY last_seen DESC`
 			return
 		}
 
+		sessionCounts := fetchSessionCounts(cfg)
+
 		agents := make([]models.Agent, 0, len(rows))
 		for _, row := range rows {
-			agents = append(agents, rowToAgent(row))
+			a := rowToAgent(row)
+			a.SessionCount = sessionCounts[a.DeploymentID+"__"+a.AgentID]
+			agents = append(agents, a)
 		}
 
 		total := len(agents)
@@ -93,9 +127,8 @@ SELECT
     agent_id,
     deployment_id,
     deployment_name,
-    max(event_time)             AS last_seen,
-    count()                     AS event_count,
-    count_distinct(session_key) AS session_count
+    max(event_time) AS last_seen,
+    count()         AS event_count
 FROM table(agentshield_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
@@ -114,6 +147,28 @@ LIMIT 1`,
 		}
 
 		a := rowToAgent(rows[0])
+
+		// Fetch filtered session count using the same criteria as ListSessions.
+		countSQL := fmt.Sprintf(`
+SELECT count() AS session_count
+FROM (
+    SELECT session_id
+    FROM table(agentshield_hook_events)
+    WHERE deployment_id = '%s'
+      AND agent_id      = '%s'
+      AND session_id    != ''
+    GROUP BY session_id
+    HAVING any_if(session_key, session_key != '') NOT LIKE 'temp:%%'
+      AND session_id NOT LIKE 'slug-generator-%%'
+      AND count_if(run_id != '') > 0
+)`,
+			deploymentID, agentID)
+
+		countRows, err := timeplus.Query(&cfg.Timeplus, countSQL)
+		if err == nil && len(countRows) > 0 {
+			a.SessionCount = parseInt(countRows[0]["session_count"])
+		}
+
 		c.JSON(http.StatusOK, a)
 	}
 }
@@ -125,6 +180,5 @@ func rowToAgent(row map[string]any) models.Agent {
 		DeploymentName: parseStr(row["deployment_name"]),
 		LastSeen:       parseTime(row["last_seen"]),
 		EventCount:     parseInt(row["event_count"]),
-		SessionCount:   parseInt(row["session_count"]),
 	}
 }
