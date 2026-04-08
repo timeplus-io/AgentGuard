@@ -377,14 +377,6 @@ func createNotifyUDF(ctx context.Context, conn proton.Conn) error {
 }
 
 func createNotifierAlert(ctx context.Context, conn proton.Conn) error {
-	exists, err := streamExists(ctx, conn, "agentshield_notifier")
-	if err != nil {
-		return fmt.Errorf("check alert: %w", err)
-	}
-	if exists {
-		log.Printf("timeplus: alert agentshield_notifier already exists, skipping")
-		return nil
-	}
 	if err := conn.Exec(ctx, ddlNotifierAlert); err != nil {
 		return fmt.Errorf("create alert: %w", err)
 	}
@@ -674,7 +666,7 @@ def notify_agentshield_udf(rule_ids, rule_names, severities,
     return rule_ids
 $$`
 
-const ddlNotifierAlert = `CREATE ALERT agentshield_notifier
+const ddlNotifierAlert = `CREATE ALERT IF NOT EXISTS agentshield_notifier
   BATCH 1 EVENTS WITH TIMEOUT 5s
   LIMIT 10 ALERTS PER 1m
   CALL notify_agentshield_udf
