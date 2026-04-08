@@ -44,6 +44,10 @@ func parseTime(v any) time.Time {
 		if s == "" {
 			return time.Time{}
 		}
+		// Proton returns timestamps without timezone: "2026-04-08 03:25:17.544"
+		if t, err := time.ParseInLocation("2006-01-02 15:04:05.999999999", s, time.UTC); err == nil {
+			return t
+		}
 		if t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", s); err == nil {
 			return t
 		}
@@ -122,6 +126,7 @@ WHERE deployment_id = '%s'
 GROUP BY session_id
 HAVING session_key NOT LIKE 'temp:%%'
    AND session_id  NOT LIKE 'slug-generator-%%'
+   AND count_if(run_id != '') > 0
 ORDER BY last_seen DESC`,
 			deploymentID, agentID)
 
