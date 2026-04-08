@@ -490,6 +490,85 @@ def scenario_5(model: str | None):
 
 
 # ---------------------------------------------------------------------------
+# Scenario 6 — Multiple agents (main + analyst)
+# ---------------------------------------------------------------------------
+
+def scenario_6(model: str | None):
+    section("Scenario 6 — Multiple Agents (main + analyst)")
+    t_start = now_iso()
+
+    # Check that the 'analyst' agent is registered in OpenClaw.
+    req = urllib.request.Request(
+        f"{OPENCLAW_URL}/v1/models",
+        headers={"Authorization": f"Bearer {OPENCLAW_TOKEN}"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as r:
+        models_resp = json.loads(r.read())
+    model_ids = {m["id"] for m in models_resp.get("data", [])}
+
+    if not check("openclaw/analyst model available",
+                 "openclaw/analyst" in model_ids,
+                 "run 'make add-agents' first"):
+        return False
+
+    # Send one message to main and one to analyst — different model IDs route to
+    # different agents; each produces hook events with its own agent_id.
+    print(f"  [{INFO}] Sending message to main agent...")
+    reply_main = chat(
+        [{"role": "user", "content": "Reply with exactly: 'I am main.'"}],
+        user_id="agentshield-test-s6-main",
+        model_override=model,
+        # no model field change — defaults to openclaw/main in chat()
+    )
+    print(f"  [{INFO}] main reply: {reply_main[:80]}")
+
+    print(f"  [{INFO}] Sending message to analyst agent...")
+    # Override the model field inside the payload to target the analyst agent.
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {OPENCLAW_TOKEN}",
+    }
+    payload = {
+        "model": "openclaw/analyst",
+        "messages": [{"role": "user", "content": "Reply with exactly: 'I am analyst.'"}],
+        "user": "agentshield-test-s6-analyst",
+    }
+    req = urllib.request.Request(
+        f"{OPENCLAW_URL}/v1/chat/completions",
+        data=json.dumps(payload).encode(),
+        headers=headers,
+    )
+    with urllib.request.urlopen(req, timeout=REPLY_TIMEOUT_S) as r:
+        result = json.loads(r.read())
+    reply_analyst = result["choices"][0]["message"]["content"]
+    print(f"  [{INFO}] analyst reply: {reply_analyst[:80]}")
+
+    print(f"  [{INFO}] Waiting {FLUSH_WAIT_S}s for flush...")
+    time.sleep(FLUSH_WAIT_S)
+
+    # Verify hook events for both agents are in Timeplus.
+    agent_rows = tpq(f"""
+        SELECT agent_id, count() as cnt
+        FROM table(agentshield_hook_events)
+        WHERE event_time >= '{t_start}'
+          AND agent_id != ''
+        GROUP BY agent_id
+        ORDER BY agent_id
+    """)
+    agent_ids = {r["agent_id"] for r in agent_rows}
+
+    results = [
+        check("main agent events recorded",     "main"     in agent_ids),
+        check("analyst agent events recorded",  "analyst"  in agent_ids),
+        check("2 distinct agents in stream",    len(agent_ids) >= 2,
+              f"{len(agent_ids)} agents: {sorted(agent_ids)}"),
+    ]
+    print()
+    print_table(agent_rows, ["agent_id", "cnt"])
+    return all(results)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -499,6 +578,7 @@ SCENARIOS = {
     3: ("Sub-Agent Spawn Chain",      scenario_3),
     4: ("Scheduled Cron Task",        scenario_4),
     5: ("Complex Coding + Compaction",scenario_5),
+    6: ("Multiple Agents",            scenario_6),
 }
 
 
