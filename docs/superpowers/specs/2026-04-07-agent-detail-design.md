@@ -26,37 +26,19 @@ Single route, no nested page navigation. All drill-down state lives in query par
 
 Derive `session_type` from `session_key` pattern for display labels:
 
-| Pattern | Type label |
-|---------|-----------|
-| `agent:<id>:main` | Web UI |
-| `agent:<id>:openai-user:<x>` | HTTP API |
-| `agent:<id>:cron:<x>` | Cron |
-| `agent:<id>:subagent:<uuid>` | Sub-agent |
-| anything else | Unknown |
+| Pattern | Type label | Icon |
+|---------|-----------|------|
+| `agent:<id>:main` | Web UI | `language` |
+| `agent:<id>:openai-user:<x>` | HTTP API | `api` |
+| `agent:<id>:cron:<x>` | Cron | `schedule` |
+| `agent:<id>:subagent:<uuid>` | Sub-agent | `account_tree` |
+| anything else | Unknown | `help_outline` |
 
 ---
 
 ## Backend — New Endpoints
 
-### Extend `GET /api/agents/:id`
-
-Add to existing response (no breaking change):
-```json
-{
-  "agent_id": "main",
-  "deployment_id": "local",
-  "deployment_name": "Local Dev",
-  "last_seen": "...",
-  "event_count": 835,
-  "session_count": 5,
-  "run_count": 42,
-  "block_count": 3,
-  "model": "kimi-k2.5:cloud",
-  "provider": "ollama"
-}
-```
-
-New fields from Proton: `run_count` = `count(DISTINCT run_id)`, `block_count` = `countIf(hook_decision='block')`, `model` = `any(model)` filtered to non-empty, `provider` = `any(provider)` filtered to non-empty.
+> **Note:** Extending `GET /api/agents/:id` with `run_count`, `block_count`, `model`, `provider` is deferred to a future iteration when metric cards are wired to live data.
 
 ### `GET /api/agents/:id/sessions`
 
@@ -81,7 +63,7 @@ SQL: `GROUP BY session_id, session_key` with `WHERE agent_id = X AND deployment_
 
 ### `GET /api/agents/:id/sessions/:session_id`
 
-Returns runs within a session, oldest first.
+Returns metadata and runs list for one session.
 
 Response:
 ```json
@@ -96,134 +78,189 @@ Response:
       "end_time": "2026-04-07T21:41:19Z",
       "event_count": 6,
       "model": "kimi-k2.5:cloud",
-      "tool_count": 0,
+      "tool_count": 2,
       "has_block": false
     }
   ]
 }
 ```
 
-SQL: `GROUP BY run_id` with `WHERE session_id = X AND run_id != ''`, compute `min(event_time)` as `start_time`, `max(event_time)` as `end_time`, `count()`, `any(model)`, `countIf(hook_name = 'before_tool_call')`, `countIf(hook_decision = 'block') > 0`.
+SQL: `GROUP BY run_id` with `WHERE session_id = X AND run_id != ''`. Compute: `min(event_time)` as `start_time`, `max(event_time)` as `end_time`, `count()`, `any(model)`, `countIf(hook_name = 'before_tool_call')` as `tool_count`, `countIf(hook_decision = 'block') > 0` as `has_block`. Ordered by `start_time ASC`.
 
 ### `GET /api/agents/:id/events`
 
-Returns events for the timeline. Supports query params `session_id` and `run_id` (both optional, stackable).
+Returns paginated events for the timeline.
 
 Query params:
-- `session_id=<uuid>` — filter to session
-- `run_id=<uuid>` — filter to run (implies session)
-- `limit=<n>` — default 100, max 500
+- `session_id=<uuid>` — filter to session (required unless run_id provided)
+- `run_id=<uuid>` — additionally filter to a specific run
+- `since=<RFC3339>` — only events after this time (time range start)
+- `until=<RFC3339>` — only events before this time (time range end)
+- `page=<n>` — 1-based page number, default 1
+- `limit=<n>` — events per page, default 100, max 500
 
 Response:
 ```json
-[
-  {
-    "hook_name": "llm_output",
-    "event_time": "2026-04-07T21:41:19Z",
-    "run_id": "e566fb8c-...",
-    "session_id": "abc-123",
-    "tool_name": "",
-    "provider": "ollama",
-    "model": "kimi-k2.5:cloud",
-    "hook_decision": "",
-    "block_reason": "",
-    "event_data": "{...}"
-  }
-]
+{
+  "events": [
+    {
+      "hook_name": "llm_output",
+      "event_time": "2026-04-07T21:41:19Z",
+      "run_id": "e566fb8c-...",
+      "session_id": "abc-123",
+      "tool_name": "",
+      "provider": "ollama",
+      "model": "kimi-k2.5:cloud",
+      "hook_decision": "",
+      "block_reason": "",
+      "event_data": "{...}"
+    }
+  ],
+  "total": 145,
+  "page": 1,
+  "limit": 100
+}
 ```
 
-SQL: `SELECT ... FROM table(agentshield_hook_events) WHERE deployment_id=X AND agent_id=Y [AND session_id=Z] [AND run_id=W] ORDER BY event_time ASC LIMIT N`.
+SQL: `SELECT ... FROM table(agentshield_hook_events) WHERE deployment_id=X AND agent_id=Y [AND session_id=Z] [AND run_id=W] [AND event_time >= since] [AND event_time <= until] ORDER BY event_time ASC LIMIT limit OFFSET (page-1)*limit`.
 
 ---
 
 ## Frontend — UI Layout
 
 ```
-┌─────────┬─────────────────────────────────────────────────────────┐
-│ Sidebar │  [← Agents]  main  [Local Dev]       [Live Monitor]     │
-│  (nav)  ├──────────────────────────────────────────────────────────┤
-│         │  Events  Sessions  Runs  Blocks  (metric cards row)      │
-│         ├──────────────────┬───────────────────────────────────────┤
-│         │ Sessions panel   │  Timeline                             │
-│         │ (w-56 fixed)     │                                       │
-│         │                  │  ● hook_name        14:22:01         │
-│         │ ▾ Web UI         │    model / tool details              │
-│         │   › Run 1  ←sel  │                                       │
-│         │   › Run 2        │  ● hook_name        14:21:58         │
-│         │   › Run 3        │    ...                               │
-│         │                  │                                       │
-│         │ ▸ HTTP API       │  (empty state if no session          │
-│         │ ▸ HTTP API       │   selected: "Select a session        │
-│         │ ▸ Cron           │   from the left to view events")     │
-│         │                  │                                       │
-└─────────┴──────────────────┴───────────────────────────────────────┘
+┌─────────┬──────────────────────────────────────────────────────────────┐
+│ Sidebar │  [← Agents]  main  [Local Dev]    [↺ Refresh]               │
+│  (nav)  ├───────────────────────────────────────────────────────────────┤
+│         │  [Events: 835]  [Sessions: 5]  [Runs: 42]  [Blocks: 3]       │
+│         ├──────────────┬────────────────────────────────────────────────┤
+│         │ Sessions     │  Timeline                     [← prev] [next →]│
+│         │ ─────────    │                                                 │
+│         │ 🌐 Web UI    │  ● llm_output           14:22:01.442           │
+│         │  › Run #1    │    ollama / kimi-k2.5:cloud                    │
+│         │  › Run #2 ◀  │    ▸ LLM Output  (click to expand detail panel)│
+│         │  › Run #3    │                                                 │
+│         │ 🔌 HTTP API  │  ● before_tool_call      14:22:00.181          │
+│         │ ⏰ Cron      │    write_file                                   │
+│         │ 🌿 Sub-agent │    ▸ Tool Call                                  │
+│         │              │                                                 │
+│         │              │  (empty: "Select a session")                   │
+└─────────┴──────────────┴────────────────────────────────────────────────┘
+                                         ↓ clicking ▸ expands detail panel
+                          ┌──────────────────────────────────┐
+                          │ LLM Output                        │
+                          │ Provider   ollama                 │
+                          │ Model      kimi-k2.5:cloud        │
+                          │ Run ID     e566fb8c-...           │
+                          │ Time       2026-04-07 14:22:01    │
+                          └──────────────────────────────────┘
 ```
 
 ### Sessions Panel
 
-- Fixed width `w-56`, scrollable
-- Groups: each session is a row showing session_type icon + label (last segment of session_key) + run_count badge
-- Clicking a session: expands runs list beneath it (accordion), updates `?session=` query param, loads events
-- Clicking a run: updates `?run_id=` query param, filters timeline
-- Selected state: pink accent (`text-[#ffb0cf]`, left border highlight)
-- Session type icons: `web` → `language`, `openai-user` → `api`, `cron` → `schedule`, `subagent` → `account_tree`
+- Fixed width `w-52`, scrollable, no horizontal resize
+- Each session row: icon + session_type label + run_count badge
+- Session label: `session_type` (e.g. "Web UI", "HTTP API") — `session_key` shown as subtitle in smaller text
+- Clicking session: accordion expands showing run list beneath, sets `?session=` param, loads events for that session
+- Each run row: `Run #N` label + start time + tool/block badges if applicable
+- Clicking run: sets `?run_id=` param, filters timeline
+- Active selection: `border-l-2 border-[#ffb0cf] text-[#ffb0cf]` highlight
+- Session type icons via Material Symbols: language / api / schedule / account_tree
 
-### Metric Cards (top row, 4 cards)
+### Metric Cards (top row, 4 compact cards)
 
-Replace static cards with live data from `GET /api/agents/:id`:
-1. **Total Events** — `event_count`
-2. **Sessions** — `session_count`
-3. **Runs** — `run_count`
-4. **Blocks** — `block_count` (accent color `text-[#ffb4ab]` if > 0)
+Kept as static placeholders in this implementation round — live data wiring deferred to a future iteration. The 4 cards remain visible in the layout:
+1. **Total Events** / icon: `bolt`
+2. **Sessions** / icon: `layers`
+3. **Runs** / icon: `sync_alt`
+4. **Blocks** / icon: `block`
+
+The `GET /api/agents/:id` extension (adding `run_count`, `block_count`, `model`, `provider`) is also deferred.
+
+### Refresh Button
+
+- In the top-right of the page header: `↺ Refresh` button
+- On click: re-fetches agent stats, sessions list, and current events (whichever are loaded)
+- Shows a spinning icon while any fetch is in-flight
 
 ### Timeline Panel
 
-Each event is a row in a vertical timeline:
-- Left dot: color-coded by hook category (llm=pink, tool=blue, security/block=red, lifecycle=zinc)
-- Hook name (monospace, small)
-- Timestamp (right-aligned, `HH:mm:ss.SSS`)
-- Secondary line: relevant fields — `model`, `tool_name`, `hook_decision`, `block_reason` (only non-empty ones shown)
-- `event_data` shown as a collapsed expandable JSON block on click
+Each event is a row in a vertical timeline list:
 
-Hook color categories:
+**Row structure:**
 ```
-llm_input / llm_output         → #ffb0cf (pink)
-before_tool_call / after_tool_call / tool_result_persist → #93c5fd (blue)
-hook_decision = 'block'        → #ffb4ab (red)
-before_agent_start / agent_end → zinc-400
-everything else                → zinc-600
+  ● hook_name                           HH:mm:ss.SSS
+    subtitle line (model / tool_name / decision — non-empty only)
+    ▸ Event Details  (expandable)
 ```
 
-Empty states:
-- No session selected: centered message "Select a session to view its event timeline"
-- Session selected, no events: "No events recorded for this session"
-- Loading: spinner replacing timeline content
+**Dot colors** (left dot and accent):
+```
+llm_input / llm_output                         → #ffb0cf (pink)
+before_tool_call / after_tool_call
+  / tool_result_persist                         → #93c5fd (blue-300)
+hook_decision = 'block'                         → #ffb4ab (red)
+before_agent_start / agent_end                  → zinc-400
+everything else                                 → zinc-600
+```
+
+**Expandable detail panel** (inline below the event row, not a modal):
+
+Clicking `▸ Event Details` expands a structured panel. Content varies by hook type:
+
+| Hook type | Fields shown |
+|-----------|-------------|
+| `llm_input` | Provider, Model, Run ID, Session ID, Message count (from event_data) |
+| `llm_output` | Provider, Model, Run ID, finish reason (from event_data) |
+| `before_tool_call` / `after_tool_call` | Tool Name, Run ID, tool input args (from event_data, formatted as key-value pairs) |
+| `tool_result_persist` | Tool Name, result preview (truncated to 200 chars from event_data) |
+| `hook_decision = 'block'` | Block Reason, Rule that fired (from event_data) |
+| `before_agent_start` / `agent_end` | Run ID, Session ID, duration if both present |
+| anything else | Key-value pairs of all non-empty top-level fields from event_data |
+
+`event_data` is parsed as JSON. Fields are displayed as a clean key-value table (`text-[10px]` labels, `text-xs font-mono` values), not raw JSON.
+
+**Pagination controls** (bottom of timeline):
+- Shows `Showing X–Y of Z events`
+- Prev / Next buttons
+- Page size selector: 25 / 50 / 100
+
+**Time range filter** (above timeline):
+- Two inputs: `From` and `To` (datetime-local HTML inputs)
+- Default: empty (no time filter)
+- On change: triggers re-fetch of events with `since=` and `until=` params
+- Clearing both resets to no filter
+
+**Empty / loading states:**
+- No session selected: "Select a session from the left to view its event timeline"
+- Loading: spinner in place of timeline
+- Session selected, 0 events: "No events recorded for this session"
 
 ### Removed
 
-- Agent Identity panel (static hardcoded model, session ID, security tags, Neural Health Pulse, Update Config / Terminate Agent buttons)
+- Agent Identity panel (static model, session ID, security tags, Neural Health Pulse, Update Config / Terminate Agent buttons)
 
 ---
 
 ## File Structure
 
 **New backend files:**
-- `backend/internal/handlers/agent_sessions.go` — ListSessions, GetSession handlers
-- `backend/internal/handlers/agent_events.go` — ListEvents handler
+- `backend/internal/handlers/agent_sessions.go` — `ListSessions(cfg)`, `GetSession(cfg)` handlers
+- `backend/internal/handlers/agent_events.go` — `ListEvents(cfg)` handler
 
 **Modified backend files:**
-- `backend/internal/models/models.go` — add Session, Run, Event, extended Agent structs
-- `backend/internal/handlers/agents.go` — extend GetAgent SQL + rowToAgent
-- `backend/cmd/server/main.go` — register new routes
+- `backend/internal/models/models.go` — add `Session`, `Run`, `Event`, `EventsResponse` structs
+- `backend/cmd/server/main.go` — register 3 new routes
 
 **Modified frontend files:**
 - `frontend/src/pages/AgentDetail.jsx` — full rewrite
-- `frontend/src/api/client.js` — add listSessions, getSession, listEvents methods
+- `frontend/src/api/client.js` — add `listSessions(id)`, `getSession(id, sessionId)`, `listEvents(id, params)` methods
 
 ---
 
 ## Validation
 
-- `session_id` and `run_id` path/query params validated with same UUID regex before SQL interpolation
-- All SQL uses parameterized-style construction with the existing `idPartRe` guard for `deploymentId`/`agentId`; UUIDs validated separately with `uuidRe = regexp.MustCompile(^[0-9a-f-]{36}$)`
-- `limit` capped at 500
+- `session_id` and `run_id` path/query params validated with `uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)` before SQL interpolation
+- `deploymentId` and `agentId` continue using existing `idPartRe`
+- `since` / `until` parsed with `time.Parse(time.RFC3339, ...)` — rejected with 400 if malformed
+- `limit` capped at 500, `page` minimum 1
