@@ -149,7 +149,7 @@ func ToggleRule(cfg *config.Config) gin.HandlerFunc {
 
 		// Flip enabled via INSERT ... SELECT — reads current state and flips it atomically
 		sql := fmt.Sprintf(`
-INSERT INTO agentshield_rules
+INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
 SELECT
   rule_id,
   arg_max(name,               updated_at) AS name,
@@ -236,7 +236,7 @@ func UpgradeRule(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		escapedSQL := strings.ReplaceAll(body.QuerySQL, "'", "''")
-		insertSQL := fmt.Sprintf(`INSERT INTO agentshield_rules VALUES
+		insertSQL := fmt.Sprintf(`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES
 ('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s',now64(3))`,
 			id,
 			strings.ReplaceAll(current.Name, "'", "''"),
@@ -270,7 +270,7 @@ func UninstallRule(cfg *config.Config) gin.HandlerFunc {
 		id := c.Param("id")
 
 		sql := fmt.Sprintf(`
-INSERT INTO agentshield_rules
+INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
 SELECT
   rule_id,
   arg_max(name,               updated_at) AS name,
