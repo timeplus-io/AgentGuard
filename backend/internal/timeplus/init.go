@@ -181,7 +181,7 @@ var builtinRuleData = []builtinRule{
 		severity:    "critical",
 		category:    "prompt_injection",
 		fpRate:      "medium",
-		hookSources: "llm_input,llm_output",
+		hookSources: "llm_input",
 		querySQL: `SELECT
   event_time                AS detected_at,
   'rp-001'                  AS rule_id,
@@ -196,7 +196,7 @@ var builtinRuleData = []builtinRule{
   concat('Potential prompt injection in ', hook_name, ' from agent ', agent_id) AS message,
   event_data
 FROM agentshield_hook_events
-WHERE hook_name IN ('llm_input', 'llm_output')
+WHERE hook_name = 'llm_input'
   AND (
        lower(event_data) LIKE '%ignore previous instructions%'
     OR lower(event_data) LIKE '%ignore all previous%'
@@ -251,7 +251,7 @@ WHERE hook_name IN ('tool_result_persist', 'after_tool_call', 'llm_output')
 		severity:    "warning",
 		category:    "privilege",
 		fpRate:      "low",
-		hookSources: "before_tool_call,after_tool_call",
+		hookSources: "before_tool_call",
 		querySQL: `SELECT
   event_time        AS detected_at,
   'rp-003'          AS rule_id,
@@ -266,7 +266,7 @@ WHERE hook_name IN ('tool_result_persist', 'after_tool_call', 'llm_output')
   concat('Dangerous tool call: ', tool_name, ' by agent ', agent_id) AS message,
   event_data
 FROM agentshield_hook_events
-WHERE hook_name IN ('before_tool_call', 'after_tool_call')
+WHERE hook_name = 'before_tool_call'
   AND (
        lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
     OR lower(event_data) LIKE '%sudo %'
@@ -284,7 +284,7 @@ WHERE hook_name IN ('before_tool_call', 'after_tool_call')
 		severity:    "warning",
 		category:    "supply_chain",
 		fpRate:      "high",
-		hookSources: "before_install,before_tool_call,after_tool_call",
+		hookSources: "before_install,before_tool_call",
 		querySQL: `SELECT
   event_time           AS detected_at,
   'rp-004'             AS rule_id,
@@ -301,7 +301,7 @@ WHERE hook_name IN ('before_tool_call', 'after_tool_call')
 FROM agentshield_hook_events
 WHERE hook_name = 'before_install'
    OR (
-       hook_name IN ('before_tool_call', 'after_tool_call')
+       hook_name = 'before_tool_call'
     AND (
            lower(event_data) LIKE '%npm install%'
         OR lower(event_data) LIKE '%pip install%'

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -67,6 +68,22 @@ func ProtonQueryHandler(cfg *config.Config) gin.HandlerFunc {
 		c.Header("Cache-Control", "no-cache")
 		c.Status(http.StatusOK)
 
-		io.Copy(c.Writer, resp.Body) //nolint:errcheck
+		// Stream line-by-line and flush after each row so live events reach the
+		// browser immediately. io.Copy + http.ResponseWriter buffers up to 4 KB
+		// before writing, which means individual live rows stall until the buffer
+		// fills — unacceptable for real-time streaming.
+		flusher, canFlush := c.Writer.(http.Flusher)
+		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 256*1024), 256*1024) // 256 KB max line (large event_data)
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if len(line) == 0 {
+				continue
+			}
+			c.Writer.Write(append(line, '\n')) //nolint:errcheck
+			if canFlush {
+				flusher.Flush()
+			}
+		}
 	}
 }

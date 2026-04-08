@@ -8,10 +8,12 @@ import RulePacks from './pages/RulePacks'
 import RuleDetail from './pages/RuleDetail'
 import Investigate from './pages/Investigate'
 import Onboarding from './pages/Onboarding'
+import { NotificationsProvider } from './components/NotificationsProvider'
 
 export default function App() {
   return (
     <BrowserRouter>
+    <NotificationsProvider>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
@@ -25,6 +27,7 @@ export default function App() {
         <Route path="/onboarding" element={<Onboarding />} />
 
       </Routes>
+    </NotificationsProvider>
     </BrowserRouter>
   )
 }

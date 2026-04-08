@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import Footer from '../components/Footer'
@@ -6,38 +7,112 @@ import PageHeader from '../components/PageHeader'
 import { SeverityBadge } from '../components/Badge'
 import { api } from '../api/client'
 
-const staticThreats = [
-  { id: 1, severity: 'Critical', name: 'Prompt Injection Attempt', vector: 'Vector: System Message Override', agent: 'OpenClaw-Prod-1', session: 'sess_8f22x_991', date: 'Oct 24, 14:02:11', ago: '2 mins ago' },
-  { id: 2, severity: 'Warning', name: 'Abnormal Token Consumption', vector: 'Vector: Rate Limit Near-Threshold', agent: 'SecureMind-Edge-7', session: 'sess_11a9q_420', date: 'Oct 24, 13:45:00', ago: '19 mins ago' },
-  { id: 3, severity: 'Critical', name: 'Sensitive Data Leakage', vector: 'Vector: PII Detection in Output', agent: 'OpenClaw-Prod-3', session: 'sess_5d3r4_102', date: 'Oct 24, 13:12:44', ago: '51 mins ago' },
-  { id: 4, severity: 'Info', name: 'System Patch Required', vector: 'Vector: New Security Definitions Available', agent: 'GLOBAL-ORCH', session: 'N/A', date: 'Oct 24, 12:00:01', ago: '2 hours ago' },
+const TIME_RANGES = [
+  { label: '1h',  value: '-1h' },
+  { label: '6h',  value: '-6h' },
+  { label: '24h', value: '-24h' },
+  { label: '7d',  value: '-7d' },
 ]
 
-const liveStream = [
-  { time: '14:05:22', text: <><span className="text-white font-semibold">OpenClaw-Prod-1</span> performed a recursive sanity check on session <span className="text-[#ffb2b8]">sess_8f22x_991</span>.</> },
-  { time: '14:05:18', text: <><span className="text-white font-semibold">Firewall-01</span> blocked incoming traffic from <span className="text-[#ffb4ab]">192.168.1.12</span> due to malformed header.</> },
-  { time: '14:04:59', text: <><span className="text-white font-semibold">System</span> successfully rotated encryption keys for region: <span className="text-[#ffb0cf]">US-EAST-1</span>.</> },
-]
+// Single streaming query per panel: Proton delivers historical backfill first,
+// then continues streaming live events on the same connection.
+const sqlThreats = (range) => `
+SELECT detected_at, rule_id, rule_name, severity, agent_id,
+       session_id, hook_name, tool_name, message
+FROM agentshield_security_events
+SETTINGS seek_to='${range}'`
+
+const sqlActivity = (range) => `
+SELECT hook_name, event_time, agent_id, tool_name, model, hook_decision
+FROM agentshield_hook_events
+WHERE hook_name IN ('llm_input', 'llm_output', 'before_tool_call', 'after_tool_call')
+SETTINGS seek_to='${range}'`
+
+function formatTs(ts) {
+  if (!ts) return '—'
+  try {
+    return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts).toLocaleString()
+  } catch { return String(ts) }
+}
+
+function formatEvtTime(ts) {
+  if (!ts) return ''
+  try {
+    return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
+      .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch { return String(ts) }
+}
+
+function formatActivity(evt) {
+  if (evt.hook_name === 'llm_input')       return `called LLM${evt.model ? ` [${evt.model}]` : ''}`
+  if (evt.hook_name === 'llm_output')      return `received LLM response${evt.model ? ` [${evt.model}]` : ''}`
+  if (evt.hook_name === 'before_tool_call') return `invoked tool ${evt.tool_name || '(unknown)'}`
+  if (evt.hook_name === 'after_tool_call')  return `completed tool ${evt.tool_name || '(unknown)'}`
+  return evt.hook_name
+}
 
 export default function Threats() {
-  const [threats, setThreats] = useState(staticThreats)
-  const [loading, setLoading] = useState(true)
+  const [threats, setThreats] = useState([])
+  const [liveActivity, setLiveActivity] = useState([])
+  const [connected, setConnected] = useState(false)
   const [severity, setSeverity] = useState('All')
   const [category, setCategory] = useState('All Categories')
+  const [timeRange, setTimeRange] = useState('-24h')
 
   useEffect(() => {
-    const params = {}
-    if (severity !== 'All') params.severity = severity
-    if (category !== 'All Categories') params.category = category
-    api.listThreats(params)
-      .then(data => {
-        if (data.threats && data.threats.length > 0) setThreats(data.threats)
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [severity, category])
+    // Clear existing data when time range changes so old backfill doesn't linger
+    setThreats([])
+    setLiveActivity([])
+    setConnected(false)
 
-  const filtered = threats.filter(t => severity === 'All' || t.severity === severity)
+    const threatCtrl = new AbortController()
+    const activityCtrl = new AbortController()
+
+    async function streamThreats() {
+      let first = true
+      for await (const row of api.protonQuery(sqlThreats(timeRange), { signal: threatCtrl.signal })) {
+        if (first) { setConnected(true); first = false }
+        setThreats(prev => [row, ...prev].slice(0, 100))
+      }
+      setConnected(false)
+    }
+
+    async function streamActivity() {
+      for await (const row of api.protonQuery(sqlActivity(timeRange), { signal: activityCtrl.signal })) {
+        setLiveActivity(prev => [row, ...prev].slice(0, 20))
+      }
+    }
+
+    streamThreats().catch(e => { if (e?.name !== 'AbortError') setConnected(false) })
+    streamActivity().catch(() => {})
+
+    return () => {
+      threatCtrl.abort()
+      activityCtrl.abort()
+    }
+  }, [timeRange])
+
+  const filtered = threats
+    .filter(t => {
+      if (severity !== 'All' && t.severity?.toLowerCase() !== severity.toLowerCase()) return false
+      if (category !== 'All Categories') {
+        const catMap = { Injection: 'rp-001', Exfiltration: 'rp-002', 'Supply Chain': 'rp-004' }
+        const mappedId = catMap[category]
+        if (!mappedId || !t.rule_id?.startsWith(mappedId)) return false
+      }
+      return true
+    })
+    .sort((a, b) => {
+      const ta = new Date(typeof a.detected_at === 'string' ? a.detected_at.replace(' ', 'T') : a.detected_at)
+      const tb = new Date(typeof b.detected_at === 'string' ? b.detected_at.replace(' ', 'T') : b.detected_at)
+      return tb - ta
+    })
+
+  const sortedActivity = [...liveActivity].sort((a, b) => {
+    const ta = new Date(typeof a.event_time === 'string' ? a.event_time.replace(' ', 'T') : a.event_time)
+    const tb = new Date(typeof b.event_time === 'string' ? b.event_time.replace(' ', 'T') : b.event_time)
+    return tb - ta
+  })
 
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
@@ -49,20 +124,28 @@ export default function Threats() {
           <PageHeader
             title="Threats"
             subtitle="Real-time surveillance of AI agent activity and anomalous patterns."
-            actions={<>
-              <button className="flex items-center gap-2 px-4 py-2 bg-[#2c2834] hover:bg-[#37333f] transition-colors text-xs font-medium text-[#e7dff0] rounded-sm border border-[#574149]/10">
-                <span className="material-symbols-outlined text-[16px]">export_notes</span>
-                Export to SIEM
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] hover:opacity-90 transition-opacity text-xs font-semibold text-[#3d0023] rounded-sm">
-                <span className="material-symbols-outlined text-[16px]">block</span>
-                Block Pattern
-              </button>
-            </>}
           />
 
           {/* Filter Bar */}
           <section className="bg-[#211e29] rounded p-6 mb-6 flex flex-wrap items-center gap-6">
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Time Range</label>
+              <div className="flex gap-1">
+                {TIME_RANGES.map(r => (
+                  <button
+                    key={r.value}
+                    onClick={() => setTimeRange(r.value)}
+                    className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors ${
+                      timeRange === r.value
+                        ? 'bg-[#ffb0cf]/20 text-[#ffb0cf] border border-[#ffb0cf]/30'
+                        : 'bg-[#2c2834] text-zinc-400 border border-[#574149]/10 hover:text-white'
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex flex-col gap-2 flex-1 min-w-[200px]">
               <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Severity</label>
               <div className="flex gap-1">
@@ -96,105 +179,116 @@ export default function Threats() {
                 <option>Supply Chain</option>
               </select>
             </div>
-            <div className="flex flex-col gap-2 flex-1 min-w-[200px]">
-              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Date Range</label>
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">calendar_month</span>
-                <input className="bg-[#0f0c17] border-none text-xs font-medium text-[#e7dff0] rounded-sm py-2 pl-9 pr-3 w-full cursor-pointer" readOnly type="text" defaultValue="Last 24 Hours" />
-              </div>
-            </div>
-            <div className="flex items-end h-full">
-              <button className="p-2.5 bg-[#ffb0cf]/10 text-[#ffb0cf] hover:bg-[#ffb0cf]/20 transition-colors rounded-sm">
-                <span className="material-symbols-outlined">filter_list</span>
-              </button>
-            </div>
           </section>
 
-          {/* Table */}
-          <section className="bg-[#211e29] rounded-sm overflow-hidden">
-            <div className="overflow-x-auto">
+          {/* Threats Table */}
+          <section className="bg-[#211e29] rounded-sm overflow-hidden mb-8">
+            <div className="px-6 py-4 flex items-center justify-between border-b border-[#574149]/10">
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">
+                Security Events
+                <span className="ml-2 text-zinc-600 font-normal normal-case">({filtered.length})</span>
+              </span>
+              {connected && (
+                <span className="flex items-center gap-1.5 text-[10px] font-semibold text-[#ffb0cf] uppercase tracking-widest">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#ffb0cf] animate-pulse" />
+                  Live
+                </span>
+              )}
+            </div>
+            <div className="overflow-auto max-h-96">
               <table className="w-full text-left border-collapse">
-                <thead className="bg-[#2c2834]/50">
+                <thead className="bg-[#2c2834] sticky top-0 z-10">
                   <tr>
-                    {['Severity', 'Alert Name', 'Agent Identity', 'Session ID', 'Timestamp', 'Action'].map((h, i) => (
-                      <th key={h} className={`px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest ${i === 5 ? 'text-right' : ''}`}>{h}</th>
+                    {['Severity', 'Rule / Message', 'Agent', 'Session', 'Hook', 'Time'].map(h => (
+                      <th key={h} className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#574149]/10">
-                  {loading ? (
-                    <tr><td colSpan={6} className="px-6 py-12 text-center text-zinc-500">Loading...</td></tr>
-                  ) : filtered.map(t => (
-                    <tr key={t.id} className="hover:bg-[#2c2834] transition-colors group">
-                      <td className="px-6 py-5"><SeverityBadge severity={t.severity} /></td>
-                      <td className="px-6 py-5">
-                        <p className="text-xs font-semibold text-[#e7dff0]">{t.name}</p>
-                        <p className="text-[10px] text-zinc-500 font-medium">{t.vector}</p>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-zinc-500 text-xs">
+                        {threats.length > 0
+                          ? 'No threats match the current filters.'
+                          : connected ? 'Connecting to threat stream…' : 'No threats detected in the selected time range.'}
                       </td>
-                      <td className="px-6 py-5">
-                        <code className="text-xs font-mono text-[#ffb0cf] px-2 py-0.5 bg-[#ffb0cf]/5 rounded-sm">{t.agent}</code>
+                    </tr>
+                  ) : filtered.map((t) => (
+                    <tr key={`${t.detected_at}-${t.rule_id}-${t.agent_id}`} className="hover:bg-[#2c2834] transition-colors">
+                      <td className="px-6 py-4"><SeverityBadge severity={t.severity} /></td>
+                      <td className="px-6 py-4">
+                        {t.rule_id ? (
+                          <Link to={`/rules/${t.rule_id}`} className="text-xs font-semibold text-[#e7dff0] hover:text-[#ffb0cf] transition-colors">
+                            {t.rule_name}
+                          </Link>
+                        ) : (
+                          <p className="text-xs font-semibold text-[#e7dff0]">{t.rule_name}</p>
+                        )}
+                        <p className="text-[10px] text-zinc-500 font-medium max-w-xs truncate">{t.message}</p>
                       </td>
-                      <td className="px-6 py-5">
-                        <span className="text-xs text-zinc-400">{t.session}</span>
+                      <td className="px-6 py-4">
+                        <code className="text-xs font-mono text-[#ffb0cf] px-2 py-0.5 bg-[#ffb0cf]/5 rounded-sm">{t.agent_id}</code>
                       </td>
-                      <td className="px-6 py-5">
-                        <p className="text-xs text-[#e7dff0]">{t.date}</p>
-                        <p className="text-[10px] text-zinc-500">{t.ago}</p>
+                      <td className="px-6 py-4">
+                        <span className="text-xs text-zinc-400 font-mono">
+                          {t.session_id
+                            ? t.session_id.length > 12
+                              ? t.session_id.slice(0, 12) + '…'
+                              : t.session_id
+                            : '—'}
+                        </span>
                       </td>
-                      <td className="px-6 py-5 text-right">
-                        <button className="text-[#ffb0cf] hover:text-[#570033] text-xs font-semibold transition-colors">View Details</button>
+                      <td className="px-6 py-4">
+                        <span className="text-[10px] text-zinc-500">{t.hook_name}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-xs text-zinc-400">{formatTs(t.detected_at)}</span>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="p-6 bg-[#211e29] border-t border-[#574149]/10 flex justify-between items-center">
-              <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Showing 1-12 of 284 Threats</span>
-              <div className="flex gap-2">
-                <button className="p-2 bg-[#2c2834] rounded text-zinc-500 hover:text-[#e7dff0]">
-                  <span className="material-symbols-outlined text-xs">chevron_left</span>
-                </button>
-                {[1, 2, 3].map(p => (
-                  <button key={p} className={`p-2 rounded text-[10px] font-semibold px-3 ${p === 1 ? 'bg-[#ffb0cf]/20 text-[#ffb0cf]' : 'bg-[#2c2834] text-zinc-500 hover:text-[#e7dff0]'}`}>{p}</button>
-                ))}
-                <button className="p-2 bg-[#2c2834] rounded text-zinc-500 hover:text-[#e7dff0]">
-                  <span className="material-symbols-outlined text-xs">chevron_right</span>
-                </button>
-              </div>
+          </section>
+
+          {/* Live Activity Panel */}
+          <section className="bg-[#2c2834] p-8 rounded-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-5">
+              <span className="material-symbols-outlined text-[120px]">shield_with_heart</span>
+            </div>
+            <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-6 flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-[#ffb0cf] shadow-[0_0_10px_#ffb0cf] animate-pulse" />
+              Live Agent Activity
+              {sortedActivity.length > 0 && (
+                <span className="ml-auto text-[10px] text-zinc-600 font-normal normal-case tracking-normal">
+                  latest {sortedActivity.length}
+                </span>
+              )}
+            </h3>
+            <div className="space-y-3 h-64 overflow-y-auto pr-1">
+              {sortedActivity.length === 0 ? (
+                <p className="text-xs text-zinc-600">Waiting for agent activity…</p>
+              ) : sortedActivity.map((evt) => (
+                <div key={`${evt.event_time}-${evt.agent_id}-${evt.hook_name}`} className="flex items-start gap-4">
+                  <span className="text-[10px] font-mono text-[#ffb0cf] py-0.5 whitespace-nowrap flex-shrink-0">
+                    {formatEvtTime(evt.event_time)}
+                  </span>
+                  <p className="text-xs text-zinc-300">
+                    <span className="font-semibold text-white">{evt.agent_id}</span>
+                    {' '}{formatActivity(evt)}
+                    {evt.hook_decision && evt.hook_decision !== 'allow' && (
+                      <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase ${
+                        evt.hook_decision === 'block'
+                          ? 'bg-red-500/20 text-red-400'
+                          : 'bg-amber-500/20 text-amber-400'
+                      }`}>{evt.hook_decision}</span>
+                    )}
+                  </p>
+                </div>
+              ))}
             </div>
           </section>
 
-          {/* Bottom */}
-          <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-[#2c2834] p-8 rounded-sm relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-5">
-                <span className="material-symbols-outlined text-[120px]">shield_with_heart</span>
-              </div>
-              <h3 className="text-lg font-medium mb-6 flex items-center gap-3">
-                <span className="w-2 h-2 rounded-full bg-[#ffb0cf] shadow-[0_0_10px_#ffb0cf]"></span>
-                Live Data Stream
-              </h3>
-              <div className="space-y-4">
-                {liveStream.map((item, i) => (
-                  <div key={i} className="flex items-start gap-4">
-                    <span className="text-[10px] font-mono text-[#ffb0cf] py-1">{item.time}</span>
-                    <p className="text-xs text-zinc-300">{item.text}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="bg-gradient-to-br from-[#211e29] to-[#15121d] p-8 rounded-sm flex flex-col justify-center items-center text-center border border-[#ffb0cf]/5">
-              <div className="w-16 h-16 rounded-full bg-[#ffb0cf]/10 flex items-center justify-center mb-4">
-                <span className="material-symbols-outlined text-[#ffb0cf] text-2xl">insights</span>
-              </div>
-              <h4 className="text-base font-semibold mb-2">Threat Intelligence</h4>
-              <p className="text-xs text-zinc-400 mb-6 px-4">Automatic pattern analysis suggests an uptick in Injection attempts from APAC regions.</p>
-              <button className="w-full py-3 bg-[#ffb0cf] text-[#63003b] font-semibold text-xs rounded hover:opacity-90 transition-opacity">
-                Update Definitions
-              </button>
-            </div>
-          </div>
         </div>
       </main>
     </div>
