@@ -60,7 +60,7 @@ HAVING arg_max(deleted, updated_at) = false
 
 #### `agentshield_security_events` — Global alert stream
 
-Written to by each enabled rule's MV. Queried by the UI for enforcement log and block counts.
+Written to by each enabled rule's MV. Queried by the UI for the detection log and detection counts.
 
 ```sql
 CREATE STREAM agentshield_security_events (
@@ -185,7 +185,7 @@ agentshield_hook_events  (source stream)
           ┌───────┴────────────┐
           ▼                    ▼
     AgentShield UI        Slack / PagerDuty
-    (enforcement log)     (from settings integrations)
+    (detection log)       (from settings integrations)
 ```
 
 ---
@@ -205,7 +205,7 @@ Creates in order:
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/rules` | List all non-deleted rules with current `enabled` state and `blocks_24h` from `agentshield_security_events` |
+| `GET` | `/api/rules` | List all non-deleted rules with current `enabled` state and `detections_24h` from `agentshield_security_events` |
 | `GET` | `/api/rules/:id` | Single rule detail: metadata + recent detections from `agentshield_security_events WHERE rule_id = :id` |
 | `POST` | `/api/rules/:id/toggle` | Insert `enabled=!current` record → PAUSE or RESUME MV |
 | `POST` | `/api/rules/:id/upgrade` | Insert new record with updated `version`+`query_sql` → DROP + CREATE MV |
@@ -227,14 +227,24 @@ type RulePack struct {
     RequiredTelemetry string  `json:"required_telemetry"`
     FPRate            string  `json:"fp_rate"`
     HookSources       string  `json:"hook_sources"`
-    Blocks24h         int     `json:"blocks_24h"`
+    Detections24h     int     `json:"detections_24h"`
 }
 
 type RulesResponse struct {
-    RulePacks         []RulePack         `json:"rule_packs"`
-    TotalBlocks24h    int                `json:"total_blocks_24h"`
-    ActiveRuleDensity int                `json:"active_rule_density"`
-    RecentEnforcement []EnforcementEvent `json:"recent_enforcement"`
+    RulePacks           []RulePack         `json:"rule_packs"`
+    TotalDetections24h  int                `json:"total_detections_24h"`
+    ActiveRuleDensity   int                `json:"active_rule_density"`
+    RecentDetections    []SecurityEvent    `json:"recent_detections"`
+}
+
+type SecurityEvent struct {
+    RuleID     string `json:"rule_id"`
+    RuleName   string `json:"rule_name"`
+    Severity   string `json:"severity"`
+    AgentID    string `json:"agent_id"`
+    HookName   string `json:"hook_name"`
+    Message    string `json:"message"`
+    DetectedAt string `json:"detected_at"`
 }
 
 type AlertWebhookPayload struct {
@@ -262,8 +272,8 @@ type AlertWebhookPayload struct {
 - Version badge (`⚡ v2.4.1`) or "Inactive" if disabled
 
 **Bottom section:**
-- Recent Policy Enforcement log (from `agentshield_security_events`, latest 10 events)
-- Total Blocks (24h) stat card
+- Recent Detections log (from `agentshield_security_events`, latest 10 events)
+- Total Detections (24h) stat card
 - Active Rule Density stat card with progress bar
 
 ### Route: `/rules/:id` — Rule Detail page
