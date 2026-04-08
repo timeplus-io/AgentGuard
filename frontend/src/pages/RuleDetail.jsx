@@ -56,7 +56,11 @@ export default function RuleDetail() {
     setActionLoading(true)
     try {
       await api.toggleRule(id)
-      setRule(prev => ({ ...prev, enabled: !prev.enabled }))
+      // Refresh from API to get authoritative state
+      const data = await api.getRule(id)
+      setRule(data)
+      setRecentDetections(data.recent_detections || [])
+      setDetections24h(data.detections_24h || 0)
     } catch (e) {
       console.error('Toggle failed', e)
     } finally {

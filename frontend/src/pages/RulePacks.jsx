@@ -73,7 +73,27 @@ export default function RulePacks() {
       await api.toggleRule(id)
     } catch {
       setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !newVal, active: !newVal } : r))
+      return
     }
+    // Refresh from API to get authoritative state
+    api.listRules()
+      .then(data => {
+        if (data.rule_packs && data.rule_packs.length > 0) {
+          setRules(data.rule_packs.map(r => ({
+            id: r.id,
+            icon: RULE_ICONS[r.id] || 'shield',
+            name: r.name,
+            desc: r.description,
+            enabled: r.enabled,
+            version: r.enabled ? (r.version || null) : null,
+            active: r.enabled,
+            detections24h: r.detections_24h || 0,
+          })))
+        }
+        if (data.total_detections_24h !== undefined) setTotalDetections(data.total_detections_24h)
+        if (data.active_rule_density !== undefined) setDensity(data.active_rule_density)
+      })
+      .catch(() => {})
   }
 
   return (
