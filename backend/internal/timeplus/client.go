@@ -53,3 +53,31 @@ func Query(cfg *config.TimeplusConfig, sql string) ([]Row, error) {
 	}
 	return result.Data, nil
 }
+
+// ExecHTTP executes a DDL or DML statement against the Proton HTTP interface.
+// Use for CREATE/DROP/PAUSE/RESUME statements from handler code.
+func ExecHTTP(cfg *config.TimeplusConfig, sql string) error {
+	url := fmt.Sprintf("http://%s:%d/", cfg.Host, cfg.Port)
+	body := strings.NewReader(sql)
+
+	req, err := http.NewRequest(http.MethodPost, url, body)
+	if err != nil {
+		return fmt.Errorf("proton exec: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "text/plain")
+	if cfg.User != "" {
+		req.SetBasicAuth(cfg.User, cfg.Password)
+	}
+
+	resp, err := protonHTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("proton exec: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("proton exec: status %d: %s", resp.StatusCode, string(errBody))
+	}
+	return nil
+}
