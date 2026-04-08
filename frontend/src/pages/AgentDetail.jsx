@@ -6,6 +6,24 @@ import { api } from '../api/client'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+function fmtTokens(n) {
+  if (n == null) return '—'
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
+  return String(n)
+}
+
+function fmtLatency(ms) {
+  if (ms == null || ms === 0) return '—'
+  if (ms >= 1000) return (ms / 1000).toFixed(1) + 's'
+  return Math.round(ms) + ' ms'
+}
+
+function fmtPct(rate) {
+  if (rate == null) return '—'
+  return (rate * 100).toFixed(1) + '%'
+}
+
 function fmtTime(iso) {
   if (!iso) return ''
   const d = new Date(iso)
@@ -202,6 +220,9 @@ export default function AgentDetail() {
   const [since, setSince] = useState('')
   const [until, setUntil] = useState('')
 
+  const [llmMetrics, setLlmMetrics] = useState(null)
+  const [toolMetrics, setToolMetrics] = useState(null)
+
   const [loadingAgent, setLoadingAgent] = useState(true)
   const [loadingSessions, setLoadingSessions] = useState(true)
   const [loadingEvents, setLoadingEvents] = useState(false)
@@ -215,6 +236,18 @@ export default function AgentDetail() {
       .then(setAgent)
       .catch(() => {})
       .finally(() => setLoadingAgent(false))
+  }, [id, refreshTick])
+
+  useEffect(() => {
+    api.getLLMMetrics({ agent_id: id })
+      .then(setLlmMetrics)
+      .catch(() => setLlmMetrics(null))
+  }, [id, refreshTick])
+
+  useEffect(() => {
+    api.getToolMetrics({ agent_id: id })
+      .then(setToolMetrics)
+      .catch(() => setToolMetrics(null))
   }, [id, refreshTick])
 
   useEffect(() => {
@@ -267,11 +300,42 @@ export default function AgentDetail() {
   const startEvent = eventsTotal === 0 ? 0 : (page - 1) * limit + 1
   const endEvent = Math.min(page * limit, eventsTotal)
 
-  const metrics = [
+  const volumeMetrics = [
     { label: 'Total Events',    value: agent ? agent.event_count     : '—', icon: 'bolt' },
     { label: 'Total Sessions',  value: agent ? agent.session_count   : '—', icon: 'layers' },
     { label: 'Total Runs',      value: agent ? agent.run_count       : '—', icon: 'sync_alt' },
     { label: 'Total Tool Calls',value: agent ? agent.tool_call_count : '—', icon: 'handyman' },
+  ]
+
+  const llmSuccessRate = llmMetrics?.calls?.success_rate
+  const toolSuccessRate = toolMetrics?.summary?.success_rate
+  const perfMetrics = [
+    {
+      label: 'Total Tokens',
+      value: llmMetrics ? fmtTokens(llmMetrics.tokens?.total) : '—',
+      sub: llmMetrics ? `↑ ${fmtTokens(llmMetrics.tokens?.input)}  ↓ ${fmtTokens(llmMetrics.tokens?.output)}` : null,
+      icon: 'token',
+    },
+    {
+      label: 'LLM Latency p50',
+      value: llmMetrics ? fmtLatency(llmMetrics.latency_ms?.p50) : '—',
+      sub: llmMetrics ? `p95 ${fmtLatency(llmMetrics.latency_ms?.p95)}` : null,
+      icon: 'speed',
+    },
+    {
+      label: 'LLM Success Rate',
+      value: llmMetrics ? fmtPct(llmSuccessRate) : '—',
+      sub: llmMetrics ? `${llmMetrics.calls?.success ?? 0} ok · ${llmMetrics.calls?.failed ?? 0} failed` : null,
+      icon: 'check_circle',
+      accent: llmSuccessRate != null && llmSuccessRate < 1,
+    },
+    {
+      label: 'Tool Success Rate',
+      value: toolMetrics ? fmtPct(toolSuccessRate) : '—',
+      sub: toolMetrics ? `${toolMetrics.summary?.success_calls ?? 0} ok · ${toolMetrics.summary?.failed_calls ?? 0} failed` : null,
+      icon: 'build_circle',
+      accent: toolSuccessRate != null && toolSuccessRate < 1,
+    },
   ]
 
   const agentName = agent?.agent_id ?? id
@@ -307,15 +371,29 @@ export default function AgentDetail() {
       </header>
 
       <main className="pl-64 pt-16 min-h-screen flex flex-col">
-        {/* Metric cards */}
-        <section className="grid grid-cols-4 gap-4 p-6 pb-4 shrink-0">
-          {metrics.map((m) => (
+        {/* Volume metric cards */}
+        <section className="grid grid-cols-4 gap-4 p-6 pb-3 shrink-0">
+          {volumeMetrics.map((m) => (
             <div key={m.label} className="bg-[#2c2834] p-4 rounded relative overflow-hidden group">
               <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
                 <span className="material-symbols-outlined text-4xl">{m.icon}</span>
               </div>
               <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest mb-1">{m.label}</p>
               <h2 className="text-2xl font-medium text-[#e7dff0]">{m.value}</h2>
+            </div>
+          ))}
+        </section>
+
+        {/* Performance metric cards */}
+        <section className="grid grid-cols-4 gap-4 px-6 pb-4 shrink-0">
+          {perfMetrics.map((m) => (
+            <div key={m.label} className="bg-[#211e29] p-4 rounded relative overflow-hidden group border border-[#574149]/10">
+              <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                <span className={`material-symbols-outlined text-4xl ${m.accent ? 'text-[#ffb4ab]' : ''}`}>{m.icon}</span>
+              </div>
+              <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest mb-1">{m.label}</p>
+              <h2 className={`text-2xl font-medium ${m.accent ? 'text-[#ffb4ab]' : 'text-[#e7dff0]'}`}>{m.value}</h2>
+              {m.sub && <p className="text-[10px] text-zinc-600 mt-1 truncate">{m.sub}</p>}
             </div>
           ))}
         </section>
