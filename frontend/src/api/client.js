@@ -31,7 +31,10 @@ async function put(path, body) {
 export const api = {
   getDashboard: () => get('/dashboard'),
   listAgents: (page = 1, limit = 15) => get(`/agents?page=${page}&limit=${limit}`),
-  getAgent: (id) => get(`/agents/${id}`),
+  getAgent: (id, params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return get(`/agents/${id}${q ? '?' + q : ''}`)
+  },
   listSessions: (agentId, params = {}) => {
     const q = new URLSearchParams(params).toString()
     return get(`/agents/${agentId}/sessions${q ? '?' + q : ''}`)
@@ -40,6 +43,14 @@ export const api = {
   listEvents: (agentId, params = {}) => {
     const q = new URLSearchParams(params).toString()
     return get(`/agents/${agentId}/events${q ? '?' + q : ''}`)
+  },
+  getLLMMetrics: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return get(`/metrics/llm${q ? '?' + q : ''}`)
+  },
+  getToolMetrics: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return get(`/metrics/tools${q ? '?' + q : ''}`)
   },
   listThreats: (params = {}) => {
     const q = new URLSearchParams(params).toString()

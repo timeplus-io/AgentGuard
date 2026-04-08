@@ -1,4 +1,11 @@
 import { useState, useEffect } from 'react'
+
+function fmtTokens(n) {
+  if (!n) return '—'
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
+  return String(n)
+}
 import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
@@ -23,7 +30,7 @@ function timeAgo(iso) {
 
 const statusConfig = {
   ACTIVE: { dot: 'bg-[#ffb0cf] shadow-[0_0_8px_rgba(255,176,207,0.4)]', badge: 'bg-[#ffb0cf]/10 text-[#ffb0cf] border border-[#ffb0cf]/20' },
-  IDLE:   { dot: 'bg-zinc-600', badge: 'bg-zinc-700/40 text-zinc-400 border border-zinc-600/30' },
+  IDLE: { dot: 'bg-zinc-600', badge: 'bg-zinc-700/40 text-zinc-400 border border-zinc-600/30' },
 }
 
 export default function AgentList() {
@@ -40,7 +47,7 @@ export default function AgentList() {
           setTotal(data.total || 0)
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false))
   }, [page])
 
@@ -56,8 +63,7 @@ export default function AgentList() {
             <div>
               <h2 className="text-3xl font-medium text-[#e7dff0] tracking-tight mb-2">Agent Fleet</h2>
               <p className="text-zinc-500 text-xs max-w-lg">
-                Manage and monitor your active sentinel agents. Currently monitoring{' '}
-                <span className="text-[#ffb0cf] font-medium">12 active nodes</span> across 3 regions.
+                Manage and monitor your active agents.
               </p>
             </div>
             <div className="flex gap-3">
@@ -82,20 +88,21 @@ export default function AgentList() {
                   <th className="px-6 py-4">Deployment</th>
                   <th className="px-6 py-4">Events</th>
                   <th className="px-6 py-4">Sessions</th>
+                  <th className="px-6 py-4">Tokens</th>
+                  <th className="px-6 py-4">LLM Calls</th>
                   <th className="px-6 py-4">Last Seen</th>
-                  <th className="px-6 py-4 text-right">Operations</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#574149]/10">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
+                    <td colSpan={8} className="px-6 py-12 text-center text-zinc-500">
                       <span className="material-symbols-outlined animate-spin text-[#ffb0cf]">refresh</span>
                     </td>
                   </tr>
                 ) : agents.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500 text-xs">
+                    <td colSpan={8} className="px-6 py-12 text-center text-zinc-500 text-xs">
                       No agents found. Connect an agent to start monitoring.
                     </td>
                   </tr>
@@ -127,13 +134,14 @@ export default function AgentList() {
                       <td className="px-6 py-5">
                         <div className="text-xs font-mono text-[#e7dff0]">{agent.session_count?.toLocaleString()}</div>
                       </td>
+                      <td className="px-6 py-5">
+                        <div className="text-xs font-mono text-[#e7dff0]">{fmtTokens(agent.total_tokens)}</div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="text-xs font-mono text-[#e7dff0]">{agent.llm_call_count?.toLocaleString() ?? '—'}</div>
+                      </td>
                       <td className="px-6 py-5 text-xs text-zinc-400">
                         {timeAgo(agent.last_seen)}
-                      </td>
-                      <td className="px-6 py-5 text-right">
-                        <button className="text-zinc-500 hover:text-[#e7dff0] transition-colors">
-                          <span className="material-symbols-outlined">more_vert</span>
-                        </button>
                       </td>
                     </tr>
                   )
@@ -167,11 +175,10 @@ export default function AgentList() {
                 <button
                   key={p}
                   onClick={() => setPage(p)}
-                  className={`w-8 h-8 flex items-center justify-center rounded-sm border text-[10px] font-semibold transition-colors ${
-                    page === p
+                  className={`w-8 h-8 flex items-center justify-center rounded-sm border text-[10px] font-semibold transition-colors ${page === p
                       ? 'bg-[#1d1a25] border-[#574149]/10 text-[#e7dff0]'
                       : 'bg-transparent border-transparent text-zinc-500 hover:bg-[#2c2834]'
-                  }`}
+                    }`}
                 >
                   {p}
                 </button>

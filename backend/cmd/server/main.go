@@ -94,6 +94,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.GET("/agents/:id/sessions", handlers.ListSessions(cfg))
 		api.GET("/agents/:id/sessions/:session_id", handlers.GetSession(cfg))
 		api.GET("/agents/:id/events", handlers.ListEvents(cfg))
+		api.GET("/metrics/llm", handlers.GetLLMMetrics(cfg))
+		api.GET("/metrics/tools", handlers.GetToolMetrics(cfg))
 		api.GET("/threats", handlers.ListThreats)
 		api.GET("/cost", handlers.GetCost)
 		api.GET("/rules", handlers.ListRules)
