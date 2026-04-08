@@ -42,6 +42,7 @@ export default function RulePacks() {
   const [totalDetections, setTotalDetections] = useState(0)
   const [density, setDensity] = useState(0)
   const [recentDetections, setRecentDetections] = useState([])
+  const [confirmToggle, setConfirmToggle] = useState(null) // { id, newVal, name }
 
   useEffect(() => {
     api.listRules()
@@ -66,8 +67,15 @@ export default function RulePacks() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleToggle = async (id, newVal) => {
-    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: newVal, active: newVal } : r))
+  const handleToggle = (id, newVal) => {
+    const rule = rules.find(r => r.id === id)
+    setConfirmToggle({ id, newVal, name: rule?.name || id })
+  }
+
+  const confirmDoToggle = async () => {
+    const { id, newVal } = confirmToggle
+    setConfirmToggle(null)
+    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: newVal, active: newVal, version: newVal ? (r.version || '') : null } : r))
     try {
       await api.toggleRule(id)
     } catch {
@@ -80,6 +88,40 @@ export default function RulePacks() {
       <Sidebar />
       <TopNav />
       <Footer />
+
+      {/* Toggle confirmation modal */}
+      {confirmToggle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#1d1a25] border border-[#574149]/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-6">
+            <h3 className="text-base font-semibold text-white">
+              {confirmToggle.newVal ? 'Enable' : 'Disable'} Rule Pack
+            </h3>
+            <p className="text-sm text-zinc-400">
+              Are you sure you want to <span className="text-white font-medium">{confirmToggle.newVal ? 'enable' : 'disable'}</span> <span className="text-[#ffb0cf]">{confirmToggle.name}</span>?
+              {!confirmToggle.newVal && <span className="block mt-2 text-xs text-zinc-500">This will pause the detection MV and stop new events from being detected.</span>}
+              {confirmToggle.newVal && <span className="block mt-2 text-xs text-zinc-500">This will create or resume the detection MV and start monitoring.</span>}
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmToggle(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDoToggle}
+                className={`px-4 py-2 text-xs font-semibold rounded-sm transition-colors ${
+                  confirmToggle.newVal
+                    ? 'bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023]'
+                    : 'bg-zinc-700 text-white hover:bg-zinc-600'
+                }`}
+              >
+                {confirmToggle.newVal ? 'Enable' : 'Disable'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <main className="pl-64 pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
           <PageHeader

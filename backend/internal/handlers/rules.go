@@ -326,7 +326,7 @@ func queryCurrentRulePacks(cfg *config.TimeplusConfig) ([]models.RulePack, error
 	packs := make([]models.RulePack, 0, len(rows))
 	for _, row := range rows {
 		id := strVal(row, "rule_id")
-		enabled, _ := row["enabled"].(bool)
+		enabled := boolVal(row, "enabled")
 		pack := models.RulePack{
 			ID:                id,
 			Name:              strVal(row, "name"),
@@ -417,4 +417,17 @@ func mvExists(cfg *config.TimeplusConfig, ruleID string) (bool, error) {
 func strVal(row map[string]any, key string) string {
 	v, _ := row[key].(string)
 	return v
+}
+
+// boolVal reads a bool column from a Proton HTTP JSON row.
+// Proton serialises bool as 0/1 (json.Number), not JSON true/false.
+func boolVal(row map[string]any, key string) bool {
+	switch v := row[key].(type) {
+	case bool:
+		return v
+	case json.Number:
+		i, _ := v.Int64()
+		return i != 0
+	}
+	return false
 }
