@@ -49,16 +49,6 @@ export default function Threats() {
           <PageHeader
             title="Threats"
             subtitle="Real-time surveillance of AI agent activity and anomalous patterns."
-            actions={<>
-              <button className="flex items-center gap-2 px-4 py-2 bg-[#2c2834] hover:bg-[#37333f] transition-colors text-xs font-medium text-[#e7dff0] rounded-sm border border-[#574149]/10">
-                <span className="material-symbols-outlined text-[16px]">export_notes</span>
-                Export to SIEM
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] hover:opacity-90 transition-opacity text-xs font-semibold text-[#3d0023] rounded-sm">
-                <span className="material-symbols-outlined text-[16px]">block</span>
-                Block Pattern
-              </button>
-            </>}
           />
 
           {/* Filter Bar */}
