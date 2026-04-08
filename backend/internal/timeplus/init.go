@@ -314,43 +314,24 @@ WHERE hook_name = 'before_install'
 	},
 }
 
-// seedBuiltinRules ensures every builtin rule has a current (non-deleted) record.
-// It checks each rule individually so that previously uninstalled rules are
-// automatically reinstated on the next server start.
 func seedBuiltinRules(ctx context.Context, conn proton.Conn) error {
-	// Query the latest deleted flag per rule_id from historical rows.
-	rows, err := conn.Query(ctx, `
-		SELECT rule_id, arg_max(deleted, updated_at) AS is_deleted
-		FROM table(agentshield_rules)
-		GROUP BY rule_id
-	`)
-	if err != nil {
-		return fmt.Errorf("seed check query: %w", err)
+	row := conn.QueryRow(ctx, "SELECT count() FROM table(agentshield_rules)")
+	var count uint64
+	if err := row.Scan(&count); err != nil {
+		return fmt.Errorf("seed check: %w", err)
 	}
-	defer rows.Close()
+	if count > 0 {
+		log.Printf("timeplus: rules already seeded (%d records), skipping", count)
+		return nil
+	}
 
-	present := map[string]bool{} // rule_id → true if present AND not deleted
-	for rows.Next() {
-		var ruleID string
-		var isDeleted bool
-		if err := rows.Scan(&ruleID, &isDeleted); err != nil {
-			continue
-		}
-		if !isDeleted {
-			present[ruleID] = true
-		}
+	batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)")
+	if err != nil {
+		return fmt.Errorf("seed prepare: %w", err)
 	}
 
 	now := time.Now()
-	seeded := 0
 	for _, r := range builtinRuleData {
-		if present[r.ruleID] {
-			continue
-		}
-		batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)")
-		if err != nil {
-			return fmt.Errorf("seed prepare %s: %w", r.ruleID, err)
-		}
 		if err := batch.Append(
 			r.ruleID, r.name, r.version, r.description, r.querySQL,
 			true, false, r.severity, r.category, r.requiredTelemetry,
@@ -358,17 +339,11 @@ func seedBuiltinRules(ctx context.Context, conn proton.Conn) error {
 		); err != nil {
 			return fmt.Errorf("seed append %s: %w", r.ruleID, err)
 		}
-		if err := batch.Send(); err != nil {
-			return fmt.Errorf("seed send %s: %w", r.ruleID, err)
-		}
-		log.Printf("timeplus: installed built-in rule %s", r.ruleID)
-		seeded++
 	}
-	if seeded == 0 {
-		log.Printf("timeplus: all built-in rules already installed")
-	} else {
-		log.Printf("timeplus: installed %d built-in rule(s)", seeded)
+	if err := batch.Send(); err != nil {
+		return fmt.Errorf("seed send: %w", err)
 	}
+	log.Printf("timeplus: seeded %d built-in rules", len(builtinRuleData))
 	return nil
 }
 
