@@ -240,8 +240,13 @@ export default function Threats() {
             <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-6 flex items-center gap-3">
               <span className="w-2 h-2 rounded-full bg-[#ffb0cf] shadow-[0_0_10px_#ffb0cf] animate-pulse" />
               Live Agent Activity
+              {liveActivity.length > 0 && (
+                <span className="ml-auto text-[10px] text-zinc-600 font-normal normal-case tracking-normal">
+                  latest {liveActivity.length}
+                </span>
+              )}
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-3 h-64 overflow-y-auto pr-1">
               {liveActivity.length === 0 ? (
                 <p className="text-xs text-zinc-600">Waiting for agent activity…</p>
               ) : liveActivity.map((evt, i) => (
