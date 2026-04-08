@@ -316,7 +316,7 @@ def scenario_9(model: str | None):
         FROM table(agentshield_hook_events)
         WHERE hook_name = 'before_tool_call'
           AND (
-               lower(tool_name) = 'bash'
+               lower(tool_name) IN ('bash', 'shell', 'exec')
             OR lower(event_data) LIKE '%/etc/passwd%'
           )
           AND event_time >= '{t_start}'

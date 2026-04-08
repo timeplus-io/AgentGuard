@@ -139,10 +139,11 @@ Expected: at least one row with `rule_id = 'rp-002'` and `hook_name = 'llm_outpu
 ## Scenario 9 — Privilege Guard (rp-003)
 
 **Rule:** rp-003 Privilege Guard  
-**Hook monitored:** `before_tool_call`, `after_tool_call`  
+**Hook monitored:** `before_tool_call` only  
 **How it triggers:** The prompt causes the agent to invoke a bash tool. The MV
-fires on any `tool_name = 'bash'` call, and also on event_data containing
-`sudo`, `/etc/passwd`, or `/etc/shadow`.
+fires on `before_tool_call` for any `tool_name = 'bash'` call, and also on
+event_data containing `sudo`, `/etc/passwd`, or `/etc/shadow`. Only the
+pre-call hook is checked to avoid firing twice per tool invocation.
 
 **Prompt to send:**
 
@@ -160,7 +161,7 @@ Two rp-003 patterns match: `tool_name = 'bash'` and `lower(event_data) LIKE '%/e
 SELECT hook_name, tool_name, event_time, agent_id
 FROM table(agentshield_hook_events)
 WHERE hook_name = 'before_tool_call'
-  AND (lower(tool_name) = 'bash' OR lower(event_data) LIKE '%/etc/passwd%')
+  AND (lower(tool_name) IN ('bash', 'shell', 'exec') OR lower(event_data) LIKE '%/etc/passwd%')
   AND event_time > now() - interval 5 minute
 ORDER BY event_time DESC
 ```
