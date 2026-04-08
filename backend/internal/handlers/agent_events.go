@@ -58,7 +58,7 @@ func ListEvents(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		if rid != "" {
-			if !idPartRe.MatchString(rid) {
+			if !runIDRe.MatchString(rid) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid run_id"})
 				return
 			}

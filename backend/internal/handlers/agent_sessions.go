@@ -14,8 +14,15 @@ import (
 	"github.com/timeplus/agentshield/internal/timeplus"
 )
 
-// uuidRe validates session_id and run_id path/query params before SQL interpolation.
+// uuidRe validates strict UUID-format params before SQL interpolation.
 var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// runIDRe validates run_id values — OpenClaw uses multiple formats:
+//   - chatcmpl_<uuid>   (HTTP API / OpenAI-compat)
+//   - announce:v1:agent:...:run:<uuid>  (subagent runs)
+//   - slug-gen-<timestamp>  (internal, filtered at session level)
+// Allows alphanum, hyphens, underscores, dots, colons. Excludes quotes/backslash.
+var runIDRe = regexp.MustCompile(`^[a-zA-Z0-9._:/-]+$`)
 
 // sessionType derives a human-readable type label from the session_key pattern.
 func sessionType(key string) string {
