@@ -183,7 +183,7 @@ Expected: at least one row with `rule_id = 'rp-003'`.
 ## Scenario 10 — Supply Chain Watch (rp-004)
 
 **Rule:** rp-004 Supply Chain Watch  
-**Hook monitored:** `before_install`, `before_tool_call`, `after_tool_call`  
+**Hook monitored:** `before_install`, `before_tool_call` only  
 **How it triggers:** The prompt causes the agent to run a pip install command
 via bash. The MV matches `lower(event_data) LIKE '%pip install%'` on the
 bash tool call event.

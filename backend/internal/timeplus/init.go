@@ -284,7 +284,7 @@ WHERE hook_name = 'before_tool_call'
 		severity:    "warning",
 		category:    "supply_chain",
 		fpRate:      "high",
-		hookSources: "before_install,before_tool_call,after_tool_call",
+		hookSources: "before_install,before_tool_call",
 		querySQL: `SELECT
   event_time           AS detected_at,
   'rp-004'             AS rule_id,
@@ -301,7 +301,7 @@ WHERE hook_name = 'before_tool_call'
 FROM agentshield_hook_events
 WHERE hook_name = 'before_install'
    OR (
-       hook_name IN ('before_tool_call', 'after_tool_call')
+       hook_name = 'before_tool_call'
     AND (
            lower(event_data) LIKE '%npm install%'
         OR lower(event_data) LIKE '%pip install%'
