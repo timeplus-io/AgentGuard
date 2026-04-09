@@ -36,6 +36,14 @@ function fmtTime(iso) {
   return `${yyyy}-${mo}-${dd} ${hh}:${mm}:${ss} UTC`
 }
 
+function fmtShortTime(iso) {
+  if (!iso) return ''
+  try {
+    return new Date(typeof iso === 'string' ? iso.replace(' ', 'T') : iso)
+      .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch { return '' }
+}
+
 function dotColor(event) {
   if (event.hook_decision === 'block') return '#ffb4ab'
   const n = event.hook_name
@@ -215,6 +223,25 @@ function EventRow({ event }) {
   )
 }
 
+// ── SessionHeader ─────────────────────────────────────────────────────────────
+
+function SessionHeader({ sessionDetail }) {
+  const isEnded = sessionDetail.status === 'ended'
+  const sid = sessionDetail.session_id
+  const shortId = sid.length > 20 ? sid.slice(0, 20) + '…' : sid
+  return (
+    <div className="px-5 py-3 border-b border-[#574149]/20 flex items-center gap-4 shrink-0 bg-[#1d1a25]">
+      <code className="text-[11px] font-mono text-[#e7dff0]">{shortId}</code>
+      <span className={`flex items-center gap-1.5 text-[10px] font-semibold ${isEnded ? 'text-zinc-500' : 'text-emerald-400'}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
+        {isEnded ? 'Ended' : 'Active'}
+      </span>
+      <span className="text-[10px] text-zinc-500">{sessionDetail.runs.length} Runs</span>
+      <span className="text-[10px] text-zinc-500">{sessionDetail.total_tool_calls ?? 0} Tool Calls</span>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AgentDetail() {
@@ -228,6 +255,7 @@ export default function AgentDetail() {
   const [sessionDetail, setSessionDetail] = useState(null)
   const [events, setEvents] = useState([])
   const [eventsTruncated, setEventsTruncated] = useState(false)
+  const [activeTab, setActiveTab] = useState('timeline')
   const [timePreset, setTimePreset] = useState('24h')
 
   const [llmMetrics, setLlmMetrics] = useState(null)
@@ -307,6 +335,7 @@ export default function AgentDetail() {
   }, [id, selectedSession, selectedRun, timePreset, refreshTick])
 
   const selectSession = (sid) => {
+    setActiveTab('timeline')
     setSearchParams({ session: sid })
   }
 
@@ -516,6 +545,33 @@ export default function AgentDetail() {
 
           {/* Timeline panel */}
           <section className="flex-1 bg-[#211e29] rounded-sm flex flex-col min-w-0 overflow-hidden">
+
+            {/* Session header */}
+            {selectedSession && sessionDetail && (
+              <SessionHeader sessionDetail={sessionDetail} />
+            )}
+
+            {/* Tab bar */}
+            {selectedSession && (
+              <div className="flex border-b border-[#574149]/20 shrink-0">
+                {[
+                  { id: 'timeline', label: 'Timeline' },
+                  { id: 'raw', label: 'Raw Events' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-colors border-b-2 ${
+                      activeTab === tab.id
+                        ? 'border-[#ffb0cf] text-[#ffb0cf]'
+                        : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Event list */}
             <div className="flex-1 overflow-y-auto">
