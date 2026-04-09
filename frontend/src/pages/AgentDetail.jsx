@@ -257,13 +257,13 @@ function buildRunSteps(events) {
     const msgs = Array.isArray(data.messages) ? data.messages : []
     const userMsg = [...msgs].reverse().find(m => m.role === 'user')
     if (userMsg) {
-      const raw = typeof userMsg.content === 'string'
+      const rawContent = typeof userMsg.content === 'string'
         ? userMsg.content
         : Array.isArray(userMsg.content)
           ? userMsg.content.map(c => (typeof c === 'string' ? c : c?.text ?? '')).join('')
           : ''
-      if (raw.trim()) {
-        const t = raw.trim()
+      if (rawContent.trim()) {
+        const t = rawContent.trim()
         steps.push({
           type: 'user_input',
           label: 'User Input',
@@ -799,10 +799,10 @@ export default function AgentDetail() {
                   }
                   return (
                     <div className="p-4">
-                      {runs.map((run, idx) => (
+                      {runs.map((run) => (
                         <RunTimeline
                           key={run.run_id}
-                          runIndex={idx}
+                          runIndex={sessionDetail.runs.findIndex(r => r.run_id === run.run_id)}
                           run={run}
                           events={byRun[run.run_id] ?? []}
                         />
@@ -816,7 +816,7 @@ export default function AgentDetail() {
             {eventsTruncated && (
               <div className="px-6 py-2 border-t border-[#574149]/20 shrink-0 flex items-center gap-2">
                 <span className="material-symbols-outlined text-[14px] text-amber-400">warning</span>
-                <span className="text-[10px] text-amber-400">Showing first 500 events — session has more. Use filters to narrow the view.</span>
+                <span className="text-[10px] text-amber-400">Showing first 500 events — session has more. Select a specific run from the sidebar to narrow the view.</span>
               </div>
             )}
 
