@@ -204,6 +204,27 @@ type EventsResponse struct {
 	Limit  int         `json:"limit"`
 }
 
+// TraceSpan is one node in the run trace waterfall.
+// Kind is "run" | "llm" | "tool".
+// Status is "ok" | "error" | "blocked".
+// ParentID is "" for the root run span; run_id for all children.
+type TraceSpan struct {
+	SpanID     string            `json:"span_id"`
+	ParentID   string            `json:"parent_id"`
+	Kind       string            `json:"kind"`
+	Name       string            `json:"name"`
+	StartMs    int64             `json:"start_ms"`
+	DurationMs int64             `json:"duration_ms"`
+	Status     string            `json:"status"`
+	Attributes map[string]string `json:"attributes"`
+}
+
+// TraceResponse is returned by GET /api/agents/:id/sessions/:sid/runs/:rid/trace.
+// Spans are sorted by StartMs ascending; root span always has ParentID == "".
+type TraceResponse struct {
+	Spans []TraceSpan `json:"spans"`
+}
+
 type ThreatListResponse struct {
 	Threats []Threat `json:"threats"`
 	Total   int      `json:"total"`
