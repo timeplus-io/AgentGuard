@@ -763,6 +763,14 @@ export default function AgentDetail() {
               ) : (
                 // Timeline tab
                 (() => {
+                  // Still loading session detail — don't show "No runs found" yet
+                  if (!sessionDetail) {
+                    return (
+                      <div className="flex items-center justify-center h-full">
+                        <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                      </div>
+                    )
+                  }
                   const runs = selectedRun
                     ? (sessionDetail?.runs ?? []).filter(r => r.run_id === selectedRun)
                     : (sessionDetail?.runs ?? [])
@@ -777,6 +785,7 @@ export default function AgentDetail() {
                   // Group events by run_id
                   const byRun = {}
                   for (const e of events) {
+                    if (!e.run_id) continue
                     if (!byRun[e.run_id]) byRun[e.run_id] = []
                     byRun[e.run_id].push(e)
                   }
