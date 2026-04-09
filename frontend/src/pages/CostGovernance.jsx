@@ -41,6 +41,7 @@ export default function CostGovernance() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [deletingKey, setDeletingKey] = useState(null)
+  const [editingKey, setEditingKey] = useState(null)
 
   useEffect(() => {
     api.getCost()
@@ -71,12 +72,26 @@ export default function CostGovernance() {
       setSaveError('')
       setShowAddForm(false)
       setForm(EMPTY_FORM)
+      setEditingKey(null)
       fetchPricing()
     } catch {
       setSaveError('Save failed. Please try again.')
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleEdit = (p) => {
+    setForm({
+      provider: p.provider,
+      model: p.model,
+      input_cost_per_million: String(p.input_cost_per_million),
+      output_cost_per_million: String(p.output_cost_per_million),
+      cache_read_cost_per_million: String(p.cache_read_cost_per_million),
+    })
+    setEditingKey(`${p.provider}/${p.model}`)
+    setShowAddForm(true)
+    setSaveError('')
   }
 
   const handleDelete = async (provider, model) => {
@@ -258,14 +273,24 @@ export default function CostGovernance() {
                       <td className="py-3 text-zinc-400">{formatDollar(p.cache_read_cost_per_million)}</td>
                       <td className="py-3 text-zinc-500">{p.updated_at ? p.updated_at.slice(0, 10) : '—'}</td>
                       <td className="py-3 text-right">
-                        <button
-                          onClick={() => handleDelete(p.provider, p.model)}
-                          disabled={deletingKey === key}
-                          className="text-zinc-500 hover:text-[#ffb4ab] disabled:opacity-40"
-                          title="Delete"
-                        >
-                          <span className="material-symbols-outlined text-base">close</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleEdit(p)}
+                            disabled={showAddForm}
+                            className="text-zinc-500 hover:text-[#ffb0cf] disabled:opacity-40"
+                            title="Edit"
+                          >
+                            <span className="material-symbols-outlined text-base">edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.provider, p.model)}
+                            disabled={deletingKey === key || showAddForm}
+                            className="text-zinc-500 hover:text-[#ffb4ab] disabled:opacity-40"
+                            title="Delete"
+                          >
+                            <span className="material-symbols-outlined text-base">close</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -279,17 +304,19 @@ export default function CostGovernance() {
                   <tr>
                     <td className="py-2">
                       <input
-                        className="w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none"
+                        className={`w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-xs focus:outline-none ${editingKey ? 'text-zinc-500 cursor-not-allowed' : 'text-[#e7dff0] placeholder-zinc-600'}`}
                         placeholder="anthropic"
                         value={form.provider}
+                        readOnly={!!editingKey}
                         onChange={e => setForm(f => ({ ...f, provider: e.target.value }))}
                       />
                     </td>
                     <td className="py-2">
                       <input
-                        className="w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none"
+                        className={`w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-xs focus:outline-none ${editingKey ? 'text-zinc-500 cursor-not-allowed' : 'text-[#e7dff0] placeholder-zinc-600'}`}
                         placeholder="claude-sonnet-4-6"
                         value={form.model}
+                        readOnly={!!editingKey}
                         onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
                       />
                     </td>
@@ -331,7 +358,7 @@ export default function CostGovernance() {
                           {saving ? '...' : 'Save'}
                         </button>
                         <button
-                          onClick={() => { setShowAddForm(false); setForm(EMPTY_FORM); setSaveError('') }}
+                          onClick={() => { setShowAddForm(false); setForm(EMPTY_FORM); setSaveError(''); setEditingKey(null) }}
                           className="px-2 py-1 bg-[#37333f] text-zinc-300 text-[10px] font-semibold rounded"
                         >
                           Cancel
