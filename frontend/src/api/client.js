@@ -56,7 +56,15 @@ export const api = {
     const q = new URLSearchParams(params).toString()
     return get(`/threats${q ? '?' + q : ''}`)
   },
-  getCost: () => get('/cost'),
+  getCost: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return get(`/cost${q ? '?' + q : ''}`)
+  },
+  listPricing: () => get('/cost/pricing'),
+  upsertPricing: (entry) => post('/cost/pricing', entry),
+  deletePricing: (provider, model) =>
+    fetch(`${BASE}/cost/pricing/${encodeURIComponent(provider)}/${encodeURIComponent(model)}`, { method: 'DELETE' })
+      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() }),
   listRules: () => get('/rules'),
   getRulesCatalog: () => get('/rules/catalog'),
   getRule: (id) => get(`/rules/${id}`),
