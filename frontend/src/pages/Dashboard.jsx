@@ -111,12 +111,6 @@ export default function Dashboard() {
           <PageHeader
             title="Security Posture"
             subtitle="Real-time defensive intelligence for distributed AI agents."
-            actions={
-              <div className="flex items-center gap-2 bg-[#211e29] p-1 rounded-sm">
-                <button className="px-4 py-1.5 text-xs font-semibold bg-[#ffb0cf] text-[#63003b] rounded-sm uppercase tracking-wider">Live View</button>
-                <button className="px-4 py-1.5 text-xs font-semibold text-zinc-500 hover:text-white uppercase tracking-wider">History</button>
-              </div>
-            }
           />
 
           {/* KPI Bento Grid */}
