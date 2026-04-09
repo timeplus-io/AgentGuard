@@ -331,10 +331,15 @@ type QueryResult struct {
 	Total   int                 `json:"total"`
 }
 
+type ColumnInfo struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
 type TableInfo struct {
-	Name    string   `json:"name"`
-	Type    string   `json:"type"`
-	Columns []string `json:"columns"`
+	Name    string       `json:"name"`
+	Type    string       `json:"type"`
+	Columns []ColumnInfo `json:"columns"`
 }
 
 type Integration struct {
