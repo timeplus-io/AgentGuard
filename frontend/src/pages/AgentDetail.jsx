@@ -227,6 +227,7 @@ export default function AgentDetail() {
   const [sessions, setSessions] = useState([])
   const [sessionDetail, setSessionDetail] = useState(null)
   const [events, setEvents] = useState([])
+  const [eventsTruncated, setEventsTruncated] = useState(false)
   const [timePreset, setTimePreset] = useState('24h')
 
   const [llmMetrics, setLlmMetrics] = useState(null)
@@ -287,7 +288,7 @@ export default function AgentDetail() {
   }, [id, selectedSession, refreshTick])
 
   useEffect(() => {
-    if (!selectedSession && !selectedRun) { setEvents([]); return }
+    if (!selectedSession && !selectedRun) { setEvents([]); setEventsTruncated(false); return }
     const params = { limit: 500 }
     if (selectedSession) params.session_id = selectedSession
     if (selectedRun) params.run_id = selectedRun
@@ -296,8 +297,12 @@ export default function AgentDetail() {
 
     setLoadingEvents(true)
     api.listEvents(id, params)
-      .then(r => { setEvents(r.events ?? []) })
-      .catch(() => setEvents([]))
+      .then(r => {
+        const evts = r.events ?? []
+        setEvents(evts)
+        setEventsTruncated((r.total ?? evts.length) > 500)
+      })
+      .catch(() => { setEvents([]); setEventsTruncated(false) })
       .finally(() => setLoadingEvents(false))
   }, [id, selectedSession, selectedRun, timePreset, refreshTick])
 
@@ -535,6 +540,12 @@ export default function AgentDetail() {
               )}
             </div>
 
+            {eventsTruncated && (
+              <div className="px-6 py-2 border-t border-[#574149]/20 shrink-0 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[14px] text-amber-400">warning</span>
+                <span className="text-[10px] text-amber-400">Showing first 500 events — session has more. Use filters to narrow the view.</span>
+              </div>
+            )}
 
           </section>
         </div>
