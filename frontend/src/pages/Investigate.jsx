@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import Editor from 'react-simple-code-editor'
+import { highlight, languages } from 'prismjs/components/prism-core'
+import 'prismjs/components/prism-sql'
+import 'prismjs/themes/prism-tomorrow.css'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import Footer from '../components/Footer'
@@ -135,7 +139,7 @@ export default function Investigate() {
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-xs text-zinc-500">terminal</span>
-                      <span className="text-[10px] font-semibold text-zinc-400 tracking-widest uppercase">PROTON_SQL</span>
+                      <span className="text-[10px] font-semibold text-zinc-400 tracking-widest uppercase">SQL Query</span>
                     </div>
                     <div className="h-3 w-px bg-[#574149]/20"></div>
                     <div className="flex gap-2 items-center">
@@ -167,12 +171,23 @@ export default function Investigate() {
                     </button>
                   </div>
                 </div>
-                <textarea
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  className="h-40 bg-[#0f0c17] font-mono text-xs p-6 text-zinc-300 leading-relaxed resize-none focus:outline-none custom-scrollbar"
-                  spellCheck={false}
-                />
+                <div className="h-40 overflow-auto custom-scrollbar bg-[#0f0c17]">
+                  <Editor
+                    value={query}
+                    onValueChange={setQuery}
+                    highlight={code => highlight(code, languages.sql, 'sql')}
+                    padding={24}
+                    style={{
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                      fontSize: 12,
+                      lineHeight: 1.6,
+                      minHeight: '100%',
+                      background: 'transparent',
+                      color: '#d4d4d8',
+                    }}
+                    textareaClassName="focus:outline-none"
+                  />
+                </div>
               </div>
 
               {/* Results */}

@@ -48,3 +48,9 @@ body {
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #2c2834; border-radius: 10px; }
+
+/* Neutralise prism-tomorrow's default background so it doesn't bleed into the editor */
+code[class*="language-"],
+pre[class*="language-"] {
+  background: transparent !important;
+}
