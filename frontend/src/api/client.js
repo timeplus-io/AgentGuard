@@ -70,6 +70,7 @@ export const api = {
   getRule: (id) => get(`/rules/${id}`),
   toggleRule: (id) => post(`/rules/${id}/toggle`, {}),
   upgradeRule: (id, querySql) => post(`/rules/${id}/upgrade`, { query_sql: querySql }),
+  createRule: (body) => post('/rules', body),
   installRule: (id) => post(`/rules/${id}/install`, {}),
   uninstallRule: (id) =>
     fetch(`${BASE}/rules/${id}`, { method: 'DELETE' })

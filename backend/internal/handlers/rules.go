@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentshield/internal/config"
@@ -21,6 +23,21 @@ var latestVersions = map[string]string{
 	"rp-003": "1.0.0",
 	"rp-004": "1.0.0",
 }
+
+const sqlDeletedCustomRules = `
+SELECT
+  rule_id,
+  arg_max(name,               updated_at) AS name,
+  arg_max(version,            updated_at) AS version,
+  arg_max(description,        updated_at) AS description,
+  arg_max(severity,           updated_at) AS severity,
+  arg_max(category,           updated_at) AS category,
+  arg_max(fp_rate,            updated_at) AS fp_rate,
+  arg_max(hook_sources,       updated_at) AS hook_sources
+FROM table(agentshield_rules)
+WHERE rule_id LIKE 'custom-%'
+GROUP BY rule_id
+HAVING arg_max(deleted, updated_at) = true`
 
 const sqlCurrentRules = `
 SELECT
@@ -324,7 +341,9 @@ func ListCatalog(cfg *config.Config) gin.HandlerFunc {
 			FPRate      string `json:"fp_rate"`
 			HookSources string `json:"hook_sources"`
 			Installed   bool   `json:"installed"`
+			IsCustom    bool   `json:"is_custom"`
 		}
+
 		catalog := tp.Catalog()
 		items := make([]CatalogItem, 0, len(catalog))
 		for _, e := range catalog {
@@ -338,19 +357,110 @@ func ListCatalog(cfg *config.Config) gin.HandlerFunc {
 				FPRate:      e.FPRate,
 				HookSources: e.HookSources,
 				Installed:   installedIDs[e.ID],
+				IsCustom:    false,
 			})
 		}
+
+		// Append deleted custom rules so they can be reinstalled.
+		customRows, err := tp.Query(&cfg.Timeplus, sqlDeletedCustomRules)
+		if err != nil {
+			log.Printf("rules: deleted custom rules query failed: %v", err)
+		}
+		for _, row := range customRows {
+			id := strVal(row, "rule_id")
+			if id == "" {
+				continue
+			}
+			if installedIDs[id] {
+				continue // currently installed, skip
+			}
+			items = append(items, CatalogItem{
+				ID:          id,
+				Name:        strVal(row, "name"),
+				Version:     strVal(row, "version"),
+				Description: strVal(row, "description"),
+				Severity:    strVal(row, "severity"),
+				Category:    strVal(row, "category"),
+				FPRate:      strVal(row, "fp_rate"),
+				HookSources: strVal(row, "hook_sources"),
+				Installed:   false,
+				IsCustom:    true,
+			})
+		}
+
 		c.JSON(http.StatusOK, gin.H{"catalog": items})
 	}
 }
 
-// InstallRule installs a builtin rule from the catalog. Works for both
-// first-time installs and rules that were previously uninstalled.
+// InstallRule installs a rule. Custom rules (custom- prefix) are reinstalled
+// from their last known stream state. Builtin rules (rp- prefix) are installed
+// from the hardcoded catalog.
 func InstallRule(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		// Find in builtin catalog
+		// Custom rules: reinstall by reading last state from the stream.
+		if strings.HasPrefix(id, "custom-") {
+			rows, err := tp.Query(&cfg.Timeplus, fmt.Sprintf(`
+				SELECT
+				  arg_max(query_sql, updated_at) AS query_sql,
+				  arg_max(deleted,   updated_at) AS deleted
+				FROM table(agentshield_rules)
+				WHERE rule_id = '%s'
+				GROUP BY rule_id
+			`, strings.ReplaceAll(id, "'", "''")))
+			if err != nil || len(rows) == 0 {
+				c.JSON(http.StatusNotFound, gin.H{"error": "custom rule not found in stream"})
+				return
+			}
+			row := rows[0]
+
+			// Guard: rule is currently active — nothing to reinstall.
+			if !boolVal(row, "deleted") {
+				c.JSON(http.StatusConflict, gin.H{"error": "rule is already installed"})
+				return
+			}
+
+			querySQL := strVal(row, "query_sql")
+
+			// Guard: stored SQL is required to recreate the MV.
+			if querySQL == "" {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "stored rule has no query_sql; cannot reinstall"})
+				return
+			}
+
+			reinstallSQL := fmt.Sprintf(`
+INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
+SELECT
+  rule_id,
+  arg_max(name,               updated_at) AS name,
+  arg_max(version,            updated_at) AS version,
+  arg_max(description,        updated_at) AS description,
+  arg_max(query_sql,          updated_at) AS query_sql,
+  true                                    AS enabled,
+  false                                   AS deleted,
+  arg_max(severity,           updated_at) AS severity,
+  arg_max(category,           updated_at) AS category,
+  arg_max(required_telemetry, updated_at) AS required_telemetry,
+  arg_max(fp_rate,            updated_at) AS fp_rate,
+  arg_max(hook_sources,       updated_at) AS hook_sources,
+  now64(3)                                AS updated_at
+FROM table(agentshield_rules)
+WHERE rule_id = '%s'
+GROUP BY rule_id`, strings.ReplaceAll(id, "'", "''"))
+
+			if err := tp.ExecHTTP(&cfg.Timeplus, reinstallSQL); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "reinstall failed"})
+				return
+			}
+			if err := tp.CreateRuleMV(&cfg.Timeplus, id, querySQL); err != nil {
+				log.Printf("rules: custom reinstall MV %s: %v", id, err)
+			}
+			c.JSON(http.StatusOK, gin.H{"installed": true, "rule_id": id})
+			return
+		}
+
+		// Builtin rules: install from hardcoded catalog.
 		var found *tp.CatalogEntry
 		for _, e := range tp.Catalog() {
 			if e.ID == id {
@@ -366,24 +476,22 @@ func InstallRule(cfg *config.Config) gin.HandlerFunc {
 
 		escapedSQL := strings.ReplaceAll(found.QuerySQL, "'", "''")
 		insertSQL := fmt.Sprintf(
-			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s',now64(3))`,
+			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
 			id,
 			strings.ReplaceAll(found.Name, "'", "''"),
 			found.Version,
 			strings.ReplaceAll(found.Description, "'", "''"),
 			escapedSQL,
-			found.Severity, found.Category, "",
+			found.Severity, found.Category,
 			found.FPRate, found.HookSources,
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "reinstall insert failed"})
 			return
 		}
-
 		if err := tp.CreateRuleMV(&cfg.Timeplus, id, found.QuerySQL); err != nil {
 			log.Printf("rules: reinstall create MV %s: %v", id, err)
 		}
-
 		c.JSON(http.StatusOK, gin.H{"installed": true, "rule_id": id})
 	}
 }
@@ -510,6 +618,84 @@ func AlertWebhook(cfg *config.Config) gin.HandlerFunc {
 			payload.RuleID, payload.Severity, payload.AgentID, payload.Message)
 		GlobalAlertBroadcaster.Publish(payload)
 		c.JSON(http.StatusOK, gin.H{"received": true})
+	}
+}
+
+// CreateRule creates a new custom rule from a user-provided detection SQL query.
+// The SQL body may contain the placeholder literals '__rule_id__' and '__rule_name__'
+// which the handler substitutes with the generated rule ID and the rule name before
+// storing and creating the MV.
+func CreateRule(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			QuerySQL    string `json:"query_sql"`
+			Severity    string `json:"severity"`
+			Category    string `json:"category"`
+			FPRate      string `json:"fp_rate"`
+			HookSources string `json:"hook_sources"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+		if body.Name == "" || body.Description == "" || body.QuerySQL == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name, description, and query_sql are required"})
+			return
+		}
+		if body.Severity == "" {
+			body.Severity = "warning"
+		}
+
+		ruleID := "custom-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+
+		// Substitute placeholders so the stored SQL is self-contained.
+		escapedName := strings.ReplaceAll(body.Name, "'", "''")
+
+		// finalSQL: substituted SQL used verbatim for MV creation (single-escaped SQL literals).
+		finalSQL := strings.ReplaceAll(body.QuerySQL, "'__rule_id__'", "'"+ruleID+"'")
+		finalSQL = strings.ReplaceAll(finalSQL, "'__rule_name__'", "'"+escapedName+"'")
+
+		// escapedSQL: escape the raw SQL for embedding in a VALUES string, then substitute
+		// (avoids double-escaping: escape first, then replace the now-doubled placeholder quotes).
+		escapedSQL := strings.ReplaceAll(body.QuerySQL, "'", "''")
+		escapedSQL = strings.ReplaceAll(escapedSQL, "''__rule_id__''", "'"+ruleID+"'")
+		escapedSQL = strings.ReplaceAll(escapedSQL, "''__rule_name__''", "'"+escapedName+"'")
+
+		insertSQL := fmt.Sprintf(
+			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
+			ruleID,
+			escapedName,
+			strings.ReplaceAll(body.Description, "'", "''"),
+			escapedSQL,
+			strings.ReplaceAll(body.Severity, "'", "''"),
+			strings.ReplaceAll(body.Category, "'", "''"),
+			strings.ReplaceAll(body.FPRate, "'", "''"),
+			strings.ReplaceAll(body.HookSources, "'", "''"),
+		)
+		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
+			log.Printf("rules: create rule insert: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "insert failed"})
+			return
+		}
+
+		if err := tp.CreateRuleMV(&cfg.Timeplus, ruleID, finalSQL); err != nil {
+			log.Printf("rules: create custom MV %s: %v", ruleID, err)
+		}
+
+		c.JSON(http.StatusCreated, models.RulePack{
+			ID:          ruleID,
+			Name:        body.Name,
+			Version:     "1.0.0",
+			Description: body.Description,
+			QuerySQL:    finalSQL,
+			Enabled:     true,
+			Severity:    body.Severity,
+			Category:    body.Category,
+			FPRate:      body.FPRate,
+			HookSources: body.HookSources,
+		})
 	}
 }
 
