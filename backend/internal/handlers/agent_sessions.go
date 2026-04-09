@@ -3,10 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -301,9 +299,22 @@ WHERE deployment_id = '%s'
 	}
 }
 
-// GetRunTrace handles GET /api/agents/:id/sessions/:session_id/runs/:run_id/trace
-// It synthesizes a waterfall span tree from agentshield_hook_events (run bounds +
-// tool spans) and otel_traces (LLM call spans). OTel query failure is non-fatal.
+// hookKind maps a hook name to a span kind used for waterfall colouring.
+func hookKind(hookName string) string {
+	switch hookName {
+	case "llm_input", "llm_output", "before_model_resolve", "before_prompt_build", "before_agent_reply":
+		return "llm"
+	case "before_tool_call", "after_tool_call", "tool_result_persist":
+		return "tool"
+	default:
+		return "lifecycle"
+	}
+}
+
+// GetRunTrace handles GET /api/agents/:id/sessions/:session_id/runs/:run_id/trace.
+// It builds a waterfall purely from agentshield_hook_events: every event for the
+// run becomes a span whose duration is the gap to the next event (or to run end
+// for the last event). No OTel dependency.
 func GetRunTrace(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		deploymentID, agentID, ok := splitAgentID(c.Param("id"))
@@ -324,265 +335,119 @@ func GetRunTrace(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// ── Query 1: run time bounds ──────────────────────────────────────────
-		boundsSQL := fmt.Sprintf(`
-SELECT
-    min(event_time) AS start_time,
-    max(event_time) AS end_time
-FROM table(agentshield_hook_events)
-WHERE deployment_id = '%s'
-  AND agent_id      = '%s'
-  AND session_id    = '%s'
-  AND run_id        = '%s'`,
-			deploymentID, agentID, sessionID, runID)
-
-		boundsRows, err := timeplus.Query(&cfg.Timeplus, boundsSQL)
-		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
-			return
-		}
-		// min/max aggregate always returns exactly one row; detect a missing run
-		// by checking whether the aggregated time is zero (NULL in Proton).
-		startTime := parseTime(boundsRows[0]["start_time"])
-		endTime := parseTime(boundsRows[0]["end_time"])
-		if startTime.IsZero() {
-			c.JSON(http.StatusNotFound, gin.H{"error": "run not found"})
-			return
-		}
-
-		startMs := startTime.UnixMilli()
-		endMs := endTime.UnixMilli()
-		durationMs := endMs - startMs
-		if durationMs <= 0 {
-			durationMs = 1
-		}
-
-		spans := []models.TraceSpan{
-			{
-				SpanID:     runID,
-				ParentID:   "",
-				Kind:       "run",
-				Name:       "run",
-				StartMs:    startMs,
-				DurationMs: durationMs,
-				Status:     "ok",
-				Attributes: map[string]string{},
-			},
-		}
-
-		// ── Query 2: OTel LLM spans (non-fatal) ──────────────────────────────
-		startNs := startTime.UnixNano()
-		endNs := endTime.UnixNano()
-
-		// OpenClaw emits ONE openclaw.model.usage span per agent turn. Its timing
-		// is synthesised retrospectively: startTime = Date.now()-durationMs,
-		// endTime = Date.now(). The endTime fires at the same moment as the
-		// llm_output hook (both happen at turn completion), so end_time_ns
-		// (= start_time_ns + duration) is the reliable anchor for run correlation.
-		//
-		// Filter: span end_time_ns falls within the run's hook-event window
-		// (±60 s buffer for minor clock skew between OTel and hook clients).
-		const otelForwardNs = int64(60_000_000_000) // 60 s buffer in nanoseconds
-
-		otelSQL := fmt.Sprintf(`
-SELECT
-    span_id,
-    start_time_ns,
-    duration,
-    span_attributes
-FROM table(otel_traces)
-WHERE span_attributes['openclaw.sessionId'] = '%s'
-  AND span_name = 'openclaw.model.usage'
-  AND (start_time_ns + duration) >= %d
-  AND (start_time_ns + duration) <= %d
-ORDER BY start_time_ns ASC`,
-			sessionID, startNs, endNs+otelForwardNs)
-
-		var llmSpans []models.TraceSpan // kept for re-parenting tool spans below
-
-		otelRows, otelErr := timeplus.Query(&cfg.Timeplus, otelSQL)
-		if otelErr != nil {
-			log.Printf("GetRunTrace: otel_traces query failed (non-fatal): %v", otelErr)
-		} else {
-			for i, row := range otelRows {
-				spanID := parseStr(row["span_id"])
-				if spanID == "" {
-					spanID = fmt.Sprintf("llm-%d", i)
-				}
-				spanStartMs := parseInt64(row["start_time_ns"]) / 1_000_000
-				spanDurationMs := parseInt64(row["duration"]) / 1_000_000
-
-				attrs := map[string]string{}
-				// span_attributes is a map column; Proton returns it as map[string]interface{}
-				if rawMap, ok := row["span_attributes"].(map[string]interface{}); ok {
-					for k, v := range rawMap {
-						if s, ok2 := v.(string); ok2 {
-							attrs[k] = s
-						}
-					}
-				}
-
-				// Derive a human-readable name from the model attribute.
-				llmName := "llm"
-				for _, key := range []string{"openclaw.model.name", "gen_ai.request.model", "llm.model.name", "model"} {
-					if m, ok := attrs[key]; ok && m != "" {
-						llmName = m
-						break
-					}
-				}
-
-				s := models.TraceSpan{
-					SpanID:     spanID,
-					ParentID:   runID,
-					Kind:       "llm",
-					Name:       llmName,
-					StartMs:    spanStartMs,
-					DurationMs: spanDurationMs,
-					Status:     "ok",
-					Attributes: attrs,
-				}
-				llmSpans = append(llmSpans, s)
-				spans = append(spans, s)
-			}
-		}
-
-		// ── Query 3: tool call spans ──────────────────────────────────────────
-		toolSQL := fmt.Sprintf(`
-SELECT hook_name, event_time, tool_name, hook_decision, block_reason, event_data
+		// Fetch all hook events for this run in chronological order.
+		eventsSQL := fmt.Sprintf(`
+SELECT hook_name, event_time, tool_name, provider, model,
+       hook_decision, block_reason, event_data
 FROM table(agentshield_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
   AND session_id    = '%s'
   AND run_id        = '%s'
-  AND hook_name     IN ('before_tool_call', 'after_tool_call')
 ORDER BY event_time ASC`,
 			deploymentID, agentID, sessionID, runID)
 
-		toolRows, err := timeplus.Query(&cfg.Timeplus, toolSQL)
+		rows, err := timeplus.Query(&cfg.Timeplus, eventsSQL)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
-
-		// Collect before/after events; key by toolCallId when present.
-		type toolEvt struct {
-			hookName     string
-			eventTime    time.Time
-			toolName     string
-			hookDecision string
-			blockReason  string
-			eventData    string
-			toolCallID   string
+		if len(rows) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "run not found"})
+			return
 		}
 
-		var befores []toolEvt
-		afterByID := map[string]toolEvt{}
-		var aftersNoID []toolEvt
+		// Derive run bounds from first and last event.
+		firstMs := parseTime(rows[0]["event_time"]).UnixMilli()
+		lastMs := parseTime(rows[len(rows)-1]["event_time"]).UnixMilli()
+		runDurationMs := lastMs - firstMs
+		if runDurationMs <= 0 {
+			runDurationMs = 1
+		}
 
-		for _, row := range toolRows {
-			evt := toolEvt{
-				hookName:     parseStr(row["hook_name"]),
-				eventTime:    parseTime(row["event_time"]),
-				toolName:     parseStr(row["tool_name"]),
-				hookDecision: parseStr(row["hook_decision"]),
-				blockReason:  parseStr(row["block_reason"]),
-				eventData:    parseStr(row["event_data"]),
-			}
-			var data map[string]interface{}
-			if json.Unmarshal([]byte(evt.eventData), &data) == nil {
-				if tcid, ok := data["toolCallId"].(string); ok {
-					evt.toolCallID = tcid
-				}
-			}
-			if evt.hookName == "before_tool_call" {
-				befores = append(befores, evt)
+		spans := make([]models.TraceSpan, 0, len(rows)+1)
+
+		// Root span covers the full run window.
+		spans = append(spans, models.TraceSpan{
+			SpanID:     runID,
+			ParentID:   "",
+			Kind:       "run",
+			Name:       "run",
+			StartMs:    firstMs,
+			DurationMs: runDurationMs,
+			Status:     "ok",
+			Attributes: map[string]string{},
+		})
+
+		// One child span per hook event; duration = gap to the next event.
+		for i, row := range rows {
+			hookName := parseStr(row["hook_name"])
+			evtMs := parseTime(row["event_time"]).UnixMilli()
+
+			var durationMs int64
+			if i+1 < len(rows) {
+				nextMs := parseTime(rows[i+1]["event_time"]).UnixMilli()
+				durationMs = nextMs - evtMs
 			} else {
-				if evt.toolCallID != "" {
-					afterByID[evt.toolCallID] = evt
-				} else {
-					aftersNoID = append(aftersNoID, evt)
-				}
+				durationMs = lastMs - evtMs
 			}
-		}
-
-		noIDIdx := 0
-		for i, before := range befores {
-			var after *toolEvt
-			if before.toolCallID != "" {
-				if a, ok := afterByID[before.toolCallID]; ok {
-					after = &a
-				}
-			} else if noIDIdx < len(aftersNoID) {
-				a := aftersNoID[noIDIdx]
-				after = &a
-				noIDIdx++
+			if durationMs < 0 {
+				durationMs = 0
 			}
 
-			spanStartMs := before.eventTime.UnixMilli()
-			var spanDurationMs int64
+			// Determine status.
 			status := "ok"
-			attrs := map[string]string{"tool_name": before.toolName}
-
-			if before.hookDecision == "block" {
+			hookDecision := parseStr(row["hook_decision"])
+			if hookDecision == "block" {
 				status = "blocked"
-				if before.blockReason != "" {
-					attrs["block_reason"] = before.blockReason
-				}
-			} else if after != nil {
-				spanDurationMs = after.eventTime.UnixMilli() - spanStartMs
+			}
+
+			// Build attributes from the structured columns.
+			attrs := map[string]string{}
+			if tn := parseStr(row["tool_name"]); tn != "" {
+				attrs["tool_name"] = tn
+			}
+			if m := parseStr(row["model"]); m != "" {
+				attrs["model"] = m
+			}
+			if p := parseStr(row["provider"]); p != "" {
+				attrs["provider"] = p
+			}
+			if hookDecision != "" && hookDecision != "observe" {
+				attrs["hook_decision"] = hookDecision
+			}
+			if br := parseStr(row["block_reason"]); br != "" {
+				attrs["block_reason"] = br
+			}
+
+			// Extract useful fields from event_data JSON.
+			if ed := parseStr(row["event_data"]); ed != "" {
 				var data map[string]interface{}
-				if json.Unmarshal([]byte(after.eventData), &data) == nil {
-					if d, ok := data["durationMs"].(float64); ok {
-						spanDurationMs = int64(d)
-					}
+				if json.Unmarshal([]byte(ed), &data) == nil {
 					if errMsg, ok := data["error"].(string); ok && errMsg != "" {
 						status = "error"
 						attrs["error"] = errMsg
+					}
+					if dur, ok := data["durationMs"].(float64); ok {
+						attrs["duration_ms"] = fmt.Sprintf("%.0f", dur)
+					}
+					if tcid, ok := data["toolCallId"].(string); ok {
+						attrs["tool_call_id"] = tcid
 					}
 				}
 			}
 
 			spans = append(spans, models.TraceSpan{
-				SpanID:     fmt.Sprintf("tool-%d", i),
+				SpanID:     fmt.Sprintf("evt-%d", i),
 				ParentID:   runID,
-				Kind:       "tool",
-				Name:       before.toolName,
-				StartMs:    spanStartMs,
-				DurationMs: spanDurationMs,
+				Kind:       hookKind(hookName),
+				Name:       hookName,
+				StartMs:    evtMs,
+				DurationMs: durationMs,
 				Status:     status,
 				Attributes: attrs,
 			})
 		}
-
-		// Re-parent tool spans under their preceding LLM span so the waterfall
-		// shows the blog-style hierarchy: run → llm → tools.
-		// llmSpans is already sorted by StartMs ascending (ORDER BY in the SQL).
-		// For each tool, assign it to the last LLM span that started at or before
-		// the tool — this correctly matches tools to the LLM call that produced them.
-		if len(llmSpans) > 0 {
-			for i, s := range spans {
-				if s.Kind != "tool" {
-					continue
-				}
-				parentID := runID
-				for _, llm := range llmSpans {
-					if llm.StartMs <= s.StartMs {
-						parentID = llm.SpanID
-					}
-				}
-				spans[i].ParentID = parentID
-			}
-		}
-
-		// Sort: root first, then all others by StartMs ascending.
-		sort.Slice(spans, func(i, j int) bool {
-			iRoot := spans[i].ParentID == ""
-			jRoot := spans[j].ParentID == ""
-			if iRoot != jRoot {
-				return iRoot
-			}
-			return spans[i].StartMs < spans[j].StartMs
-		})
 
 		c.JSON(http.StatusOK, models.TraceResponse{Spans: spans})
 	}

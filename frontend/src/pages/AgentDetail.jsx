@@ -428,10 +428,11 @@ function RunWaterfall({ spans }) {
   })
 
   function barColor(span) {
-    if (span.kind === 'run') return '#ffb0cf'
-    if (span.kind === 'llm') return '#93c5fd'
-    if (span.status === 'ok') return '#6ee7b7'
-    return '#ffb4ab' // blocked or error
+    if (span.kind === 'run') return '#ffb0cf'        // pink  — run root
+    if (span.status === 'blocked' || span.status === 'error') return '#ffb4ab' // red
+    if (span.kind === 'llm') return '#93c5fd'         // blue  — llm_input / llm_output
+    if (span.kind === 'tool') return '#6ee7b7'        // green — tool calls
+    return '#c4b5fd'                                  // purple — lifecycle events
   }
 
   function fmtDuration(ms) {
@@ -461,10 +462,10 @@ function RunWaterfall({ spans }) {
                 className="w-36 shrink-0 flex items-center gap-1"
                 style={{ paddingLeft: depth * 16 }}
               >
-                {span.kind === 'tool' && span.status === 'blocked' && (
+                {span.status === 'blocked' && (
                   <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">block</span>
                 )}
-                {span.kind === 'tool' && span.status === 'error' && (
+                {span.status === 'error' && (
                   <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">error</span>
                 )}
                 <span className="text-[11px] text-[#e7dff0] truncate">{span.name}</span>
