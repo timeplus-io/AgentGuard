@@ -392,13 +392,69 @@ func ListCatalog(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// InstallRule installs a builtin rule from the catalog. Works for both
-// first-time installs and rules that were previously uninstalled.
+// InstallRule installs a rule. Custom rules (custom- prefix) are reinstalled
+// from their last known stream state. Builtin rules (rp- prefix) are installed
+// from the hardcoded catalog.
 func InstallRule(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		// Find in builtin catalog
+		// Custom rules: reinstall by reading last state from the stream.
+		if strings.HasPrefix(id, "custom-") {
+			rows, err := tp.Query(&cfg.Timeplus, fmt.Sprintf(`
+				SELECT
+				  arg_max(name,               updated_at) AS name,
+				  arg_max(version,            updated_at) AS version,
+				  arg_max(description,        updated_at) AS description,
+				  arg_max(query_sql,          updated_at) AS query_sql,
+				  arg_max(severity,           updated_at) AS severity,
+				  arg_max(category,           updated_at) AS category,
+				  arg_max(required_telemetry, updated_at) AS required_telemetry,
+				  arg_max(fp_rate,            updated_at) AS fp_rate,
+				  arg_max(hook_sources,       updated_at) AS hook_sources
+				FROM table(agentshield_rules)
+				WHERE rule_id = '%s'
+				GROUP BY rule_id
+			`, strings.ReplaceAll(id, "'", "''")))
+			if err != nil || len(rows) == 0 {
+				c.JSON(http.StatusNotFound, gin.H{"error": "custom rule not found in stream"})
+				return
+			}
+			row := rows[0]
+			querySQL := strVal(row, "query_sql")
+
+			reinstallSQL := fmt.Sprintf(`
+INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
+SELECT
+  rule_id,
+  arg_max(name,               updated_at) AS name,
+  arg_max(version,            updated_at) AS version,
+  arg_max(description,        updated_at) AS description,
+  arg_max(query_sql,          updated_at) AS query_sql,
+  true                                    AS enabled,
+  false                                   AS deleted,
+  arg_max(severity,           updated_at) AS severity,
+  arg_max(category,           updated_at) AS category,
+  arg_max(required_telemetry, updated_at) AS required_telemetry,
+  arg_max(fp_rate,            updated_at) AS fp_rate,
+  arg_max(hook_sources,       updated_at) AS hook_sources,
+  now64(3)                                AS updated_at
+FROM table(agentshield_rules)
+WHERE rule_id = '%s'
+GROUP BY rule_id`, strings.ReplaceAll(id, "'", "''"))
+
+			if err := tp.ExecHTTP(&cfg.Timeplus, reinstallSQL); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "reinstall failed"})
+				return
+			}
+			if err := tp.CreateRuleMV(&cfg.Timeplus, id, querySQL); err != nil {
+				log.Printf("rules: custom reinstall MV %s: %v", id, err)
+			}
+			c.JSON(http.StatusOK, gin.H{"installed": true, "rule_id": id})
+			return
+		}
+
+		// Builtin rules: install from hardcoded catalog.
 		var found *tp.CatalogEntry
 		for _, e := range tp.Catalog() {
 			if e.ID == id {
@@ -414,24 +470,22 @@ func InstallRule(cfg *config.Config) gin.HandlerFunc {
 
 		escapedSQL := strings.ReplaceAll(found.QuerySQL, "'", "''")
 		insertSQL := fmt.Sprintf(
-			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s',now64(3))`,
+			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
 			id,
 			strings.ReplaceAll(found.Name, "'", "''"),
 			found.Version,
 			strings.ReplaceAll(found.Description, "'", "''"),
 			escapedSQL,
-			found.Severity, found.Category, "",
+			found.Severity, found.Category,
 			found.FPRate, found.HookSources,
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "reinstall insert failed"})
 			return
 		}
-
 		if err := tp.CreateRuleMV(&cfg.Timeplus, id, found.QuerySQL); err != nil {
 			log.Printf("rules: reinstall create MV %s: %v", id, err)
 		}
-
 		c.JSON(http.StatusOK, gin.H{"installed": true, "rule_id": id})
 	}
 }
