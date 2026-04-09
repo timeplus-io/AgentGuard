@@ -1,7 +1,7 @@
 const severityStyles = {
-  Critical: 'bg-[#93000a] text-[#ffb4ab]',
-  Warning: 'bg-[#37333f] text-[#ffb2b8]',
-  Info: 'bg-[#2c2834] text-zinc-400',
+  critical: { badge: 'bg-[#93000a] text-[#ffb4ab]', dot: 'bg-[#ffb4ab] animate-pulse', label: 'Critical' },
+  warning:  { badge: 'bg-[#37333f] text-[#ffb2b8]', dot: 'bg-[#ffb2b8]',               label: 'Warning' },
+  info:     { badge: 'bg-[#2c2834] text-zinc-400',   dot: 'bg-zinc-400',                label: 'Info' },
 }
 
 const statusStyles = {
@@ -11,10 +11,12 @@ const statusStyles = {
 }
 
 export function SeverityBadge({ severity }) {
+  const key = severity?.toLowerCase() || 'info'
+  const s = severityStyles[key] || severityStyles.info
   return (
-    <span className={`flex items-center gap-2 px-2.5 py-1 text-[10px] font-bold uppercase rounded-full w-fit ${severityStyles[severity] || severityStyles.Info}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${severity === 'Critical' ? 'bg-[#ffb4ab] animate-pulse' : severity === 'Warning' ? 'bg-[#ffb2b8]' : 'bg-zinc-400'}`}></span>
-      {severity}
+    <span className={`flex items-center gap-2 px-2.5 py-1 text-[10px] font-black uppercase rounded-full w-fit ${s.badge}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+      {s.label}
     </span>
   )
 }
