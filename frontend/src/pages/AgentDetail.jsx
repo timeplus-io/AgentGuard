@@ -223,15 +223,70 @@ function EventRow({ event }) {
   )
 }
 
+// ── SessionSummary ────────────────────────────────────────────────────────────
+
+function SessionSummary({ sessionDetail }) {
+  const isEnded = sessionDetail.status === 'ended'
+  const runs = sessionDetail.runs ?? []
+  const startedAt = runs[0]?.start_time ?? null
+  const endedAt = isEnded ? (runs[runs.length - 1]?.end_time ?? null) : null
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8">
+      <div className="w-full max-w-lg bg-[#1d1a25] rounded-sm p-6 space-y-6">
+        {/* Session ID */}
+        <div>
+          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1.5">Session ID</p>
+          <code className="text-[13px] font-mono text-[#e7dff0] break-all leading-relaxed">{sessionDetail.session_id}</code>
+        </div>
+
+        {/* Status */}
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
+          <span className={`text-sm font-semibold ${isEnded ? 'text-zinc-500' : 'text-emerald-400'}`}>
+            {isEnded ? 'Ended' : 'Active'}
+          </span>
+          {sessionDetail.session_type && (
+            <span className="ml-2 text-[10px] text-zinc-600 bg-[#2c2834] px-2 py-0.5 rounded-full uppercase tracking-wider">
+              {sessionDetail.session_type}
+            </span>
+          )}
+        </div>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Started</p>
+            <p className="text-xs font-mono text-[#e7dff0]">{startedAt ? fmtTime(startedAt) : '—'}</p>
+          </div>
+          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Ended</p>
+            <p className="text-xs font-mono text-[#e7dff0]">{endedAt ? fmtTime(endedAt) : '—'}</p>
+          </div>
+          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Total Runs</p>
+            <p className="text-2xl font-bold text-[#e7dff0]">{runs.length}</p>
+          </div>
+          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Tool Calls</p>
+            <p className="text-2xl font-bold text-[#e7dff0]">{sessionDetail.total_tool_calls ?? 0}</p>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-zinc-600 text-center">Select a run from the left to view its timeline</p>
+      </div>
+    </div>
+  )
+}
+
 // ── SessionHeader ─────────────────────────────────────────────────────────────
 
 function SessionHeader({ sessionDetail }) {
   const isEnded = sessionDetail.status === 'ended'
   const sid = sessionDetail.session_id ?? ''
-  const shortId = sid.length > 20 ? sid.slice(0, 20) + '…' : sid
   return (
-    <div className="px-5 py-3 border-b border-[#574149]/20 flex items-center gap-4 shrink-0 bg-[#1d1a25]">
-      <code className="text-[11px] font-mono text-[#e7dff0]">{shortId}</code>
+    <div className="px-5 py-3 border-b border-[#574149]/20 flex flex-wrap items-center gap-x-4 gap-y-1 shrink-0 bg-[#1d1a25]">
+      <code className="text-[11px] font-mono text-[#e7dff0] break-all">{sid}</code>
       <span className={`flex items-center gap-1.5 text-[10px] font-semibold ${isEnded ? 'text-zinc-500' : 'text-emerald-400'}`}>
         <span className={`w-1.5 h-1.5 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
         {isEnded ? 'Ended' : 'Active'}
@@ -364,8 +419,8 @@ function RunTimeline({ runIndex, run, events }) {
       {/* Run header */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <span className="text-xs font-semibold text-[#e7dff0]">Run #{runIndex + 1}</span>
-        <code className="text-[10px] font-mono text-zinc-500">
-          {rid.length > 16 ? rid.slice(0, 16) + '…' : rid || '—'}
+        <code className="text-[10px] font-mono text-zinc-500 break-all">
+          {rid || '—'}
         </code>
         {timeRange && <span className="text-[10px] text-zinc-600">{timeRange}</span>}
         {run.tool_count > 0 && (
@@ -505,6 +560,7 @@ export default function AgentDetail() {
   const [events, setEvents] = useState([])
   const [eventsTruncated, setEventsTruncated] = useState(false)
   const [activeTab, setActiveTab] = useState('timeline')
+  const [expandedSessions, setExpandedSessions] = useState(new Set())
   const [timePreset, setTimePreset] = useState('24h')
 
   const [llmMetrics, setLlmMetrics] = useState(null)
@@ -565,10 +621,10 @@ export default function AgentDetail() {
   }, [id, selectedSession, refreshTick])
 
   useEffect(() => {
-    if (!selectedSession && !selectedRun) { setEvents([]); setEventsTruncated(false); return }
+    if (!selectedRun) { setEvents([]); setEventsTruncated(false); return }
     const params = { limit: 500 }
     if (selectedSession) params.session_id = selectedSession
-    if (selectedRun) params.run_id = selectedRun
+    params.run_id = selectedRun
     const since = presetToISO(timePreset)
     if (since) params.since = since
 
@@ -586,6 +642,15 @@ export default function AgentDetail() {
   const selectSession = (sid) => {
     setActiveTab('timeline')
     setSearchParams({ session: sid })
+    setExpandedSessions(prev => {
+      const next = new Set(prev)
+      if (next.has(sid)) {
+        next.delete(sid)
+      } else {
+        next.add(sid)
+      }
+      return next
+    })
   }
 
   const selectRun = (rid) => {
@@ -729,7 +794,8 @@ export default function AgentDetail() {
               ) : (
                 sessions.map(session => {
                   const isActive = selectedSession === session.session_id
-                  const runs = isActive && sessionDetail?.runs ? sessionDetail.runs : []
+                  const isExpanded = expandedSessions.has(session.session_id)
+                  const runs = isExpanded && sessionDetail?.runs && isActive ? sessionDetail.runs : []
                   return (
                     <div key={session.session_id}>
                       <button
@@ -746,17 +812,24 @@ export default function AgentDetail() {
                             <span className={`text-xs font-medium truncate ${isActive ? 'text-[#ffb0cf]' : 'text-[#e7dff0]'}`}>
                               {session.session_type}
                             </span>
-                            <span className="text-[9px] bg-[#574149]/30 text-zinc-400 px-1.5 py-0.5 rounded-full shrink-0">
-                              {session.run_count}
-                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[9px] bg-[#574149]/30 text-zinc-400 px-1.5 py-0.5 rounded-full">
+                                {session.run_count}
+                              </span>
+                              {session.run_count > 0 && (
+                                <span className={`material-symbols-outlined text-[12px] transition-transform ${isExpanded && isActive ? 'text-[#ffb0cf] rotate-180' : 'text-zinc-600'}`}>
+                                  expand_more
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-[10px] text-zinc-600 truncate mt-0.5">{session.session_key}</p>
+                          <p className="text-[10px] text-zinc-600 break-all mt-0.5">{session.session_key}</p>
                           <p className="text-[9px] text-zinc-700 font-mono mt-0.5">{fmtTime(session.last_seen)}</p>
                         </div>
                       </button>
 
                       {/* Run list (accordion) */}
-                      {isActive && runs.map((run, idx) => {
+                      {isExpanded && isActive && runs.map((run, idx) => {
                         const isRunActive = selectedRun === run.run_id
                         return (
                           <button
@@ -795,13 +868,13 @@ export default function AgentDetail() {
           {/* Timeline panel */}
           <section className="flex-1 bg-[#211e29] rounded-sm flex flex-col min-w-0 overflow-hidden">
 
-            {/* Session header */}
-            {selectedSession && sessionDetail && (
+            {/* Session header — only when a run is selected */}
+            {selectedRun && sessionDetail && (
               <SessionHeader sessionDetail={sessionDetail} />
             )}
 
-            {/* Tab bar */}
-            {selectedSession && (
+            {/* Tab bar — only when a run is selected */}
+            {selectedRun && (
               <div role="tablist" className="flex border-b border-[#574149]/20 shrink-0">
                 {[
                   { id: 'timeline', label: 'Timeline' },
@@ -826,11 +899,15 @@ export default function AgentDetail() {
 
             {/* Event list */}
             <div className="flex-1 overflow-y-auto">
-              {!selectedSession && !selectedRun ? (
-                <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
-                  <span className="material-symbols-outlined text-4xl">timeline</span>
-                  <p className="text-sm">Select a session from the left to view its event timeline</p>
-                </div>
+              {!selectedRun ? (
+                selectedSession && sessionDetail ? (
+                  <SessionSummary sessionDetail={sessionDetail} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                    <span className="material-symbols-outlined text-4xl">timeline</span>
+                    <p className="text-sm">Select a session from the left to begin</p>
+                  </div>
+                )
               ) : loadingEvents ? (
                 <div className="flex items-center justify-center h-full">
                   <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
