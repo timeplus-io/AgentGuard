@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import Footer from '../components/Footer'
@@ -30,6 +30,7 @@ function formatTs(ts) {
 }
 
 export default function RulePacks() {
+  const navigate = useNavigate()
   const [rules, setRules] = useState([])
   const [catalog, setCatalog] = useState([])
   const [loading, setLoading] = useState(true)
@@ -199,7 +200,10 @@ export default function RulePacks() {
             title="Rule Packs"
             subtitle="Configure and manage security policies enforced across all monitored AI agents."
             actions={
-              <button className="px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-xs font-semibold rounded-sm">
+              <button
+                onClick={() => navigate('/rules/new')}
+                className="px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-xs font-semibold rounded-sm hover:scale-[0.98] transition-all"
+              >
                 New Custom Rule
               </button>
             }
@@ -256,13 +260,18 @@ export default function RulePacks() {
                   <div key={entry.id} className="bg-[#1d1a25]/60 border border-dashed border-zinc-700/40 p-5 rounded-sm flex flex-col gap-4">
                     <div className="flex justify-between items-start">
                       <div className="w-10 h-10 bg-[#0f0c17] flex items-center justify-center rounded-sm text-zinc-600">
-                        <span className="material-symbols-outlined">{RULE_ICONS[entry.id] || 'shield'}</span>
+                        <span className="material-symbols-outlined">{entry.is_custom ? 'tune' : (RULE_ICONS[entry.id] || 'shield')}</span>
                       </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide border ${
-                        entry.severity === 'critical'
-                          ? 'bg-[#ffb0cf]/10 text-[#ffb0cf] border-[#ffb0cf]/20'
-                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      }`}>{entry.severity}</span>
+                      <div className="flex items-center gap-2">
+                        {entry.is_custom && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#2c2834] text-zinc-400 border border-zinc-700/40 font-semibold uppercase tracking-wide">Custom</span>
+                        )}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide border ${
+                          entry.severity === 'critical'
+                            ? 'bg-[#ffb0cf]/10 text-[#ffb0cf] border-[#ffb0cf]/20'
+                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        }`}>{entry.severity}</span>
+                      </div>
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold text-zinc-400 mb-1">{entry.name}</h3>
