@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,9 @@ import (
 	"github.com/timeplus/agentshield/internal/models"
 	tp "github.com/timeplus/agentshield/internal/timeplus"
 )
+
+// pricingKeyRe validates provider and model values used in SQL path params.
+var pricingKeyRe = regexp.MustCompile(`^[a-zA-Z0-9._:/-]+$`)
 
 // GetCost handles GET /api/cost.
 // Runs three Proton queries to compute cost KPIs, daily trend, and token breakdown.
@@ -168,6 +172,10 @@ func DeletePricing(cfg *config.Config) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "provider and model are required"})
 			return
 		}
+		if !pricingKeyRe.MatchString(provider) || !pricingKeyRe.MatchString(model) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid provider or model"})
+			return
+		}
 
 		sql := fmt.Sprintf(
 			`DELETE FROM agentshield_pricing WHERE provider = '%s' AND model = '%s'`,
@@ -320,17 +328,18 @@ GROUP BY e.provider, e.model`
 	}
 
 	totalCost := inputCost + outputCost + cacheCost
-	pct := func(part float64) int {
-		if totalCost == 0 {
-			return 0
-		}
-		return int(part / totalCost * 100)
+
+	inputPct, outputPct := 0, 0
+	if totalCost > 0 {
+		inputPct = int(inputCost / totalCost * 100)
+		outputPct = int(outputCost / totalCost * 100)
 	}
+	cachePct := 100 - inputPct - outputPct // ensure sum is exactly 100
 
 	return []models.TokenBreakdown{
-		{Label: "Input Tokens", Percentage: pct(inputCost), Amount: inputCost},
-		{Label: "Output Tokens", Percentage: pct(outputCost), Amount: outputCost},
-		{Label: "Cache Tokens", Percentage: pct(cacheCost), Amount: cacheCost},
+		{Label: "Input Tokens", Percentage: inputPct, Amount: inputCost},
+		{Label: "Output Tokens", Percentage: outputPct, Amount: outputCost},
+		{Label: "Cache Tokens", Percentage: cachePct, Amount: cacheCost},
 	}, nil
 }
 
