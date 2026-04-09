@@ -40,6 +40,8 @@ export const api = {
     return get(`/agents/${agentId}/sessions${q ? '?' + q : ''}`)
   },
   getSession: (agentId, sessionId) => get(`/agents/${agentId}/sessions/${sessionId}`),
+  getRunTrace: (agentId, sessionId, runId) =>
+    get(`/agents/${agentId}/sessions/${sessionId}/runs/${encodeURIComponent(runId)}/trace`),
   listEvents: (agentId, params = {}) => {
     const q = new URLSearchParams(params).toString()
     return get(`/agents/${agentId}/events${q ? '?' + q : ''}`)
