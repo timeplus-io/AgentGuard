@@ -79,7 +79,7 @@ export default function Threats() {
       <Sidebar />
       <TopNav />
       <Footer />
-      <main className="pl-64 pt-16 pb-8 min-h-screen">
+      <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-8">
           <PageHeader
             title="Threats"

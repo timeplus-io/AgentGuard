@@ -56,7 +56,7 @@ export default function AgentList() {
       <Sidebar />
       <TopNav />
       <Footer />
-      <main className="pl-64 pt-16 pb-8 min-h-screen">
+      <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-8 max-w-7xl w-full mx-auto">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">

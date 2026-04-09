@@ -75,7 +75,7 @@ export default function Investigate() {
       <Sidebar />
       <TopNav />
       <Footer />
-      <main className="pl-64 pt-16 pb-8 min-h-screen">
+      <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 flex flex-col gap-6" style={{ height: 'calc(100vh - 64px)' }}>
           <PageHeader
             title="SQL Console"

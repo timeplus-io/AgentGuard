@@ -108,7 +108,7 @@ export default function RuleDetail() {
     return (
       <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
         <Sidebar /><TopNav /><Footer />
-        <main className="pl-64 pt-16 pb-8 min-h-screen">
+        <main className="pl-sidebar pt-16 pb-8 min-h-screen">
           <div className="p-6 lg:p-10 space-y-6">
             {[1,2,3].map(i => <div key={i} className="bg-[#1d1a25] rounded-sm h-32 animate-pulse" />)}
           </div>
@@ -121,7 +121,7 @@ export default function RuleDetail() {
     return (
       <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
         <Sidebar /><TopNav /><Footer />
-        <main className="pl-64 pt-16 pb-8 min-h-screen flex items-center justify-center">
+        <main className="pl-sidebar pt-16 pb-8 min-h-screen flex items-center justify-center">
           <p className="text-zinc-500">Rule not found.</p>
         </main>
       </div>
@@ -170,7 +170,7 @@ export default function RuleDetail() {
         </div>
       )}
 
-      <main className="pl-64 pt-16 pb-8 min-h-screen">
+      <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
 
           {/* Back link */}
