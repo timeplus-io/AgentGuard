@@ -218,6 +218,7 @@ type DailySpend struct {
 type TokenBreakdown struct {
 	Label      string  `json:"label"`
 	Percentage int     `json:"percentage"`
+	Tokens     int64   `json:"tokens"`
 	Amount     float64 `json:"amount"`
 }
 

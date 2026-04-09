@@ -303,6 +303,9 @@ func queryCostTokenBreakdown(cfg *config.TimeplusConfig) ([]models.TokenBreakdow
 SELECT
   e.provider,
   e.model,
+  sum(to_int64(json_extract_string(e.event_data, 'usage', 'input')))                        AS input_tokens,
+  sum(to_int64(json_extract_string(e.event_data, 'usage', 'output')))                       AS output_tokens,
+  sum(to_int64(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))   AS cache_tokens,
   sum(to_int64(json_extract_string(e.event_data, 'usage', 'input')))
     * any(p.input_cost_per_million) / 1000000.0                                              AS input_cost,
   sum(to_int64(json_extract_string(e.event_data, 'usage', 'output')))
@@ -320,26 +323,30 @@ GROUP BY e.provider, e.model`
 		return nil, err
 	}
 
+	var inputTokens, outputTokens, cacheTokens int64
 	var inputCost, outputCost, cacheCost float64
 	for _, r := range rows {
+		inputTokens += parseInt64(r["input_tokens"])
+		outputTokens += parseInt64(r["output_tokens"])
+		cacheTokens += parseInt64(r["cache_tokens"])
 		inputCost += parseFloat64(r["input_cost"])
 		outputCost += parseFloat64(r["output_cost"])
 		cacheCost += parseFloat64(r["cache_cost"])
 	}
 
-	totalCost := inputCost + outputCost + cacheCost
-
+	// Percentages are based on token count, not cost — so they're meaningful even for free models.
+	totalTokens := inputTokens + outputTokens + cacheTokens
 	inputPct, outputPct, cachePct := 0, 0, 0
-	if totalCost > 0 {
-		inputPct = int(inputCost / totalCost * 100)
-		outputPct = int(outputCost / totalCost * 100)
+	if totalTokens > 0 {
+		inputPct = int(float64(inputTokens) / float64(totalTokens) * 100)
+		outputPct = int(float64(outputTokens) / float64(totalTokens) * 100)
 		cachePct = 100 - inputPct - outputPct // ensure sum is exactly 100
 	}
 
 	return []models.TokenBreakdown{
-		{Label: "Input Tokens", Percentage: inputPct, Amount: inputCost},
-		{Label: "Output Tokens", Percentage: outputPct, Amount: outputCost},
-		{Label: "Cache Tokens", Percentage: cachePct, Amount: cacheCost},
+		{Label: "Input Tokens", Percentage: inputPct, Tokens: inputTokens, Amount: inputCost},
+		{Label: "Output Tokens", Percentage: outputPct, Tokens: outputTokens, Amount: outputCost},
+		{Label: "Cache Tokens", Percentage: cachePct, Tokens: cacheTokens, Amount: cacheCost},
 	}, nil
 }
 
