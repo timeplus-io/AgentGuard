@@ -542,14 +542,21 @@ func CreateRule(cfg *config.Config) gin.HandlerFunc {
 			body.Severity = "warning"
 		}
 
-		ruleID := "custom-" + strconv.FormatInt(time.Now().UnixMilli(), 10)
+		ruleID := "custom-" + strconv.FormatInt(time.Now().UnixNano(), 10)
 
 		// Substitute placeholders so the stored SQL is self-contained.
 		escapedName := strings.ReplaceAll(body.Name, "'", "''")
+
+		// finalSQL: substituted SQL used verbatim for MV creation (single-escaped SQL literals).
 		finalSQL := strings.ReplaceAll(body.QuerySQL, "'__rule_id__'", "'"+ruleID+"'")
 		finalSQL = strings.ReplaceAll(finalSQL, "'__rule_name__'", "'"+escapedName+"'")
 
-		escapedSQL := strings.ReplaceAll(finalSQL, "'", "''")
+		// escapedSQL: escape the raw SQL for embedding in a VALUES string, then substitute
+		// (avoids double-escaping: escape first, then replace the now-doubled placeholder quotes).
+		escapedSQL := strings.ReplaceAll(body.QuerySQL, "'", "''")
+		escapedSQL = strings.ReplaceAll(escapedSQL, "''__rule_id__''", "'"+ruleID+"'")
+		escapedSQL = strings.ReplaceAll(escapedSQL, "''__rule_name__''", "'"+escapedName+"'")
+
 		insertSQL := fmt.Sprintf(
 			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
 			ruleID,
@@ -562,7 +569,8 @@ func CreateRule(cfg *config.Config) gin.HandlerFunc {
 			strings.ReplaceAll(body.HookSources, "'", "''"),
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "insert failed: " + err.Error()})
+			log.Printf("rules: create rule insert: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "insert failed"})
 			return
 		}
 
