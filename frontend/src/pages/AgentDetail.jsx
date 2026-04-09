@@ -227,7 +227,7 @@ function EventRow({ event }) {
 
 function SessionHeader({ sessionDetail }) {
   const isEnded = sessionDetail.status === 'ended'
-  const sid = sessionDetail.session_id
+  const sid = sessionDetail.session_id ?? ''
   const shortId = sid.length > 20 ? sid.slice(0, 20) + '…' : sid
   return (
     <div className="px-5 py-3 border-b border-[#574149]/20 flex items-center gap-4 shrink-0 bg-[#1d1a25]">
@@ -236,7 +236,7 @@ function SessionHeader({ sessionDetail }) {
         <span className={`w-1.5 h-1.5 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
         {isEnded ? 'Ended' : 'Active'}
       </span>
-      <span className="text-[10px] text-zinc-500">{sessionDetail.runs.length} Runs</span>
+      <span className="text-[10px] text-zinc-500">{sessionDetail.runs?.length ?? 0} Runs</span>
       <span className="text-[10px] text-zinc-500">{sessionDetail.total_tool_calls ?? 0} Tool Calls</span>
     </div>
   )
@@ -553,13 +553,15 @@ export default function AgentDetail() {
 
             {/* Tab bar */}
             {selectedSession && (
-              <div className="flex border-b border-[#574149]/20 shrink-0">
+              <div role="tablist" className="flex border-b border-[#574149]/20 shrink-0">
                 {[
                   { id: 'timeline', label: 'Timeline' },
                   { id: 'raw', label: 'Raw Events' },
                 ].map(tab => (
                   <button
                     key={tab.id}
+                    role="tab"
+                    aria-selected={activeTab === tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={`px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-colors border-b-2 ${
                       activeTab === tab.id
