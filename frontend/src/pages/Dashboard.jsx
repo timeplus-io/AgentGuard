@@ -4,6 +4,7 @@ import TopNav from '../components/TopNav'
 import Footer from '../components/Footer'
 import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
+import LiveAgentActivity from '../components/LiveAgentActivity'
 
 const staticThreats = [
   {
@@ -51,19 +52,6 @@ const staticThreats = [
     iconColor: 'text-zinc-500',
   },
 ]
-
-const staticAgents = [
-  { id: 'Shield-Core-01', status: 'ACTIVE', env: 'Production-US-East', throughput: '1,204 tokens/sec', lastAction: '2 mins ago', dotColor: 'bg-emerald-500' },
-  { id: 'Customer-Exp-Alpha', status: 'ACTIVE', env: 'Production-EU-West', throughput: '890 tokens/sec', lastAction: 'Just now', dotColor: 'bg-emerald-500' },
-  { id: 'Internal-Dev-Bot', status: 'SUSPENDED', env: 'Staging-Sandbox', throughput: '0 tokens/sec', lastAction: '14 mins ago', dotColor: 'bg-[#ffb4ab]' },
-  { id: 'Reporting-Agent-v2', status: 'THROTTLED', env: 'Production-US-East', throughput: '120 tokens/sec', lastAction: '1 min ago', dotColor: 'bg-amber-500' },
-]
-
-const statusColors = {
-  ACTIVE: 'text-emerald-400 bg-emerald-400/10',
-  SUSPENDED: 'text-[#ffb4ab] bg-[#ffb4ab]/10',
-  THROTTLED: 'text-amber-500 bg-amber-500/10',
-}
 
 const categories = [
   { label: 'LLM01: Prompt Injection', pct: 32 },
@@ -205,43 +193,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Recent Agent Activity */}
-          <div className="bg-[#2c2834] rounded-sm overflow-hidden">
-            <div className="p-6 border-b border-[#574149]/10">
-              <h3 className="text-base font-semibold text-[#e7dff0]">Recent Agent Activity</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-[#1d1a25]">
-                  <tr>
-                    <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Agent ID</th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Status</th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Environment</th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Throughput</th>
-                    <th className="px-6 py-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-right">Last Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#574149]/10">
-                  {staticAgents.map(agent => (
-                    <tr key={agent.id} className="hover:bg-[#211e29] transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2 h-2 ${agent.dotColor} rounded-full`}></div>
-                          <span className="text-xs font-semibold text-[#e7dff0]">{agent.id}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-sm ${statusColors[agent.status]}`}>{agent.status}</span>
-                      </td>
-                      <td className="px-6 py-4 text-xs text-zinc-400 font-mono">{agent.env}</td>
-                      <td className="px-6 py-4 text-xs text-zinc-400">{agent.throughput}</td>
-                      <td className="px-6 py-4 text-[10px] text-zinc-500 text-right font-mono uppercase">{agent.lastAction}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <LiveAgentActivity timeRange="-1h" limit={10} />
         </div>
       </main>
     </div>
