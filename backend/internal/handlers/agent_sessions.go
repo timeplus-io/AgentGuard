@@ -247,6 +247,32 @@ ORDER BY start_time ASC`,
 			return
 		}
 
+		// Second query: session-level counters (no run_id filter, catches session_end).
+		statsSQL := fmt.Sprintf(`
+SELECT
+    count_if(hook_name = 'session_end')      AS has_ended,
+    count_if(hook_name = 'before_tool_call') AS total_tool_calls
+FROM table(agentshield_hook_events)
+WHERE deployment_id = '%s'
+  AND agent_id      = '%s'
+  AND session_id    = '%s'`,
+			deploymentID, agentID, sessionID)
+
+		statsRows, err := timeplus.Query(&cfg.Timeplus, statsSQL)
+		if err != nil {
+			// Non-fatal: degrade gracefully if stats query fails.
+			statsRows = nil
+		}
+
+		status := "active"
+		totalToolCalls := 0
+		if len(statsRows) > 0 {
+			if parseBool(statsRows[0]["has_ended"]) {
+				status = "ended"
+			}
+			totalToolCalls = parseInt(statsRows[0]["total_tool_calls"])
+		}
+
 		sessionKey := parseStr(runsRows[0]["session_key"])
 
 		runs := make([]models.Run, 0, len(runsRows))
@@ -263,10 +289,12 @@ ORDER BY start_time ASC`,
 		}
 
 		c.JSON(http.StatusOK, models.SessionDetail{
-			SessionID:   sessionID,
-			SessionKey:  sessionKey,
-			SessionType: sessionType(sessionKey),
-			Runs:        runs,
+			SessionID:      sessionID,
+			SessionKey:     sessionKey,
+			SessionType:    sessionType(sessionKey),
+			Status:         status,
+			TotalToolCalls: totalToolCalls,
+			Runs:           runs,
 		})
 	}
 }
