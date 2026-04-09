@@ -298,3 +298,157 @@ WHERE deployment_id = '%s'
 		})
 	}
 }
+
+// hookKind maps a hook name to a span kind used for waterfall colouring.
+func hookKind(hookName string) string {
+	switch hookName {
+	case "llm_input", "llm_output", "before_model_resolve", "before_prompt_build", "before_agent_reply":
+		return "llm"
+	case "before_tool_call", "after_tool_call", "tool_result_persist":
+		return "tool"
+	default:
+		return "lifecycle"
+	}
+}
+
+// GetRunTrace handles GET /api/agents/:id/sessions/:session_id/runs/:run_id/trace.
+// It builds a waterfall purely from agentshield_hook_events: every event for the
+// run becomes a span whose duration is the gap to the next event (or to run end
+// for the last event). No OTel dependency.
+func GetRunTrace(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		deploymentID, agentID, ok := splitAgentID(c.Param("id"))
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format"})
+			return
+		}
+
+		sessionID := c.Param("session_id")
+		if !idPartRe.MatchString(sessionID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session_id format"})
+			return
+		}
+
+		runID := c.Param("run_id")
+		if !runIDRe.MatchString(runID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid run_id format"})
+			return
+		}
+
+		// Fetch all hook events for this run in chronological order.
+		eventsSQL := fmt.Sprintf(`
+SELECT hook_name, event_time, tool_name, provider, model,
+       hook_decision, block_reason, event_data
+FROM table(agentshield_hook_events)
+WHERE deployment_id = '%s'
+  AND agent_id      = '%s'
+  AND session_id    = '%s'
+  AND run_id        = '%s'
+ORDER BY event_time ASC`,
+			deploymentID, agentID, sessionID, runID)
+
+		rows, err := timeplus.Query(&cfg.Timeplus, eventsSQL)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
+			return
+		}
+		if len(rows) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "run not found"})
+			return
+		}
+
+		// Derive run bounds from first and last event.
+		firstMs := parseTime(rows[0]["event_time"]).UnixMilli()
+		lastMs := parseTime(rows[len(rows)-1]["event_time"]).UnixMilli()
+		runDurationMs := lastMs - firstMs
+		if runDurationMs <= 0 {
+			runDurationMs = 1
+		}
+
+		spans := make([]models.TraceSpan, 0, len(rows)+1)
+
+		// Root span covers the full run window.
+		spans = append(spans, models.TraceSpan{
+			SpanID:     runID,
+			ParentID:   "",
+			Kind:       "run",
+			Name:       "run",
+			StartMs:    firstMs,
+			DurationMs: runDurationMs,
+			Status:     "ok",
+			Attributes: map[string]string{},
+		})
+
+		// One child span per hook event; duration = gap to the next event.
+		for i, row := range rows {
+			hookName := parseStr(row["hook_name"])
+			evtMs := parseTime(row["event_time"]).UnixMilli()
+
+			var durationMs int64
+			if i+1 < len(rows) {
+				nextMs := parseTime(rows[i+1]["event_time"]).UnixMilli()
+				durationMs = nextMs - evtMs
+			} else {
+				durationMs = lastMs - evtMs
+			}
+			if durationMs < 0 {
+				durationMs = 0
+			}
+
+			// Determine status.
+			status := "ok"
+			hookDecision := parseStr(row["hook_decision"])
+			if hookDecision == "block" {
+				status = "blocked"
+			}
+
+			// Build attributes from the structured columns.
+			attrs := map[string]string{}
+			if tn := parseStr(row["tool_name"]); tn != "" {
+				attrs["tool_name"] = tn
+			}
+			if m := parseStr(row["model"]); m != "" {
+				attrs["model"] = m
+			}
+			if p := parseStr(row["provider"]); p != "" {
+				attrs["provider"] = p
+			}
+			if hookDecision != "" && hookDecision != "observe" {
+				attrs["hook_decision"] = hookDecision
+			}
+			if br := parseStr(row["block_reason"]); br != "" {
+				attrs["block_reason"] = br
+			}
+
+			// Extract useful fields from event_data JSON.
+			if ed := parseStr(row["event_data"]); ed != "" {
+				var data map[string]interface{}
+				if json.Unmarshal([]byte(ed), &data) == nil {
+					if errMsg, ok := data["error"].(string); ok && errMsg != "" {
+						status = "error"
+						attrs["error"] = errMsg
+					}
+					if dur, ok := data["durationMs"].(float64); ok {
+						attrs["duration_ms"] = fmt.Sprintf("%.0f", dur)
+					}
+					if tcid, ok := data["toolCallId"].(string); ok {
+						attrs["tool_call_id"] = tcid
+					}
+				}
+			}
+
+			spans = append(spans, models.TraceSpan{
+				SpanID:     fmt.Sprintf("evt-%d", i),
+				ParentID:   runID,
+				Kind:       hookKind(hookName),
+				Name:       hookName,
+				StartMs:    evtMs,
+				DurationMs: durationMs,
+				Status:     status,
+				Attributes: attrs,
+			})
+		}
+
+		c.JSON(http.StatusOK, models.TraceResponse{Spans: spans})
+	}
+}

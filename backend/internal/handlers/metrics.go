@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,10 +35,19 @@ func parseInt64(v any) int64 {
 	switch n := v.(type) {
 	case float64:
 		return int64(n)
-	case interface{ Int64() (int64, error) }:
+	case json.Number:
 		if i, err := n.Int64(); err == nil {
 			return i
 		}
+		// Fallback for uint64 values that exceed int64 max (e.g., very large counters).
+		// strconv is available via json.Number's underlying string.
+		if u, err := strconv.ParseUint(string(n), 10, 64); err == nil {
+			return int64(u)
+		}
+	case int64:
+		return n
+	case uint64:
+		return int64(n)
 	}
 	return 0
 }

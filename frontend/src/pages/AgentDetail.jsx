@@ -399,6 +399,122 @@ function buildRunData(events) {
   return { runInfo, steps }
 }
 
+// ── RunWaterfall ──────────────────────────────────────────────────────────────
+
+function RunWaterfall({ spans }) {
+  const [expandedSpan, setExpandedSpan] = useState(null)
+
+  if (!spans || spans.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+        <span className="material-symbols-outlined text-4xl">account_tree</span>
+        <p className="text-sm">No trace data available for this run</p>
+      </div>
+    )
+  }
+
+  const root = spans.find(s => s.parent_id === '')
+  if (!root) return null
+
+  const rootStart = root.start_ms
+  const totalMs = root.duration_ms || 1
+
+  // Build a depth map so nested spans (run→llm→tool) render with correct indent.
+  // Spans are sorted with parents before children, so a single forward pass works.
+  const depthMap = {}
+  spans.forEach(s => {
+    const parentDepth = s.parent_id === '' ? -1 : (depthMap[s.parent_id] ?? 0)
+    depthMap[s.span_id] = parentDepth + 1
+  })
+
+  function barColor(span) {
+    if (span.kind === 'run') return '#ffb0cf'        // pink  — run root
+    if (span.status === 'blocked' || span.status === 'error') return '#ffb4ab' // red
+    if (span.kind === 'llm') return '#93c5fd'         // blue  — llm_input / llm_output
+    if (span.kind === 'tool') return '#6ee7b7'        // green — tool calls
+    return '#c4b5fd'                                  // purple — lifecycle events
+  }
+
+  function fmtDuration(ms) {
+    if (ms == null || ms === 0) return '—'
+    if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
+    return `${Math.round(ms)}ms`
+  }
+
+  return (
+    <div className="p-3 space-y-0.5">
+      {spans.map(span => {
+        const depth = depthMap[span.span_id] ?? 0
+        const leftPct = Math.max(0, ((span.start_ms - rootStart) / totalMs) * 100)
+        const widthPct = Math.max(0.5, (span.duration_ms / totalMs) * 100)
+        const color = barColor(span)
+        const isExpanded = expandedSpan === span.span_id
+        const hasAttrs = span.attributes && Object.keys(span.attributes).length > 0
+
+        return (
+          <div key={span.span_id}>
+            <button
+              onClick={() => hasAttrs && setExpandedSpan(isExpanded ? null : span.span_id)}
+              className={`w-full text-left flex items-center gap-3 px-2 py-1.5 rounded-sm transition-colors ${hasAttrs ? 'hover:bg-[#2c2834]/50 cursor-pointer' : 'cursor-default'}`}
+            >
+              {/* Name column */}
+              <div
+                className="w-36 shrink-0 flex items-center gap-1"
+                style={{ paddingLeft: depth * 16 }}
+              >
+                {span.status === 'blocked' && (
+                  <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">block</span>
+                )}
+                {span.status === 'error' && (
+                  <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">error</span>
+                )}
+                <span className="text-[11px] text-[#e7dff0] truncate">{span.name}</span>
+              </div>
+
+              {/* Bar column */}
+              <div className="flex-1 relative h-4 bg-[#0f0c17] rounded-sm overflow-hidden">
+                <div
+                  className="absolute top-0 h-full rounded-sm opacity-80"
+                  style={{
+                    left: `${leftPct}%`,
+                    width: `${widthPct}%`,
+                    backgroundColor: color,
+                    minWidth: 2,
+                  }}
+                />
+              </div>
+
+              {/* Duration column */}
+              <span className="text-[10px] text-zinc-500 w-12 text-right shrink-0 tabular-nums">
+                {fmtDuration(span.duration_ms)}
+              </span>
+
+              {/* Expand indicator */}
+              {hasAttrs && (
+                <span className={`material-symbols-outlined text-[12px] text-zinc-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                  expand_more
+                </span>
+              )}
+            </button>
+
+            {/* Attribute panel */}
+            {isExpanded && hasAttrs && (
+              <div
+                className="mx-2 mb-1 bg-[#0f0c17] rounded-sm px-3 py-2"
+                style={{ marginLeft: depth * 16 + 8 }}
+              >
+                {Object.entries(span.attributes).map(([k, v]) => (
+                  <KVRow key={k} label={k} value={v} />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── RunTimeline ───────────────────────────────────────────────────────────────
 
 function stepDot(step) {
@@ -559,6 +675,8 @@ export default function AgentDetail() {
   const [sessionDetail, setSessionDetail] = useState(null)
   const [events, setEvents] = useState([])
   const [eventsTruncated, setEventsTruncated] = useState(false)
+  const [traceData, setTraceData] = useState(null)
+  const [loadingTrace, setLoadingTrace] = useState(false)
   const [activeTab, setActiveTab] = useState('timeline')
   const [expandedSessions, setExpandedSessions] = useState(new Set())
   const [timePreset, setTimePreset] = useState('24h')
@@ -638,6 +756,16 @@ export default function AgentDetail() {
       .catch(() => { setEvents([]); setEventsTruncated(false) })
       .finally(() => setLoadingEvents(false))
   }, [id, selectedSession, selectedRun, timePreset, refreshTick])
+
+  useEffect(() => {
+    setTraceData(null)
+    if (!selectedRun || !selectedSession || activeTab !== 'trace') return
+    setLoadingTrace(true)
+    api.getRunTrace(id, selectedSession, selectedRun)
+      .then(setTraceData)
+      .catch(() => setTraceData(null))
+      .finally(() => setLoadingTrace(false))
+  }, [id, selectedSession, selectedRun, activeTab])
 
   const selectSession = (sid) => {
     setActiveTab('timeline')
@@ -878,7 +1006,7 @@ export default function AgentDetail() {
               <div role="tablist" className="flex border-b border-[#574149]/20 shrink-0">
                 {[
                   { id: 'timeline', label: 'Timeline' },
-                  { id: 'raw', label: 'Raw Events' },
+                  { id: 'trace',    label: 'Trace' },
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -908,21 +1036,18 @@ export default function AgentDetail() {
                     <p className="text-sm">Select a session from the left to begin</p>
                   </div>
                 )
+              ) : activeTab === 'trace' ? (
+                loadingTrace ? (
+                  <div className="flex items-center justify-center h-full">
+                    <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                  </div>
+                ) : (
+                  <RunWaterfall spans={traceData?.spans ?? []} />
+                )
               ) : loadingEvents ? (
                 <div className="flex items-center justify-center h-full">
                   <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
                 </div>
-              ) : activeTab === 'raw' ? (
-                events.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
-                    <span className="material-symbols-outlined text-4xl">inbox</span>
-                    <p className="text-sm">No events recorded for this session</p>
-                  </div>
-                ) : (
-                  events.map((event, i) => (
-                    <EventRow key={`${event.run_id}-${event.hook_name}-${i}`} event={event} />
-                  ))
-                )
               ) : (
                 // Timeline tab
                 (() => {
