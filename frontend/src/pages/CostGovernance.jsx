@@ -195,7 +195,7 @@ export default function CostGovernance() {
                   <div key={t.label}>
                     <div className="flex justify-between text-xs mb-2">
                       <span className="text-zinc-400">{t.label}</span>
-                      <span className="text-[#e7dff0] font-semibold">{t.percentage}% ({formatDollar(t.amount)})</span>
+                      <span className="text-[#e7dff0] font-semibold">{t.percentage}% ({(t.tokens ?? 0).toLocaleString()} tokens)</span>
                     </div>
                     <div className="h-1.5 w-full bg-[#0f0c17] rounded-full overflow-hidden">
                       <div className={`h-full ${TOKEN_COLORS[t.label] ?? 'bg-zinc-500'}`} style={{ width: `${t.percentage}%` }}></div>
