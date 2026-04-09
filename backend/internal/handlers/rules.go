@@ -24,6 +24,22 @@ var latestVersions = map[string]string{
 	"rp-004": "1.0.0",
 }
 
+const sqlDeletedCustomRules = `
+SELECT
+  rule_id,
+  arg_max(name,               updated_at) AS name,
+  arg_max(version,            updated_at) AS version,
+  arg_max(description,        updated_at) AS description,
+  arg_max(query_sql,          updated_at) AS query_sql,
+  arg_max(severity,           updated_at) AS severity,
+  arg_max(category,           updated_at) AS category,
+  arg_max(fp_rate,            updated_at) AS fp_rate,
+  arg_max(hook_sources,       updated_at) AS hook_sources
+FROM table(agentshield_rules)
+WHERE rule_id LIKE 'custom-%'
+GROUP BY rule_id
+HAVING arg_max(deleted, updated_at) = true`
+
 const sqlCurrentRules = `
 SELECT
   rule_id,
@@ -326,7 +342,9 @@ func ListCatalog(cfg *config.Config) gin.HandlerFunc {
 			FPRate      string `json:"fp_rate"`
 			HookSources string `json:"hook_sources"`
 			Installed   bool   `json:"installed"`
+			IsCustom    bool   `json:"is_custom"`
 		}
+
 		catalog := tp.Catalog()
 		items := make([]CatalogItem, 0, len(catalog))
 		for _, e := range catalog {
@@ -340,8 +358,34 @@ func ListCatalog(cfg *config.Config) gin.HandlerFunc {
 				FPRate:      e.FPRate,
 				HookSources: e.HookSources,
 				Installed:   installedIDs[e.ID],
+				IsCustom:    false,
 			})
 		}
+
+		// Append deleted custom rules so they can be reinstalled.
+		customRows, err := tp.Query(&cfg.Timeplus, sqlDeletedCustomRules)
+		if err != nil {
+			log.Printf("rules: deleted custom rules query failed: %v", err)
+		}
+		for _, row := range customRows {
+			id := strVal(row, "rule_id")
+			if installedIDs[id] {
+				continue // currently installed, skip
+			}
+			items = append(items, CatalogItem{
+				ID:          id,
+				Name:        strVal(row, "name"),
+				Version:     strVal(row, "version"),
+				Description: strVal(row, "description"),
+				Severity:    strVal(row, "severity"),
+				Category:    strVal(row, "category"),
+				FPRate:      strVal(row, "fp_rate"),
+				HookSources: strVal(row, "hook_sources"),
+				Installed:   false,
+				IsCustom:    true,
+			})
+		}
+
 		c.JSON(http.StatusOK, gin.H{"catalog": items})
 	}
 }
