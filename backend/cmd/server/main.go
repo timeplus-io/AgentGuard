@@ -105,6 +105,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.GET("/rules/catalog", handlers.ListCatalog(cfg))
 		api.GET("/rules/mv-status", handlers.MVStatus(cfg))
 		api.POST("/rules/sync", handlers.SyncMVs(cfg))
+		api.POST("/rules", handlers.CreateRule(cfg))
 		api.GET("/rules/:id", handlers.GetRule(cfg))
 		api.POST("/rules/:id/install", handlers.InstallRule(cfg))
 		api.POST("/rules/:id/toggle", handlers.ToggleRule(cfg))
