@@ -12,23 +12,27 @@ import (
 
 func GetDashboard(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Total distinct agents ever seen.
+		// Total distinct agents ever seen (exclude rows with empty agent_id).
 		agentRows, _ := tp.Query(&cfg.Timeplus,
-			`SELECT count(distinct agent_id) AS total FROM table(agentshield_hook_events)`)
+			`SELECT count(distinct agent_id) AS total FROM table(agentshield_hook_events) WHERE agent_id != ''`)
 		totalAgents := 0
 		if len(agentRows) > 0 {
 			totalAgents = int(parseInt64(agentRows[0]["total"]))
 		}
 
-		// Active threats and critical escalations in the last 24 h.
-		threatRows, _ := tp.Query(&cfg.Timeplus, `
-SELECT count() AS total, countIf(severity = 'Critical') AS critical
-FROM table(agentshield_security_events)
-WHERE event_time >= now() - interval 1 day`)
+		// Active threats in the last 24 h.
+		// Uses detected_at (the timestamp column on agentshield_security_events).
+		// countIf is unsupported in Proton — run two separate counts.
+		threatRows, _ := tp.Query(&cfg.Timeplus,
+			`SELECT count() AS total FROM table(agentshield_security_events) WHERE detected_at >= now() - interval 1 day`)
+		criticalRows, _ := tp.Query(&cfg.Timeplus,
+			`SELECT count() AS critical FROM table(agentshield_security_events) WHERE detected_at >= now() - interval 1 day AND severity = 'critical'`)
 		activeThreats, criticalEscalations := 0, 0
 		if len(threatRows) > 0 {
 			activeThreats = int(parseInt64(threatRows[0]["total"]))
-			criticalEscalations = int(parseInt64(threatRows[0]["critical"]))
+		}
+		if len(criticalRows) > 0 {
+			criticalEscalations = int(parseInt64(criticalRows[0]["critical"]))
 		}
 
 		// Estimated LLM cost over the last 24 h.
