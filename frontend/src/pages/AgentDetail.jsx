@@ -429,7 +429,7 @@ function RunWaterfall({ spans }) {
   function fmtDuration(ms) {
     if (ms == null || ms === 0) return '—'
     if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
-    return `${ms}ms`
+    return `${Math.round(ms)}ms`
   }
 
   return (
