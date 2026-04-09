@@ -34,7 +34,7 @@ func Init(cfg *config.TimeplusConfig) error {
 		return fmt.Errorf("timeplus init: creating security streams: %w", err)
 	}
 	if err := createPricingStream(ctx, conn); err != nil {
-		return fmt.Errorf("timeplus init: creating pricing stream: %w", err)
+		log.Printf("timeplus init: warning creating pricing stream: %v", err)
 	}
 	if err := seedPricingData(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning seeding pricing: %v", err)
@@ -649,7 +649,7 @@ CREATE STREAM agentshield_rules
 )`
 
 const ddlPricingStream = `
-CREATE MUTABLE STREAM agentshield_pricing
+CREATE MUTABLE STREAM IF NOT EXISTS agentshield_pricing
 (
   provider                    low_cardinality(string),
   model                       low_cardinality(string),
