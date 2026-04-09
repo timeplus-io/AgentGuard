@@ -36,6 +36,14 @@ function fmtTime(iso) {
   return `${yyyy}-${mo}-${dd} ${hh}:${mm}:${ss} UTC`
 }
 
+function fmtShortTime(iso) {
+  if (!iso) return ''
+  try {
+    return new Date(typeof iso === 'string' ? iso.replace(' ', 'T') : iso)
+      .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch { return '' }
+}
+
 function dotColor(event) {
   if (event.hook_decision === 'block') return '#ffb4ab'
   const n = event.hook_name
@@ -215,6 +223,329 @@ function EventRow({ event }) {
   )
 }
 
+// ── SessionSummary ────────────────────────────────────────────────────────────
+
+function SessionSummary({ sessionDetail }) {
+  const isEnded = sessionDetail.status === 'ended'
+  const runs = sessionDetail.runs ?? []
+  const startedAt = runs[0]?.start_time ?? null
+  const endedAt = isEnded ? (runs[runs.length - 1]?.end_time ?? null) : null
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8">
+      <div className="w-full max-w-lg bg-[#1d1a25] rounded-sm p-6 space-y-6">
+        {/* Session ID */}
+        <div>
+          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1.5">Session ID</p>
+          <code className="text-[13px] font-mono text-[#e7dff0] break-all leading-relaxed">{sessionDetail.session_id}</code>
+        </div>
+
+        {/* Status */}
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
+          <span className={`text-sm font-semibold ${isEnded ? 'text-zinc-500' : 'text-emerald-400'}`}>
+            {isEnded ? 'Ended' : 'Active'}
+          </span>
+          {sessionDetail.session_type && (
+            <span className="ml-2 text-[10px] text-zinc-600 bg-[#2c2834] px-2 py-0.5 rounded-full uppercase tracking-wider">
+              {sessionDetail.session_type}
+            </span>
+          )}
+        </div>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Started</p>
+            <p className="text-xs font-mono text-[#e7dff0]">{startedAt ? fmtTime(startedAt) : '—'}</p>
+          </div>
+          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Ended</p>
+            <p className="text-xs font-mono text-[#e7dff0]">{endedAt ? fmtTime(endedAt) : '—'}</p>
+          </div>
+          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Total Runs</p>
+            <p className="text-2xl font-bold text-[#e7dff0]">{runs.length}</p>
+          </div>
+          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Tool Calls</p>
+            <p className="text-2xl font-bold text-[#e7dff0]">{sessionDetail.total_tool_calls ?? 0}</p>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-zinc-600 text-center">Select a run from the left to view its timeline</p>
+      </div>
+    </div>
+  )
+}
+
+// ── SessionHeader ─────────────────────────────────────────────────────────────
+
+function SessionHeader({ sessionDetail }) {
+  const isEnded = sessionDetail.status === 'ended'
+  const sid = sessionDetail.session_id ?? ''
+  return (
+    <div className="px-5 py-3 border-b border-[#574149]/20 flex flex-wrap items-center gap-x-4 gap-y-1 shrink-0 bg-[#1d1a25]">
+      <code className="text-[11px] font-mono text-[#e7dff0] break-all">{sid}</code>
+      <span className={`flex items-center gap-1.5 text-[10px] font-semibold ${isEnded ? 'text-zinc-500' : 'text-emerald-400'}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
+        {isEnded ? 'Ended' : 'Active'}
+      </span>
+      <span className="text-[10px] text-zinc-500">{sessionDetail.runs?.length ?? 0} Runs</span>
+      <span className="text-[10px] text-zinc-500">{sessionDetail.total_tool_calls ?? 0} Tool Calls</span>
+    </div>
+  )
+}
+
+// ── buildRunData ──────────────────────────────────────────────────────────────
+// Returns { runInfo, steps } for a single run's events.
+// runInfo: general info (model, provider, systemPrompt) shown at top of card.
+// steps: time-ordered events (user input → tool calls → response).
+
+function parseEvtData(evt) {
+  const raw = safeParse(evt?.event_data)
+  return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {}
+}
+
+function buildRunData(events) {
+  const llmIn       = events.find(e => e.hook_name === 'llm_input')
+  const llmOut      = events.find(e => e.hook_name === 'llm_output')
+  const beforeTools = events.filter(e => e.hook_name === 'before_tool_call')
+  const afterTools  = events.filter(e => e.hook_name === 'after_tool_call')
+
+  const llmInData = llmIn ? parseEvtData(llmIn) : {}
+
+  // General run info — not time-ordered, shown above the timeline
+  const runInfo = {
+    model:        llmIn?.model    || llmInData.model    || null,
+    provider:     llmIn?.provider || llmInData.provider || null,
+    systemPrompt: llmInData.systemPrompt || null,
+    historyCount: Array.isArray(llmInData.historyMessages) ? llmInData.historyMessages.length : null,
+    imagesCount:  (llmInData.imagesCount > 0) ? llmInData.imagesCount : null,
+  }
+
+  const steps = []
+
+  // ── User Input ────────────────────────────────────────────────────────────
+  // Use event_data.prompt (the direct user message) rather than parsing historyMessages.
+  if (llmIn) {
+    const prompt = llmInData.prompt
+    if (prompt && String(prompt).trim()) {
+      const t = String(prompt).trim()
+      steps.push({
+        type:    'user_input',
+        label:   'User Input',
+        content: t.slice(0, 400) + (t.length > 400 ? '…' : ''),
+      })
+    }
+  }
+
+  // ── Tool Calls (before + after paired by toolCallId, then position) ───────
+  for (let i = 0; i < beforeTools.length; i++) {
+    const before     = beforeTools[i]
+    const beforeData = parseEvtData(before)
+    const blocked    = before.hook_decision === 'block'
+    const toolCallId = beforeData.toolCallId || null
+    const params     = (beforeData.params && typeof beforeData.params === 'object' && Object.keys(beforeData.params).length > 0)
+      ? beforeData.params : null
+
+    // Find matching after_tool_call
+    const after = toolCallId
+      ? afterTools.find(a => parseEvtData(a).toolCallId === toolCallId)
+      : afterTools[i]
+
+    let resultError = null, duration = null
+    if (after) {
+      const afterData = parseEvtData(after)
+      resultError = afterData.error || null
+      duration    = afterData.durationMs ?? null
+    }
+
+    steps.push({
+      type:        'tool_call',
+      label:       blocked ? 'Tool Blocked' : 'Tool Called',
+      content:     before.tool_name || beforeData.toolName || '—',
+      blocked,
+      params,
+      // after_tool_call present means tool completed (success unless resultError set)
+      hasResult:   after != null,
+      resultError,
+      duration,
+    })
+  }
+
+  // ── LLM Response ─────────────────────────────────────────────────────────
+  if (llmOut) {
+    const llmOutData = parseEvtData(llmOut)
+    const usage      = llmOutData.usage ?? llmOutData.usageTotals ?? {}
+    const tokenParts = [
+      usage.input  != null              ? `${fmtTokens(usage.input)} in`           : null,
+      usage.output != null              ? `${fmtTokens(usage.output)} out`          : null,
+      usage.cacheRead != null && usage.cacheRead > 0 ? `${fmtTokens(usage.cacheRead)} cached` : null,
+      usage.total  != null              ? `${fmtTokens(usage.total)} total`         : null,
+    ].filter(Boolean)
+
+    const texts = llmOutData.assistantTexts ?? llmOutData.assistant_texts ?? []
+    const responseText = Array.isArray(texts) ? texts.join('\n').trim() : ''
+
+    steps.push({
+      type:    'llm_response',
+      label:   'Response',
+      tokens:  tokenParts.length > 0 ? tokenParts.join(' · ') : null,
+      content: responseText ? responseText.slice(0, 500) + (responseText.length > 500 ? '…' : '') : null,
+    })
+  }
+
+  return { runInfo, steps }
+}
+
+// ── RunTimeline ───────────────────────────────────────────────────────────────
+
+function stepDot(step) {
+  if (step.type === 'tool_call') return step.blocked ? '#ffb4ab' : '#93c5fd'
+  return '#ffb0cf'
+}
+
+function RunTimeline({ runIndex, run, events }) {
+  const [sysExpanded, setSysExpanded] = useState(false)
+  const rid = run.run_id ?? ''
+  const { runInfo, steps } = buildRunData(events)
+  const start = fmtShortTime(run.start_time)
+  const end   = fmtShortTime(run.end_time)
+  const timeRange = start && end ? `${start} → ${end}` : start || ''
+
+  return (
+    <div className="bg-[#1d1a25] rounded-sm p-5 mb-3 last:mb-0">
+      {/* Run header */}
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <span className="text-xs font-semibold text-[#e7dff0]">Run #{runIndex + 1}</span>
+        <code className="text-[10px] font-mono text-zinc-500 break-all">
+          {rid || '—'}
+        </code>
+        {timeRange && <span className="text-[10px] text-zinc-600">{timeRange}</span>}
+        {run.tool_count > 0 && (
+          <span className="text-[9px] bg-[#93c5fd]/10 text-[#93c5fd] px-1.5 py-0.5 rounded-full">
+            {run.tool_count} tools
+          </span>
+        )}
+        {run.has_block && (
+          <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">block</span>
+        )}
+      </div>
+
+      {/* General run info — model, system prompt (not time-ordered) */}
+      {(runInfo.model || runInfo.systemPrompt) && (
+        <div className="mb-4 bg-[#0f0c17] rounded-sm px-3 py-2.5 space-y-2">
+          {runInfo.model && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="material-symbols-outlined text-[13px] text-zinc-500">smart_toy</span>
+              <span className="text-[10px] text-zinc-300 font-mono">
+                {[runInfo.model, runInfo.provider].filter(Boolean).join(' · ')}
+              </span>
+              {runInfo.historyCount != null && (
+                <span className="text-[10px] text-zinc-500">{runInfo.historyCount} messages in history</span>
+              )}
+              {runInfo.imagesCount != null && (
+                <span className="text-[10px] text-zinc-500">{runInfo.imagesCount} images</span>
+              )}
+            </div>
+          )}
+          {runInfo.systemPrompt && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="material-symbols-outlined text-[13px] text-zinc-500">tune</span>
+                <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wide">System Prompt</span>
+                <button
+                  onClick={() => setSysExpanded(e => !e)}
+                  className="text-[10px] text-zinc-600 hover:text-[#ffb0cf] transition-colors"
+                >
+                  {sysExpanded ? '▲ collapse' : '▼ expand'}
+                </button>
+              </div>
+              <p className="text-[10px] text-zinc-400 break-words leading-relaxed font-mono whitespace-pre-wrap">
+                {sysExpanded
+                  ? runInfo.systemPrompt
+                  : runInfo.systemPrompt.slice(0, 150) + (runInfo.systemPrompt.length > 150 ? '…' : '')}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Timeline steps */}
+      {steps.length === 0 ? (
+        <p className="text-[11px] text-zinc-600">No structured events for this run.</p>
+      ) : (
+        <div>
+          {steps.map((step, i) => (
+            <div key={`${step.type}-${i}`} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div
+                  className="w-2 h-2 rounded-full shrink-0 mt-1"
+                  style={{ backgroundColor: stepDot(step) }}
+                />
+                {i < steps.length - 1 && (
+                  <div className="w-px flex-1 bg-[#574149]/20 my-1" style={{ minHeight: '12px' }} />
+                )}
+              </div>
+              <div className="pb-3 flex-1 min-w-0">
+                <span className={`text-[10px] font-semibold uppercase tracking-wide ${
+                  step.blocked ? 'text-[#ffb4ab]' : 'text-zinc-400'
+                }`}>
+                  {step.label}
+                </span>
+
+                {/* Main content: tool name or prompt text or response text */}
+                {step.content && (
+                  <p className="text-xs text-[#e7dff0] mt-0.5 break-words leading-relaxed whitespace-pre-wrap">
+                    {step.content}
+                  </p>
+                )}
+
+                {/* Tool params (key-value) */}
+                {step.params && (
+                  <div className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5 space-y-0.5">
+                    {Object.entries(step.params).map(([k, v]) => (
+                      <div key={k} className="grid grid-cols-[90px_1fr] gap-1.5">
+                        <span className="text-[10px] text-zinc-500 truncate">{k}</span>
+                        <span className="text-[10px] font-mono text-zinc-300 break-all whitespace-pre-wrap">
+                          {typeof v === 'object' ? JSON.stringify(v) : String(v ?? '—')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Tool result: success/fail indicator + error reason */}
+                {step.type === 'tool_call' && step.hasResult && (
+                  <div className="mt-1.5 flex items-start gap-2">
+                    {step.resultError ? (
+                      <>
+                        <span className="material-symbols-outlined text-[13px] text-[#ffb4ab] shrink-0 mt-0.5">cancel</span>
+                        <span className="text-[10px] text-[#ffb4ab] break-words">{step.resultError}</span>
+                      </>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                        <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                        Success{step.duration != null ? ` · ${step.duration} ms` : ''}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Token usage (llm_response) */}
+                {step.tokens && (
+                  <p className="text-[10px] text-zinc-500 mt-0.5">{step.tokens}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AgentDetail() {
@@ -227,9 +558,9 @@ export default function AgentDetail() {
   const [sessions, setSessions] = useState([])
   const [sessionDetail, setSessionDetail] = useState(null)
   const [events, setEvents] = useState([])
-  const [eventsTotal, setEventsTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(100)
+  const [eventsTruncated, setEventsTruncated] = useState(false)
+  const [activeTab, setActiveTab] = useState('timeline')
+  const [expandedSessions, setExpandedSessions] = useState(new Set())
   const [timePreset, setTimePreset] = useState('24h')
 
   const [llmMetrics, setLlmMetrics] = useState(null)
@@ -290,27 +621,39 @@ export default function AgentDetail() {
   }, [id, selectedSession, refreshTick])
 
   useEffect(() => {
-    if (!selectedSession && !selectedRun) { setEvents([]); setEventsTotal(0); return }
-    const params = { page, limit }
+    if (!selectedRun) { setEvents([]); setEventsTruncated(false); return }
+    const params = { limit: 500 }
     if (selectedSession) params.session_id = selectedSession
-    if (selectedRun) params.run_id = selectedRun
+    params.run_id = selectedRun
     const since = presetToISO(timePreset)
     if (since) params.since = since
 
     setLoadingEvents(true)
     api.listEvents(id, params)
-      .then(r => { setEvents(r.events ?? []); setEventsTotal(r.total ?? 0) })
-      .catch(() => { setEvents([]); setEventsTotal(0) })
+      .then(r => {
+        const evts = r.events ?? []
+        setEvents(evts)
+        setEventsTruncated((r.total ?? evts.length) > 500)
+      })
+      .catch(() => { setEvents([]); setEventsTruncated(false) })
       .finally(() => setLoadingEvents(false))
-  }, [id, selectedSession, selectedRun, page, limit, timePreset, refreshTick])
+  }, [id, selectedSession, selectedRun, timePreset, refreshTick])
 
   const selectSession = (sid) => {
-    setPage(1)
+    setActiveTab('timeline')
     setSearchParams({ session: sid })
+    setExpandedSessions(prev => {
+      const next = new Set(prev)
+      if (next.has(sid)) {
+        next.delete(sid)
+      } else {
+        next.add(sid)
+      }
+      return next
+    })
   }
 
   const selectRun = (rid) => {
-    setPage(1)
     const params = {}
     if (selectedSession) params.session = selectedSession
     params.run_id = rid
@@ -318,9 +661,6 @@ export default function AgentDetail() {
   }
 
   const isRefreshing = loadingAgent || loadingSessions || loadingEvents
-  const totalPages = Math.max(1, Math.ceil(eventsTotal / limit))
-  const startEvent = eventsTotal === 0 ? 0 : (page - 1) * limit + 1
-  const endEvent = Math.min(page * limit, eventsTotal)
 
   const volumeMetrics = [
     { label: 'Total Events',    value: agent ? agent.event_count     : '—', icon: 'bolt' },
@@ -388,7 +728,7 @@ export default function AgentDetail() {
             <span className="material-symbols-outlined text-sm text-zinc-500">schedule</span>
             <select
               value={timePreset}
-              onChange={e => { setTimePreset(e.target.value); setPage(1) }}
+              onChange={e => setTimePreset(e.target.value)}
               className="bg-[#2c2834] border border-[#574149]/30 text-xs text-zinc-300 rounded-sm px-2 py-1.5 focus:outline-none focus:border-[#ffb0cf]/40 hover:border-[#574149]/60 transition-colors"
             >
               {TIME_PRESETS.map(p => (
@@ -454,7 +794,8 @@ export default function AgentDetail() {
               ) : (
                 sessions.map(session => {
                   const isActive = selectedSession === session.session_id
-                  const runs = isActive && sessionDetail?.runs ? sessionDetail.runs : []
+                  const isExpanded = expandedSessions.has(session.session_id)
+                  const runs = isExpanded && sessionDetail?.runs && isActive ? sessionDetail.runs : []
                   return (
                     <div key={session.session_id}>
                       <button
@@ -471,17 +812,24 @@ export default function AgentDetail() {
                             <span className={`text-xs font-medium truncate ${isActive ? 'text-[#ffb0cf]' : 'text-[#e7dff0]'}`}>
                               {session.session_type}
                             </span>
-                            <span className="text-[9px] bg-[#574149]/30 text-zinc-400 px-1.5 py-0.5 rounded-full shrink-0">
-                              {session.run_count}
-                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[9px] bg-[#574149]/30 text-zinc-400 px-1.5 py-0.5 rounded-full">
+                                {session.run_count}
+                              </span>
+                              {session.run_count > 0 && (
+                                <span className={`material-symbols-outlined text-[12px] transition-transform ${isExpanded && isActive ? 'text-[#ffb0cf] rotate-180' : 'text-zinc-600'}`}>
+                                  expand_more
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-[10px] text-zinc-600 truncate mt-0.5">{session.session_key}</p>
+                          <p className="text-[10px] text-zinc-600 break-all mt-0.5">{session.session_key}</p>
                           <p className="text-[9px] text-zinc-700 font-mono mt-0.5">{fmtTime(session.last_seen)}</p>
                         </div>
                       </button>
 
                       {/* Run list (accordion) */}
-                      {isActive && runs.map((run, idx) => {
+                      {isExpanded && isActive && runs.map((run, idx) => {
                         const isRunActive = selectedRun === run.run_id
                         return (
                           <button
@@ -520,65 +868,121 @@ export default function AgentDetail() {
           {/* Timeline panel */}
           <section className="flex-1 bg-[#211e29] rounded-sm flex flex-col min-w-0 overflow-hidden">
 
+            {/* Session header — only when a run is selected */}
+            {selectedRun && sessionDetail && (
+              <SessionHeader sessionDetail={sessionDetail} />
+            )}
+
+            {/* Tab bar — only when a run is selected */}
+            {selectedRun && (
+              <div role="tablist" className="flex border-b border-[#574149]/20 shrink-0">
+                {[
+                  { id: 'timeline', label: 'Timeline' },
+                  { id: 'raw', label: 'Raw Events' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    role="tab"
+                    aria-selected={activeTab === tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-colors border-b-2 ${
+                      activeTab === tab.id
+                        ? 'border-[#ffb0cf] text-[#ffb0cf]'
+                        : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Event list */}
             <div className="flex-1 overflow-y-auto">
-              {!selectedSession && !selectedRun ? (
-                <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
-                  <span className="material-symbols-outlined text-4xl">timeline</span>
-                  <p className="text-sm">Select a session from the left to view its event timeline</p>
-                </div>
+              {!selectedRun ? (
+                selectedSession && sessionDetail ? (
+                  <SessionSummary sessionDetail={sessionDetail} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                    <span className="material-symbols-outlined text-4xl">timeline</span>
+                    <p className="text-sm">Select a session from the left to begin</p>
+                  </div>
+                )
               ) : loadingEvents ? (
                 <div className="flex items-center justify-center h-full">
                   <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
                 </div>
-              ) : events.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
-                  <span className="material-symbols-outlined text-4xl">inbox</span>
-                  <p className="text-sm">No events recorded for this session</p>
-                </div>
+              ) : activeTab === 'raw' ? (
+                events.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                    <span className="material-symbols-outlined text-4xl">inbox</span>
+                    <p className="text-sm">No events recorded for this session</p>
+                  </div>
+                ) : (
+                  events.map((event, i) => (
+                    <EventRow key={`${event.run_id}-${event.hook_name}-${i}`} event={event} />
+                  ))
+                )
               ) : (
-                events.map((event, i) => (
-                  <EventRow key={`${event.run_id}-${event.hook_name}-${i}`} event={event} />
-                ))
+                // Timeline tab
+                (() => {
+                  // Still loading session detail — don't show "No runs found" yet
+                  if (!sessionDetail) {
+                    return (
+                      <div className="flex items-center justify-center h-full">
+                        <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                      </div>
+                    )
+                  }
+                  const runs = selectedRun
+                    ? (sessionDetail?.runs ?? []).filter(r => r.run_id === selectedRun)
+                    : (sessionDetail?.runs ?? [])
+                  if (runs.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                        <span className="material-symbols-outlined text-4xl">inbox</span>
+                        <p className="text-sm">No runs found for this session</p>
+                      </div>
+                    )
+                  }
+                  // Group events by run_id
+                  const byRun = {}
+                  for (const e of events) {
+                    if (!e.run_id) continue
+                    if (!byRun[e.run_id]) byRun[e.run_id] = []
+                    byRun[e.run_id].push(e)
+                  }
+                  // Sort each run's events by event_time ASC
+                  for (const rid of Object.keys(byRun)) {
+                    byRun[rid].sort((a, b) => {
+                      const ta = new Date(typeof a.event_time === 'string' ? a.event_time.replace(' ', 'T') : a.event_time)
+                      const tb = new Date(typeof b.event_time === 'string' ? b.event_time.replace(' ', 'T') : b.event_time)
+                      return ta - tb
+                    })
+                  }
+                  return (
+                    <div className="p-4">
+                      {runs.map((run) => (
+                        <RunTimeline
+                          key={run.run_id}
+                          runIndex={sessionDetail.runs.findIndex(r => r.run_id === run.run_id)}
+                          run={run}
+                          events={byRun[run.run_id] ?? []}
+                        />
+                      ))}
+                    </div>
+                  )
+                })()
               )}
             </div>
 
-            {/* Pagination */}
-            {(selectedSession || selectedRun) && eventsTotal > 0 && (
-              <div className="flex items-center justify-between px-6 py-3 border-t border-[#574149]/20 shrink-0">
-                <span className="text-[10px] text-zinc-500">
-                  Showing {startEvent}–{endEvent} of {eventsTotal} events
-                </span>
-                <div className="flex items-center gap-3">
-                  <select
-                    value={limit}
-                    onChange={e => { setLimit(Number(e.target.value)); setPage(1) }}
-                    className="bg-[#0f0c17] border border-[#574149]/20 text-xs text-zinc-400 rounded-sm px-2 py-1 focus:outline-none"
-                  >
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                  <button
-                    disabled={page <= 1}
-                    onClick={() => setPage(p => p - 1)}
-                    className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-[#ffb0cf] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-sm">chevron_left</span>
-                    Prev
-                  </button>
-                  <span className="text-[10px] text-zinc-600">{page} / {totalPages}</span>
-                  <button
-                    disabled={page >= totalPages}
-                    onClick={() => setPage(p => p + 1)}
-                    className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-[#ffb0cf] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Next
-                    <span className="material-symbols-outlined text-sm">chevron_right</span>
-                  </button>
-                </div>
+            {eventsTruncated && (
+              <div className="px-6 py-2 border-t border-[#574149]/20 shrink-0 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[14px] text-amber-400">warning</span>
+                <span className="text-[10px] text-amber-400">Showing first 500 events — session has more. Select a specific run from the sidebar to narrow the view.</span>
               </div>
             )}
+
           </section>
         </div>
       </main>

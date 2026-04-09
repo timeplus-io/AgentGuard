@@ -174,10 +174,12 @@ type Run struct {
 
 // SessionDetail is returned by GET /agents/:id/sessions/:session_id.
 type SessionDetail struct {
-	SessionID   string `json:"session_id"`
-	SessionKey  string `json:"session_key"`
-	SessionType string `json:"session_type"`
-	Runs        []Run  `json:"runs"`
+	SessionID      string `json:"session_id"`
+	SessionKey     string `json:"session_key"`
+	SessionType    string `json:"session_type"`
+	Status         string `json:"status"`           // "active" | "ended"
+	TotalToolCalls int    `json:"total_tool_calls"`
+	Runs           []Run  `json:"runs"`
 }
 
 // HookEvent is one row returned by GET /agents/:id/events.
