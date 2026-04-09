@@ -52,6 +52,7 @@ export default function CostGovernance() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [deletingKey, setDeletingKey] = useState(null)
 
   useEffect(() => {
@@ -80,10 +81,12 @@ export default function CostGovernance() {
         output_cost_per_million: parseFloat(form.output_cost_per_million) || 0,
         cache_read_cost_per_million: parseFloat(form.cache_read_cost_per_million) || 0,
       })
+      setSaveError('')
       setShowAddForm(false)
       setForm(EMPTY_FORM)
       fetchPricing()
     } catch {
+      setSaveError('Save failed. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -243,7 +246,7 @@ export default function CostGovernance() {
               <h4 className="text-base font-semibold text-[#e7dff0]">Model Pricing</h4>
               {!showAddForm && (
                 <button
-                  onClick={() => setShowAddForm(true)}
+                  onClick={() => { setShowAddForm(true); setSaveError('') }}
                   className="text-xs text-[#ffb0cf] font-semibold flex items-center gap-1 hover:underline"
                 >
                   <span className="material-symbols-outlined text-xs">add_circle</span>
@@ -270,9 +273,9 @@ export default function CostGovernance() {
                     <tr key={key}>
                       <td className="py-3 font-medium text-[#e7dff0]">{p.provider}</td>
                       <td className="py-3 text-zinc-400">{p.model}</td>
-                      <td className="py-3 text-zinc-400">${p.input_cost_per_million.toFixed(2)}</td>
-                      <td className="py-3 text-zinc-400">${p.output_cost_per_million.toFixed(2)}</td>
-                      <td className="py-3 text-zinc-400">${p.cache_read_cost_per_million.toFixed(2)}</td>
+                      <td className="py-3 text-zinc-400">{formatDollar(p.input_cost_per_million)}</td>
+                      <td className="py-3 text-zinc-400">{formatDollar(p.output_cost_per_million)}</td>
+                      <td className="py-3 text-zinc-400">{formatDollar(p.cache_read_cost_per_million)}</td>
                       <td className="py-3 text-zinc-500">{p.updated_at ? p.updated_at.slice(0, 10) : '—'}</td>
                       <td className="py-3 text-right">
                         <button
@@ -287,6 +290,11 @@ export default function CostGovernance() {
                     </tr>
                   )
                 })}
+                {pricing.length === 0 && !showAddForm && (
+                  <tr>
+                    <td colSpan={7} className="py-4 text-center text-zinc-500 text-xs">No pricing entries. Click "+ Add Model" to add one.</td>
+                  </tr>
+                )}
                 {showAddForm && (
                   <tr>
                     <td className="py-2">
@@ -343,12 +351,13 @@ export default function CostGovernance() {
                           {saving ? '...' : 'Save'}
                         </button>
                         <button
-                          onClick={() => { setShowAddForm(false); setForm(EMPTY_FORM) }}
+                          onClick={() => { setShowAddForm(false); setForm(EMPTY_FORM); setSaveError('') }}
                           className="px-2 py-1 bg-[#37333f] text-zinc-300 text-[10px] font-semibold rounded"
                         >
                           Cancel
                         </button>
                       </div>
+                      {saveError && <p className="text-[10px] text-[#ffb4ab] mt-1 text-right">{saveError}</p>}
                     </td>
                   </tr>
                 )}
