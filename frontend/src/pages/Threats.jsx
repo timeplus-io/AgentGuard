@@ -6,6 +6,7 @@ import Footer from '../components/Footer'
 import PageHeader from '../components/PageHeader'
 import { SeverityBadge } from '../components/Badge'
 import { api } from '../api/client'
+import LiveAgentActivity from '../components/LiveAgentActivity'
 
 const TIME_RANGES = [
   { label: '1h',  value: '-1h' },
@@ -22,12 +23,6 @@ SELECT detected_at, rule_id, rule_name, severity, agent_id,
 FROM agentshield_security_events
 SETTINGS seek_to='${range}'`
 
-const sqlActivity = (range) => `
-SELECT hook_name, event_time, agent_id, tool_name, model, hook_decision
-FROM agentshield_hook_events
-WHERE hook_name IN ('llm_input', 'llm_output', 'before_tool_call', 'after_tool_call')
-SETTINGS seek_to='${range}'`
-
 function formatTs(ts) {
   if (!ts) return '—'
   try {
@@ -35,25 +30,8 @@ function formatTs(ts) {
   } catch { return String(ts) }
 }
 
-function formatEvtTime(ts) {
-  if (!ts) return ''
-  try {
-    return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
-      .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch { return String(ts) }
-}
-
-function formatActivity(evt) {
-  if (evt.hook_name === 'llm_input')       return `called LLM${evt.model ? ` [${evt.model}]` : ''}`
-  if (evt.hook_name === 'llm_output')      return `received LLM response${evt.model ? ` [${evt.model}]` : ''}`
-  if (evt.hook_name === 'before_tool_call') return `invoked tool ${evt.tool_name || '(unknown)'}`
-  if (evt.hook_name === 'after_tool_call')  return `completed tool ${evt.tool_name || '(unknown)'}`
-  return evt.hook_name
-}
-
 export default function Threats() {
   const [threats, setThreats] = useState([])
-  const [liveActivity, setLiveActivity] = useState([])
   const [connected, setConnected] = useState(false)
   const [severity, setSeverity] = useState('All')
   const [category, setCategory] = useState('All Categories')
@@ -62,11 +40,9 @@ export default function Threats() {
   useEffect(() => {
     // Clear existing data when time range changes so old backfill doesn't linger
     setThreats([])
-    setLiveActivity([])
     setConnected(false)
 
     const threatCtrl = new AbortController()
-    const activityCtrl = new AbortController()
 
     async function streamThreats() {
       let first = true
@@ -77,19 +53,9 @@ export default function Threats() {
       setConnected(false)
     }
 
-    async function streamActivity() {
-      for await (const row of api.protonQuery(sqlActivity(timeRange), { signal: activityCtrl.signal })) {
-        setLiveActivity(prev => [row, ...prev].slice(0, 20))
-      }
-    }
-
     streamThreats().catch(e => { if (e?.name !== 'AbortError') setConnected(false) })
-    streamActivity().catch(() => {})
 
-    return () => {
-      threatCtrl.abort()
-      activityCtrl.abort()
-    }
+    return () => { threatCtrl.abort() }
   }, [timeRange])
 
   const filtered = threats
@@ -107,12 +73,6 @@ export default function Threats() {
       const tb = new Date(typeof b.detected_at === 'string' ? b.detected_at.replace(' ', 'T') : b.detected_at)
       return tb - ta
     })
-
-  const sortedActivity = [...liveActivity].sort((a, b) => {
-    const ta = new Date(typeof a.event_time === 'string' ? a.event_time.replace(' ', 'T') : a.event_time)
-    const tb = new Date(typeof b.event_time === 'string' ? b.event_time.replace(' ', 'T') : b.event_time)
-    return tb - ta
-  })
 
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
@@ -251,43 +211,7 @@ export default function Threats() {
             </div>
           </section>
 
-          {/* Live Activity Panel */}
-          <section className="bg-[#2c2834] p-8 rounded-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-5">
-              <span className="material-symbols-outlined text-[120px]">shield_with_heart</span>
-            </div>
-            <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-6 flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-[#ffb0cf] shadow-[0_0_10px_#ffb0cf] animate-pulse" />
-              Live Agent Activity
-              {sortedActivity.length > 0 && (
-                <span className="ml-auto text-[10px] text-zinc-600 font-normal normal-case tracking-normal">
-                  latest {sortedActivity.length}
-                </span>
-              )}
-            </h3>
-            <div className="space-y-3 h-64 overflow-y-auto pr-1">
-              {sortedActivity.length === 0 ? (
-                <p className="text-xs text-zinc-600">Waiting for agent activity…</p>
-              ) : sortedActivity.map((evt) => (
-                <div key={`${evt.event_time}-${evt.agent_id}-${evt.hook_name}`} className="flex items-start gap-4">
-                  <span className="text-[10px] font-mono text-[#ffb0cf] py-0.5 whitespace-nowrap flex-shrink-0">
-                    {formatEvtTime(evt.event_time)}
-                  </span>
-                  <p className="text-xs text-zinc-300">
-                    <span className="font-semibold text-white">{evt.agent_id}</span>
-                    {' '}{formatActivity(evt)}
-                    {evt.hook_decision && evt.hook_decision !== 'allow' && (
-                      <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase ${
-                        evt.hook_decision === 'block'
-                          ? 'bg-red-500/20 text-red-400'
-                          : 'bg-amber-500/20 text-amber-400'
-                      }`}>{evt.hook_decision}</span>
-                    )}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
+          <LiveAgentActivity timeRange={timeRange} />
 
         </div>
       </main>
