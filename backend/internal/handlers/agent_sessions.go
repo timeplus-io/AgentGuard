@@ -374,14 +374,15 @@ WHERE deployment_id = '%s'
 		startNs := startTime.UnixNano()
 		endNs := endTime.UnixNano()
 
-		// The LLM inference span starts when OpenClaw fires the API call — which
-		// typically happens BEFORE the first hook event for the run (e.g. the
-		// `llm_input` hook fires a few ms after the OTel span opens, and
-		// `before_tool_call` fires only after the model has already responded).
-		// Use a 10-minute lookback so OTel spans are never missed due to this
-		// ordering, plus a 60-second forward buffer for spans that close late.
-		const otelLookbackNs = int64(600_000_000_000) // 10 min in nanoseconds
-		const otelForwardNs = int64(60_000_000_000)   // 60 s in nanoseconds
+		// OpenClaw emits ONE openclaw.model.usage span per agent turn. Its timing
+		// is synthesised retrospectively: startTime = Date.now()-durationMs,
+		// endTime = Date.now(). The endTime fires at the same moment as the
+		// llm_output hook (both happen at turn completion), so end_time_ns
+		// (= start_time_ns + duration) is the reliable anchor for run correlation.
+		//
+		// Filter: span end_time_ns falls within the run's hook-event window
+		// (±60 s buffer for minor clock skew between OTel and hook clients).
+		const otelForwardNs = int64(60_000_000_000) // 60 s buffer in nanoseconds
 
 		otelSQL := fmt.Sprintf(`
 SELECT
@@ -392,10 +393,10 @@ SELECT
 FROM table(otel_traces)
 WHERE span_attributes['openclaw.sessionId'] = '%s'
   AND span_name = 'openclaw.model.usage'
-  AND start_time_ns >= %d
-  AND start_time_ns <= %d
+  AND (start_time_ns + duration) >= %d
+  AND (start_time_ns + duration) <= %d
 ORDER BY start_time_ns ASC`,
-			sessionID, startNs-otelLookbackNs, endNs+otelForwardNs)
+			sessionID, startNs, endNs+otelForwardNs)
 
 		var llmSpans []models.TraceSpan // kept for re-parenting tool spans below
 
