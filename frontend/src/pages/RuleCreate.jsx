@@ -103,7 +103,7 @@ export default function RuleCreate() {
     }
   }
 
-  const canSave = form.name.trim() !== '' && sql.trim() !== '' && !saving
+  const canSave = form.name.trim() !== '' && form.description.trim() !== '' && sql.trim() !== '' && !saving
 
   const inputCls = 'bg-[#0f0c17] border border-[#574149]/20 rounded-sm px-3 py-2 text-xs text-[#e7dff0] placeholder-zinc-600 focus:outline-none focus:border-[#ffb0cf]/40'
   const labelCls = 'text-[10px] font-semibold text-zinc-500 uppercase tracking-widest'
@@ -151,8 +151,9 @@ export default function RuleCreate() {
                 <h3 className="text-[10px] font-bold text-[#ffb0cf] tracking-widest uppercase">Rule Metadata</h3>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className={labelCls}>Name *</label>
+                  <label htmlFor="rule-name" className={labelCls}>Name *</label>
                   <input
+                    id="rule-name"
                     type="text"
                     value={form.name}
                     onChange={e => setField('name', e.target.value)}
@@ -162,8 +163,9 @@ export default function RuleCreate() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className={labelCls}>Description *</label>
+                  <label htmlFor="rule-description" className={labelCls}>Description *</label>
                   <textarea
+                    id="rule-description"
                     value={form.description}
                     onChange={e => setField('description', e.target.value)}
                     placeholder="What does this rule detect?"
@@ -173,8 +175,8 @@ export default function RuleCreate() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className={labelCls}>Severity</label>
-                  <select value={form.severity} onChange={e => setField('severity', e.target.value)} className={inputCls}>
+                  <label htmlFor="rule-severity" className={labelCls}>Severity</label>
+                  <select id="rule-severity" value={form.severity} onChange={e => setField('severity', e.target.value)} className={inputCls}>
                     <option value="critical">Critical</option>
                     <option value="warning">Warning</option>
                     <option value="info">Info</option>
@@ -182,8 +184,9 @@ export default function RuleCreate() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className={labelCls}>Category</label>
+                  <label htmlFor="rule-category" className={labelCls}>Category</label>
                   <input
+                    id="rule-category"
                     type="text"
                     value={form.category}
                     onChange={e => setField('category', e.target.value)}
@@ -193,8 +196,8 @@ export default function RuleCreate() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className={labelCls}>False Positive Rate</label>
-                  <select value={form.fp_rate} onChange={e => setField('fp_rate', e.target.value)} className={inputCls}>
+                  <label htmlFor="rule-fp-rate" className={labelCls}>False Positive Rate</label>
+                  <select id="rule-fp-rate" value={form.fp_rate} onChange={e => setField('fp_rate', e.target.value)} className={inputCls}>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
@@ -202,8 +205,9 @@ export default function RuleCreate() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className={labelCls}>Hook Sources</label>
+                  <label htmlFor="rule-hook-sources" className={labelCls}>Hook Sources</label>
                   <input
+                    id="rule-hook-sources"
                     type="text"
                     value={form.hook_sources}
                     onChange={e => setField('hook_sources', e.target.value)}
