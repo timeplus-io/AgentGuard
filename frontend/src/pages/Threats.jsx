@@ -109,21 +109,27 @@ export default function Threats() {
             <div className="flex flex-col gap-2 flex-1 min-w-[200px]">
               <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Severity</label>
               <div className="flex gap-1">
-                {['Critical', 'Warning', 'Info'].map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setSeverity(prev => prev === s ? 'All' : s)}
-                    className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors ${
-                      severity === s
-                        ? s === 'Critical' ? 'bg-[#93000a] text-[#ffb4ab]'
-                          : s === 'Warning' ? 'bg-[#37333f] text-[#ffb2b8]'
-                          : 'bg-[#2c2834] text-zinc-300'
-                        : 'bg-[#2c2834] text-[#ddbfc8] border border-[#574149]/10'
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
+                {[
+                  { label: 'Critical', activeBg: 'bg-[#93000a]',      activeText: 'text-[#ffb4ab]', inactiveBg: 'bg-[#93000a]/10', inactiveText: 'text-[#ffb4ab]/50', dot: 'bg-[#ffb4ab]', pulse: true  },
+                  { label: 'Warning',  activeBg: 'bg-[#37333f]',      activeText: 'text-[#ffb2b8]', inactiveBg: 'bg-[#37333f]/50', inactiveText: 'text-[#ffb2b8]/50', dot: 'bg-[#ffb2b8]', pulse: false },
+                  { label: 'Info',     activeBg: 'bg-[#2c2834]',      activeText: 'text-zinc-400',  inactiveBg: 'bg-transparent',  inactiveText: 'text-zinc-600',     dot: 'bg-zinc-500',  pulse: false },
+                ].map(({ label, activeBg, activeText, inactiveBg, inactiveText, dot, pulse }) => {
+                  const isActive = severity === label
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => setSeverity(prev => prev === label ? 'All' : label)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-black uppercase rounded-full transition-colors border ${
+                        isActive
+                          ? `${activeBg} ${activeText} border-transparent`
+                          : `${inactiveBg} ${inactiveText} border-[#574149]/20`
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${dot} ${isActive && pulse ? 'animate-pulse' : ''}`} />
+                      {label}
+                    </button>
+                  )
+                })}
               </div>
             </div>
             <div className="flex flex-col gap-2 flex-1 min-w-[200px]">
