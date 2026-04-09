@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -33,10 +34,14 @@ func parseInt64(v any) int64 {
 	switch n := v.(type) {
 	case float64:
 		return int64(n)
-	case interface{ Int64() (int64, error) }:
+	case json.Number:
 		if i, err := n.Int64(); err == nil {
 			return i
 		}
+	case int64:
+		return n
+	case uint64:
+		return int64(n)
 	}
 	return 0
 }

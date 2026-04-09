@@ -536,11 +536,10 @@ ORDER BY event_time ASC`,
 
 		// Sort all spans by StartMs ascending (root first, then children).
 		sort.Slice(spans, func(i, j int) bool {
-			if spans[i].ParentID == "" {
-				return true
-			}
-			if spans[j].ParentID == "" {
-				return false
+			iRoot := spans[i].ParentID == ""
+			jRoot := spans[j].ParentID == ""
+			if iRoot != jRoot {
+				return iRoot
 			}
 			return spans[i].StartMs < spans[j].StartMs
 		})
