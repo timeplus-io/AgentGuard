@@ -242,97 +242,110 @@ function SessionHeader({ sessionDetail }) {
   )
 }
 
-// ── buildRunSteps ─────────────────────────────────────────────────────────────
+// ── buildRunData ──────────────────────────────────────────────────────────────
+// Returns { runInfo, steps } for a single run's events.
+// runInfo: general info (model, provider, systemPrompt) shown at top of card.
+// steps: time-ordered events (user input → tool calls → response).
 
-function buildRunSteps(events) {
+function parseEvtData(evt) {
+  const raw = safeParse(evt?.event_data)
+  return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {}
+}
+
+function buildRunData(events) {
+  const llmIn       = events.find(e => e.hook_name === 'llm_input')
+  const llmOut      = events.find(e => e.hook_name === 'llm_output')
+  const beforeTools = events.filter(e => e.hook_name === 'before_tool_call')
+  const afterTools  = events.filter(e => e.hook_name === 'after_tool_call')
+
+  const llmInData = llmIn ? parseEvtData(llmIn) : {}
+
+  // General run info — not time-ordered, shown above the timeline
+  const runInfo = {
+    model:        llmIn?.model    || llmInData.model    || null,
+    provider:     llmIn?.provider || llmInData.provider || null,
+    systemPrompt: llmInData.systemPrompt || null,
+    historyCount: Array.isArray(llmInData.historyMessages) ? llmInData.historyMessages.length : null,
+    imagesCount:  (llmInData.imagesCount > 0) ? llmInData.imagesCount : null,
+  }
+
   const steps = []
-  const llmIn  = events.find(e => e.hook_name === 'llm_input')
-  const llmOut = events.find(e => e.hook_name === 'llm_output')
-  const tools  = events.filter(e => e.hook_name === 'before_tool_call')
 
-  // User Input: last user-role message from llm_input event_data
+  // ── User Input ────────────────────────────────────────────────────────────
+  // Use event_data.prompt (the direct user message) rather than parsing historyMessages.
   if (llmIn) {
-    const raw = safeParse(llmIn.event_data)
-    const data = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {}
-    const msgs = Array.isArray(data.messages) ? data.messages : []
-    const userMsg = [...msgs].reverse().find(m => m.role === 'user')
-    if (userMsg) {
-      const rawContent = typeof userMsg.content === 'string'
-        ? userMsg.content
-        : Array.isArray(userMsg.content)
-          ? userMsg.content.map(c => (typeof c === 'string' ? c : c?.text ?? '')).join('')
-          : ''
-      if (rawContent.trim()) {
-        const t = rawContent.trim()
-        steps.push({
-          type: 'user_input',
-          label: 'User Input',
-          content: t.slice(0, 200) + (t.length > 200 ? '…' : ''),
-        })
-      }
-    }
-  }
-
-  // LLM Input: model + provider from llm_input event
-  if (llmIn) {
-    const raw = safeParse(llmIn.event_data)
-    const data = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {}
-    const msgs = Array.isArray(data.messages) ? data.messages : []
-    const msgCount = msgs.length || data.messageCount || data.message_count || 0
-    const model    = llmIn.model    || data.model    || '—'
-    const provider = llmIn.provider || data.provider || ''
-    steps.push({
-      type:     'llm_input',
-      label:    'LLM Input',
-      content:  [model, provider].filter(Boolean).join(' · '),
-      sub:      msgCount ? `${msgCount} messages` : undefined,
-    })
-  }
-
-  // Tool Called / Tool Blocked: one step per before_tool_call event
-  for (const e of tools) {
-    const blocked = e.hook_decision === 'block'
-    steps.push({
-      type:     'tool_call',
-      label:    blocked ? 'Tool Blocked' : 'Tool Called',
-      content:  e.tool_name || '—',
-      blocked,
-    })
-  }
-
-  // LLM Output: token usage + finish reason from llm_output event
-  if (llmOut) {
-    const raw  = safeParse(llmOut.event_data)
-    const data = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {}
-    const usage  = data.usage ?? data.usageTotals ?? {}
-    const inTok  = usage.input  ?? usage.input_tokens  ?? usage.inputTokens
-    const outTok = usage.output ?? usage.output_tokens ?? usage.outputTokens
-    const finish = data.finishReason ?? data.finish_reason ?? data.stop_reason ?? ''
-    const tokenStr = [
-      inTok  != null ? `${fmtTokens(inTok)} in`  : null,
-      outTok != null ? `${fmtTokens(outTok)} out` : null,
-    ].filter(Boolean).join(' · ') || '—'
-    steps.push({
-      type:    'llm_output',
-      label:   'LLM Output',
-      content: tokenStr,
-      sub:     finish || undefined,
-    })
-
-    // Final Response: last assistantTexts entry from llm_output event_data
-    const texts   = data.assistantTexts ?? data.assistant_texts ?? []
-    const lastTxt = Array.isArray(texts) ? texts[texts.length - 1] : ''
-    if (lastTxt && String(lastTxt).trim()) {
-      const t = String(lastTxt).trim()
+    const prompt = llmInData.prompt
+    if (prompt && String(prompt).trim()) {
+      const t = String(prompt).trim()
       steps.push({
-        type:    'final_response',
-        label:   'Final Response',
-        content: t.slice(0, 300) + (t.length > 300 ? '…' : ''),
+        type:    'user_input',
+        label:   'User Input',
+        content: t.slice(0, 400) + (t.length > 400 ? '…' : ''),
       })
     }
   }
 
-  return steps
+  // ── Tool Calls (before + after paired by toolCallId, then position) ───────
+  for (let i = 0; i < beforeTools.length; i++) {
+    const before     = beforeTools[i]
+    const beforeData = parseEvtData(before)
+    const blocked    = before.hook_decision === 'block'
+    const toolCallId = beforeData.toolCallId || null
+    const params     = (beforeData.params && typeof beforeData.params === 'object' && Object.keys(beforeData.params).length > 0)
+      ? beforeData.params : null
+
+    // Find matching after_tool_call
+    const after = toolCallId
+      ? afterTools.find(a => parseEvtData(a).toolCallId === toolCallId)
+      : afterTools[i]
+
+    let result = null, resultError = null, duration = null
+    if (after) {
+      const afterData = parseEvtData(after)
+      const raw = afterData.result
+      if (raw != null) {
+        const s = typeof raw === 'string' ? raw : JSON.stringify(raw)
+        result = s.trim().slice(0, 400) + (s.trim().length > 400 ? '…' : '')
+      }
+      resultError = afterData.error || null
+      duration    = afterData.durationMs ?? null
+    }
+
+    steps.push({
+      type:        'tool_call',
+      label:       blocked ? 'Tool Blocked' : 'Tool Called',
+      content:     before.tool_name || beforeData.toolName || '—',
+      blocked,
+      params,
+      result,
+      resultError,
+      duration,
+    })
+  }
+
+  // ── LLM Response ─────────────────────────────────────────────────────────
+  if (llmOut) {
+    const llmOutData = parseEvtData(llmOut)
+    const usage      = llmOutData.usage ?? llmOutData.usageTotals ?? {}
+    const tokenParts = [
+      usage.input  != null              ? `${fmtTokens(usage.input)} in`           : null,
+      usage.output != null              ? `${fmtTokens(usage.output)} out`          : null,
+      usage.cacheRead != null && usage.cacheRead > 0 ? `${fmtTokens(usage.cacheRead)} cached` : null,
+      usage.total  != null              ? `${fmtTokens(usage.total)} total`         : null,
+    ].filter(Boolean)
+
+    const texts = llmOutData.assistantTexts ?? llmOutData.assistant_texts ?? []
+    const responseText = Array.isArray(texts) ? texts.join('\n').trim() : ''
+
+    steps.push({
+      type:    'llm_response',
+      label:   'Response',
+      tokens:  tokenParts.length > 0 ? tokenParts.join(' · ') : null,
+      content: responseText ? responseText.slice(0, 500) + (responseText.length > 500 ? '…' : '') : null,
+    })
+  }
+
+  return { runInfo, steps }
 }
 
 // ── RunTimeline ───────────────────────────────────────────────────────────────
@@ -343,8 +356,9 @@ function stepDot(step) {
 }
 
 function RunTimeline({ runIndex, run, events }) {
+  const [sysExpanded, setSysExpanded] = useState(false)
   const rid = run.run_id ?? ''
-  const steps = buildRunSteps(events)
+  const { runInfo, steps } = buildRunData(events)
   const start = fmtShortTime(run.start_time)
   const end   = fmtShortTime(run.end_time)
   const timeRange = start && end ? `${start} → ${end}` : start || ''
@@ -352,7 +366,7 @@ function RunTimeline({ runIndex, run, events }) {
   return (
     <div className="bg-[#1d1a25] rounded-sm p-5 mb-3 last:mb-0">
       {/* Run header */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
         <span className="text-xs font-semibold text-[#e7dff0]">Run #{runIndex + 1}</span>
         <code className="text-[10px] font-mono text-zinc-500">
           {rid.length > 16 ? rid.slice(0, 16) + '…' : rid || '—'}
@@ -368,7 +382,46 @@ function RunTimeline({ runIndex, run, events }) {
         )}
       </div>
 
-      {/* Steps */}
+      {/* General run info — model, system prompt (not time-ordered) */}
+      {(runInfo.model || runInfo.systemPrompt) && (
+        <div className="mb-4 bg-[#0f0c17] rounded-sm px-3 py-2.5 space-y-2">
+          {runInfo.model && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="material-symbols-outlined text-[13px] text-zinc-500">smart_toy</span>
+              <span className="text-[10px] text-zinc-300 font-mono">
+                {[runInfo.model, runInfo.provider].filter(Boolean).join(' · ')}
+              </span>
+              {runInfo.historyCount != null && (
+                <span className="text-[10px] text-zinc-500">{runInfo.historyCount} messages in history</span>
+              )}
+              {runInfo.imagesCount != null && (
+                <span className="text-[10px] text-zinc-500">{runInfo.imagesCount} images</span>
+              )}
+            </div>
+          )}
+          {runInfo.systemPrompt && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="material-symbols-outlined text-[13px] text-zinc-500">tune</span>
+                <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wide">System Prompt</span>
+                <button
+                  onClick={() => setSysExpanded(e => !e)}
+                  className="text-[10px] text-zinc-600 hover:text-[#ffb0cf] transition-colors"
+                >
+                  {sysExpanded ? '▲ collapse' : '▼ expand'}
+                </button>
+              </div>
+              <p className="text-[10px] text-zinc-400 break-words leading-relaxed font-mono whitespace-pre-wrap">
+                {sysExpanded
+                  ? runInfo.systemPrompt
+                  : runInfo.systemPrompt.slice(0, 150) + (runInfo.systemPrompt.length > 150 ? '…' : '')}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Timeline steps */}
       {steps.length === 0 ? (
         <p className="text-[11px] text-zinc-600">No structured events for this run.</p>
       ) : (
@@ -390,11 +443,45 @@ function RunTimeline({ runIndex, run, events }) {
                 }`}>
                   {step.label}
                 </span>
-                <p className="text-xs text-[#e7dff0] mt-0.5 break-words leading-relaxed">
-                  {step.content}
-                </p>
-                {step.sub && (
-                  <p className="text-[10px] text-zinc-500 mt-0.5">{step.sub}</p>
+
+                {/* Main content: tool name or prompt text or response text */}
+                {step.content && (
+                  <p className="text-xs text-[#e7dff0] mt-0.5 break-words leading-relaxed whitespace-pre-wrap">
+                    {step.content}
+                  </p>
+                )}
+
+                {/* Tool params (key-value) */}
+                {step.params && (
+                  <div className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5 space-y-0.5">
+                    {Object.entries(step.params).map(([k, v]) => (
+                      <div key={k} className="grid grid-cols-[90px_1fr] gap-1.5">
+                        <span className="text-[10px] text-zinc-500 truncate">{k}</span>
+                        <span className="text-[10px] font-mono text-zinc-300 break-all whitespace-pre-wrap">
+                          {typeof v === 'object' ? JSON.stringify(v) : String(v ?? '—')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Tool result / error / duration */}
+                {(step.result != null || step.resultError || step.duration != null) && (
+                  <div className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5">
+                    {step.duration != null && (
+                      <span className="text-[10px] text-zinc-600 block mb-0.5">{step.duration} ms</span>
+                    )}
+                    {step.resultError ? (
+                      <p className="text-[10px] text-[#ffb4ab] break-words">{step.resultError}</p>
+                    ) : step.result ? (
+                      <p className="text-[10px] font-mono text-zinc-400 break-words whitespace-pre-wrap">{step.result}</p>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* Token usage (llm_response) */}
+                {step.tokens && (
+                  <p className="text-[10px] text-zinc-500 mt-0.5">{step.tokens}</p>
                 )}
               </div>
             </div>
