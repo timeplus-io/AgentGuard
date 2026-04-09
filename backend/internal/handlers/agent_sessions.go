@@ -341,11 +341,8 @@ WHERE deployment_id = '%s'
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
-		if len(boundsRows) == 0 {
-			c.JSON(http.StatusNotFound, gin.H{"error": "run not found"})
-			return
-		}
-
+		// min/max aggregate always returns exactly one row; detect a missing run
+		// by checking whether the aggregated time is zero (NULL in Proton).
 		startTime := parseTime(boundsRows[0]["start_time"])
 		endTime := parseTime(boundsRows[0]["end_time"])
 		if startTime.IsZero() {

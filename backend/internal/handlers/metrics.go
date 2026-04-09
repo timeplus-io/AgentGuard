@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,11 @@ func parseInt64(v any) int64 {
 	case json.Number:
 		if i, err := n.Int64(); err == nil {
 			return i
+		}
+		// Fallback for uint64 values that exceed int64 max (e.g., very large counters).
+		// strconv is available via json.Number's underlying string.
+		if u, err := strconv.ParseUint(string(n), 10, 64); err == nil {
+			return int64(u)
 		}
 	case int64:
 		return n
