@@ -17,6 +17,7 @@ export default function Investigate() {
   const [error, setError] = useState(null)
   const [rowMeta, setRowMeta] = useState(null)
   const [availTables, setAvailTables] = useState([])
+  const [panelOpen, setPanelOpen] = useState(true)
   const abortRef = useRef(null)
   const startTimeRef = useRef(null)
 
@@ -79,16 +80,22 @@ export default function Investigate() {
 
           <div className="flex gap-6 flex-1 overflow-hidden min-h-0">
             {/* Left Panel */}
-            <aside className="w-72 flex flex-col gap-4 overflow-hidden">
-              {/* Table Schemas + Saved Queries */}
+            <aside className={`flex flex-col gap-4 overflow-hidden transition-all duration-200 ${panelOpen ? 'w-72' : 'w-8'}`}>
               <div className="flex-1 flex flex-col bg-[#2c2834] rounded-sm border border-[#574149]/10 overflow-hidden">
-                <div className="p-4 border-b border-[#574149]/10 flex items-center justify-between">
-                  <h3 className="text-[10px] font-bold text-[#ffb0cf] tracking-widest uppercase">Console Resources</h3>
-                  <button onClick={fetchTables} className="text-zinc-500 hover:text-white transition-colors">
-                    <span className="material-symbols-outlined text-xs">refresh</span>
-                  </button>
+                <div className="p-4 border-b border-[#574149]/10 flex items-center justify-between shrink-0">
+                  {panelOpen && <h3 className="text-[10px] font-bold text-[#ffb0cf] tracking-widest uppercase">Console Resources</h3>}
+                  <div className="flex items-center gap-1 ml-auto">
+                    {panelOpen && (
+                      <button onClick={fetchTables} className="text-zinc-500 hover:text-white transition-colors">
+                        <span className="material-symbols-outlined text-xs">refresh</span>
+                      </button>
+                    )}
+                    <button onClick={() => setPanelOpen(v => !v)} className="text-zinc-500 hover:text-white transition-colors" title={panelOpen ? 'Collapse' : 'Expand'}>
+                      <span className="material-symbols-outlined text-xs">{panelOpen ? 'left_panel_close' : 'left_panel_open'}</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                {panelOpen && <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                   <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-2">
                     <span className="material-symbols-outlined text-xs">database</span> Streams
                   </h4>
@@ -116,7 +123,7 @@ export default function Investigate() {
                       ))}
                     </div>
                   )}
-                </div>
+                </div>}
               </div>
             </aside>
 
