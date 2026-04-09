@@ -1007,7 +1007,6 @@ export default function AgentDetail() {
                 {[
                   { id: 'timeline', label: 'Timeline' },
                   { id: 'trace',    label: 'Trace' },
-                  { id: 'raw', label: 'Raw Events' },
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -1049,17 +1048,6 @@ export default function AgentDetail() {
                 <div className="flex items-center justify-center h-full">
                   <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
                 </div>
-              ) : activeTab === 'raw' ? (
-                events.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
-                    <span className="material-symbols-outlined text-4xl">inbox</span>
-                    <p className="text-sm">No events recorded for this session</p>
-                  </div>
-                ) : (
-                  events.map((event, i) => (
-                    <EventRow key={`${event.run_id}-${event.hook_name}-${i}`} event={event} />
-                  ))
-                )
               ) : (
                 // Timeline tab
                 (() => {
