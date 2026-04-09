@@ -299,14 +299,9 @@ function buildRunData(events) {
       ? afterTools.find(a => parseEvtData(a).toolCallId === toolCallId)
       : afterTools[i]
 
-    let result = null, resultError = null, duration = null
+    let resultError = null, duration = null
     if (after) {
       const afterData = parseEvtData(after)
-      const raw = afterData.result
-      if (raw != null) {
-        const s = typeof raw === 'string' ? raw : JSON.stringify(raw)
-        result = s.trim().slice(0, 400) + (s.trim().length > 400 ? '…' : '')
-      }
       resultError = afterData.error || null
       duration    = afterData.durationMs ?? null
     }
@@ -317,7 +312,8 @@ function buildRunData(events) {
       content:     before.tool_name || beforeData.toolName || '—',
       blocked,
       params,
-      result,
+      // after_tool_call present means tool completed (success unless resultError set)
+      hasResult:   after != null,
       resultError,
       duration,
     })
@@ -465,17 +461,20 @@ function RunTimeline({ runIndex, run, events }) {
                   </div>
                 )}
 
-                {/* Tool result / error / duration */}
-                {(step.result != null || step.resultError || step.duration != null) && (
-                  <div className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5">
-                    {step.duration != null && (
-                      <span className="text-[10px] text-zinc-600 block mb-0.5">{step.duration} ms</span>
-                    )}
+                {/* Tool result: success/fail indicator + error reason */}
+                {step.type === 'tool_call' && step.hasResult && (
+                  <div className="mt-1.5 flex items-start gap-2">
                     {step.resultError ? (
-                      <p className="text-[10px] text-[#ffb4ab] break-words">{step.resultError}</p>
-                    ) : step.result ? (
-                      <p className="text-[10px] font-mono text-zinc-400 break-words whitespace-pre-wrap">{step.result}</p>
-                    ) : null}
+                      <>
+                        <span className="material-symbols-outlined text-[13px] text-[#ffb4ab] shrink-0 mt-0.5">cancel</span>
+                        <span className="text-[10px] text-[#ffb4ab] break-words">{step.resultError}</span>
+                      </>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                        <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                        Success{step.duration != null ? ` · ${step.duration} ms` : ''}
+                      </span>
+                    )}
                   </div>
                 )}
 
