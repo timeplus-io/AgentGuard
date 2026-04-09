@@ -329,12 +329,12 @@ GROUP BY e.provider, e.model`
 
 	totalCost := inputCost + outputCost + cacheCost
 
-	inputPct, outputPct := 0, 0
+	inputPct, outputPct, cachePct := 0, 0, 0
 	if totalCost > 0 {
 		inputPct = int(inputCost / totalCost * 100)
 		outputPct = int(outputCost / totalCost * 100)
+		cachePct = 100 - inputPct - outputPct // ensure sum is exactly 100
 	}
-	cachePct := 100 - inputPct - outputPct // ensure sum is exactly 100
 
 	return []models.TokenBreakdown{
 		{Label: "Input Tokens", Percentage: inputPct, Amount: inputCost},
