@@ -749,15 +749,58 @@ export default function AgentDetail() {
                 <div className="flex items-center justify-center h-full">
                   <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
                 </div>
-              ) : events.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
-                  <span className="material-symbols-outlined text-4xl">inbox</span>
-                  <p className="text-sm">No events recorded for this session</p>
-                </div>
+              ) : activeTab === 'raw' ? (
+                events.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                    <span className="material-symbols-outlined text-4xl">inbox</span>
+                    <p className="text-sm">No events recorded for this session</p>
+                  </div>
+                ) : (
+                  events.map((event, i) => (
+                    <EventRow key={`${event.run_id}-${event.hook_name}-${i}`} event={event} />
+                  ))
+                )
               ) : (
-                events.map((event, i) => (
-                  <EventRow key={`${event.run_id}-${event.hook_name}-${i}`} event={event} />
-                ))
+                // Timeline tab
+                (() => {
+                  const runs = selectedRun
+                    ? (sessionDetail?.runs ?? []).filter(r => r.run_id === selectedRun)
+                    : (sessionDetail?.runs ?? [])
+                  if (runs.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                        <span className="material-symbols-outlined text-4xl">inbox</span>
+                        <p className="text-sm">No runs found for this session</p>
+                      </div>
+                    )
+                  }
+                  // Group events by run_id
+                  const byRun = {}
+                  for (const e of events) {
+                    if (!byRun[e.run_id]) byRun[e.run_id] = []
+                    byRun[e.run_id].push(e)
+                  }
+                  // Sort each run's events by event_time ASC
+                  for (const rid of Object.keys(byRun)) {
+                    byRun[rid].sort((a, b) => {
+                      const ta = new Date(typeof a.event_time === 'string' ? a.event_time.replace(' ', 'T') : a.event_time)
+                      const tb = new Date(typeof b.event_time === 'string' ? b.event_time.replace(' ', 'T') : b.event_time)
+                      return ta - tb
+                    })
+                  }
+                  return (
+                    <div className="p-4">
+                      {runs.map((run, idx) => (
+                        <RunTimeline
+                          key={run.run_id}
+                          runIndex={idx}
+                          run={run}
+                          events={byRun[run.run_id] ?? []}
+                        />
+                      ))}
+                    </div>
+                  )
+                })()
               )}
             </div>
 
