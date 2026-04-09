@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentshield/internal/config"
@@ -510,6 +512,76 @@ func AlertWebhook(cfg *config.Config) gin.HandlerFunc {
 			payload.RuleID, payload.Severity, payload.AgentID, payload.Message)
 		GlobalAlertBroadcaster.Publish(payload)
 		c.JSON(http.StatusOK, gin.H{"received": true})
+	}
+}
+
+// CreateRule creates a new custom rule from a user-provided detection SQL query.
+// The SQL body may contain the placeholder literals '__rule_id__' and '__rule_name__'
+// which the handler substitutes with the generated rule ID and the rule name before
+// storing and creating the MV.
+func CreateRule(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			QuerySQL    string `json:"query_sql"`
+			Severity    string `json:"severity"`
+			Category    string `json:"category"`
+			FPRate      string `json:"fp_rate"`
+			HookSources string `json:"hook_sources"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+		if body.Name == "" || body.Description == "" || body.QuerySQL == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name, description, and query_sql are required"})
+			return
+		}
+		if body.Severity == "" {
+			body.Severity = "warning"
+		}
+
+		ruleID := "custom-" + strconv.FormatInt(time.Now().UnixMilli(), 10)
+
+		// Substitute placeholders so the stored SQL is self-contained.
+		escapedName := strings.ReplaceAll(body.Name, "'", "''")
+		finalSQL := strings.ReplaceAll(body.QuerySQL, "'__rule_id__'", "'"+ruleID+"'")
+		finalSQL = strings.ReplaceAll(finalSQL, "'__rule_name__'", "'"+escapedName+"'")
+
+		escapedSQL := strings.ReplaceAll(finalSQL, "'", "''")
+		insertSQL := fmt.Sprintf(
+			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
+			ruleID,
+			escapedName,
+			strings.ReplaceAll(body.Description, "'", "''"),
+			escapedSQL,
+			strings.ReplaceAll(body.Severity, "'", "''"),
+			strings.ReplaceAll(body.Category, "'", "''"),
+			strings.ReplaceAll(body.FPRate, "'", "''"),
+			strings.ReplaceAll(body.HookSources, "'", "''"),
+		)
+		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "insert failed: " + err.Error()})
+			return
+		}
+
+		if err := tp.CreateRuleMV(&cfg.Timeplus, ruleID, finalSQL); err != nil {
+			log.Printf("rules: create custom MV %s: %v", ruleID, err)
+		}
+
+		c.JSON(http.StatusCreated, models.RulePack{
+			ID:          ruleID,
+			Name:        body.Name,
+			Version:     "1.0.0",
+			Description: body.Description,
+			QuerySQL:    finalSQL,
+			Enabled:     true,
+			Severity:    body.Severity,
+			Category:    body.Category,
+			FPRate:      body.FPRate,
+			HookSources: body.HookSources,
+		})
 	}
 }
 
