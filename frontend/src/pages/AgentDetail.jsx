@@ -227,9 +227,6 @@ export default function AgentDetail() {
   const [sessions, setSessions] = useState([])
   const [sessionDetail, setSessionDetail] = useState(null)
   const [events, setEvents] = useState([])
-  const [eventsTotal, setEventsTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(100)
   const [timePreset, setTimePreset] = useState('24h')
 
   const [llmMetrics, setLlmMetrics] = useState(null)
@@ -290,8 +287,8 @@ export default function AgentDetail() {
   }, [id, selectedSession, refreshTick])
 
   useEffect(() => {
-    if (!selectedSession && !selectedRun) { setEvents([]); setEventsTotal(0); return }
-    const params = { page, limit }
+    if (!selectedSession && !selectedRun) { setEvents([]); return }
+    const params = { limit: 500 }
     if (selectedSession) params.session_id = selectedSession
     if (selectedRun) params.run_id = selectedRun
     const since = presetToISO(timePreset)
@@ -299,18 +296,16 @@ export default function AgentDetail() {
 
     setLoadingEvents(true)
     api.listEvents(id, params)
-      .then(r => { setEvents(r.events ?? []); setEventsTotal(r.total ?? 0) })
-      .catch(() => { setEvents([]); setEventsTotal(0) })
+      .then(r => { setEvents(r.events ?? []) })
+      .catch(() => setEvents([]))
       .finally(() => setLoadingEvents(false))
-  }, [id, selectedSession, selectedRun, page, limit, timePreset, refreshTick])
+  }, [id, selectedSession, selectedRun, timePreset, refreshTick])
 
   const selectSession = (sid) => {
-    setPage(1)
     setSearchParams({ session: sid })
   }
 
   const selectRun = (rid) => {
-    setPage(1)
     const params = {}
     if (selectedSession) params.session = selectedSession
     params.run_id = rid
@@ -318,9 +313,6 @@ export default function AgentDetail() {
   }
 
   const isRefreshing = loadingAgent || loadingSessions || loadingEvents
-  const totalPages = Math.max(1, Math.ceil(eventsTotal / limit))
-  const startEvent = eventsTotal === 0 ? 0 : (page - 1) * limit + 1
-  const endEvent = Math.min(page * limit, eventsTotal)
 
   const volumeMetrics = [
     { label: 'Total Events',    value: agent ? agent.event_count     : '—', icon: 'bolt' },
@@ -388,7 +380,7 @@ export default function AgentDetail() {
             <span className="material-symbols-outlined text-sm text-zinc-500">schedule</span>
             <select
               value={timePreset}
-              onChange={e => { setTimePreset(e.target.value); setPage(1) }}
+              onChange={e => setTimePreset(e.target.value)}
               className="bg-[#2c2834] border border-[#574149]/30 text-xs text-zinc-300 rounded-sm px-2 py-1.5 focus:outline-none focus:border-[#ffb0cf]/40 hover:border-[#574149]/60 transition-colors"
             >
               {TIME_PRESETS.map(p => (
@@ -543,42 +535,7 @@ export default function AgentDetail() {
               )}
             </div>
 
-            {/* Pagination */}
-            {(selectedSession || selectedRun) && eventsTotal > 0 && (
-              <div className="flex items-center justify-between px-6 py-3 border-t border-[#574149]/20 shrink-0">
-                <span className="text-[10px] text-zinc-500">
-                  Showing {startEvent}–{endEvent} of {eventsTotal} events
-                </span>
-                <div className="flex items-center gap-3">
-                  <select
-                    value={limit}
-                    onChange={e => { setLimit(Number(e.target.value)); setPage(1) }}
-                    className="bg-[#0f0c17] border border-[#574149]/20 text-xs text-zinc-400 rounded-sm px-2 py-1 focus:outline-none"
-                  >
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                  <button
-                    disabled={page <= 1}
-                    onClick={() => setPage(p => p - 1)}
-                    className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-[#ffb0cf] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-sm">chevron_left</span>
-                    Prev
-                  </button>
-                  <span className="text-[10px] text-zinc-600">{page} / {totalPages}</span>
-                  <button
-                    disabled={page >= totalPages}
-                    onClick={() => setPage(p => p + 1)}
-                    className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-[#ffb0cf] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Next
-                    <span className="material-symbols-outlined text-sm">chevron_right</span>
-                  </button>
-                </div>
-              </div>
-            )}
+
           </section>
         </div>
       </main>
