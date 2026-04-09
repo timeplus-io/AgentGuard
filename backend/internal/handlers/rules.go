@@ -403,15 +403,8 @@ func InstallRule(cfg *config.Config) gin.HandlerFunc {
 		if strings.HasPrefix(id, "custom-") {
 			rows, err := tp.Query(&cfg.Timeplus, fmt.Sprintf(`
 				SELECT
-				  arg_max(name,               updated_at) AS name,
-				  arg_max(version,            updated_at) AS version,
-				  arg_max(description,        updated_at) AS description,
-				  arg_max(query_sql,          updated_at) AS query_sql,
-				  arg_max(severity,           updated_at) AS severity,
-				  arg_max(category,           updated_at) AS category,
-				  arg_max(required_telemetry, updated_at) AS required_telemetry,
-				  arg_max(fp_rate,            updated_at) AS fp_rate,
-				  arg_max(hook_sources,       updated_at) AS hook_sources
+				  arg_max(query_sql, updated_at) AS query_sql,
+				  arg_max(deleted,   updated_at) AS deleted
 				FROM table(agentshield_rules)
 				WHERE rule_id = '%s'
 				GROUP BY rule_id
@@ -421,7 +414,20 @@ func InstallRule(cfg *config.Config) gin.HandlerFunc {
 				return
 			}
 			row := rows[0]
+
+			// Guard: rule is currently active — nothing to reinstall.
+			if !boolVal(row, "deleted") {
+				c.JSON(http.StatusConflict, gin.H{"error": "rule is already installed"})
+				return
+			}
+
 			querySQL := strVal(row, "query_sql")
+
+			// Guard: stored SQL is required to recreate the MV.
+			if querySQL == "" {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "stored rule has no query_sql; cannot reinstall"})
+				return
+			}
 
 			reinstallSQL := fmt.Sprintf(`
 INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
