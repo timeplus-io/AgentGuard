@@ -71,6 +71,29 @@ FROM (
 			activeRules = int(parseInt64(ruleRows[0]["total"]))
 		}
 
+		// Threat categories — count by rule_name in last 24 h, compute percentages.
+		catRows, _ := tp.Query(&cfg.Timeplus, `
+SELECT rule_name, count() AS cnt
+FROM table(agentshield_security_events)
+WHERE detected_at >= now() - interval 1 day
+GROUP BY rule_name
+ORDER BY cnt DESC`)
+		var catTotal int64
+		for _, r := range catRows {
+			catTotal += parseInt64(r["cnt"])
+		}
+		threatCategories := make([]models.ThreatCategory, 0, len(catRows))
+		for _, r := range catRows {
+			pct := 0
+			if catTotal > 0 {
+				pct = int(parseInt64(r["cnt"]) * 100 / catTotal)
+			}
+			threatCategories = append(threatCategories, models.ThreatCategory{
+				Name:       parseStr(r["rule_name"]),
+				Percentage: pct,
+			})
+		}
+
 		costStr := fmt.Sprintf("$%.2f", totalCost)
 
 		c.JSON(http.StatusOK, models.DashboardResponse{
@@ -84,7 +107,7 @@ FROM (
 				ActiveRules:         activeRules,
 			},
 			LiveThreatFeed:   []models.Threat{},
-			ThreatCategories: []models.ThreatCategory{},
+			ThreatCategories: threatCategories,
 			RecentAgents:     []models.Agent{},
 		})
 	}

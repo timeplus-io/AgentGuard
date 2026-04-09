@@ -25,12 +25,6 @@ function formatThreatTime(ts) {
   } catch { return String(ts) }
 }
 
-const categories = [
-  { label: 'LLM01: Prompt Injection', pct: 32 },
-  { label: 'LLM02: Insecure Output', pct: 24 },
-  { label: 'LLM06: Sensitive Data Leak', pct: 18 },
-  { label: 'LLM10: Model Theft', pct: 12 },
-]
 
 export default function Dashboard() {
   const [data, setData] = useState(null)
@@ -174,14 +168,16 @@ export default function Dashboard() {
             <div className="bg-[#2c2834] rounded-sm p-6 flex flex-col">
               <h3 className="text-base font-semibold text-[#e7dff0] mb-6">Threat Categories</h3>
               <div className="space-y-6 flex-1">
-                {categories.map(cat => (
-                  <div key={cat.label}>
+                {(data?.threat_categories ?? []).length === 0 ? (
+                  <p className="text-xs text-zinc-600">No detections in the last 24h.</p>
+                ) : (data?.threat_categories ?? []).map(cat => (
+                  <div key={cat.name}>
                     <div className="flex justify-between items-end mb-2">
-                      <span className="text-xs font-semibold text-[#e7dff0] uppercase tracking-tighter">{cat.label}</span>
-                      <span className="text-xs font-mono text-[#ffb0cf]">{cat.pct}%</span>
+                      <span className="text-xs font-semibold text-[#e7dff0] uppercase tracking-tighter">{cat.name}</span>
+                      <span className="text-xs font-mono text-[#ffb0cf]">{cat.percentage}%</span>
                     </div>
                     <div className="h-1.5 w-full bg-[#1d1a25] rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-[#ffb0cf] to-[#f256a3]" style={{ width: `${cat.pct}%` }}></div>
+                      <div className="h-full bg-gradient-to-r from-[#ffb0cf] to-[#f256a3]" style={{ width: `${cat.percentage}%` }}></div>
                     </div>
                   </div>
                 ))}
