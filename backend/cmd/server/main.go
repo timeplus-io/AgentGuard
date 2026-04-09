@@ -88,7 +88,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	api := r.Group("/api")
 	{
-		api.GET("/dashboard", handlers.GetDashboard)
+		api.GET("/dashboard", handlers.GetDashboard(cfg))
 		api.GET("/agents", handlers.ListAgents(cfg))
 		api.GET("/agents/:id", handlers.GetAgent(cfg))
 		api.GET("/agents/:id/sessions", handlers.ListSessions(cfg))

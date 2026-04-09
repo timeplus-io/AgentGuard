@@ -127,14 +127,13 @@ type ThreatCategory struct {
 }
 
 type KPIData struct {
-	TotalAgents         int     `json:"total_agents"`
-	AgentsDelta         string  `json:"agents_delta"`
-	ActiveThreats       int     `json:"active_threats"`
-	CriticalEscalations int     `json:"critical_escalations"`
-	TotalCost24h        string  `json:"total_cost_24h"`
-	CostStatus          string  `json:"cost_status"`
-	ComplianceCoverage  float64 `json:"compliance_coverage"`
-	ComplianceLabel     string  `json:"compliance_label"`
+	TotalAgents         int    `json:"total_agents"`
+	AgentsDelta         string `json:"agents_delta"`
+	ActiveThreats       int    `json:"active_threats"`
+	CriticalEscalations int    `json:"critical_escalations"`
+	TotalCost24h        string `json:"total_cost_24h"`
+	CostStatus          string `json:"cost_status"`
+	ActiveRules         int    `json:"active_rules"`
 }
 
 type DashboardResponse struct {
