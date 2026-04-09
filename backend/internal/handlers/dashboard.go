@@ -1,67 +1,75 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/mock"
+	"github.com/timeplus/agentshield/internal/config"
 	"github.com/timeplus/agentshield/internal/models"
+	tp "github.com/timeplus/agentshield/internal/timeplus"
 )
 
-func GetDashboard(c *gin.Context) {
-	// Compute KPIs from mock data
-	totalAgents := len(mock.Agents)
-
-	criticalThreats := 0
-	for _, t := range mock.Threats {
-		if t.Severity == "Critical" {
-			criticalThreats++
+func GetDashboard(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Total distinct agents ever seen.
+		agentRows, _ := tp.Query(&cfg.Timeplus,
+			`SELECT count(distinct agent_id) AS total FROM table(agentshield_hook_events)`)
+		totalAgents := 0
+		if len(agentRows) > 0 {
+			totalAgents = int(parseInt64(agentRows[0]["total"]))
 		}
-	}
 
-	// Threat categories
-	categoryCount := map[string]int{}
-	for _, t := range mock.Threats {
-		categoryCount[t.Category]++
-	}
-	total := len(mock.Threats)
-	categories := []models.ThreatCategory{}
-	order := []string{"Prompt Injection", "Data Exfiltration", "Privilege Escalation", "Memory Poisoning", "Supply Chain"}
-	for _, name := range order {
-		count := categoryCount[name]
-		if count > 0 {
-			pct := int(float64(count) / float64(total) * 100)
-			categories = append(categories, models.ThreatCategory{Name: name, Percentage: pct})
+		// Active threats and critical escalations in the last 24 h.
+		threatRows, _ := tp.Query(&cfg.Timeplus, `
+SELECT count() AS total, countIf(severity = 'Critical') AS critical
+FROM table(agentshield_security_events)
+WHERE event_time >= now() - interval 1 day`)
+		activeThreats, criticalEscalations := 0, 0
+		if len(threatRows) > 0 {
+			activeThreats = int(parseInt64(threatRows[0]["total"]))
+			criticalEscalations = int(parseInt64(threatRows[0]["critical"]))
 		}
-	}
 
-	// Latest 10 threats
-	liveFeed := mock.Threats
-	if len(liveFeed) > 10 {
-		liveFeed = liveFeed[:10]
-	}
+		// Estimated LLM cost over the last 24 h.
+		// Groups by (provider, model) so any(price) is deterministic; sums in Go.
+		costRows, _ := tp.Query(&cfg.Timeplus, `
+SELECT
+  (
+    sum(to_int64(json_extract_string(e.event_data, 'usage', 'input')))
+      * any(p.input_cost_per_million)
+    + sum(to_int64(json_extract_string(e.event_data, 'usage', 'output')))
+      * any(p.output_cost_per_million)
+    + sum(to_int64(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
+      * any(p.cache_read_cost_per_million)
+  ) / 1000000.0 AS cost
+FROM table(agentshield_hook_events) AS e
+LEFT JOIN table(agentshield_pricing) AS p
+  ON e.provider = p.provider AND e.model = p.model
+WHERE e.hook_name = 'llm_output'
+  AND e.event_time >= now() - interval 1 day
+GROUP BY e.provider, e.model`)
+		var totalCost float64
+		for _, r := range costRows {
+			totalCost += parseFloat64(r["cost"])
+		}
+		costStr := fmt.Sprintf("$%.2f", totalCost)
+		costStatus := "within budget"
 
-	// 5 most recent agents
-	recentAgents := mock.Agents
-	if len(recentAgents) > 5 {
-		recentAgents = recentAgents[:5]
+		c.JSON(http.StatusOK, models.DashboardResponse{
+			KPIs: models.KPIData{
+				TotalAgents:         totalAgents,
+				AgentsDelta:         "",
+				ActiveThreats:       activeThreats,
+				CriticalEscalations: criticalEscalations,
+				TotalCost24h:        costStr,
+				CostStatus:          costStatus,
+				ComplianceCoverage:  94.7,
+				ComplianceLabel:     "SOC2 + HIPAA",
+			},
+			LiveThreatFeed:   []models.Threat{},
+			ThreatCategories: []models.ThreatCategory{},
+			RecentAgents:     []models.Agent{},
+		})
 	}
-
-	resp := models.DashboardResponse{
-		KPIs: models.KPIData{
-			TotalAgents:         totalAgents,
-			AgentsDelta:         "",
-			ActiveThreats:       len(mock.Threats),
-			CriticalEscalations: criticalThreats,
-			TotalCost24h:        "$0.00",
-			CostStatus:          "within budget",
-			ComplianceCoverage:  94.7,
-			ComplianceLabel:     "SOC2 + HIPAA",
-		},
-		LiveThreatFeed:   liveFeed,
-		ThreatCategories: categories,
-		RecentAgents:     recentAgents,
-	}
-
-	c.JSON(http.StatusOK, resp)
 }

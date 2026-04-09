@@ -73,15 +73,32 @@ export default function Dashboard() {
   }, [])
 
   const kpis = data ? [
-    { label: 'Total Agents', value: data.totalAgents ?? '1,284', delta: '+12 this hour', deltaColor: 'text-emerald-400', icon: 'smart_toy', iconColor: 'text-[#ffb0cf]', deltaIcon: 'trending_up' },
-    { label: 'Active Threats (24h)', value: data.activeThreats ?? '42', delta: '2 Critical escalations', deltaColor: 'text-[#ffb4ab]', icon: 'warning', iconColor: 'text-[#ffb4ab]', deltaIcon: 'priority_high' },
-    { label: 'Total Token Cost (24h)', value: data.tokenCost ?? '$3.2k', delta: 'Within budget limits', deltaColor: 'text-zinc-500', icon: 'monetization_on', iconColor: 'text-[#ffb0cf]', deltaIcon: 'horizontal_rule' },
-    { label: 'Compliance Coverage', value: data.complianceCoverage ?? '98.4%', delta: 'SOC2/HIPAA active', deltaColor: 'text-emerald-400', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle' },
+    {
+      label: 'Total Agents', value: data.kpis.total_agents,
+      delta: data.kpis.agents_delta || 'all time',
+      deltaColor: 'text-emerald-400', icon: 'smart_toy', iconColor: 'text-[#ffb0cf]', deltaIcon: 'trending_up',
+    },
+    {
+      label: 'Active Threats (24h)', value: data.kpis.active_threats,
+      delta: `${data.kpis.critical_escalations} Critical escalations`,
+      deltaColor: data.kpis.critical_escalations > 0 ? 'text-[#ffb4ab]' : 'text-zinc-500',
+      icon: 'warning', iconColor: 'text-[#ffb4ab]', deltaIcon: 'priority_high',
+    },
+    {
+      label: 'Total Token Cost (24h)', value: data.kpis.total_cost_24h,
+      delta: data.kpis.cost_status,
+      deltaColor: 'text-zinc-500', icon: 'monetization_on', iconColor: 'text-[#ffb0cf]', deltaIcon: 'horizontal_rule',
+    },
+    {
+      label: 'Compliance Coverage', value: `${data.kpis.compliance_coverage}%`,
+      delta: data.kpis.compliance_label,
+      deltaColor: 'text-emerald-400', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle',
+    },
   ] : [
-    { label: 'Total Agents', value: '1,284', delta: '+12 this hour', deltaColor: 'text-emerald-400', icon: 'smart_toy', iconColor: 'text-[#ffb0cf]', deltaIcon: 'trending_up' },
-    { label: 'Active Threats (24h)', value: '42', delta: '2 Critical escalations', deltaColor: 'text-[#ffb4ab]', icon: 'warning', iconColor: 'text-[#ffb4ab]', deltaIcon: 'priority_high' },
-    { label: 'Total Token Cost (24h)', value: '$3.2k', delta: 'Within budget limits', deltaColor: 'text-zinc-500', icon: 'monetization_on', iconColor: 'text-[#ffb0cf]', deltaIcon: 'horizontal_rule' },
-    { label: 'Compliance Coverage', value: '98.4%', delta: 'SOC2/HIPAA active', deltaColor: 'text-emerald-400', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle' },
+    { label: 'Total Agents', value: '—', delta: 'loading…', deltaColor: 'text-zinc-600', icon: 'smart_toy', iconColor: 'text-[#ffb0cf]', deltaIcon: 'trending_up' },
+    { label: 'Active Threats (24h)', value: '—', delta: 'loading…', deltaColor: 'text-zinc-600', icon: 'warning', iconColor: 'text-[#ffb4ab]', deltaIcon: 'priority_high' },
+    { label: 'Total Token Cost (24h)', value: '—', delta: 'loading…', deltaColor: 'text-zinc-600', icon: 'monetization_on', iconColor: 'text-[#ffb0cf]', deltaIcon: 'horizontal_rule' },
+    { label: 'Compliance Coverage', value: '—', delta: 'loading…', deltaColor: 'text-zinc-600', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle' },
   ]
 
   return (
