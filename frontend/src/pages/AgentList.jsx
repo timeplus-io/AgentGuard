@@ -12,13 +12,6 @@ import TopNav from '../components/TopNav'
 import Footer from '../components/Footer'
 import { api } from '../api/client'
 
-// Derive a simple status from last_seen timestamp
-function deriveStatus(lastSeen) {
-  if (!lastSeen) return 'IDLE'
-  const ms = Date.now() - new Date(lastSeen).getTime()
-  return ms < 5 * 60 * 1000 ? 'ACTIVE' : 'IDLE'
-}
-
 function timeAgo(iso) {
   if (!iso) return '—'
   const ms = Date.now() - new Date(iso).getTime()
@@ -26,11 +19,6 @@ function timeAgo(iso) {
   if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`
   if (ms < 86400000) return `${Math.floor(ms / 3600000)}h ago`
   return `${Math.floor(ms / 86400000)}d ago`
-}
-
-const statusConfig = {
-  ACTIVE: { dot: 'bg-[#ffb0cf] shadow-[0_0_8px_rgba(255,176,207,0.4)]', badge: 'bg-[#ffb0cf]/10 text-[#ffb0cf] border border-[#ffb0cf]/20' },
-  IDLE: { dot: 'bg-zinc-600', badge: 'bg-zinc-700/40 text-zinc-400 border border-zinc-600/30' },
 }
 
 export default function AgentList() {
@@ -84,7 +72,6 @@ export default function AgentList() {
               <thead>
                 <tr className="bg-[#211e29] text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500">
                   <th className="px-6 py-4">Agent ID</th>
-                  <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">Deployment</th>
                   <th className="px-6 py-4">Events</th>
                   <th className="px-6 py-4">Sessions</th>
@@ -96,33 +83,23 @@ export default function AgentList() {
               <tbody className="divide-y divide-[#574149]/10">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-zinc-500">
+                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
                       <span className="material-symbols-outlined animate-spin text-[#ffb0cf]">refresh</span>
                     </td>
                   </tr>
                 ) : agents.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-zinc-500 text-xs">
+                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500 text-xs">
                       No agents found. Connect an agent to start monitoring.
                     </td>
                   </tr>
                 ) : agents.map(agent => {
-                  const status = deriveStatus(agent.last_seen)
-                  const sc = statusConfig[status] || statusConfig.IDLE
                   const compositeId = `${agent.deployment_id}__${agent.agent_id}`
                   return (
                     <tr key={compositeId} className="group hover:bg-[#2c2834] transition-colors">
                       <td className="px-6 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${sc.dot}`}></div>
-                          <div>
-                            <Link to={`/agents/${compositeId}`} className="text-xs font-medium text-[#e7dff0] font-mono hover:text-[#ffb0cf] transition-colors">{agent.agent_id}</Link>
-                            <div className="text-[10px] text-zinc-500">{agent.deployment_name}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${sc.badge}`}>{status}</span>
+                        <Link to={`/agents/${compositeId}`} className="text-xs font-medium text-[#e7dff0] font-mono hover:text-[#ffb0cf] transition-colors">{agent.agent_id}</Link>
+                        <div className="text-[10px] text-zinc-500">{agent.deployment_name}</div>
                       </td>
                       <td className="px-6 py-5">
                         <div className="text-xs font-mono text-[#e7dff0]">{agent.deployment_id}</div>
