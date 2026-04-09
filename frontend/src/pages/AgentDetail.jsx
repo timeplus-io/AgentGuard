@@ -1028,10 +1028,6 @@ export default function AgentDetail() {
                     <p className="text-sm">Select a session from the left to begin</p>
                   </div>
                 )
-              ) : loadingEvents ? (
-                <div className="flex items-center justify-center h-full">
-                  <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
-                </div>
               ) : activeTab === 'trace' ? (
                 loadingTrace ? (
                   <div className="flex items-center justify-center h-full">
@@ -1040,6 +1036,10 @@ export default function AgentDetail() {
                 ) : (
                   <RunWaterfall spans={traceData?.spans ?? []} />
                 )
+              ) : loadingEvents ? (
+                <div className="flex items-center justify-center h-full">
+                  <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                </div>
               ) : activeTab === 'raw' ? (
                 events.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
