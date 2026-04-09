@@ -242,6 +242,165 @@ function SessionHeader({ sessionDetail }) {
   )
 }
 
+// ── buildRunSteps ─────────────────────────────────────────────────────────────
+
+function buildRunSteps(events) {
+  const steps = []
+  const llmIn  = events.find(e => e.hook_name === 'llm_input')
+  const llmOut = events.find(e => e.hook_name === 'llm_output')
+  const tools  = events.filter(e => e.hook_name === 'before_tool_call')
+
+  // User Input: last user-role message from llm_input event_data
+  if (llmIn) {
+    const data = safeParse(llmIn.event_data) || {}
+    const msgs = Array.isArray(data.messages) ? data.messages : []
+    const userMsg = [...msgs].reverse().find(m => m.role === 'user')
+    if (userMsg) {
+      const raw = typeof userMsg.content === 'string'
+        ? userMsg.content
+        : Array.isArray(userMsg.content)
+          ? userMsg.content.map(c => (typeof c === 'string' ? c : c?.text ?? '')).join('')
+          : ''
+      if (raw.trim()) {
+        const t = raw.trim()
+        steps.push({
+          type: 'user_input',
+          label: 'User Input',
+          content: t.slice(0, 200) + (t.length > 200 ? '…' : ''),
+        })
+      }
+    }
+  }
+
+  // LLM Input: model + provider from llm_input event
+  if (llmIn) {
+    const data = safeParse(llmIn.event_data) || {}
+    const msgs = Array.isArray(data.messages) ? data.messages : []
+    const msgCount = msgs.length || data.messageCount || data.message_count || 0
+    const model    = llmIn.model    || data.model    || '—'
+    const provider = llmIn.provider || data.provider || ''
+    steps.push({
+      type:     'llm_input',
+      label:    'LLM Input',
+      content:  [model, provider].filter(Boolean).join(' · '),
+      sub:      msgCount ? `${msgCount} messages` : undefined,
+    })
+  }
+
+  // Tool Called / Tool Blocked: one step per before_tool_call event
+  for (const e of tools) {
+    const blocked = e.hook_decision === 'block'
+    steps.push({
+      type:     'tool_call',
+      label:    blocked ? 'Tool Blocked' : 'Tool Called',
+      content:  e.tool_name || '—',
+      blocked,
+    })
+  }
+
+  // LLM Output: token usage + finish reason from llm_output event
+  if (llmOut) {
+    const data   = safeParse(llmOut.event_data) || {}
+    const usage  = data.usage ?? data.usageTotals ?? {}
+    const inTok  = usage.input  ?? usage.input_tokens  ?? usage.inputTokens
+    const outTok = usage.output ?? usage.output_tokens ?? usage.outputTokens
+    const finish = data.finishReason ?? data.finish_reason ?? data.stop_reason ?? ''
+    const tokenStr = [
+      inTok  != null ? `${fmtTokens(inTok)} in`  : null,
+      outTok != null ? `${fmtTokens(outTok)} out` : null,
+    ].filter(Boolean).join(' · ') || '—'
+    steps.push({
+      type:    'llm_output',
+      label:   'LLM Output',
+      content: tokenStr,
+      sub:     finish || undefined,
+    })
+
+    // Final Response: last assistantTexts entry from llm_output event_data
+    const texts   = data.assistantTexts ?? data.assistant_texts ?? []
+    const lastTxt = Array.isArray(texts) ? texts[texts.length - 1] : ''
+    if (lastTxt && String(lastTxt).trim()) {
+      const t = String(lastTxt).trim()
+      steps.push({
+        type:    'final_response',
+        label:   'Final Response',
+        content: t.slice(0, 300) + (t.length > 300 ? '…' : ''),
+      })
+    }
+  }
+
+  return steps
+}
+
+// ── RunTimeline ───────────────────────────────────────────────────────────────
+
+function RunTimeline({ runIndex, run, events }) {
+  const steps = buildRunSteps(events)
+  const start = fmtShortTime(run.start_time)
+  const end   = fmtShortTime(run.end_time)
+  const timeRange = start && end ? `${start} → ${end}` : start || ''
+
+  function stepDot(step) {
+    if (step.type === 'tool_call') return step.blocked ? '#ffb4ab' : '#93c5fd'
+    return '#ffb0cf'
+  }
+
+  return (
+    <div className="bg-[#1d1a25] rounded-sm p-5 mb-3 last:mb-0">
+      {/* Run header */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <span className="text-xs font-semibold text-[#e7dff0]">Run #{runIndex + 1}</span>
+        <code className="text-[10px] font-mono text-zinc-500">
+          {run.run_id.length > 16 ? run.run_id.slice(0, 16) + '…' : run.run_id}
+        </code>
+        {timeRange && <span className="text-[10px] text-zinc-600">{timeRange}</span>}
+        {run.tool_count > 0 && (
+          <span className="text-[9px] bg-[#93c5fd]/10 text-[#93c5fd] px-1.5 py-0.5 rounded-full">
+            {run.tool_count} tools
+          </span>
+        )}
+        {run.has_block && (
+          <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">block</span>
+        )}
+      </div>
+
+      {/* Steps */}
+      {steps.length === 0 ? (
+        <p className="text-[11px] text-zinc-600">No structured events for this run.</p>
+      ) : (
+        <div>
+          {steps.map((step, i) => (
+            <div key={i} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div
+                  className="w-2 h-2 rounded-full shrink-0 mt-1"
+                  style={{ backgroundColor: stepDot(step) }}
+                />
+                {i < steps.length - 1 && (
+                  <div className="w-px flex-1 bg-[#574149]/20 my-1" style={{ minHeight: '12px' }} />
+                )}
+              </div>
+              <div className="pb-3 flex-1 min-w-0">
+                <span className={`text-[10px] font-semibold uppercase tracking-wide ${
+                  step.blocked ? 'text-[#ffb4ab]' : 'text-zinc-400'
+                }`}>
+                  {step.label}
+                </span>
+                <p className="text-xs text-[#e7dff0] mt-0.5 break-words leading-relaxed">
+                  {step.content}
+                </p>
+                {step.sub && (
+                  <p className="text-[10px] text-zinc-500 mt-0.5">{step.sub}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AgentDetail() {
