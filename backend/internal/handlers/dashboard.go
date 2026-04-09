@@ -57,8 +57,21 @@ GROUP BY e.provider, e.model`)
 		for _, r := range costRows {
 			totalCost += parseFloat64(r["cost"])
 		}
+		// Active rules — latest state per rule_id via arg_max.
+		ruleRows, _ := tp.Query(&cfg.Timeplus, `
+SELECT count() AS total
+FROM (
+  SELECT rule_id, arg_max(enabled, updated_at) AS active
+  FROM table(agentshield_rules)
+  GROUP BY rule_id
+  HAVING active = true
+)`)
+		activeRules := 0
+		if len(ruleRows) > 0 {
+			activeRules = int(parseInt64(ruleRows[0]["total"]))
+		}
+
 		costStr := fmt.Sprintf("$%.2f", totalCost)
-		costStatus := "within budget"
 
 		c.JSON(http.StatusOK, models.DashboardResponse{
 			KPIs: models.KPIData{
@@ -67,9 +80,8 @@ GROUP BY e.provider, e.model`)
 				ActiveThreats:       activeThreats,
 				CriticalEscalations: criticalEscalations,
 				TotalCost24h:        costStr,
-				CostStatus:          costStatus,
-				ComplianceCoverage:  94.7,
-				ComplianceLabel:     "SOC2 + HIPAA",
+				CostStatus:          "within budget",
+				ActiveRules:         activeRules,
 			},
 			LiveThreatFeed:   []models.Threat{},
 			ThreatCategories: []models.ThreatCategory{},

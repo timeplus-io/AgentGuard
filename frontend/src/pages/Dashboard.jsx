@@ -78,15 +78,15 @@ export default function Dashboard() {
       deltaColor: 'text-zinc-500', icon: 'monetization_on', iconColor: 'text-[#ffb0cf]', deltaIcon: 'horizontal_rule',
     },
     {
-      label: 'Compliance Coverage', value: `${data.kpis.compliance_coverage}%`,
-      delta: data.kpis.compliance_label,
+      label: 'Active Rules', value: data.kpis.active_rules,
+      delta: 'security policies enforced',
       deltaColor: 'text-emerald-400', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle',
     },
   ] : [
     { label: 'Total Agents', value: '—', delta: 'loading…', deltaColor: 'text-zinc-600', icon: 'smart_toy', iconColor: 'text-[#ffb0cf]', deltaIcon: 'trending_up' },
     { label: 'Active Threats (24h)', value: '—', delta: 'loading…', deltaColor: 'text-zinc-600', icon: 'warning', iconColor: 'text-[#ffb4ab]', deltaIcon: 'priority_high' },
     { label: 'Total Token Cost (24h)', value: '—', delta: 'loading…', deltaColor: 'text-zinc-600', icon: 'monetization_on', iconColor: 'text-[#ffb0cf]', deltaIcon: 'horizontal_rule' },
-    { label: 'Compliance Coverage', value: '—', delta: 'loading…', deltaColor: 'text-zinc-600', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle' },
+    { label: 'Active Rules', value: '—', delta: 'loading…', deltaColor: 'text-zinc-600', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle' },
   ]
 
   return (
