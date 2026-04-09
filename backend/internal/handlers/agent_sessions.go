@@ -3,8 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -296,5 +298,253 @@ WHERE deployment_id = '%s'
 			TotalToolCalls: totalToolCalls,
 			Runs:           runs,
 		})
+	}
+}
+
+// GetRunTrace handles GET /api/agents/:id/sessions/:session_id/runs/:run_id/trace
+// It synthesizes a waterfall span tree from agentshield_hook_events (run bounds +
+// tool spans) and otel_traces (LLM call spans). OTel query failure is non-fatal.
+func GetRunTrace(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		deploymentID, agentID, ok := splitAgentID(c.Param("id"))
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format"})
+			return
+		}
+
+		sessionID := c.Param("session_id")
+		if !idPartRe.MatchString(sessionID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session_id format"})
+			return
+		}
+
+		runID := c.Param("run_id")
+		if !runIDRe.MatchString(runID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid run_id format"})
+			return
+		}
+
+		// ── Query 1: run time bounds ──────────────────────────────────────────
+		boundsSQL := fmt.Sprintf(`
+SELECT
+    min(event_time) AS start_time,
+    max(event_time) AS end_time
+FROM table(agentshield_hook_events)
+WHERE deployment_id = '%s'
+  AND agent_id      = '%s'
+  AND session_id    = '%s'
+  AND run_id        = '%s'`,
+			deploymentID, agentID, sessionID, runID)
+
+		boundsRows, err := timeplus.Query(&cfg.Timeplus, boundsSQL)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
+			return
+		}
+		if len(boundsRows) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "run not found"})
+			return
+		}
+
+		startTime := parseTime(boundsRows[0]["start_time"])
+		endTime := parseTime(boundsRows[0]["end_time"])
+		if startTime.IsZero() {
+			c.JSON(http.StatusNotFound, gin.H{"error": "run not found"})
+			return
+		}
+
+		startMs := startTime.UnixMilli()
+		endMs := endTime.UnixMilli()
+		durationMs := endMs - startMs
+		if durationMs <= 0 {
+			durationMs = 1
+		}
+
+		spans := []models.TraceSpan{
+			{
+				SpanID:     runID,
+				ParentID:   "",
+				Kind:       "run",
+				Name:       "run",
+				StartMs:    startMs,
+				DurationMs: durationMs,
+				Status:     "ok",
+				Attributes: map[string]string{},
+			},
+		}
+
+		// ── Query 2: OTel LLM spans (non-fatal) ──────────────────────────────
+		startNs := startTime.UnixNano()
+		endNs := endTime.UnixNano()
+
+		otelSQL := fmt.Sprintf(`
+SELECT
+    span_id,
+    start_time_ns,
+    duration,
+    span_attributes
+FROM table(otel_traces)
+WHERE span_attributes['openclaw.sessionId'] = '%s'
+  AND span_name = 'openclaw.model.usage'
+  AND start_time_ns >= %d
+  AND start_time_ns <= %d
+ORDER BY start_time_ns ASC`,
+			sessionID, startNs, endNs)
+
+		otelRows, otelErr := timeplus.Query(&cfg.Timeplus, otelSQL)
+		if otelErr != nil {
+			log.Printf("GetRunTrace: otel_traces query failed (non-fatal): %v", otelErr)
+		} else {
+			for i, row := range otelRows {
+				spanID := parseStr(row["span_id"])
+				if spanID == "" {
+					spanID = fmt.Sprintf("llm-%d", i)
+				}
+				spanStartMs := parseInt64(row["start_time_ns"]) / 1_000_000
+				spanDurationMs := parseInt64(row["duration"]) / 1_000_000
+
+				attrs := map[string]string{}
+				// span_attributes is a map column; Proton returns it as map[string]interface{}
+				if rawMap, ok := row["span_attributes"].(map[string]interface{}); ok {
+					for k, v := range rawMap {
+						if s, ok2 := v.(string); ok2 {
+							attrs[k] = s
+						}
+					}
+				}
+
+				spans = append(spans, models.TraceSpan{
+					SpanID:     spanID,
+					ParentID:   runID,
+					Kind:       "llm",
+					Name:       "LLM call",
+					StartMs:    spanStartMs,
+					DurationMs: spanDurationMs,
+					Status:     "ok",
+					Attributes: attrs,
+				})
+			}
+		}
+
+		// ── Query 3: tool call spans ──────────────────────────────────────────
+		toolSQL := fmt.Sprintf(`
+SELECT hook_name, event_time, tool_name, hook_decision, block_reason, event_data
+FROM table(agentshield_hook_events)
+WHERE deployment_id = '%s'
+  AND agent_id      = '%s'
+  AND session_id    = '%s'
+  AND run_id        = '%s'
+  AND hook_name     IN ('before_tool_call', 'after_tool_call')
+ORDER BY event_time ASC`,
+			deploymentID, agentID, sessionID, runID)
+
+		toolRows, err := timeplus.Query(&cfg.Timeplus, toolSQL)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
+			return
+		}
+
+		// Collect before/after events; key by toolCallId when present.
+		type toolEvt struct {
+			hookName     string
+			eventTime    time.Time
+			toolName     string
+			hookDecision string
+			blockReason  string
+			eventData    string
+			toolCallID   string
+		}
+
+		var befores []toolEvt
+		afterByID := map[string]toolEvt{}
+		var aftersNoID []toolEvt
+
+		for _, row := range toolRows {
+			evt := toolEvt{
+				hookName:     parseStr(row["hook_name"]),
+				eventTime:    parseTime(row["event_time"]),
+				toolName:     parseStr(row["tool_name"]),
+				hookDecision: parseStr(row["hook_decision"]),
+				blockReason:  parseStr(row["block_reason"]),
+				eventData:    parseStr(row["event_data"]),
+			}
+			var data map[string]interface{}
+			if json.Unmarshal([]byte(evt.eventData), &data) == nil {
+				if tcid, ok := data["toolCallId"].(string); ok {
+					evt.toolCallID = tcid
+				}
+			}
+			if evt.hookName == "before_tool_call" {
+				befores = append(befores, evt)
+			} else {
+				if evt.toolCallID != "" {
+					afterByID[evt.toolCallID] = evt
+				} else {
+					aftersNoID = append(aftersNoID, evt)
+				}
+			}
+		}
+
+		noIDIdx := 0
+		for i, before := range befores {
+			var after *toolEvt
+			if before.toolCallID != "" {
+				if a, ok := afterByID[before.toolCallID]; ok {
+					after = &a
+				}
+			} else if noIDIdx < len(aftersNoID) {
+				a := aftersNoID[noIDIdx]
+				after = &a
+				noIDIdx++
+			}
+
+			spanStartMs := before.eventTime.UnixMilli()
+			var spanDurationMs int64
+			status := "ok"
+			attrs := map[string]string{"tool_name": before.toolName}
+
+			if before.hookDecision == "block" {
+				status = "blocked"
+				if before.blockReason != "" {
+					attrs["block_reason"] = before.blockReason
+				}
+			} else if after != nil {
+				spanDurationMs = after.eventTime.UnixMilli() - spanStartMs
+				var data map[string]interface{}
+				if json.Unmarshal([]byte(after.eventData), &data) == nil {
+					if d, ok := data["durationMs"].(float64); ok {
+						spanDurationMs = int64(d)
+					}
+					if errMsg, ok := data["error"].(string); ok && errMsg != "" {
+						status = "error"
+						attrs["error"] = errMsg
+					}
+				}
+			}
+
+			spans = append(spans, models.TraceSpan{
+				SpanID:     fmt.Sprintf("tool-%d", i),
+				ParentID:   runID,
+				Kind:       "tool",
+				Name:       before.toolName,
+				StartMs:    spanStartMs,
+				DurationMs: spanDurationMs,
+				Status:     status,
+				Attributes: attrs,
+			})
+		}
+
+		// Sort all spans by StartMs ascending (root first, then children).
+		sort.Slice(spans, func(i, j int) bool {
+			if spans[i].ParentID == "" {
+				return true
+			}
+			if spans[j].ParentID == "" {
+				return false
+			}
+			return spans[i].StartMs < spans[j].StartMs
+		})
+
+		c.JSON(http.StatusOK, models.TraceResponse{Spans: spans})
 	}
 }
