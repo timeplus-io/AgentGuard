@@ -33,6 +33,12 @@ func Init(cfg *config.TimeplusConfig) error {
 	if err := createSecurityStreams(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating security streams: %w", err)
 	}
+	if err := createPricingStream(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning creating pricing stream: %v", err)
+	}
+	if err := seedPricingData(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning seeding pricing: %v", err)
+	}
 	if err := seedBuiltinRules(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning seeding rules: %v", err)
 	}
@@ -641,6 +647,67 @@ CREATE STREAM agentshield_rules
   hook_sources       string,
   updated_at         datetime64(3)
 )`
+
+const ddlPricingStream = `
+CREATE MUTABLE STREAM IF NOT EXISTS agentshield_pricing
+(
+  provider                    low_cardinality(string),
+  model                       low_cardinality(string),
+  input_cost_per_million      float64,
+  output_cost_per_million     float64,
+  cache_read_cost_per_million float64,
+  updated_at                  datetime64(3)
+) PRIMARY KEY (provider, model)`
+
+type pricingSeed struct {
+	provider  string
+	model     string
+	inputCPM  float64
+	outputCPM float64
+	cacheCPM  float64
+}
+
+var pricingSeedData = []pricingSeed{
+	{"anthropic", "claude-sonnet-4-6", 3.00, 15.00, 0.30},
+	{"anthropic", "claude-opus-4-6", 15.00, 75.00, 1.50},
+	{"anthropic", "claude-haiku-4-5", 0.80, 4.00, 0.08},
+	{"openai", "gpt-4o", 2.50, 10.00, 1.25},
+	{"openai", "gpt-4o-mini", 0.15, 0.60, 0.075},
+	{"openai", "o3", 10.00, 40.00, 2.50},
+}
+
+func createPricingStream(ctx context.Context, conn proton.Conn) error {
+	return execIfNotExists(ctx, conn, "stream", "agentshield_pricing", ddlPricingStream)
+}
+
+func seedPricingData(ctx context.Context, conn proton.Conn) error {
+	row := conn.QueryRow(ctx, "SELECT count() FROM table(agentshield_pricing)")
+	var count uint64
+	if err := row.Scan(&count); err != nil {
+		return fmt.Errorf("pricing seed check: %w", err)
+	}
+	if count > 0 {
+		log.Printf("timeplus: pricing already seeded (%d records), skipping", count)
+		return nil
+	}
+
+	batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentshield_pricing (provider, model, input_cost_per_million, output_cost_per_million, cache_read_cost_per_million, updated_at)")
+	if err != nil {
+		return fmt.Errorf("pricing seed prepare: %w", err)
+	}
+
+	now := time.Now()
+	for _, p := range pricingSeedData {
+		if err := batch.Append(p.provider, p.model, p.inputCPM, p.outputCPM, p.cacheCPM, now); err != nil {
+			return fmt.Errorf("pricing seed append %s/%s: %w", p.provider, p.model, err)
+		}
+	}
+	if err := batch.Send(); err != nil {
+		return fmt.Errorf("pricing seed send: %w", err)
+	}
+	log.Printf("timeplus: seeded %d pricing entries", len(pricingSeedData))
+	return nil
+}
 
 const ddlNotifyUDF = `CREATE OR REPLACE FUNCTION notify_agentshield_udf(
   rule_id string, rule_name string, severity string,

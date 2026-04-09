@@ -6,71 +6,42 @@ import Footer from '../components/Footer'
 import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
 
-const staticSpendData = [
-  { day: 'MON', amount: 1650 },
-  { day: 'TUE', amount: 2100 },
-  { day: 'WED', amount: 2800 },
-  { day: 'THU', amount: 3200 },
-  { day: 'FRI', amount: 1800 },
-  { day: 'SAT', amount: 1100 },
-  { day: 'SUN', amount: 1950 },
-]
-
-const agentModels = [
-  { model: 'Claude-3.5-Sonnet', agent: 'Security_Bot_Alpha', cost: '$4,210', requests: '2.1M Requests' },
-  { model: 'GPT-4o', agent: 'Investigator_Deep', cost: '$3,842', requests: '1.4M Requests' },
-  { model: 'GPT-4-Turbo', agent: 'Legacy_Auditor', cost: '$2,105', requests: '0.8M Requests' },
-  { model: 'Claude-3-Haiku', agent: 'Quick_Log_Parser', cost: '$685', requests: '8.2M Requests' },
-]
-
-const budgetPolicies = [
-  { name: 'Daily Hard Cap', trigger: '$500/day', enforcement: 'KILL_AGENT', enfClass: 'bg-[#93000a] text-[#ffdad6]', status: 'Active', statusColor: 'text-emerald-400', dot: 'bg-emerald-400' },
-  { name: 'Spike Warning', trigger: '200% Velocity', enforcement: 'NOTIFY_SOC', enfClass: 'bg-[#4b4754] text-[#bcb6c5]', status: 'Active', statusColor: 'text-emerald-400', dot: 'bg-emerald-400' },
-  { name: 'Model Throttling', trigger: 'Budget > 80%', enforcement: 'SWITCH_HAIKU', enfClass: 'bg-[#4b4754] text-[#bcb6c5]', status: 'Paused', statusColor: 'text-zinc-500', dot: 'bg-zinc-600' },
-]
-
-const anomalies = [
-  {
-    border: 'border-[#ffb4ab]',
-    icon: 'warning', iconBg: 'bg-[#93000a]/20 text-[#ffb4ab]',
-    title: 'Runaway token loop detected',
-    sub: 'Agent: Auditor_Bot_04 • Impact: $42.10/min',
-    age: '2H AGO',
-    actions: true,
-  },
-  {
-    border: 'border-[#ffb0cf]',
-    icon: 'trending_up', iconBg: 'bg-[#ffb0cf]/10 text-[#ffb0cf]',
-    title: 'Unexpected model shift',
-    sub: 'Legacy_Auditor routing 100% to GPT-4o',
-    age: '1D AGO',
-    actions: false,
-  },
-  {
-    border: 'border-zinc-700',
-    icon: 'receipt_long', iconBg: 'bg-[#37333f] text-zinc-500',
-    title: 'Budget alert threshold reached',
-    sub: 'Security_Cluster_Global at 80% of limit',
-    age: '2D AGO',
-    actions: false,
-  },
-]
-
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-[#2c2834] border border-[#574149]/20 px-3 py-2 rounded-sm text-xs">
         <p className="text-zinc-400 font-semibold">{label}</p>
-        <p className="text-[#ffb0cf] font-bold">${payload[0].value.toLocaleString()}</p>
+        <p className="text-[#ffb0cf] font-bold">${payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
       </div>
     )
   }
   return null
 }
 
+function formatDollar(n) {
+  if (n == null) return '$0.00'
+  return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+
+const TOKEN_COLORS = {
+  'Input Tokens':  'bg-[#D53F8C]',
+  'Output Tokens': 'bg-[#ffb0cf]',
+  'Cache Tokens':  'bg-[#ffb2b8]',
+}
+
+const EMPTY_FORM = { provider: '', model: '', input_cost_per_million: '', output_cost_per_million: '', cache_read_cost_per_million: '' }
+
 export default function CostGovernance() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [pricing, setPricing] = useState([])
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [deletingKey, setDeletingKey] = useState(null)
+  const [editingKey, setEditingKey] = useState(null)
 
   useEffect(() => {
     api.getCost()
@@ -79,15 +50,80 @@ export default function CostGovernance() {
       .finally(() => setLoading(false))
   }, [])
 
-  const kpis = [
-    { label: 'Month-to-Date Spend', value: data?.monthToDate ?? '$12,842.50', delta: '4.2% from last month', deltaColor: 'text-emerald-400', deltaIcon: 'trending_down' },
-    { label: 'Forecasted Total', value: data?.forecasted ?? '$15,200.00', delta: 'Within 15% of budget', deltaColor: 'text-zinc-500', deltaIcon: null },
-    { label: 'Avg. Token Cost / 1M', value: data?.avgTokenCost ?? '$0.82', delta: 'Optimized by 12%', deltaColor: 'text-[#ffb0cf]', deltaIcon: null },
-    { label: 'Active Policy Breaches', value: data?.policyBreaches ?? '02', delta: 'Requires Attention', deltaColor: 'text-[#ffb4ab]', deltaIcon: null, valueColor: 'text-[#ffb4ab]' },
+  const fetchPricing = () => {
+    api.listPricing()
+      .then(res => setPricing(res.pricing ?? []))
+      .catch(() => {})
+  }
+
+  useEffect(() => { fetchPricing() }, [])
+
+  const handleSave = async () => {
+    if (!form.provider || !form.model) return
+    setSaving(true)
+    try {
+      await api.upsertPricing({
+        provider: form.provider,
+        model: form.model,
+        input_cost_per_million: parseFloat(form.input_cost_per_million) || 0,
+        output_cost_per_million: parseFloat(form.output_cost_per_million) || 0,
+        cache_read_cost_per_million: parseFloat(form.cache_read_cost_per_million) || 0,
+      })
+      setSaveError('')
+      setShowAddForm(false)
+      setForm(EMPTY_FORM)
+      setEditingKey(null)
+      fetchPricing()
+    } catch {
+      setSaveError('Save failed. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEdit = (p) => {
+    setForm({
+      provider: p.provider,
+      model: p.model,
+      input_cost_per_million: String(p.input_cost_per_million),
+      output_cost_per_million: String(p.output_cost_per_million),
+      cache_read_cost_per_million: String(p.cache_read_cost_per_million),
+    })
+    setEditingKey(`${p.provider}/${p.model}`)
+    setShowAddForm(true)
+    setSaveError('')
+  }
+
+  const handleDelete = async (provider, model) => {
+    const key = `${provider}/${model}`
+    setDeletingKey(key)
+    try {
+      await api.deletePricing(provider, model)
+      fetchPricing()
+    } catch {
+    } finally {
+      setDeletingKey(null)
+    }
+  }
+
+  const spendData = data?.daily_spend ?? []
+  const maxSpend = spendData.length > 0 ? Math.max(...spendData.map(d => d.amount)) : 0
+
+  const tokenBreakdown = data?.token_breakdown ?? [
+    { label: 'Input Tokens', percentage: 0, amount: 0 },
+    { label: 'Output Tokens', percentage: 0, amount: 0 },
+    { label: 'Cache Tokens', percentage: 0, amount: 0 },
   ]
 
-  const spendData = data?.dailySpend ?? staticSpendData
-  const maxSpend = Math.max(...spendData.map(d => d.amount))
+  const agentModelCosts = data?.agent_model_costs ?? []
+  const cacheSavings = data?.cache_savings ?? 0
+  const wastedSpend = data?.wasted_spend ?? 0
+
+  const kpis = [
+    { label: 'Month-to-Date Spend', value: formatDollar(data?.month_to_date), delta: '4.2% from last month', deltaColor: 'text-emerald-400', deltaIcon: 'trending_down' },
+    { label: 'Forecasted Total',     value: formatDollar(data?.forecasted),    delta: 'Within 15% of budget', deltaColor: 'text-zinc-500',    deltaIcon: null },
+    { label: 'Avg. Token Cost / 1M', value: formatDollar(data?.avg_token_cost), delta: 'Optimized by 12%',  deltaColor: 'text-[#ffb0cf]',   deltaIcon: null },
+  ]
 
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
@@ -104,12 +140,9 @@ export default function CostGovernance() {
                 <span className="material-symbols-outlined text-[16px]">download</span>
                 Export Report
               </button>
-              <button className="px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-xs font-semibold rounded-sm flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px]">add</span>
-                New Policy
-              </button>
             </>}
           />
+
           {/* KPI Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {kpis.map((kpi, i) => (
@@ -132,8 +165,7 @@ export default function CostGovernance() {
               <div className="flex justify-between items-center mb-8">
                 <h4 className="text-base font-semibold text-[#e7dff0]">Daily Spend Trend</h4>
                 <div className="flex gap-2">
-                  <span className="px-2 py-1 bg-[#37333f] text-[10px] rounded text-[#ffb0cf] border border-[#ffb0cf]/20">7 DAYS</span>
-                  <span className="px-2 py-1 bg-[#0f0c17] text-[10px] rounded text-zinc-500">30 DAYS</span>
+                  <span className="px-2 py-1 bg-[#37333f] text-[10px] rounded text-[#ffb0cf] border border-[#ffb0cf]/20">30 DAYS</span>
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={256}>
@@ -143,10 +175,7 @@ export default function CostGovernance() {
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,176,207,0.05)' }} />
                   <Bar dataKey="amount" radius={[2, 2, 0, 0]}>
                     {spendData.map((entry, index) => (
-                      <Cell
-                        key={index}
-                        fill={entry.amount === maxSpend ? '#ffb0cf' : '#1d1a25'}
-                      />
+                      <Cell key={index} fill={entry.amount === maxSpend ? '#ffb0cf' : '#1d1a25'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -157,18 +186,14 @@ export default function CostGovernance() {
             <div className="bg-[#2c2834] p-6 rounded">
               <h4 className="text-base font-semibold text-[#e7dff0] mb-8">Token Breakdown</h4>
               <div className="space-y-6">
-                {[
-                  { label: 'Input Tokens', pct: 42, amount: '$5,393', color: 'bg-[#D53F8C]' },
-                  { label: 'Output Tokens', pct: 48, amount: '$6,164', color: 'bg-[#ffb0cf]' },
-                  { label: 'Cache Hits', pct: 10, amount: '$1,284', color: 'bg-[#ffb2b8]' },
-                ].map(t => (
+                {tokenBreakdown.map(t => (
                   <div key={t.label}>
                     <div className="flex justify-between text-xs mb-2">
                       <span className="text-zinc-400">{t.label}</span>
-                      <span className="text-[#e7dff0] font-semibold">{t.pct}% ({t.amount})</span>
+                      <span className="text-[#e7dff0] font-semibold">{t.percentage}% ({(t.tokens ?? 0).toLocaleString()} tokens)</span>
                     </div>
                     <div className="h-1.5 w-full bg-[#0f0c17] rounded-full overflow-hidden">
-                      <div className={`h-full ${t.color}`} style={{ width: `${t.pct}%` }}></div>
+                      <div className={`h-full ${TOKEN_COLORS[t.label] ?? 'bg-zinc-500'}`} style={{ width: `${t.percentage}%` }}></div>
                     </div>
                   </div>
                 ))}
@@ -177,11 +202,11 @@ export default function CostGovernance() {
                 <div className="flex items-center gap-4">
                   <div className="flex-1 bg-[#0f0c17] p-3 rounded text-center">
                     <p className="text-[10px] text-zinc-500 uppercase font-semibold">Cache Savings</p>
-                    <p className="text-base font-semibold text-emerald-400">$2,410</p>
+                    <p className="text-base font-semibold text-emerald-400">{formatDollar(cacheSavings)}</p>
                   </div>
                   <div className="flex-1 bg-[#0f0c17] p-3 rounded text-center">
                     <p className="text-[10px] text-zinc-500 uppercase font-semibold">Wasted Spend</p>
-                    <p className="text-base font-semibold text-[#ffb4ab]">$142</p>
+                    <p className="text-base font-semibold text-[#ffb4ab]">{formatDollar(wastedSpend)}</p>
                   </div>
                 </div>
               </div>
@@ -192,86 +217,161 @@ export default function CostGovernance() {
           <div className="bg-[#2c2834] p-6 rounded">
             <h4 className="text-base font-semibold text-[#e7dff0] mb-6">Cost per Agent / Model</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {agentModels.map(am => (
-                <div key={am.agent} className="bg-[#211e29] p-4 rounded flex items-center justify-between group hover:bg-[#37333f] transition-colors">
+              {agentModelCosts.map((am, i) => (
+                <div key={`${am.agent_id}-${am.model}-${i}`} className="bg-[#211e29] p-4 rounded flex items-center justify-between group hover:bg-[#37333f] transition-colors">
                   <div>
-                    <p className="text-[10px] text-zinc-500 uppercase font-semibold mb-1">{am.model}</p>
-                    <h5 className="font-semibold text-[#e7dff0]">{am.agent}</h5>
+                    <p className="text-[10px] text-zinc-500 uppercase font-semibold mb-1">{am.provider} / {am.model}</p>
+                    <h5 className="font-semibold text-[#e7dff0]">{am.agent_name}</h5>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-[#ffb0cf]">{am.cost}</p>
+                    <p className="font-semibold text-[#ffb0cf]">{formatDollar(am.cost)}</p>
                     <p className="text-[10px] text-zinc-500">{am.requests}</p>
                   </div>
                 </div>
               ))}
+              {agentModelCosts.length === 0 && !loading && (
+                <div className="col-span-4 text-center text-zinc-500 text-sm py-4">No cost data available yet.</div>
+              )}
             </div>
           </div>
 
-          {/* Budget Policy + Anomalies */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-[#2c2834] p-6 rounded">
-              <div className="flex justify-between items-center mb-6">
-                <h4 className="text-base font-semibold text-[#e7dff0]">Budget Policy Table</h4>
-                <button className="text-xs text-[#ffb0cf] font-semibold flex items-center gap-1 hover:underline">
+          {/* Model Pricing */}
+          <div className="bg-[#2c2834] p-6 rounded">
+            <div className="flex justify-between items-center mb-6">
+              <h4 className="text-base font-semibold text-[#e7dff0]">Model Pricing</h4>
+              {!showAddForm && (
+                <button
+                  onClick={() => { setShowAddForm(true); setSaveError('') }}
+                  className="text-xs text-[#ffb0cf] font-semibold flex items-center gap-1 hover:underline"
+                >
                   <span className="material-symbols-outlined text-xs">add_circle</span>
-                  New Policy
+                  Add Model
                 </button>
-              </div>
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="text-zinc-500 border-b border-[#574149]/10">
-                    <th className="pb-3 font-medium">Policy Name</th>
-                    <th className="pb-3 font-medium">Alert Trigger</th>
-                    <th className="pb-3 font-medium">Enforcement</th>
-                    <th className="pb-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#574149]/5">
-                  {budgetPolicies.map(p => (
-                    <tr key={p.name}>
-                      <td className="py-4 font-medium text-[#e7dff0]">{p.name}</td>
-                      <td className="py-4 text-zinc-400">{p.trigger}</td>
-                      <td className="py-4"><span className={`px-2 py-0.5 text-[10px] rounded font-semibold ${p.enfClass}`}>{p.enforcement}</span></td>
-                      <td className="py-4">
-                        <div className={`flex items-center gap-1.5 ${p.statusColor}`}>
-                          <div className={`w-1.5 h-1.5 rounded-full ${p.dot}`}></div>
-                          {p.status}
+              )}
+            </div>
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="text-zinc-500 border-b border-[#574149]/10">
+                  <th className="pb-3 font-medium">Provider</th>
+                  <th className="pb-3 font-medium">Model</th>
+                  <th className="pb-3 font-medium">Input $/1M</th>
+                  <th className="pb-3 font-medium">Output $/1M</th>
+                  <th className="pb-3 font-medium">Cache-Read $/1M</th>
+                  <th className="pb-3 font-medium">Updated</th>
+                  <th className="pb-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#574149]/5">
+                {pricing.map(p => {
+                  const key = `${p.provider}/${p.model}`
+                  return (
+                    <tr key={key}>
+                      <td className="py-3 font-medium text-[#e7dff0]">{p.provider}</td>
+                      <td className="py-3 text-zinc-400">{p.model}</td>
+                      <td className="py-3 text-zinc-400">{formatDollar(p.input_cost_per_million)}</td>
+                      <td className="py-3 text-zinc-400">{formatDollar(p.output_cost_per_million)}</td>
+                      <td className="py-3 text-zinc-400">{formatDollar(p.cache_read_cost_per_million)}</td>
+                      <td className="py-3 text-zinc-500">{p.updated_at ? p.updated_at.slice(0, 10) : '—'}</td>
+                      <td className="py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleEdit(p)}
+                            disabled={showAddForm}
+                            className="text-zinc-500 hover:text-[#ffb0cf] disabled:opacity-40"
+                            title="Edit"
+                          >
+                            <span className="material-symbols-outlined text-base">edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.provider, p.model)}
+                            disabled={deletingKey === key || showAddForm}
+                            className="text-zinc-500 hover:text-[#ffb4ab] disabled:opacity-40"
+                            title="Delete"
+                          >
+                            <span className="material-symbols-outlined text-base">close</span>
+                          </button>
                         </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="bg-[#2c2834] p-6 rounded">
-              <h4 className="text-base font-semibold text-[#e7dff0] mb-6">Anomaly History</h4>
-              <div className="space-y-4">
-                {anomalies.map((a, i) => (
-                  <div key={i} className={`bg-[#211e29] p-4 rounded border-l-2 ${a.border}`}>
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded ${a.iconBg}`}>
-                          <span className="material-symbols-outlined">{a.icon}</span>
-                        </div>
-                        <div>
-                          <p className="font-semibold text-[#e7dff0]">{a.title}</p>
-                          <p className="text-xs text-zinc-500">{a.sub}</p>
-                        </div>
+                  )
+                })}
+                {pricing.length === 0 && !showAddForm && (
+                  <tr>
+                    <td colSpan={7} className="py-4 text-center text-zinc-500 text-xs">No pricing entries. Click "+ Add Model" to add one.</td>
+                  </tr>
+                )}
+                {showAddForm && (
+                  <tr>
+                    <td className="py-2">
+                      <input
+                        className={`w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-xs focus:outline-none ${editingKey ? 'text-zinc-500 cursor-not-allowed' : 'text-[#e7dff0] placeholder-zinc-600'}`}
+                        placeholder="anthropic"
+                        value={form.provider}
+                        readOnly={!!editingKey}
+                        onChange={e => setForm(f => ({ ...f, provider: e.target.value }))}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <input
+                        className={`w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-xs focus:outline-none ${editingKey ? 'text-zinc-500 cursor-not-allowed' : 'text-[#e7dff0] placeholder-zinc-600'}`}
+                        placeholder="claude-sonnet-4-6"
+                        value={form.model}
+                        readOnly={!!editingKey}
+                        onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <input
+                        type="number" step="0.01"
+                        className="w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none"
+                        placeholder="3.00"
+                        value={form.input_cost_per_million}
+                        onChange={e => setForm(f => ({ ...f, input_cost_per_million: e.target.value }))}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <input
+                        type="number" step="0.01"
+                        className="w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none"
+                        placeholder="15.00"
+                        value={form.output_cost_per_million}
+                        onChange={e => setForm(f => ({ ...f, output_cost_per_million: e.target.value }))}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <input
+                        type="number" step="0.01"
+                        className="w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none"
+                        placeholder="0.30"
+                        value={form.cache_read_cost_per_million}
+                        onChange={e => setForm(f => ({ ...f, cache_read_cost_per_million: e.target.value }))}
+                      />
+                    </td>
+                    <td className="py-2"></td>
+                    <td className="py-2 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={handleSave}
+                          disabled={saving || !form.provider || !form.model}
+                          className="px-2 py-1 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-[10px] font-semibold rounded disabled:opacity-40"
+                        >
+                          {saving ? '...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={() => { setShowAddForm(false); setForm(EMPTY_FORM); setSaveError(''); setEditingKey(null) }}
+                          className="px-2 py-1 bg-[#37333f] text-zinc-300 text-[10px] font-semibold rounded"
+                        >
+                          Cancel
+                        </button>
                       </div>
-                      <p className="text-[10px] text-zinc-500 font-semibold">{a.age}</p>
-                    </div>
-                    {a.actions && (
-                      <div className="mt-4 flex gap-2">
-                        <button className="px-3 py-1 bg-[#93000a] text-[#ffdad6] text-[10px] font-semibold rounded">QUARANTINE AGENT</button>
-                        <button className="px-3 py-1 bg-[#37333f] text-zinc-300 text-[10px] font-semibold rounded">DISMISS</button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+                      {saveError && <p className="text-[10px] text-[#ffb4ab] mt-1 text-right">{saveError}</p>}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
+
         </div>
       </main>
     </div>
