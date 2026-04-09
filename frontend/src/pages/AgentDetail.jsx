@@ -408,7 +408,7 @@ export default function AgentDetail() {
         </div>
       </header>
 
-      <main className="pl-64 pt-16 h-screen overflow-hidden flex flex-col">
+      <main className="pl-sidebar pt-16 h-screen overflow-hidden flex flex-col">
         {/* Volume metric cards */}
         <section className="grid grid-cols-4 gap-4 p-6 pb-3 shrink-0">
           {volumeMetrics.map((m) => (

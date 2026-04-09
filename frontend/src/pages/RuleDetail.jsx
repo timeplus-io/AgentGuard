@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { highlight, languages } from 'prismjs/components/prism-core'
+import 'prismjs/components/prism-sql'
+import 'prismjs/themes/prism-tomorrow.css'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import Footer from '../components/Footer'
@@ -105,7 +108,7 @@ export default function RuleDetail() {
     return (
       <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
         <Sidebar /><TopNav /><Footer />
-        <main className="pl-64 pt-16 pb-8 min-h-screen">
+        <main className="pl-sidebar pt-16 pb-8 min-h-screen">
           <div className="p-6 lg:p-10 space-y-6">
             {[1,2,3].map(i => <div key={i} className="bg-[#1d1a25] rounded-sm h-32 animate-pulse" />)}
           </div>
@@ -118,7 +121,7 @@ export default function RuleDetail() {
     return (
       <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
         <Sidebar /><TopNav /><Footer />
-        <main className="pl-64 pt-16 pb-8 min-h-screen flex items-center justify-center">
+        <main className="pl-sidebar pt-16 pb-8 min-h-screen flex items-center justify-center">
           <p className="text-zinc-500">Rule not found.</p>
         </main>
       </div>
@@ -167,7 +170,7 @@ export default function RuleDetail() {
         </div>
       )}
 
-      <main className="pl-64 pt-16 pb-8 min-h-screen">
+      <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
 
           {/* Back link */}
@@ -306,9 +309,16 @@ export default function RuleDetail() {
                 {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
-            <pre className="text-xs font-mono text-zinc-300 bg-[#0f0c17] p-6 rounded-sm overflow-x-auto whitespace-pre leading-relaxed">
-              {rule.query_sql}
-            </pre>
+            <div className="bg-[#0f0c17] rounded-sm overflow-x-auto">
+              <pre
+                className="text-xs font-mono leading-relaxed p-6 m-0"
+                dangerouslySetInnerHTML={{
+                  __html: rule.query_sql
+                    ? highlight(rule.query_sql, languages.sql, 'sql')
+                    : ''
+                }}
+              />
+            </div>
           </div>
 
           {/* Recent Detections */}

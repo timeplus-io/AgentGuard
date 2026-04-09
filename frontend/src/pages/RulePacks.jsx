@@ -193,7 +193,7 @@ export default function RulePacks() {
         </div>
       )}
 
-      <main className="pl-64 pt-16 pb-8 min-h-screen">
+      <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
           <PageHeader
             title="Rule Packs"

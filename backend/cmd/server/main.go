@@ -112,7 +112,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.DELETE("/rules/:id", handlers.UninstallRule(cfg))
 		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
 		api.GET("/notifications/stream", handlers.NotificationsSSEHandler())
-		api.GET("/investigate/tables", handlers.ListTables)
+		api.GET("/investigate/tables", handlers.ListTables(cfg))
 		api.POST("/investigate/query", handlers.RunQuery)
 		api.GET("/settings", handlers.GetSettings)
 		api.PUT("/settings", handlers.UpdateSettings)
