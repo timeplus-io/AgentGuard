@@ -265,12 +265,12 @@ type CostResponse struct {
 
 // PricingEntry is one row in the agentshield_pricing mutable stream.
 type PricingEntry struct {
-	Provider               string  `json:"provider"`
-	Model                  string  `json:"model"`
-	InputCostPerMillion    float64 `json:"input_cost_per_million"`
-	OutputCostPerMillion   float64 `json:"output_cost_per_million"`
+	Provider                string  `json:"provider"`
+	Model                   string  `json:"model"`
+	InputCostPerMillion     float64 `json:"input_cost_per_million"`
+	OutputCostPerMillion    float64 `json:"output_cost_per_million"`
 	CacheReadCostPerMillion float64 `json:"cache_read_cost_per_million"`
-	UpdatedAt              string  `json:"updated_at"`
+	UpdatedAt               string  `json:"updated_at"`
 }
 
 // PricingListResponse is returned by GET /api/cost/pricing.
