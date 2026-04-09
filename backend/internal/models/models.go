@@ -222,10 +222,15 @@ type TokenBreakdown struct {
 }
 
 type AgentModelCost struct {
-	Model     string  `json:"model"`
-	AgentName string  `json:"agent_name"`
-	Cost      float64 `json:"cost"`
-	Requests  string  `json:"requests"`
+	Model        string  `json:"model"`
+	AgentName    string  `json:"agent_name"`
+	Cost         float64 `json:"cost"`
+	Requests     string  `json:"requests"`
+	Provider     string  `json:"provider"`
+	AgentID      string  `json:"agent_id"`
+	InputTokens  int64   `json:"input_tokens"`
+	OutputTokens int64   `json:"output_tokens"`
+	CacheTokens  int64   `json:"cache_tokens"`
 }
 
 type BudgetPolicy struct {
@@ -256,6 +261,21 @@ type CostResponse struct {
 	AgentModelCosts []AgentModelCost `json:"agent_model_costs"`
 	BudgetPolicies  []BudgetPolicy   `json:"budget_policies"`
 	Anomalies       []CostAnomaly    `json:"anomalies"`
+}
+
+// PricingEntry is one row in the agentshield_pricing mutable stream.
+type PricingEntry struct {
+	Provider               string  `json:"provider"`
+	Model                  string  `json:"model"`
+	InputCostPerMillion    float64 `json:"input_cost_per_million"`
+	OutputCostPerMillion   float64 `json:"output_cost_per_million"`
+	CacheReadCostPerMillion float64 `json:"cache_read_cost_per_million"`
+	UpdatedAt              string  `json:"updated_at"`
+}
+
+// PricingListResponse is returned by GET /api/cost/pricing.
+type PricingListResponse struct {
+	Pricing []PricingEntry `json:"pricing"`
 }
 
 type RulePack struct {
