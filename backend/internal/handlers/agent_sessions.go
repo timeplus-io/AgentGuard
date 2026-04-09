@@ -374,6 +374,15 @@ WHERE deployment_id = '%s'
 		startNs := startTime.UnixNano()
 		endNs := endTime.UnixNano()
 
+		// The LLM inference span starts when OpenClaw fires the API call — which
+		// typically happens BEFORE the first hook event for the run (e.g. the
+		// `llm_input` hook fires a few ms after the OTel span opens, and
+		// `before_tool_call` fires only after the model has already responded).
+		// Use a 10-minute lookback so OTel spans are never missed due to this
+		// ordering, plus a 60-second forward buffer for spans that close late.
+		const otelLookbackNs = int64(600_000_000_000) // 10 min in nanoseconds
+		const otelForwardNs = int64(60_000_000_000)   // 60 s in nanoseconds
+
 		otelSQL := fmt.Sprintf(`
 SELECT
     span_id,
@@ -386,7 +395,9 @@ WHERE span_attributes['openclaw.sessionId'] = '%s'
   AND start_time_ns >= %d
   AND start_time_ns <= %d
 ORDER BY start_time_ns ASC`,
-			sessionID, startNs, endNs)
+			sessionID, startNs-otelLookbackNs, endNs+otelForwardNs)
+
+		var llmSpans []models.TraceSpan // kept for re-parenting tool spans below
 
 		otelRows, otelErr := timeplus.Query(&cfg.Timeplus, otelSQL)
 		if otelErr != nil {
@@ -410,16 +421,27 @@ ORDER BY start_time_ns ASC`,
 					}
 				}
 
-				spans = append(spans, models.TraceSpan{
+				// Derive a human-readable name from the model attribute.
+				llmName := "llm"
+				for _, key := range []string{"openclaw.model.name", "gen_ai.request.model", "llm.model.name", "model"} {
+					if m, ok := attrs[key]; ok && m != "" {
+						llmName = m
+						break
+					}
+				}
+
+				s := models.TraceSpan{
 					SpanID:     spanID,
 					ParentID:   runID,
 					Kind:       "llm",
-					Name:       "LLM call",
+					Name:       llmName,
 					StartMs:    spanStartMs,
 					DurationMs: spanDurationMs,
 					Status:     "ok",
 					Attributes: attrs,
-				})
+				}
+				llmSpans = append(llmSpans, s)
+				spans = append(spans, s)
 			}
 		}
 
@@ -531,7 +553,27 @@ ORDER BY event_time ASC`,
 			})
 		}
 
-		// Sort all spans by StartMs ascending (root first, then children).
+		// Re-parent tool spans under their preceding LLM span so the waterfall
+		// shows the blog-style hierarchy: run → llm → tools.
+		// llmSpans is already sorted by StartMs ascending (ORDER BY in the SQL).
+		// For each tool, assign it to the last LLM span that started at or before
+		// the tool — this correctly matches tools to the LLM call that produced them.
+		if len(llmSpans) > 0 {
+			for i, s := range spans {
+				if s.Kind != "tool" {
+					continue
+				}
+				parentID := runID
+				for _, llm := range llmSpans {
+					if llm.StartMs <= s.StartMs {
+						parentID = llm.SpanID
+					}
+				}
+				spans[i].ParentID = parentID
+			}
+		}
+
+		// Sort: root first, then all others by StartMs ascending.
 		sort.Slice(spans, func(i, j int) bool {
 			iRoot := spans[i].ParentID == ""
 			jRoot := spans[j].ParentID == ""

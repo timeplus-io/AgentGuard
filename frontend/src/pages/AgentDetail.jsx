@@ -419,6 +419,14 @@ function RunWaterfall({ spans }) {
   const rootStart = root.start_ms
   const totalMs = root.duration_ms || 1
 
+  // Build a depth map so nested spans (run→llm→tool) render with correct indent.
+  // Spans are sorted with parents before children, so a single forward pass works.
+  const depthMap = {}
+  spans.forEach(s => {
+    const parentDepth = s.parent_id === '' ? -1 : (depthMap[s.parent_id] ?? 0)
+    depthMap[s.span_id] = parentDepth + 1
+  })
+
   function barColor(span) {
     if (span.kind === 'run') return '#ffb0cf'
     if (span.kind === 'llm') return '#93c5fd'
@@ -435,7 +443,7 @@ function RunWaterfall({ spans }) {
   return (
     <div className="p-3 space-y-0.5">
       {spans.map(span => {
-        const depth = span.parent_id === '' ? 0 : 1
+        const depth = depthMap[span.span_id] ?? 0
         const leftPct = Math.max(0, ((span.start_ms - rootStart) / totalMs) * 100)
         const widthPct = Math.max(0.5, (span.duration_ms / totalMs) * 100)
         const color = barColor(span)
