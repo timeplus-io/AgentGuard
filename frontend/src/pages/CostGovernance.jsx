@@ -23,19 +23,6 @@ function formatDollar(n) {
   return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function enfClass(enforcement) {
-  if (!enforcement) return 'bg-[#4b4754] text-[#bcb6c5]'
-  if (enforcement.toUpperCase().includes('KILL') || enforcement.toUpperCase().includes('BLOCK')) return 'bg-[#93000a] text-[#ffdad6]'
-  return 'bg-[#4b4754] text-[#bcb6c5]'
-}
-
-function anomalyStyles(severity) {
-  switch (severity) {
-    case 'error':   return { border: 'border-[#ffb4ab]', icon: 'warning',      iconBg: 'bg-[#93000a]/20 text-[#ffb4ab]' }
-    case 'warning': return { border: 'border-[#ffb0cf]', icon: 'trending_up',  iconBg: 'bg-[#ffb0cf]/10 text-[#ffb0cf]' }
-    default:        return { border: 'border-zinc-700',  icon: 'receipt_long', iconBg: 'bg-[#37333f] text-zinc-500' }
-  }
-}
 
 const TOKEN_COLORS = {
   'Input Tokens':  'bg-[#D53F8C]',
@@ -114,16 +101,13 @@ export default function CostGovernance() {
   ]
 
   const agentModelCosts = data?.agent_model_costs ?? []
-  const budgetPolicies = data?.budget_policies ?? []
-  const anomalies = data?.anomalies ?? []
   const cacheSavings = data?.cache_savings ?? 0
   const wastedSpend = data?.wasted_spend ?? 0
 
   const kpis = [
-    { label: 'Month-to-Date Spend',  value: formatDollar(data?.month_to_date),   delta: '4.2% from last month',    deltaColor: 'text-emerald-400',   deltaIcon: 'trending_down' },
-    { label: 'Forecasted Total',      value: formatDollar(data?.forecasted),       delta: 'Within 15% of budget',    deltaColor: 'text-zinc-500',       deltaIcon: null },
-    { label: 'Avg. Token Cost / 1M',  value: formatDollar(data?.avg_token_cost),   delta: 'Optimized by 12%',        deltaColor: 'text-[#ffb0cf]',      deltaIcon: null },
-    { label: 'Active Policy Breaches',value: String(data?.policy_breaches ?? 0).padStart(2, '0'), delta: 'Requires Attention', deltaColor: 'text-[#ffb4ab]', deltaIcon: null, valueColor: 'text-[#ffb4ab]' },
+    { label: 'Month-to-Date Spend', value: formatDollar(data?.month_to_date), delta: '4.2% from last month', deltaColor: 'text-emerald-400', deltaIcon: 'trending_down' },
+    { label: 'Forecasted Total',     value: formatDollar(data?.forecasted),    delta: 'Within 15% of budget', deltaColor: 'text-zinc-500',    deltaIcon: null },
+    { label: 'Avg. Token Cost / 1M', value: formatDollar(data?.avg_token_cost), delta: 'Optimized by 12%',  deltaColor: 'text-[#ffb0cf]',   deltaIcon: null },
   ]
 
   return (
@@ -140,10 +124,6 @@ export default function CostGovernance() {
               <button className="px-4 py-2 bg-[#2c2834] text-[#e7dff0] text-xs font-medium rounded-sm border border-[#574149]/10 hover:bg-[#37333f] transition-colors flex items-center gap-2">
                 <span className="material-symbols-outlined text-[16px]">download</span>
                 Export Report
-              </button>
-              <button className="px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-xs font-semibold rounded-sm flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px]">add</span>
-                New Policy
               </button>
             </>}
           />
@@ -365,79 +345,6 @@ export default function CostGovernance() {
             </table>
           </div>
 
-          {/* Budget Policy + Anomalies */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-[#2c2834] p-6 rounded">
-              <div className="flex justify-between items-center mb-6">
-                <h4 className="text-base font-semibold text-[#e7dff0]">Budget Policy Table</h4>
-                <button className="text-xs text-[#ffb0cf] font-semibold flex items-center gap-1 hover:underline">
-                  <span className="material-symbols-outlined text-xs">add_circle</span>
-                  New Policy
-                </button>
-              </div>
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="text-zinc-500 border-b border-[#574149]/10">
-                    <th className="pb-3 font-medium">Policy Name</th>
-                    <th className="pb-3 font-medium">Alert Trigger</th>
-                    <th className="pb-3 font-medium">Enforcement</th>
-                    <th className="pb-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#574149]/5">
-                  {budgetPolicies.map(p => {
-                    const isActive = p.status === 'active'
-                    return (
-                      <tr key={p.id}>
-                        <td className="py-4 font-medium text-[#e7dff0]">{p.name}</td>
-                        <td className="py-4 text-zinc-400">{p.trigger}</td>
-                        <td className="py-4">
-                          <span className={`px-2 py-0.5 text-[10px] rounded font-semibold ${enfClass(p.enforcement)}`}>{p.enforcement}</span>
-                        </td>
-                        <td className="py-4">
-                          <div className={`flex items-center gap-1.5 ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-400' : 'bg-zinc-600'}`}></div>
-                            {isActive ? 'Active' : 'Paused'}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="bg-[#2c2834] p-6 rounded">
-              <h4 className="text-base font-semibold text-[#e7dff0] mb-6">Anomaly History</h4>
-              <div className="space-y-4">
-                {anomalies.map(a => {
-                  const styles = anomalyStyles(a.severity)
-                  return (
-                    <div key={a.id} className={`bg-[#211e29] p-4 rounded border-l-2 ${styles.border}`}>
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded ${styles.iconBg}`}>
-                            <span className="material-symbols-outlined">{styles.icon}</span>
-                          </div>
-                          <div>
-                            <p className="font-semibold text-[#e7dff0]">{a.title}</p>
-                            <p className="text-xs text-zinc-500">{a.description}</p>
-                          </div>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 font-semibold">{a.time_ago}</p>
-                      </div>
-                      {a.severity === 'error' && (
-                        <div className="mt-4 flex gap-2">
-                          <button className="px-3 py-1 bg-[#93000a] text-[#ffdad6] text-[10px] font-semibold rounded">QUARANTINE AGENT</button>
-                          <button className="px-3 py-1 bg-[#37333f] text-zinc-300 text-[10px] font-semibold rounded">DISMISS</button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
         </div>
       </main>
     </div>
