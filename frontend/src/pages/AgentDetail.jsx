@@ -252,7 +252,8 @@ function buildRunSteps(events) {
 
   // User Input: last user-role message from llm_input event_data
   if (llmIn) {
-    const data = safeParse(llmIn.event_data) || {}
+    const raw = safeParse(llmIn.event_data)
+    const data = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {}
     const msgs = Array.isArray(data.messages) ? data.messages : []
     const userMsg = [...msgs].reverse().find(m => m.role === 'user')
     if (userMsg) {
@@ -274,7 +275,8 @@ function buildRunSteps(events) {
 
   // LLM Input: model + provider from llm_input event
   if (llmIn) {
-    const data = safeParse(llmIn.event_data) || {}
+    const raw = safeParse(llmIn.event_data)
+    const data = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {}
     const msgs = Array.isArray(data.messages) ? data.messages : []
     const msgCount = msgs.length || data.messageCount || data.message_count || 0
     const model    = llmIn.model    || data.model    || '—'
@@ -300,7 +302,8 @@ function buildRunSteps(events) {
 
   // LLM Output: token usage + finish reason from llm_output event
   if (llmOut) {
-    const data   = safeParse(llmOut.event_data) || {}
+    const raw  = safeParse(llmOut.event_data)
+    const data = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {}
     const usage  = data.usage ?? data.usageTotals ?? {}
     const inTok  = usage.input  ?? usage.input_tokens  ?? usage.inputTokens
     const outTok = usage.output ?? usage.output_tokens ?? usage.outputTokens
@@ -334,16 +337,17 @@ function buildRunSteps(events) {
 
 // ── RunTimeline ───────────────────────────────────────────────────────────────
 
+function stepDot(step) {
+  if (step.type === 'tool_call') return step.blocked ? '#ffb4ab' : '#93c5fd'
+  return '#ffb0cf'
+}
+
 function RunTimeline({ runIndex, run, events }) {
+  const rid = run.run_id ?? ''
   const steps = buildRunSteps(events)
   const start = fmtShortTime(run.start_time)
   const end   = fmtShortTime(run.end_time)
   const timeRange = start && end ? `${start} → ${end}` : start || ''
-
-  function stepDot(step) {
-    if (step.type === 'tool_call') return step.blocked ? '#ffb4ab' : '#93c5fd'
-    return '#ffb0cf'
-  }
 
   return (
     <div className="bg-[#1d1a25] rounded-sm p-5 mb-3 last:mb-0">
@@ -351,7 +355,7 @@ function RunTimeline({ runIndex, run, events }) {
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <span className="text-xs font-semibold text-[#e7dff0]">Run #{runIndex + 1}</span>
         <code className="text-[10px] font-mono text-zinc-500">
-          {run.run_id.length > 16 ? run.run_id.slice(0, 16) + '…' : run.run_id}
+          {rid.length > 16 ? rid.slice(0, 16) + '…' : rid || '—'}
         </code>
         {timeRange && <span className="text-[10px] text-zinc-600">{timeRange}</span>}
         {run.tool_count > 0 && (
@@ -370,7 +374,7 @@ function RunTimeline({ runIndex, run, events }) {
       ) : (
         <div>
           {steps.map((step, i) => (
-            <div key={i} className="flex gap-3">
+            <div key={`${step.type}-${i}`} className="flex gap-3">
               <div className="flex flex-col items-center">
                 <div
                   className="w-2 h-2 rounded-full shrink-0 mt-1"
