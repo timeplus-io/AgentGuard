@@ -30,7 +30,6 @@ SELECT
   arg_max(name,               updated_at) AS name,
   arg_max(version,            updated_at) AS version,
   arg_max(description,        updated_at) AS description,
-  arg_max(query_sql,          updated_at) AS query_sql,
   arg_max(severity,           updated_at) AS severity,
   arg_max(category,           updated_at) AS category,
   arg_max(fp_rate,            updated_at) AS fp_rate,
@@ -369,6 +368,9 @@ func ListCatalog(cfg *config.Config) gin.HandlerFunc {
 		}
 		for _, row := range customRows {
 			id := strVal(row, "rule_id")
+			if id == "" {
+				continue
+			}
 			if installedIDs[id] {
 				continue // currently installed, skip
 			}
