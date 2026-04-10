@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
@@ -10,11 +10,12 @@ import { api } from '../api/client'
 function formatTs(ts) {
   if (!ts) return '—'
   try {
-    return new Date(
-      typeof ts === 'string'
-        ? ts.replace(' ', 'T').replace(' UTC', 'Z').replace(' +0000', 'Z')
-        : ts
-    ).toLocaleString()
+    const normalized = typeof ts === 'string'
+      ? ts.replace(' ', 'T').replace(/\s+UTC$/, 'Z').replace(/\s+\+0000$/, 'Z').replace(/\s+[\w+\-:]+$/, 'Z')
+      : ts
+    const d = new Date(normalized)
+    if (isNaN(d.getTime())) return String(ts)
+    return d.toLocaleString()
   } catch { return String(ts) }
 }
 
@@ -195,9 +196,8 @@ export default function Threats() {
                       </td>
                     </tr>
                   ) : filtered.map(t => (
-                    <>
+                    <React.Fragment key={t.threat_id}>
                       <tr
-                        key={t.threat_id}
                         onClick={() => setExpandedId(prev => prev === t.threat_id ? null : t.threat_id)}
                         className="hover:bg-[#2c2834] transition-colors cursor-pointer"
                       >
@@ -289,7 +289,7 @@ export default function Threats() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
