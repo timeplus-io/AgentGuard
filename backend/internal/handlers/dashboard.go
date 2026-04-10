@@ -49,11 +49,11 @@ func GetDashboard(cfg *config.Config) gin.HandlerFunc {
 		costRows, err := tp.Query(&cfg.Timeplus, `
 SELECT
   (
-    sum(to_int64(json_extract_string(e.event_data, 'usage', 'input')))
+    sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))
       * any(p.input_cost_per_million)
-    + sum(to_int64(json_extract_string(e.event_data, 'usage', 'output')))
+    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))
       * any(p.output_cost_per_million)
-    + sum(to_int64(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
+    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
       * any(p.cache_read_cost_per_million)
   ) / 1000000.0 AS cost
 FROM table(agentshield_hook_events) AS e

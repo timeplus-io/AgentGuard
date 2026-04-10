@@ -207,15 +207,15 @@ SELECT
   e.provider,
   e.model,
   count()                                                                                     AS request_count,
-  sum(to_int64(json_extract_string(e.event_data, 'usage', 'input')))                         AS input_tokens,
-  sum(to_int64(json_extract_string(e.event_data, 'usage', 'output')))                        AS output_tokens,
-  sum(to_int64(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))    AS cache_tokens,
+  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))                         AS input_tokens,
+  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))                        AS output_tokens,
+  sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))    AS cache_tokens,
   (
-    sum(to_int64(json_extract_string(e.event_data, 'usage', 'input')))
+    sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))
       * any(p.input_cost_per_million)
-    + sum(to_int64(json_extract_string(e.event_data, 'usage', 'output')))
+    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))
       * any(p.output_cost_per_million)
-    + sum(to_int64(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
+    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
       * any(p.cache_read_cost_per_million)
   ) / 1000000.0                                                                               AS total_cost
 FROM table(agentshield_hook_events) AS e
@@ -258,11 +258,11 @@ SELECT
   e.provider,
   e.model,
   (
-    sum(to_int64(json_extract_string(e.event_data, 'usage', 'input')))
+    sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))
       * any(p.input_cost_per_million)
-    + sum(to_int64(json_extract_string(e.event_data, 'usage', 'output')))
+    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))
       * any(p.output_cost_per_million)
-    + sum(to_int64(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
+    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
       * any(p.cache_read_cost_per_million)
   ) / 1000000.0                                                                              AS cost_per_model
 FROM table(agentshield_hook_events) AS e
@@ -303,14 +303,14 @@ func queryCostTokenBreakdown(cfg *config.TimeplusConfig) ([]models.TokenBreakdow
 SELECT
   e.provider,
   e.model,
-  sum(to_int64(json_extract_string(e.event_data, 'usage', 'input')))                        AS input_tokens,
-  sum(to_int64(json_extract_string(e.event_data, 'usage', 'output')))                       AS output_tokens,
-  sum(to_int64(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))   AS cache_tokens,
-  sum(to_int64(json_extract_string(e.event_data, 'usage', 'input')))
+  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))                        AS input_tokens,
+  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))                       AS output_tokens,
+  sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))   AS cache_tokens,
+  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))
     * any(p.input_cost_per_million) / 1000000.0                                              AS input_cost,
-  sum(to_int64(json_extract_string(e.event_data, 'usage', 'output')))
+  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))
     * any(p.output_cost_per_million) / 1000000.0                                             AS output_cost,
-  sum(to_int64(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
+  sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
     * any(p.cache_read_cost_per_million) / 1000000.0                                         AS cache_cost
 FROM table(agentshield_hook_events) AS e
 LEFT JOIN table(agentshield_pricing) AS p
