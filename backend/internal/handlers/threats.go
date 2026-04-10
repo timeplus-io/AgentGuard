@@ -18,9 +18,13 @@ import (
 type threatKey struct{ agentID, deploymentID, sessionID, ruleID string }
 
 // computeThreatID returns the MD5 hex string of the four key fields.
+// Uses length-prefix encoding to prevent hash collisions when field values contain hyphens.
 // Used as the API path parameter (:id) — never stored in Proton.
 func computeThreatID(agentID, deploymentID, sessionID, ruleID string) string {
-	h := md5.Sum([]byte(agentID + "-" + deploymentID + "-" + sessionID + "-" + ruleID))
+	encoded := fmt.Sprintf("%d:%s\x00%d:%s\x00%d:%s\x00%d:%s",
+		len(agentID), agentID, len(deploymentID), deploymentID,
+		len(sessionID), sessionID, len(ruleID), ruleID)
+	h := md5.Sum([]byte(encoded))
 	return hex.EncodeToString(h[:])
 }
 
@@ -129,6 +133,8 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		// Build events map from Query 3 ([]ThreatEvent per key, newest first from ORDER BY).
+		// Cap at 50 events per threat to bound memory usage.
+		const maxEventsPerThreat = 50
 		eventsMap := make(map[threatKey][]models.ThreatEvent, len(r1.rows))
 		if r3.err == nil {
 			for _, row := range r3.rows {
@@ -137,6 +143,9 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 					parseStr(row["deployment_id"]),
 					parseStr(row["session_id"]),
 					parseStr(row["rule_id"]),
+				}
+				if len(eventsMap[k]) >= maxEventsPerThreat {
+					continue
 				}
 				eventsMap[k] = append(eventsMap[k], models.ThreatEvent{
 					DetectedAt: parseStr(row["detected_at"]),
