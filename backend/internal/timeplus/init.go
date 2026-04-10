@@ -340,7 +340,7 @@ func seedBuiltinRules(ctx context.Context, conn proton.Conn) error {
 	for _, r := range builtinRuleData {
 		if err := batch.Append(
 			r.ruleID, r.name, r.version, r.description, r.querySQL,
-			true, false, r.severity, r.category, r.requiredTelemetry,
+			false, false, r.severity, r.category, r.requiredTelemetry,
 			r.fpRate, r.hookSources, now,
 		); err != nil {
 			return fmt.Errorf("seed append %s: %w", r.ruleID, err)

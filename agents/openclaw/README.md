@@ -87,14 +87,39 @@ make approve
 
 ## AgentShield plugin
 
-The plugin is a TypeScript npm package compiled to `agentshield-plugin/dist/`. The compiled output is committed to git so it is available for Docker volume mount without a build step at runtime.
+The plugin is published to npm as [`@timeplus/agentshield-openclaw-plugin`](https://www.npmjs.com/package/@timeplus/agentshield-openclaw-plugin).
 
-### Plugin targets
+### Installation (npm — recommended)
+
+Install the plugin into your OpenClaw project:
+
+```bash
+npm install @timeplus/agentshield-openclaw-plugin
+```
+
+OpenClaw auto-discovers plugins from `node_modules` via the `openclaw.extensions` field in the package — no manual load path needed.
+
+Configure by setting environment variables before starting OpenClaw:
+
+```bash
+export AGENTSHIELD_TIMEPLUS_URL=http://localhost:3218
+export AGENTSHIELD_DEPLOYMENT_ID=my-team
+export AGENTSHIELD_DEPLOYMENT_NAME="My Team"
+# optional — only needed if Proton has auth enabled
+export AGENTSHIELD_USERNAME=proton
+export AGENTSHIELD_PASSWORD=your-password
+```
+
+Or set the equivalent fields under `plugins.entries.agentshield.config` in `openclaw.json` (see [Plugin configuration](#plugin-configuration-in-openclaw.json) below).
+
+### Installation (Docker volume mount — this repo)
+
+This repository uses the local source tree mounted into the OpenClaw container. Use the Make targets to build and deploy:
 
 ```bash
 make install-plugin   # npm install in agentshield-plugin/
 make build-plugin     # compile TypeScript → dist/
-make deploy-plugin    # build-plugin + start (full redeploy)
+make deploy-plugin    # build-plugin + restart container
 ```
 
 ### Plugin configuration (in openclaw.json)
@@ -102,19 +127,18 @@ make deploy-plugin    # build-plugin + start (full redeploy)
 ```json
 {
   "plugins": {
-    "load": {
-      "paths": ["/home/node/.openclaw/agentshield-plugin"]
-    },
     "entries": {
       "agentshield": {
         "enabled": true,
         "config": {
           "timeplusUrl": "http://host.docker.internal:3218",
+          "deploymentId": "my-team",
+          "deploymentName": "My Team",
           "stream": "agentshield_hook_events",
           "flushMs": 2000,
           "batchSize": 50,
           "username": "proton",
-          "password": "timeplus@t+"
+          "password": ""
         }
       }
     }
@@ -122,16 +146,20 @@ make deploy-plugin    # build-plugin + start (full redeploy)
 }
 ```
 
-All fields can be overridden with environment variables:
+When using the npm install approach the `plugins.load.paths` entry is not needed — OpenClaw discovers the plugin from `node_modules` automatically.
 
-| Env var | Config field |
-|---|---|
-| `AGENTSHIELD_TIMEPLUS_URL` | `timeplusUrl` |
-| `AGENTSHIELD_STREAM` | `stream` |
-| `AGENTSHIELD_FLUSH_MS` | `flushMs` |
-| `AGENTSHIELD_BATCH_SIZE` | `batchSize` |
-| `AGENTSHIELD_USERNAME` | `username` |
-| `AGENTSHIELD_PASSWORD` | `password` |
+### Environment variables
+
+All config fields except `deploymentId` and `deploymentName` can be overridden with environment variables:
+
+| Env var | Config field | Default |
+|---|---|---|
+| `AGENTSHIELD_TIMEPLUS_URL` | `timeplusUrl` | `http://localhost:3218` |
+| `AGENTSHIELD_STREAM` | `stream` | `agentshield_hook_events` |
+| `AGENTSHIELD_FLUSH_MS` | `flushMs` | `2000` |
+| `AGENTSHIELD_BATCH_SIZE` | `batchSize` | `50` |
+| `AGENTSHIELD_USERNAME` | `username` | `proton` |
+| `AGENTSHIELD_PASSWORD` | `password` | _(empty)_ |
 
 ### Verify the plugin loaded
 
@@ -142,13 +170,13 @@ docker logs openclaw 2>&1 | grep agentshield
 Expected output:
 
 ```
-[agentshield] active — streaming to http://host.docker.internal:3218/proton/v1/ingest/streams/agentshield_hook_events (flush every 2000ms, batch size 50)
+[agentshield] active — streaming to http://host.docker.internal:3218/proton/v1/ingest/streams/agentshield_hook_events (flush every 2000ms, batch size 50) deployment=my-team
 ```
 
 ### Query hook events in Timeplus
 
 ```bash
-curl -s -u "proton:timeplus@t+" \
+curl -s -u "proton:" \
   -X POST "http://localhost:3218/proton/v1/sql" \
   -H "Content-Type: application/json" \
   -d '{"sql": "SELECT hook_name, event_time, session_id, agent_id, tool_name FROM table(agentshield_hook_events) ORDER BY event_time DESC LIMIT 20"}'
