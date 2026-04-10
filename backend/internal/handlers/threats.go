@@ -111,24 +111,31 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
+		if r2.err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": r2.err.Error()})
+			return
+		}
+		if r3.err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": r3.err.Error()})
+			return
+		}
+
 		// Build stats map from Query 2 (event_count + first_seen per key).
 		type statsEntry struct {
 			eventCount int64
 			firstSeen  string
 		}
 		statsMap := make(map[threatKey]statsEntry, len(r2.rows))
-		if r2.err == nil {
-			for _, row := range r2.rows {
-				k := threatKey{
-					parseStr(row["agent_id"]),
-					parseStr(row["deployment_id"]),
-					parseStr(row["session_id"]),
-					parseStr(row["rule_id"]),
-				}
-				statsMap[k] = statsEntry{
-					eventCount: parseInt64(row["event_count"]),
-					firstSeen:  parseStr(row["first_seen"]),
-				}
+		for _, row := range r2.rows {
+			k := threatKey{
+				parseStr(row["agent_id"]),
+				parseStr(row["deployment_id"]),
+				parseStr(row["session_id"]),
+				parseStr(row["rule_id"]),
+			}
+			statsMap[k] = statsEntry{
+				eventCount: parseInt64(row["event_count"]),
+				firstSeen:  parseStr(row["first_seen"]),
 			}
 		}
 
@@ -136,26 +143,24 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 		// Cap at 50 events per threat to bound memory usage.
 		const maxEventsPerThreat = 50
 		eventsMap := make(map[threatKey][]models.ThreatEvent, len(r1.rows))
-		if r3.err == nil {
-			for _, row := range r3.rows {
-				k := threatKey{
-					parseStr(row["agent_id"]),
-					parseStr(row["deployment_id"]),
-					parseStr(row["session_id"]),
-					parseStr(row["rule_id"]),
-				}
-				if len(eventsMap[k]) >= maxEventsPerThreat {
-					continue
-				}
-				eventsMap[k] = append(eventsMap[k], models.ThreatEvent{
-					DetectedAt: parseStr(row["detected_at"]),
-					RunID:      parseStr(row["run_id"]),
-					HookName:   parseStr(row["hook_name"]),
-					ToolName:   parseStr(row["tool_name"]),
-					Message:    parseStr(row["message"]),
-					EventData:  parseStr(row["event_data"]),
-				})
+		for _, row := range r3.rows {
+			k := threatKey{
+				parseStr(row["agent_id"]),
+				parseStr(row["deployment_id"]),
+				parseStr(row["session_id"]),
+				parseStr(row["rule_id"]),
 			}
+			if len(eventsMap[k]) >= maxEventsPerThreat {
+				continue
+			}
+			eventsMap[k] = append(eventsMap[k], models.ThreatEvent{
+				DetectedAt: parseStr(row["detected_at"]),
+				RunID:      parseStr(row["run_id"]),
+				HookName:   parseStr(row["hook_name"]),
+				ToolName:   parseStr(row["tool_name"]),
+				Message:    parseStr(row["message"]),
+				EventData:  parseStr(row["event_data"]),
+			})
 		}
 
 		// Collect threats that need re-opening.

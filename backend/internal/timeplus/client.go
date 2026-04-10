@@ -44,12 +44,16 @@ func Query(cfg *config.TimeplusConfig, sql string) ([]Row, error) {
 	}
 
 	var result struct {
-		Data []Row `json:"data"`
+		Data      []Row  `json:"data"`
+		Exception string `json:"exception"`
 	}
 	dec := json.NewDecoder(resp.Body)
 	dec.UseNumber()
 	if err := dec.Decode(&result); err != nil {
 		return nil, fmt.Errorf("proton query: decode: %w", err)
+	}
+	if result.Exception != "" {
+		return nil, fmt.Errorf("proton query: %s", result.Exception)
 	}
 	return result.Data, nil
 }
@@ -75,9 +79,16 @@ func ExecHTTP(cfg *config.TimeplusConfig, sql string) error {
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		errBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("proton exec: status %d: %s", resp.StatusCode, string(errBody))
+		return fmt.Errorf("proton exec: status %d: %s", resp.StatusCode, string(respBody))
+	}
+	// Proton may return HTTP 200 with {"exception":"..."} for runtime errors.
+	var result struct {
+		Exception string `json:"exception"`
+	}
+	if err := json.Unmarshal(respBody, &result); err == nil && result.Exception != "" {
+		return fmt.Errorf("proton exec: %s", result.Exception)
 	}
 	return nil
 }
