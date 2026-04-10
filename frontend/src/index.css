@@ -58,6 +58,15 @@ body.sidebar-collapsed .pl-sidebar {
   padding-left: 4rem; /* w-16 */
 }
 
+/* Top nav left edge tracks the sidebar width */
+.top-nav {
+  left: 16rem; /* w-64 */
+  transition: left 200ms ease;
+}
+body.sidebar-collapsed .top-nav {
+  left: 4rem; /* w-16 */
+}
+
 /* Neutralise prism-tomorrow's default background so it doesn't bleed into the editor */
 code[class*="language-"],
 pre[class*="language-"] {
