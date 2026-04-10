@@ -6,7 +6,6 @@ import 'prismjs/components/prism-sql'
 import 'prismjs/themes/prism-tomorrow.css'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
-import Footer from '../components/Footer'
 import { api } from '../api/client'
 
 const RULE_ICONS = {
@@ -100,7 +99,7 @@ export default function RuleDetail() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
-        <Sidebar /><TopNav /><Footer />
+        <Sidebar /><TopNav />
         <main className="pl-sidebar pt-16 pb-8 min-h-screen">
           <div className="p-6 lg:p-10 space-y-6">
             {[1,2,3].map(i => <div key={i} className="bg-[#1d1a25] rounded-sm h-32 animate-pulse" />)}
@@ -113,7 +112,7 @@ export default function RuleDetail() {
   if (!rule) {
     return (
       <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
-        <Sidebar /><TopNav /><Footer />
+        <Sidebar /><TopNav />
         <main className="pl-sidebar pt-16 pb-8 min-h-screen flex items-center justify-center">
           <p className="text-zinc-500">Rule not found.</p>
         </main>
@@ -125,7 +124,7 @@ export default function RuleDetail() {
 
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
-      <Sidebar /><TopNav /><Footer />
+      <Sidebar /><TopNav />
 
       {/* Toggle confirmation modal */}
       {toggleConfirm && rule && (

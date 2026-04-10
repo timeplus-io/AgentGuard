@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
-import Footer from '../components/Footer'
 import { api } from '../api/client'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -683,6 +682,7 @@ export default function AgentDetail() {
 
   const [llmMetrics, setLlmMetrics] = useState(null)
   const [toolMetrics, setToolMetrics] = useState(null)
+  const [activeThreats, setActiveThreats] = useState(null)
 
   const [loadingAgent, setLoadingAgent] = useState(true)
   const [loadingSessions, setLoadingSessions] = useState(true)
@@ -719,6 +719,14 @@ export default function AgentDetail() {
       .then(setToolMetrics)
       .catch(() => setToolMetrics(null))
   }, [id, timePreset, refreshTick])
+
+  useEffect(() => {
+    // agent_id is the second segment of the compound "{deploymentId}__{agentId}" id
+    const agentId = id.split('__')[1] ?? id
+    api.getThreats({ agent_id: agentId, status: 'open', limit: 200 })
+      .then(data => setActiveThreats(data.total ?? (data.threats?.length ?? 0)))
+      .catch(() => setActiveThreats(null))
+  }, [id, refreshTick])
 
   useEffect(() => {
     setLoadingSessions(true)
@@ -791,7 +799,7 @@ export default function AgentDetail() {
   const isRefreshing = loadingAgent || loadingSessions || loadingEvents
 
   const volumeMetrics = [
-    { label: 'Total Events',    value: agent ? agent.event_count     : '—', icon: 'bolt' },
+    { label: 'Active Threats',  value: activeThreats ?? '—', icon: 'security', accent: activeThreats > 0 },
     { label: 'Total Sessions',  value: agent ? agent.session_count   : '—', icon: 'layers' },
     { label: 'Total Runs',      value: agent ? agent.run_count       : '—', icon: 'sync_alt' },
     { label: 'Total Tool Calls',value: agent ? agent.tool_call_count : '—', icon: 'handyman' },
@@ -836,10 +844,10 @@ export default function AgentDetail() {
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
       <Sidebar />
-      <Footer />
+
 
       {/* TopNav */}
-      <header className="fixed top-0 right-0 left-64 h-16 bg-[#15121d]/95 z-50 flex justify-between items-center px-8 backdrop-blur-md shadow-[0_0_12px_rgba(213,63,140,0.12)]">
+      <header className="top-nav fixed top-0 right-0 h-16 bg-[#15121d]/95 z-50 flex justify-between items-center px-8 backdrop-blur-md shadow-[0_0_12px_rgba(213,63,140,0.12)]">
         <div className="flex items-center gap-4">
           <Link to="/agents" className="text-zinc-400 hover:text-[#ffb0cf] transition-colors">
             <span className="material-symbols-outlined">arrow_back</span>
@@ -880,12 +888,12 @@ export default function AgentDetail() {
         {/* Volume metric cards */}
         <section className="grid grid-cols-4 gap-4 p-6 pb-3 shrink-0">
           {volumeMetrics.map((m) => (
-            <div key={m.label} className="bg-[#2c2834] p-4 rounded relative overflow-hidden group">
+            <div key={m.label} className={`p-4 rounded relative overflow-hidden group ${m.accent ? 'bg-[#93000a]/20 border border-[#ffb4ab]/20' : 'bg-[#2c2834]'}`}>
               <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
-                <span className="material-symbols-outlined text-4xl">{m.icon}</span>
+                <span className={`material-symbols-outlined text-4xl ${m.accent ? 'text-[#ffb4ab]' : ''}`}>{m.icon}</span>
               </div>
               <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest mb-1">{m.label}</p>
-              <h2 className="text-2xl font-medium text-[#e7dff0]">{m.value}</h2>
+              <h2 className={`text-2xl font-medium ${m.accent ? 'text-[#ffb4ab]' : 'text-[#e7dff0]'}`}>{m.value}</h2>
             </div>
           ))}
         </section>

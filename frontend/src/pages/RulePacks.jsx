@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
-import Footer from '../components/Footer'
 import PageHeader from '../components/PageHeader'
 import Toggle from '../components/Toggle'
 import { api } from '../api/client'
@@ -24,9 +23,12 @@ export default function RulePacks() {
   const [catalog, setCatalog] = useState([])
   const [loading, setLoading] = useState(true)
   const [totalDetections, setTotalDetections] = useState(0)
-  const [density, setDensity] = useState(0)
+  const density = rules.length > 0 ? Math.round(rules.filter(r => r.enabled).length * 100 / rules.length) : 0
   const [chartData, setChartData] = useState({ openThreats: [], totalEvents: [] })
   const [chartsLoading, setChartsLoading] = useState(true)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+  const importInputRef = useRef(null)
   const [confirmToggle, setConfirmToggle] = useState(null) // { id, newVal, name }
   const [confirmInstall, setConfirmInstall] = useState(null) // catalog entry
   const [installing, setInstalling] = useState(null) // rule id being installed
@@ -46,7 +48,6 @@ export default function RulePacks() {
         })))
       }
       if (data.total_detections_24h !== undefined) setTotalDetections(data.total_detections_24h)
-      if (data.active_rule_density !== undefined) setDensity(data.active_rule_density)
     })
 
   useEffect(() => {
@@ -105,32 +106,16 @@ export default function RulePacks() {
   const confirmDoToggle = async () => {
     const { id, newVal } = confirmToggle
     setConfirmToggle(null)
+    // Optimistic update — apply immediately and revert on error.
+    // Do NOT re-fetch from the server here: Proton's table() scan has a
+    // commit lag, so an immediate GET /rules would race with the INSERT
+    // and return stale data, snapping the UI back to the old state.
     setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: newVal, active: newVal, version: newVal ? (r.version || '') : null } : r))
     try {
       await api.toggleRule(id)
     } catch {
       setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !newVal, active: !newVal } : r))
-      return
     }
-    // Refresh from API to get authoritative state
-    api.listRules()
-      .then(data => {
-        if (data.rule_packs && data.rule_packs.length > 0) {
-          setRules(data.rule_packs.map(r => ({
-            id: r.id,
-            icon: RULE_ICONS[r.id] || 'shield',
-            name: r.name,
-            desc: r.description,
-            enabled: r.enabled,
-            version: r.enabled ? (r.version || null) : null,
-            active: r.enabled,
-            detections24h: r.detections_24h || 0,
-          })))
-        }
-        if (data.total_detections_24h !== undefined) setTotalDetections(data.total_detections_24h)
-        if (data.active_rule_density !== undefined) setDensity(data.active_rule_density)
-      })
-      .catch(() => {})
   }
 
   const confirmDoInstall = async () => {
@@ -154,13 +139,38 @@ export default function RulePacks() {
     }
   }
 
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const result = await api.importCatalog(file)
+      setImportResult(result)
+      // Reload catalog to reflect imported entries.
+      api.getRulesCatalog().then(data => setCatalog(data.catalog || []))
+    } catch (err) {
+      setImportResult({ errors: [err.message] })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const handleExport = () => {
+    const a = document.createElement('a')
+    a.href = api.exportCatalogUrl()
+    a.download = 'agentshield-catalog.zip'
+    a.click()
+  }
+
   const uninstalledCatalog = catalog.filter(e => !e.installed)
 
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
       <Sidebar />
       <TopNav />
-      <Footer />
+
 
       {/* Toggle confirmation modal */}
       {confirmToggle && (
@@ -224,18 +234,62 @@ export default function RulePacks() {
 
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
+          {/* Hidden file input for import */}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".zip"
+            className="hidden"
+            onChange={handleImport}
+          />
+
           <PageHeader
             title="Rule Packs"
             subtitle="Configure and manage security policies enforced across all monitored AI agents."
             actions={
-              <button
-                onClick={() => navigate('/rules/new')}
-                className="px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-xs font-semibold rounded-sm hover:scale-[0.98] transition-all"
-              >
-                New Custom Rule
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleExport}
+                  className="px-4 py-2 text-xs font-semibold rounded-sm border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[14px]">download</span>
+                  Export Catalog
+                </button>
+                <button
+                  onClick={() => importInputRef.current?.click()}
+                  disabled={importing}
+                  className="px-4 py-2 text-xs font-semibold rounded-sm border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[14px]">upload</span>
+                  {importing ? 'Importing…' : 'Import Catalog'}
+                </button>
+                <button
+                  onClick={() => navigate('/rules/new')}
+                  className="px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-xs font-semibold rounded-sm hover:scale-[0.98] transition-all"
+                >
+                  New Custom Rule
+                </button>
+              </div>
             }
           />
+
+          {importResult && (
+            <div className={`p-4 rounded-sm text-xs flex items-start gap-3 ${importResult.errors?.length ? 'bg-[#93000a]/20 border border-[#ffb4ab]/20 text-[#ffb4ab]' : 'bg-[#1d2a1d] border border-green-700/30 text-green-400'}`}>
+              <span className="material-symbols-outlined text-[14px] mt-0.5 shrink-0">
+                {importResult.errors?.length ? 'error' : 'check_circle'}
+              </span>
+              <div className="space-y-1">
+                {(importResult.added?.length > 0) && <p>Added: <span className="font-mono">{importResult.added.join(', ')}</span></p>}
+                {(importResult.updated?.length > 0) && <p>Updated: <span className="font-mono">{importResult.updated.join(', ')}</span></p>}
+                {(importResult.skipped?.length > 0) && <p className="text-zinc-500">Skipped: <span className="font-mono">{importResult.skipped.join(', ')}</span></p>}
+                {(importResult.errors?.length > 0) && importResult.errors.map((e, i) => <p key={i}>{e}</p>)}
+                {!importResult.errors?.length && !importResult.added?.length && !importResult.updated?.length && <p>No changes — all entries already up to date.</p>}
+              </div>
+              <button onClick={() => setImportResult(null)} className="ml-auto text-zinc-500 hover:text-white shrink-0">
+                <span className="material-symbols-outlined text-[14px]">close</span>
+              </button>
+            </div>
+          )}
 
           <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
             {loading ? (

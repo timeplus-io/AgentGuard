@@ -104,6 +104,7 @@ const openAPISpec = `{
     { "name": "Threats",     "description": "Security detections emitted by active rule materialized views." },
     { "name": "Cost",        "description": "Token-based cost estimates computed from configurable per-model pricing." },
     { "name": "Rules",       "description": "Security rule packs. Each enabled rule has a corresponding Proton materialized view that writes matches to agentshield_security_events." },
+    { "name": "Catalog",     "description": "File-based rule catalog. The initial catalog ships embedded in the binary as YAML files; users can override entries or add new ones via import. Proton tracks *install state*; the catalog tracks *definitions*." },
     { "name": "Alerts",      "description": "Real-time alert delivery — webhook receiver and SSE notification stream." },
     { "name": "Investigate", "description": "Ad-hoc SQL query interface against Proton streams." },
     { "name": "Settings",    "description": "Application-level configuration." },
@@ -546,7 +547,7 @@ const openAPISpec = `{
       "post": {
         "tags": ["Rules"],
         "summary": "Create a custom rule",
-        "description": "Creates a new custom rule with a user-supplied SQL query. The \u0060rule_id\u0060 is auto-generated with a \u0060custom-\u0060 prefix.\n\nThe \u0060query_sql\u0060 must be a valid Proton \u0060SELECT\u0060 that queries \u0060agentshield_hook_events\u0060 and outputs columns matching \u0060agentshield_security_events\u0060: \u0060detected_at\u0060, \u0060rule_id\u0060, \u0060rule_name\u0060, \u0060severity\u0060, \u0060agent_id\u0060, \u0060deployment_id\u0060, \u0060session_id\u0060, \u0060run_id\u0060, \u0060hook_name\u0060, \u0060tool_name\u0060, \u0060message\u0060, \u0060event_data\u0060.",
+        "description": "Creates a new custom rule with a user-supplied SQL query and saves it to the local catalog directory.\n\nAn optional \u0060id\u0060 can be specified (letters, digits, hyphens, underscores; max 64 chars); if omitted a \u0060custom-\u0060 prefixed ID is auto-generated. The ID must be unique across the catalog.\n\nThe \u0060query_sql\u0060 must be a valid Proton \u0060SELECT\u0060 that queries \u0060agentshield_hook_events\u0060 and outputs columns matching \u0060agentshield_security_events\u0060: \u0060detected_at\u0060, \u0060rule_id\u0060, \u0060rule_name\u0060, \u0060severity\u0060, \u0060agent_id\u0060, \u0060deployment_id\u0060, \u0060session_id\u0060, \u0060run_id\u0060, \u0060hook_name\u0060, \u0060tool_name\u0060, \u0060message\u0060, \u0060event_data\u0060.",
         "operationId": "createRule",
         "requestBody": {
           "required": true,
@@ -571,9 +572,9 @@ const openAPISpec = `{
 
     "/rules/catalog": {
       "get": {
-        "tags": ["Rules"],
-        "summary": "List builtin rule catalog",
-        "description": "Returns all builtin rule definitions (currently \u0060rp-001\u0060 through \u0060rp-004\u0060) plus any previously installed and then deleted custom rules, each annotated with an \u0060installed\u0060 flag indicating whether the rule is currently active in \u0060agentshield_rules\u0060.\n\nUse this endpoint to power an install/uninstall UI — show the catalog, highlight installed entries, and call \u0060/rules/{id}/install\u0060 or \u0060DELETE /rules/{id}\u0060 accordingly.",
+        "tags": ["Catalog"],
+        "summary": "List rule catalog",
+        "description": "Returns all rule definitions from the file-based catalog (embedded initial rules merged with any local overrides), each annotated with install state from \u0060agentshield_rules\u0060.\n\nRules installed in Proton but absent from the catalog are included with \u0060tags: [\"orphaned\"]\u0060.\n\nUse this endpoint to power an install/uninstall UI — show the catalog, highlight installed entries, and call \u0060/rules/{id}/install\u0060 or \u0060DELETE /rules/{id}\u0060 accordingly. When \u0060upgradeable\u0060 is true the catalog has a newer version than what is installed — call \u0060/rules/{id}/upgrade\u0060 to update.",
         "operationId": "getRulesCatalog",
         "responses": {
           "200": { "description": "Rule catalog with installed status", "content": { "application/json": { "schema": {
@@ -581,10 +582,61 @@ const openAPISpec = `{
             "properties": { "catalog": { "type": "array", "items": { "$ref": "#/components/schemas/CatalogItem" } } }
           }, "example": {
             "catalog": [
-              { "id": "rp-001", "name": "Prompt Injection Shield", "version": "1.0.0", "description": "Detects prompt injection attacks.", "severity": "critical", "category": "prompt_injection", "fp_rate": "medium", "hook_sources": "llm_input", "installed": true, "is_custom": false },
-              { "id": "rp-002", "name": "DLP Sentinel",            "version": "1.0.0", "description": "Prevents PII and secret leakage.",  "severity": "critical", "category": "dlp",              "fp_rate": "low",    "hook_sources": "tool_result_persist,after_tool_call,llm_output", "installed": false, "is_custom": false }
+              { "id": "rp-001", "name": "Prompt Injection Shield", "version": "1.0.0", "description": "Detects prompt injection attacks.", "severity": "critical", "category": "prompt_injection", "fp_rate": "medium", "hook_sources": "llm_input", "author": "Timeplus", "tags": ["security", "prompt-injection"], "installed": true, "enabled": true, "installed_version": "1.0.0", "upgradeable": false },
+              { "id": "rp-002", "name": "DLP Sentinel",            "version": "1.0.0", "description": "Prevents PII and secret leakage.",  "severity": "critical", "category": "dlp",              "fp_rate": "low",    "hook_sources": "tool_result_persist,after_tool_call,llm_output", "author": "Timeplus", "tags": ["security", "dlp"], "installed": false, "enabled": false, "upgradeable": false }
             ]
           }}}}
+        }
+      }
+    },
+
+    "/rules/catalog/import": {
+      "post": {
+        "tags": ["Catalog"],
+        "summary": "Import catalog rules from a zip archive",
+        "description": "Uploads a zip file containing YAML rule definition files and merges them into the local catalog directory.\n\nMerge strategy (per rule ID):\n- **New ID** — always added.\n- **Newer version** — overwrites the existing entry.\n- **Same or older version** — skipped (pass \u0060?force=true\u0060 to overwrite regardless).\n\nNo rules are auto-installed after import — call \u0060/rules/{id}/install\u0060 explicitly.",
+        "operationId": "importCatalog",
+        "parameters": [
+          { "name": "force", "in": "query", "description": "If true, overwrite existing entries even when the imported version is not newer.", "schema": { "type": "boolean", "default": false } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "Zip archive containing one or more YAML rule files (one rule per file, named {id}.yaml)." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Import summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ImportResult" },
+            "example": { "added": ["custom-my-rule"], "updated": ["rp-001"], "skipped": ["rp-002"], "errors": [] }
+          }}},
+          "400": { "description": "Missing file field, invalid zip format, or YAML parse error." }
+        }
+      }
+    },
+
+    "/rules/catalog/export": {
+      "get": {
+        "tags": ["Catalog"],
+        "summary": "Export all catalog rules as a zip archive",
+        "description": "Streams a zip archive containing every rule in the merged catalog as a YAML file (named \u0060{id}.yaml\u0060 per rule).\n\nThe export includes both the embedded initial rules and any local overrides or custom rules saved in the catalog directory. Use this to back up the catalog or share it with another AgentShield instance.",
+        "operationId": "exportCatalog",
+        "responses": {
+          "200": {
+            "description": "Zip archive download.",
+            "headers": {
+              "Content-Disposition": { "schema": { "type": "string" }, "description": "attachment; filename=\"agentshield-catalog.zip\"" }
+            },
+            "content": { "application/zip": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "500": { "description": "Failed to build zip archive." }
         }
       }
     },
@@ -1120,18 +1172,23 @@ const openAPISpec = `{
       },
       "CatalogItem": {
         "type": "object",
-        "description": "A builtin or reinstallable custom rule with its installed status.",
+        "description": "A rule definition from the file-based catalog, annotated with its current install state in Proton.",
         "properties": {
-          "id":           { "type": "string" },
-          "name":         { "type": "string" },
-          "version":      { "type": "string" },
-          "description":  { "type": "string" },
-          "severity":     { "type": "string",  "enum": ["critical", "warning", "info"] },
-          "category":     { "type": "string" },
-          "fp_rate":      { "type": "string" },
-          "hook_sources": { "type": "string" },
-          "installed":    { "type": "boolean", "description": "True when this rule exists in agentshield_rules and is not deleted." },
-          "is_custom":    { "type": "boolean", "description": "True for user-created rules, false for builtins." }
+          "id":                  { "type": "string",  "description": "Rule identifier, e.g. rp-001 or custom-my-rule.", "example": "rp-001" },
+          "name":                { "type": "string",  "example": "Prompt Injection Shield" },
+          "version":             { "type": "string",  "description": "Catalog version (semver X.Y.Z).", "example": "1.0.0" },
+          "description":         { "type": "string" },
+          "severity":            { "type": "string",  "enum": ["critical", "warning", "info"] },
+          "category":            { "type": "string",  "description": "Rule category, e.g. prompt_injection, dlp, privilege, supply_chain." },
+          "fp_rate":             { "type": "string",  "description": "Expected false-positive rate.", "enum": ["low", "medium", "high"] },
+          "hook_sources":        { "type": "string",  "description": "Comma-separated hook names this rule inspects." },
+          "required_telemetry":  { "type": "string",  "description": "Optional telemetry prerequisite note." },
+          "author":              { "type": "string",  "description": "Rule author, e.g. Timeplus.", "example": "Timeplus" },
+          "tags":                { "type": "array", "items": { "type": "string" }, "description": "Labels for filtering. Orphaned rules (installed but absent from catalog) carry the 'orphaned' tag.", "example": ["security", "prompt-injection"] },
+          "installed":           { "type": "boolean", "description": "True when this rule exists in agentshield_rules and is not deleted." },
+          "enabled":             { "type": "boolean", "description": "True when the rule is installed and its MV is active." },
+          "installed_version":   { "type": "string",  "description": "Version string of the installed rule (omitted when not installed).", "example": "1.0.0" },
+          "upgradeable":         { "type": "boolean", "description": "True when the catalog version is newer than the installed version — call /rules/{id}/upgrade to update." }
         }
       },
       "RuleInput": {
@@ -1139,6 +1196,7 @@ const openAPISpec = `{
         "description": "Request body for creating a custom rule.",
         "required": ["name", "query_sql", "severity", "category"],
         "properties": {
+          "id":           { "type": "string",  "description": "Optional user-specified rule ID (letters, digits, hyphens, underscores; max 64 chars). Must be unique across the catalog. Auto-generated with a custom- prefix when omitted." },
           "name":         { "type": "string",  "description": "Display name for the rule." },
           "description":  { "type": "string" },
           "query_sql":    { "type": "string",  "description": "Proton SELECT targeting agentshield_hook_events. Must output all agentshield_security_events columns." },
@@ -1146,6 +1204,16 @@ const openAPISpec = `{
           "category":     { "type": "string",  "description": "Logical category for grouping, e.g. dlp, privilege." },
           "fp_rate":      { "type": "string",  "description": "Expected false-positive rate.", "enum": ["low", "medium", "high"] },
           "hook_sources": { "type": "string",  "description": "Comma-separated hook names for documentation purposes." }
+        }
+      },
+      "ImportResult": {
+        "type": "object",
+        "description": "Summary of a catalog import operation.",
+        "properties": {
+          "added":   { "type": "array", "items": { "type": "string" }, "description": "Rule IDs that were newly added to the catalog." },
+          "updated": { "type": "array", "items": { "type": "string" }, "description": "Rule IDs whose catalog entry was overwritten (newer version or force=true)." },
+          "skipped": { "type": "array", "items": { "type": "string" }, "description": "Rule IDs that were skipped because the imported version was not newer than the existing entry." },
+          "errors":  { "type": "array", "items": { "type": "string" }, "description": "Parse or write errors encountered per file (non-fatal — other files are still processed)." }
         }
       },
       "Alert": {

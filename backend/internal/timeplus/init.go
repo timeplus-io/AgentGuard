@@ -7,12 +7,13 @@ import (
 	"time"
 
 	proton "github.com/timeplus-io/proton-go-driver/v2"
+	"github.com/timeplus/agentshield/internal/catalog"
 	"github.com/timeplus/agentshield/internal/config"
 )
 
-// Init waits until Timeplus is reachable, then ensures all OTel streams and
-// the OTel input exist. It blocks indefinitely until the connection succeeds.
-func Init(cfg *config.TimeplusConfig) error {
+// Init waits until Timeplus is reachable, then ensures all streams, MVs, and
+// seed data are in place. catalogEntries are used to seed rules on first startup.
+func Init(cfg *config.TimeplusConfig, catalogEntries []catalog.Entry) error {
 	conn, err := waitForTimeplus(cfg)
 	if err != nil {
 		return fmt.Errorf("timeplus init: %w", err)
@@ -45,7 +46,7 @@ func Init(cfg *config.TimeplusConfig) error {
 	if err := seedPricingData(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning seeding pricing: %v", err)
 	}
-	if err := seedBuiltinRules(ctx, conn); err != nil {
+	if err := seedCatalogRules(ctx, conn, catalogEntries); err != nil {
 		log.Printf("timeplus init: warning seeding rules: %v", err)
 	}
 	if err := dropLegacyMVs(ctx, conn); err != nil {
@@ -179,164 +180,15 @@ func createNotifyFilterMV(ctx context.Context, conn proton.Conn) error {
 	return execIfNotExists(ctx, conn, "stream", "mv_notify_filter", ddlNotifyFilterMV)
 }
 
-// ── Builtin rules ─────────────────────────────────────────────────────────────
+// ── Catalog rule seeding ──────────────────────────────────────────────────────
 
-type builtinRule struct {
-	ruleID            string
-	name              string
-	version           string
-	description       string
-	querySQL          string
-	severity          string
-	category          string
-	requiredTelemetry string
-	fpRate            string
-	hookSources       string
-}
-
-var builtinRuleData = []builtinRule{
-	{
-		ruleID:      "rp-001",
-		name:        "Prompt Injection Shield",
-		version:     "1.0.0",
-		description: "Detects direct and indirect prompt injection attacks, jailbreak attempts, and goal hijacking across all message surfaces.",
-		severity:    "critical",
-		category:    "prompt_injection",
-		fpRate:      "medium",
-		hookSources: "llm_input",
-		querySQL: `SELECT
-  event_time                AS detected_at,
-  'rp-001'                  AS rule_id,
-  'Prompt Injection Shield' AS rule_name,
-  'critical'                AS severity,
-  agent_id,
-  deployment_id,
-  session_id,
-  run_id,
-  hook_name,
-  ''                        AS tool_name,
-  concat('Potential prompt injection in ', hook_name, ' from agent ', agent_id) AS message,
-  event_data
-FROM agentshield_hook_events
-WHERE hook_name = 'llm_input'
-  AND (
-       lower(event_data) LIKE '%ignore previous instructions%'
-    OR lower(event_data) LIKE '%ignore all previous%'
-    OR lower(event_data) LIKE '%jailbreak%'
-    OR lower(event_data) LIKE '%disregard your%'
-    OR lower(event_data) LIKE '%you are now a%'
-    OR lower(event_data) LIKE '%forget everything%'
-    OR lower(event_data) LIKE '%new instructions:%'
-  )`,
-	},
-	{
-		ruleID:            "rp-002",
-		name:              "DLP Sentinel",
-		version:           "1.0.0",
-		description:       "Scans outbound agent communication for PII, API keys, and sensitive internal documentation leaks.",
-		severity:          "critical",
-		category:          "dlp",
-		requiredTelemetry: "content_capture",
-		fpRate:            "low",
-		hookSources:       "tool_result_persist,after_tool_call,llm_output",
-		querySQL: `SELECT
-  event_time     AS detected_at,
-  'rp-002'       AS rule_id,
-  'DLP Sentinel' AS rule_name,
-  'critical'     AS severity,
-  agent_id,
-  deployment_id,
-  session_id,
-  run_id,
-  hook_name,
-  tool_name,
-  concat('Sensitive data in ', hook_name, if(tool_name != '', concat(' (', tool_name, ')'), ''), ' from agent ', agent_id) AS message,
-  event_data
-FROM agentshield_hook_events
-WHERE hook_name IN ('tool_result_persist', 'after_tool_call', 'llm_output')
-  AND (
-       match(event_data, '[0-9]{3}-[0-9]{2}-[0-9]{4}')
-    OR lower(event_data) LIKE '%api_key%'
-    OR lower(event_data) LIKE '%secret_key%'
-    OR lower(event_data) LIKE '%bearer %'
-    OR lower(event_data) LIKE '%sk-ant-%'
-    OR lower(event_data) LIKE '%ghp_%'
-    OR lower(event_data) LIKE '%private_key%'
-    OR lower(event_data) LIKE '%aws_secret%'
-  )`,
-	},
-	{
-		ruleID:      "rp-003",
-		name:        "Privilege Guard",
-		version:     "1.0.0",
-		description: "Monitors privilege escalation attempts through tool abuse, shell escapes, and dangerous system commands.",
-		severity:    "warning",
-		category:    "privilege",
-		fpRate:      "low",
-		hookSources: "before_tool_call",
-		querySQL: `SELECT
-  event_time        AS detected_at,
-  'rp-003'          AS rule_id,
-  'Privilege Guard' AS rule_name,
-  'warning'         AS severity,
-  agent_id,
-  deployment_id,
-  session_id,
-  run_id,
-  hook_name,
-  tool_name,
-  concat('Dangerous tool call: ', tool_name, ' by agent ', agent_id) AS message,
-  event_data
-FROM agentshield_hook_events
-WHERE hook_name = 'before_tool_call'
-  AND (
-       lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
-    OR lower(event_data) LIKE '%sudo %'
-    OR lower(event_data) LIKE '%rm -rf%'
-    OR lower(event_data) LIKE '%chmod %'
-    OR lower(event_data) LIKE '%/etc/passwd%'
-    OR lower(event_data) LIKE '%/etc/shadow%'
-  )`,
-	},
-	{
-		ruleID:      "rp-004",
-		name:        "Supply Chain Watch",
-		version:     "1.0.0",
-		description: "Monitors external model dependencies and third-party library calls for anomalous behavior.",
-		severity:    "warning",
-		category:    "supply_chain",
-		fpRate:      "high",
-		hookSources: "before_install,before_tool_call",
-		querySQL: `SELECT
-  event_time           AS detected_at,
-  'rp-004'             AS rule_id,
-  'Supply Chain Watch' AS rule_name,
-  'warning'            AS severity,
-  agent_id,
-  deployment_id,
-  session_id,
-  run_id,
-  hook_name,
-  tool_name,
-  concat('Package install by agent ', agent_id, ' via ', if(tool_name != '', tool_name, hook_name)) AS message,
-  event_data
-FROM agentshield_hook_events
-WHERE hook_name = 'before_install'
-   OR (
-       hook_name = 'before_tool_call'
-    AND (
-           lower(event_data) LIKE '%npm install%'
-        OR lower(event_data) LIKE '%pip install%'
-        OR lower(event_data) LIKE '%yarn add%'
-        OR lower(event_data) LIKE '%cargo install%'
-        OR lower(event_data) LIKE '%apt-get install%'
-        OR lower(event_data) LIKE '%brew install%'
-    )
-  )`,
-	},
-}
-
-func seedBuiltinRules(ctx context.Context, conn proton.Conn) error {
+// seedCatalogRules seeds the agentshield_rules stream with entries from the
+// catalog on first startup (when the stream is empty). Subsequent starts skip
+// seeding so that user toggle/install state is preserved.
+func seedCatalogRules(ctx context.Context, conn proton.Conn, entries []catalog.Entry) error {
+	if len(entries) == 0 {
+		return nil
+	}
 	row := conn.QueryRow(ctx, "SELECT count() FROM table(agentshield_rules)")
 	var count uint64
 	if err := row.Scan(&count); err != nil {
@@ -353,19 +205,19 @@ func seedBuiltinRules(ctx context.Context, conn proton.Conn) error {
 	}
 
 	now := time.Now()
-	for _, r := range builtinRuleData {
+	for _, e := range entries {
 		if err := batch.Append(
-			r.ruleID, r.name, r.version, r.description, r.querySQL,
-			false, false, r.severity, r.category, r.requiredTelemetry,
-			r.fpRate, r.hookSources, now,
+			e.ID, e.Name, e.Version, e.Description, e.QuerySQL,
+			false, false, e.Severity, e.Category, e.RequiredTelemetry,
+			e.FPRate, e.HookSources, now,
 		); err != nil {
-			return fmt.Errorf("seed append %s: %w", r.ruleID, err)
+			return fmt.Errorf("seed append %s: %w", e.ID, err)
 		}
 	}
 	if err := batch.Send(); err != nil {
 		return fmt.Errorf("seed send: %w", err)
 	}
-	log.Printf("timeplus: seeded %d built-in rules", len(builtinRuleData))
+	log.Printf("timeplus: seeded %d catalog rules", len(entries))
 	return nil
 }
 

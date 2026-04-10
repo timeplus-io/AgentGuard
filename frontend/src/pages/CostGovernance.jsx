@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
-import Footer from '../components/Footer'
 import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
 
@@ -129,7 +128,7 @@ export default function CostGovernance() {
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
       <Sidebar />
       <TopNav />
-      <Footer />
+
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
           <PageHeader

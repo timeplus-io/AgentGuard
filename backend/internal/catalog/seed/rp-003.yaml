@@ -1,0 +1,37 @@
+id: rp-003
+name: "Privilege Guard"
+version: "1.0.0"
+description: "Monitors privilege escalation attempts through tool abuse, shell escapes, and dangerous system commands."
+severity: warning
+category: privilege
+fp_rate: low
+hook_sources: before_tool_call
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - security
+  - privilege-escalation
+query_sql: |
+  SELECT
+    event_time        AS detected_at,
+    'rp-003'          AS rule_id,
+    'Privilege Guard' AS rule_name,
+    'warning'         AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    hook_name,
+    tool_name,
+    concat('Dangerous tool call: ', tool_name, ' by agent ', agent_id) AS message,
+    event_data
+  FROM agentshield_hook_events
+  WHERE hook_name = 'before_tool_call'
+    AND (
+         lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
+      OR lower(event_data) LIKE '%sudo %'
+      OR lower(event_data) LIKE '%rm -rf%'
+      OR lower(event_data) LIKE '%chmod %'
+      OR lower(event_data) LIKE '%/etc/passwd%'
+      OR lower(event_data) LIKE '%/etc/shadow%'
+    )

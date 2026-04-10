@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/timeplus/agentshield/internal/catalog"
 	"github.com/timeplus/agentshield/internal/config"
 	"github.com/timeplus/agentshield/internal/handlers"
 	"github.com/timeplus/agentshield/internal/timeplus"
@@ -41,8 +42,10 @@ func newRootCmd() *cobra.Command {
 	flags.String("timeplus-user", "default", "Proton/Timeplus username")
 	flags.String("timeplus-password", "", "Proton/Timeplus password")
 	flags.Int("timeplus-native-port", 8463, "Proton/Timeplus native TCP port")
+	flags.String("catalog-dir", "", "catalog directory for rule overrides and custom rules (default: ./catalog)")
 
 	viper.BindPFlag("server.port", flags.Lookup("port"))
+	viper.BindPFlag("catalog.dir", flags.Lookup("catalog-dir"))
 	viper.BindPFlag("timeplus.host", flags.Lookup("timeplus-host"))
 	viper.BindPFlag("timeplus.port", flags.Lookup("timeplus-port"))
 	viper.BindPFlag("timeplus.user", flags.Lookup("timeplus-user"))
@@ -70,10 +73,17 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading frontend assets: %w", err)
 	}
 
+	// Initialize the rule catalog (embedded seed rules + local overrides/additions).
+	mgr, err := catalog.New(catalog.SeedFS, cfg.CatalogDir)
+	if err != nil {
+		return fmt.Errorf("loading catalog: %w", err)
+	}
+
 	fmt.Printf("AgentShield starting on :%d\n", cfg.Server.Port)
 	fmt.Printf("Proton endpoint: %s:%d (native: %d)\n", cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort)
+	fmt.Printf("Catalog directory: %s (%d entries)\n", cfg.CatalogDir, len(mgr.All()))
 
-	if err := timeplus.Init(&cfg.Timeplus); err != nil {
+	if err := timeplus.Init(&cfg.Timeplus, mgr.All()); err != nil {
 		fmt.Printf("warning: timeplus init failed: %v\n", err)
 		// Non-fatal — server continues without OTel resources pre-provisioned.
 	}
@@ -108,15 +118,17 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.GET("/cost/pricing", handlers.ListPricing(cfg))
 		api.POST("/cost/pricing", handlers.UpsertPricing(cfg))
 		api.DELETE("/cost/pricing/:provider/:model", handlers.DeletePricing(cfg))
-		api.GET("/rules", handlers.ListRules(cfg))
-		api.GET("/rules/catalog", handlers.ListCatalog(cfg))
-		api.GET("/rules/mv-status", handlers.MVStatus(cfg))
-		api.POST("/rules/sync", handlers.SyncMVs(cfg))
-		api.POST("/rules", handlers.CreateRule(cfg))
-		api.GET("/rules/:id", handlers.GetRule(cfg))
-		api.POST("/rules/:id/install", handlers.InstallRule(cfg))
-		api.POST("/rules/:id/toggle", handlers.ToggleRule(cfg))
-		api.POST("/rules/:id/upgrade", handlers.UpgradeRule(cfg))
+		api.GET("/rules", handlers.ListRules(cfg, mgr))
+		api.GET("/rules/catalog", handlers.ListCatalog(cfg, mgr))
+		api.POST("/rules/catalog/import", handlers.ImportCatalog(mgr))
+		api.GET("/rules/catalog/export", handlers.ExportCatalog(mgr))
+		api.GET("/rules/mv-status", handlers.MVStatus(cfg, mgr))
+		api.POST("/rules/sync", handlers.SyncMVs(cfg, mgr))
+		api.POST("/rules", handlers.CreateRule(cfg, mgr))
+		api.GET("/rules/:id", handlers.GetRule(cfg, mgr))
+		api.POST("/rules/:id/install", handlers.InstallRule(cfg, mgr))
+		api.POST("/rules/:id/toggle", handlers.ToggleRule(cfg, mgr))
+		api.POST("/rules/:id/upgrade", handlers.UpgradeRule(cfg, mgr))
 		api.DELETE("/rules/:id", handlers.UninstallRule(cfg))
 		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
 		api.GET("/notifications/stream", handlers.NotificationsSSEHandler())
