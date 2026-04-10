@@ -109,16 +109,33 @@ type Agent struct {
 	LLMCallCount   int       `json:"llm_call_count"`
 }
 
+// ThreatEvent is one raw security event belonging to a deduplicated threat.
+type ThreatEvent struct {
+	DetectedAt string `json:"detected_at"`
+	RunID      string `json:"run_id"`
+	HookName   string `json:"hook_name"`
+	ToolName   string `json:"tool_name"`
+	Message    string `json:"message"`
+	EventData  string `json:"event_data"`
+}
+
+// Threat is a deduplicated security threat keyed by (agent_id, deployment_id, session_id, rule_id).
+// ThreatID is computed in Go (MD5 of the four key fields) and is not stored in Proton.
+// Status lifecycle: "open" → "acknowledged" → "cleared" (auto-reopens to "open" on new events).
 type Threat struct {
-	ID        string `json:"id"`
-	Severity  string `json:"severity"` // Critical, Warning, Info
-	Name      string `json:"name"`
-	Vector    string `json:"vector"`
-	AgentID   string `json:"agent_id"`
-	SessionID string `json:"session_id"`
-	Timestamp string `json:"timestamp"`
-	TimeAgo   string `json:"time_ago"`
-	Category  string `json:"category"`
+	ThreatID        string        `json:"threat_id"`
+	AgentID         string        `json:"agent_id"`
+	DeploymentID    string        `json:"deployment_id"`
+	SessionID       string        `json:"session_id"`
+	RuleID          string        `json:"rule_id"`
+	RuleName        string        `json:"rule_name"`
+	Severity        string        `json:"severity"`
+	EventCount      int64         `json:"event_count"`
+	FirstSeen       string        `json:"first_seen"`
+	LastSeen        string        `json:"last_seen"`
+	Status          string        `json:"status"` // "open", "acknowledged", "cleared"
+	StatusUpdatedAt string        `json:"status_updated_at,omitempty"`
+	Events          []ThreatEvent `json:"events"`
 }
 
 type ThreatCategory struct {

@@ -29,7 +29,7 @@ func ListThreats(c *gin.Context) {
 		if severityFilter != "" && t.Severity != severityFilter {
 			continue
 		}
-		if categoryFilter != "" && t.Category != categoryFilter {
+		if categoryFilter != "" && t.RuleID != categoryFilter {
 			continue
 		}
 		filtered = append(filtered, t)

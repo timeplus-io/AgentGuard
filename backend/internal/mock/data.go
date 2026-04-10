@@ -4,26 +4,7 @@ import "github.com/timeplus/agentshield/internal/models"
 
 var Agents = []models.Agent{}
 
-var Threats = []models.Threat{
-	{ID: "THR-001", Severity: "Critical", Name: "Prompt Injection via User Input", Vector: "user_message", AgentID: "AS-OMEGA-1102", SessionID: "sess-9f3a2", Timestamp: "2026-04-04T10:42:00Z", TimeAgo: "3m ago", Category: "Prompt Injection"},
-	{ID: "THR-002", Severity: "Critical", Name: "Data Exfiltration Attempt – PII Leak", Vector: "tool_call", AgentID: "AS-IOTA-3309", SessionID: "sess-7b1c4", Timestamp: "2026-04-04T10:30:00Z", TimeAgo: "15m ago", Category: "Data Exfiltration"},
-	{ID: "THR-003", Severity: "Critical", Name: "Privilege Escalation via Tool Abuse", Vector: "tool_result", AgentID: "AS-SIGMA-4421", SessionID: "sess-2d8e9", Timestamp: "2026-04-04T10:15:00Z", TimeAgo: "30m ago", Category: "Privilege Escalation"},
-	{ID: "THR-004", Severity: "Warning", Name: "Indirect Prompt Injection in Document", Vector: "file_read", AgentID: "AS-DELTA-9012", SessionID: "sess-1a4f7", Timestamp: "2026-04-04T09:58:00Z", TimeAgo: "47m ago", Category: "Prompt Injection"},
-	{ID: "THR-005", Severity: "Warning", Name: "Unusual Token Consumption Pattern", Vector: "llm_response", AgentID: "AS-ZETA-2201", SessionID: "sess-6e3b1", Timestamp: "2026-04-04T09:45:00Z", TimeAgo: "1h ago", Category: "Data Exfiltration"},
-	{ID: "THR-006", Severity: "Warning", Name: "Supply Chain Dependency Tampering", Vector: "package_fetch", AgentID: "AS-GAMMA-5503", SessionID: "sess-8c2d5", Timestamp: "2026-04-04T09:30:00Z", TimeAgo: "1h ago", Category: "Supply Chain"},
-	{ID: "THR-007", Severity: "Warning", Name: "Memory Poisoning via Context Injection", Vector: "memory_write", AgentID: "AS-ETA-8834", SessionID: "sess-4f7a3", Timestamp: "2026-04-04T09:15:00Z", TimeAgo: "1h ago", Category: "Memory Poisoning"},
-	{ID: "THR-008", Severity: "Info", Name: "Rate Limit Policy Triggered", Vector: "api_call", AgentID: "AS-SIGMA-4421", SessionID: "sess-3b9c6", Timestamp: "2026-04-04T09:00:00Z", TimeAgo: "2h ago", Category: "Prompt Injection"},
-	{ID: "THR-009", Severity: "Info", Name: "Suspicious File Access Pattern", Vector: "file_read", AgentID: "AS-KAPPA-9981", SessionID: "sess-5d2e8", Timestamp: "2026-04-04T08:45:00Z", TimeAgo: "2h ago", Category: "Data Exfiltration"},
-	{ID: "THR-010", Severity: "Critical", Name: "Jailbreak Attempt Detected", Vector: "user_message", AgentID: "AS-OMEGA-1102", SessionID: "sess-0a1b2", Timestamp: "2026-04-04T08:30:00Z", TimeAgo: "2h ago", Category: "Prompt Injection"},
-	{ID: "THR-011", Severity: "Warning", Name: "Unauthorized API Endpoint Access", Vector: "http_request", AgentID: "AS-BETA-7721", SessionID: "sess-7c4d1", Timestamp: "2026-04-04T08:15:00Z", TimeAgo: "2h ago", Category: "Privilege Escalation"},
-	{ID: "THR-012", Severity: "Critical", Name: "Exfiltration via Encoded Output", Vector: "llm_response", AgentID: "AS-IOTA-3309", SessionID: "sess-2e5f9", Timestamp: "2026-04-04T08:00:00Z", TimeAgo: "3h ago", Category: "Data Exfiltration"},
-	{ID: "THR-013", Severity: "Info", Name: "Malicious Package Detected in Deps", Vector: "package_fetch", AgentID: "AS-ALPHA-3030", SessionID: "sess-9d3c7", Timestamp: "2026-04-04T07:45:00Z", TimeAgo: "3h ago", Category: "Supply Chain"},
-	{ID: "THR-014", Severity: "Warning", Name: "Cross-Agent Memory Contamination", Vector: "memory_read", AgentID: "AS-THETA-6612", SessionID: "sess-6f1b4", Timestamp: "2026-04-04T07:30:00Z", TimeAgo: "3h ago", Category: "Memory Poisoning"},
-	{ID: "THR-015", Severity: "Info", Name: "Compliance Boundary Probe", Vector: "user_message", AgentID: "AS-LAMBDA-4456", SessionID: "sess-3a8e2", Timestamp: "2026-04-04T07:15:00Z", TimeAgo: "3h ago", Category: "Prompt Injection"},
-	{ID: "THR-016", Severity: "Critical", Name: "Root Privilege via Shell Escape", Vector: "tool_call", AgentID: "AS-OMEGA-1102", SessionID: "sess-1c7d5", Timestamp: "2026-04-04T07:00:00Z", TimeAgo: "4h ago", Category: "Privilege Escalation"},
-	{ID: "THR-017", Severity: "Warning", Name: "Poisoned Vector Store Entry", Vector: "memory_write", AgentID: "AS-ETA-8834", SessionID: "sess-8b2f6", Timestamp: "2026-04-04T06:45:00Z", TimeAgo: "4h ago", Category: "Memory Poisoning"},
-	{ID: "THR-018", Severity: "Info", Name: "High Token Burn Rate Observed", Vector: "llm_response", AgentID: "AS-ZETA-2201", SessionID: "sess-4e9a1", Timestamp: "2026-04-04T06:30:00Z", TimeAgo: "4h ago", Category: "Data Exfiltration"},
-}
+var Threats = []models.Threat{}
 
 var DailySpend = []models.DailySpend{
 	{Day: "Mar 29", Amount: 1842.50},
