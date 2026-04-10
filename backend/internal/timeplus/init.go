@@ -798,4 +798,5 @@ AS SELECT
     rule_name,
     severity,
     detected_at AS last_seen
-FROM agentshield_security_events`
+FROM agentshield_security_events
+SETTINGS seek_to = 'earliest'`
