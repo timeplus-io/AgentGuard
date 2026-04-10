@@ -1,60 +1,242 @@
 package handlers
 
 import (
+	"crypto/md5"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/mock"
+	"github.com/timeplus/agentshield/internal/config"
 	"github.com/timeplus/agentshield/internal/models"
+	tp "github.com/timeplus/agentshield/internal/timeplus"
 )
 
-func ListThreats(c *gin.Context) {
-	severityFilter := c.Query("severity")
-	categoryFilter := c.Query("category")
-	pageStr := c.DefaultQuery("page", "1")
-	limitStr := c.DefaultQuery("limit", "12")
+// threatKey uniquely identifies a deduplicated threat.
+type threatKey struct{ agentID, deploymentID, sessionID, ruleID string }
 
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		page = 1
-	}
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit < 1 {
-		limit = 12
-	}
+// computeThreatID returns the MD5 hex string of the four key fields.
+// Used as the API path parameter (:id) — never stored in Proton.
+func computeThreatID(agentID, deploymentID, sessionID, ruleID string) string {
+	h := md5.Sum([]byte(agentID + "-" + deploymentID + "-" + sessionID + "-" + ruleID))
+	return hex.EncodeToString(h[:])
+}
 
-	filtered := []models.Threat{}
-	for _, t := range mock.Threats {
-		if severityFilter != "" && t.Severity != severityFilter {
-			continue
+const sqlListThreats = `
+SELECT agent_id, deployment_id, session_id, rule_id,
+       rule_name, severity, last_seen, status, status_updated_at
+FROM table(agentshield_threats)`
+
+const sqlThreatStats = `
+SELECT agent_id, deployment_id, session_id, rule_id,
+       count()          AS event_count,
+       min(detected_at) AS first_seen
+FROM table(agentshield_security_events)
+GROUP BY agent_id, deployment_id, session_id, rule_id`
+
+const sqlThreatEvents = `
+SELECT agent_id, deployment_id, session_id, rule_id,
+       detected_at, run_id, hook_name, tool_name, message, event_data
+FROM table(agentshield_security_events)
+ORDER BY detected_at DESC`
+
+// ListThreats handles GET /api/threats.
+// Runs three Proton snapshot queries concurrently, merges results, applies re-open logic.
+// Query params: ?severity=, ?status=, ?page=, ?limit=
+func ListThreats(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		severityFilter := c.Query("severity")
+		statusFilter := c.Query("status")
+		pageStr := c.DefaultQuery("page", "1")
+		limitStr := c.DefaultQuery("limit", "20")
+
+		page, err := strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			page = 1
 		}
-		if categoryFilter != "" && t.RuleID != categoryFilter {
-			continue
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit < 1 {
+			limit = 20
 		}
-		filtered = append(filtered, t)
-	}
 
-	total := len(filtered)
-	start := (page - 1) * limit
-	if start >= total {
+		type queryResult struct {
+			rows []tp.Row
+			err  error
+		}
+
+		ch1 := make(chan queryResult, 1)
+		ch2 := make(chan queryResult, 1)
+		ch3 := make(chan queryResult, 1)
+
+		go func() {
+			rows, err := tp.Query(&cfg.Timeplus, sqlListThreats)
+			ch1 <- queryResult{rows, err}
+		}()
+		go func() {
+			rows, err := tp.Query(&cfg.Timeplus, sqlThreatStats)
+			ch2 <- queryResult{rows, err}
+		}()
+		go func() {
+			rows, err := tp.Query(&cfg.Timeplus, sqlThreatEvents)
+			ch3 <- queryResult{rows, err}
+		}()
+
+		r1, r2, r3 := <-ch1, <-ch2, <-ch3
+
+		if r1.err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
+			return
+		}
+
+		// Build stats map from Query 2 (event_count + first_seen per key).
+		type statsEntry struct {
+			eventCount int64
+			firstSeen  string
+		}
+		statsMap := make(map[threatKey]statsEntry, len(r2.rows))
+		if r2.err == nil {
+			for _, row := range r2.rows {
+				k := threatKey{
+					parseStr(row["agent_id"]),
+					parseStr(row["deployment_id"]),
+					parseStr(row["session_id"]),
+					parseStr(row["rule_id"]),
+				}
+				statsMap[k] = statsEntry{
+					eventCount: parseInt64(row["event_count"]),
+					firstSeen:  parseStr(row["first_seen"]),
+				}
+			}
+		}
+
+		// Build events map from Query 3 ([]ThreatEvent per key, newest first from ORDER BY).
+		eventsMap := make(map[threatKey][]models.ThreatEvent, len(r1.rows))
+		if r3.err == nil {
+			for _, row := range r3.rows {
+				k := threatKey{
+					parseStr(row["agent_id"]),
+					parseStr(row["deployment_id"]),
+					parseStr(row["session_id"]),
+					parseStr(row["rule_id"]),
+				}
+				eventsMap[k] = append(eventsMap[k], models.ThreatEvent{
+					DetectedAt: parseStr(row["detected_at"]),
+					RunID:      parseStr(row["run_id"]),
+					HookName:   parseStr(row["hook_name"]),
+					ToolName:   parseStr(row["tool_name"]),
+					Message:    parseStr(row["message"]),
+					EventData:  parseStr(row["event_data"]),
+				})
+			}
+		}
+
+		// Collect threats that need re-opening.
+		var toReopen []threatKey
+
+		threats := make([]models.Threat, 0, len(r1.rows))
+		for _, row := range r1.rows {
+			k := threatKey{
+				parseStr(row["agent_id"]),
+				parseStr(row["deployment_id"]),
+				parseStr(row["session_id"]),
+				parseStr(row["rule_id"]),
+			}
+
+			status := parseStr(row["status"])
+			if status == "" {
+				status = "open"
+			}
+			statusUpdatedAt := parseStr(row["status_updated_at"])
+			lastSeen := parseStr(row["last_seen"])
+
+			// Re-open: if cleared but new events arrived after the clear.
+			if status == "cleared" && statusUpdatedAt != "" && lastSeen != "" {
+				ls, errLS := time.Parse("2006-01-02 15:04:05.000", lastSeen)
+				su, errSU := time.Parse("2006-01-02 15:04:05.000", statusUpdatedAt)
+				if errLS == nil && errSU == nil && ls.After(su) {
+					status = "open"
+					toReopen = append(toReopen, k)
+				}
+			}
+
+			stats := statsMap[k]
+			events := eventsMap[k]
+			if events == nil {
+				events = []models.ThreatEvent{}
+			}
+
+			threats = append(threats, models.Threat{
+				ThreatID:        computeThreatID(k.agentID, k.deploymentID, k.sessionID, k.ruleID),
+				AgentID:         k.agentID,
+				DeploymentID:    k.deploymentID,
+				SessionID:       k.sessionID,
+				RuleID:          k.ruleID,
+				RuleName:        parseStr(row["rule_name"]),
+				Severity:        parseStr(row["severity"]),
+				EventCount:      stats.eventCount,
+				FirstSeen:       stats.firstSeen,
+				LastSeen:        lastSeen,
+				Status:          status,
+				StatusUpdatedAt: statusUpdatedAt,
+				Events:          events,
+			})
+		}
+
+		// Fire-and-forget: upsert re-opened threats back to agentshield_threats CF2.
+		if len(toReopen) > 0 {
+			go func(keys []threatKey) {
+				for _, k := range keys {
+					sql := fmt.Sprintf(
+						`INSERT INTO agentshield_threats (agent_id, deployment_id, session_id, rule_id, status, status_updated_at) VALUES ('%s', '%s', '%s', '%s', 'open', now64(3))`,
+						escapeSQL(k.agentID), escapeSQL(k.deploymentID),
+						escapeSQL(k.sessionID), escapeSQL(k.ruleID),
+					)
+					_ = tp.ExecHTTP(&cfg.Timeplus, sql)
+				}
+			}(toReopen)
+		}
+
+		// Sort by last_seen descending (string comparison works for ISO timestamps).
+		for i := 0; i < len(threats)-1; i++ {
+			for j := i + 1; j < len(threats); j++ {
+				if threats[j].LastSeen > threats[i].LastSeen {
+					threats[i], threats[j] = threats[j], threats[i]
+				}
+			}
+		}
+
+		// Apply filters.
+		filtered := make([]models.Threat, 0, len(threats))
+		for _, t := range threats {
+			if severityFilter != "" && t.Severity != severityFilter {
+				continue
+			}
+			if statusFilter != "" && t.Status != statusFilter {
+				continue
+			}
+			filtered = append(filtered, t)
+		}
+
+		// Paginate.
+		total := len(filtered)
+		start := (page - 1) * limit
+		if start >= total {
+			c.JSON(http.StatusOK, models.ThreatListResponse{
+				Threats: []models.Threat{},
+				Total:   total, Page: page, Limit: limit,
+			})
+			return
+		}
+		end := start + limit
+		if end > total {
+			end = total
+		}
+
 		c.JSON(http.StatusOK, models.ThreatListResponse{
-			Threats: []models.Threat{},
-			Total:   total,
-			Page:    page,
-			Limit:   limit,
+			Threats: filtered[start:end],
+			Total:   total, Page: page, Limit: limit,
 		})
-		return
 	}
-	end := start + limit
-	if end > total {
-		end = total
-	}
-
-	c.JSON(http.StatusOK, models.ThreatListResponse{
-		Threats: filtered[start:end],
-		Total:   total,
-		Page:    page,
-		Limit:   limit,
-	})
 }
