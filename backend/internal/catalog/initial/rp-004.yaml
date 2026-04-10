@@ -1,0 +1,40 @@
+id: rp-004
+name: "Supply Chain Watch"
+version: "1.0.0"
+description: "Monitors external model dependencies and third-party library calls for anomalous behavior."
+severity: warning
+category: supply_chain
+fp_rate: high
+hook_sources: "before_install,before_tool_call"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - security
+  - supply-chain
+query_sql: |
+  SELECT
+    event_time           AS detected_at,
+    'rp-004'             AS rule_id,
+    'Supply Chain Watch' AS rule_name,
+    'warning'            AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    hook_name,
+    tool_name,
+    concat('Package install by agent ', agent_id, ' via ', if(tool_name != '', tool_name, hook_name)) AS message,
+    event_data
+  FROM agentshield_hook_events
+  WHERE hook_name = 'before_install'
+     OR (
+         hook_name = 'before_tool_call'
+      AND (
+             lower(event_data) LIKE '%npm install%'
+          OR lower(event_data) LIKE '%pip install%'
+          OR lower(event_data) LIKE '%yarn add%'
+          OR lower(event_data) LIKE '%cargo install%'
+          OR lower(event_data) LIKE '%apt-get install%'
+          OR lower(event_data) LIKE '%brew install%'
+      )
+    )

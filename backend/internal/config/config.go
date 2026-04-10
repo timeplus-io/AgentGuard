@@ -20,8 +20,9 @@ type ServerConfig struct {
 }
 
 type Config struct {
-	Server   ServerConfig
-	Timeplus TimeplusConfig
+	Server     ServerConfig
+	Timeplus   TimeplusConfig
+	CatalogDir string
 }
 
 // Load reads configuration from (in order of increasing precedence):
@@ -34,6 +35,7 @@ func Load() (*Config, error) {
 
 	// Defaults
 	v.SetDefault("server.port", 8080)
+	v.SetDefault("catalog.dir", "./catalog")
 	v.SetDefault("timeplus.host", "localhost")
 	v.SetDefault("timeplus.port", 3218)
 	v.SetDefault("timeplus.native-port", 8463)
@@ -61,6 +63,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{}
 	cfg.Server.Port = v.GetInt("server.port")
+	cfg.CatalogDir = v.GetString("catalog.dir")
 	cfg.Timeplus.Host = v.GetString("timeplus.host")
 	cfg.Timeplus.Port = v.GetInt("timeplus.port")
 	cfg.Timeplus.NativePort = v.GetInt("timeplus.native-port")

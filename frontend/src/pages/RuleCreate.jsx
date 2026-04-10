@@ -29,6 +29,7 @@ WHERE 1 = 0 -- replace with your detection condition`
 export default function RuleCreate() {
   const navigate = useNavigate()
   const [form, setForm] = useState({
+    id: '',
     name: '',
     description: '',
     severity: 'warning',
@@ -87,6 +88,7 @@ export default function RuleCreate() {
     setSaveError(null)
     try {
       await api.createRule({
+        id: form.id.trim() || undefined,
         name: form.name,
         description: form.description,
         query_sql: sql,
@@ -149,6 +151,19 @@ export default function RuleCreate() {
             <aside className="w-80 shrink-0 overflow-y-auto custom-scrollbar">
               <div className="bg-[#2c2834] rounded-sm border border-[#574149]/10 p-6 flex flex-col gap-5">
                 <h3 className="text-[10px] font-bold text-[#ffb0cf] tracking-widest uppercase">Rule Metadata</h3>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="rule-id" className={labelCls}>Rule ID <span className="normal-case text-zinc-600">(optional)</span></label>
+                  <input
+                    id="rule-id"
+                    type="text"
+                    value={form.id}
+                    onChange={e => setField('id', e.target.value)}
+                    placeholder="auto-generated if blank"
+                    className={`${inputCls} font-mono`}
+                  />
+                  <p className="text-[10px] text-zinc-600">Letters, digits, hyphens, underscores. Max 64 chars. Must be unique.</p>
+                </div>
 
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="rule-name" className={labelCls}>Name *</label>

@@ -1,0 +1,38 @@
+id: rp-001
+name: "Prompt Injection Shield"
+version: "1.0.0"
+description: "Detects direct and indirect prompt injection attacks, jailbreak attempts, and goal hijacking across all message surfaces."
+severity: critical
+category: prompt_injection
+fp_rate: medium
+hook_sources: llm_input
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - security
+  - prompt-injection
+query_sql: |
+  SELECT
+    event_time                AS detected_at,
+    'rp-001'                  AS rule_id,
+    'Prompt Injection Shield' AS rule_name,
+    'critical'                AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    hook_name,
+    ''                        AS tool_name,
+    concat('Potential prompt injection in ', hook_name, ' from agent ', agent_id) AS message,
+    event_data
+  FROM agentshield_hook_events
+  WHERE hook_name = 'llm_input'
+    AND (
+         lower(event_data) LIKE '%ignore previous instructions%'
+      OR lower(event_data) LIKE '%ignore all previous%'
+      OR lower(event_data) LIKE '%jailbreak%'
+      OR lower(event_data) LIKE '%disregard your%'
+      OR lower(event_data) LIKE '%you are now a%'
+      OR lower(event_data) LIKE '%forget everything%'
+      OR lower(event_data) LIKE '%new instructions:%'
+    )

@@ -71,6 +71,13 @@ export const api = {
       .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() }),
   listRules: () => get('/rules'),
   getRulesCatalog: () => get('/rules/catalog'),
+  importCatalog: (file, force = false) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return fetch(`${BASE}/rules/catalog/import${force ? '?force=true' : ''}`, { method: 'POST', body: fd })
+      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() })
+  },
+  exportCatalogUrl: () => `${BASE}/rules/catalog/export`,
   getRule: (id) => get(`/rules/${id}`),
   toggleRule: (id) => post(`/rules/${id}/toggle`, {}),
   upgradeRule: (id, querySql) => post(`/rules/${id}/upgrade`, { query_sql: querySql }),

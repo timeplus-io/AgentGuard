@@ -14,38 +14,6 @@ func MVName(ruleID string) string {
 	return "mv_rule_" + strings.ReplaceAll(ruleID, "-", "")
 }
 
-// CatalogEntry is the public-facing summary of a builtin rule.
-type CatalogEntry struct {
-	ID          string
-	Name        string
-	Version     string
-	Description string
-	QuerySQL    string
-	Severity    string
-	Category    string
-	FPRate      string
-	HookSources string
-}
-
-// Catalog returns the full builtin rule catalog.
-func Catalog() []CatalogEntry {
-	entries := make([]CatalogEntry, 0, len(builtinRuleData))
-	for _, r := range builtinRuleData {
-		entries = append(entries, CatalogEntry{
-			ID:          r.ruleID,
-			Name:        r.name,
-			Version:     r.version,
-			Description: r.description,
-			QuerySQL:    r.querySQL,
-			Severity:    r.severity,
-			Category:    r.category,
-			FPRate:      r.fpRate,
-			HookSources: r.hookSources,
-		})
-	}
-	return entries
-}
-
 // CreateRuleMV creates a new materialized view for the rule.
 // querySQLBody is the full SELECT ... FROM agentshield_hook_events WHERE ... body.
 func CreateRuleMV(cfg *config.TimeplusConfig, ruleID, querySQLBody string) error {

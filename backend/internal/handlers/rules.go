@@ -5,26 +5,17 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentshield/internal/catalog"
 	"github.com/timeplus/agentshield/internal/config"
 	"github.com/timeplus/agentshield/internal/models"
 	tp "github.com/timeplus/agentshield/internal/timeplus"
 )
 
-// latestVersions is the catalog of the latest built-in rule versions.
-// If the live version differs, the UI shows an "Upgrade" button.
-var latestVersions = map[string]string{
-	"rp-001": "1.0.0",
-	"rp-002": "1.0.0",
-	"rp-003": "1.0.0",
-	"rp-004": "1.0.0",
-}
-
-const sqlDeletedCustomRules = `
+const sqlDeletedRules = `
 SELECT
   rule_id,
   arg_max(name,               updated_at) AS name,
@@ -35,7 +26,6 @@ SELECT
   arg_max(fp_rate,            updated_at) AS fp_rate,
   arg_max(hook_sources,       updated_at) AS hook_sources
 FROM table(agentshield_rules)
-WHERE rule_id LIKE 'custom-%'
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = true`
 
@@ -56,9 +46,9 @@ FROM table(agentshield_rules)
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = false`
 
-func ListRules(cfg *config.Config) gin.HandlerFunc {
+func ListRules(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		packs, err := queryCurrentRulePacks(&cfg.Timeplus)
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
@@ -94,11 +84,11 @@ func ListRules(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-func GetRule(cfg *config.Config) gin.HandlerFunc {
+func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		packs, err := queryCurrentRulePacks(&cfg.Timeplus)
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
 			return
@@ -147,11 +137,11 @@ func GetRule(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-func ToggleRule(cfg *config.Config) gin.HandlerFunc {
+func ToggleRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		packs, err := queryCurrentRulePacks(&cfg.Timeplus)
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
 			return
@@ -168,7 +158,6 @@ func ToggleRule(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// Flip enabled via INSERT ... SELECT — reads current state and flips it atomically
 		sql := fmt.Sprintf(`
 INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
 SELECT
@@ -221,17 +210,13 @@ GROUP BY rule_id`, id)
 	}
 }
 
-func UpgradeRule(cfg *config.Config) gin.HandlerFunc {
+func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		latestVer, ok := latestVersions[id]
-		if !ok {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no upgrade available"})
-			return
-		}
+		catalogEntry, inCatalog := mgr.Lookup(id)
 
-		packs, err := queryCurrentRulePacks(&cfg.Timeplus)
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
 			return
@@ -247,25 +232,37 @@ func UpgradeRule(cfg *config.Config) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		if current.Version == latestVer {
+
+		// Determine the target version and SQL.
+		// Body query_sql takes precedence (user-provided edit); fall back to catalog.
+		var body struct {
+			QuerySQL string `json:"query_sql"`
+		}
+		_ = c.ShouldBindJSON(&body)
+
+		targetSQL := body.QuerySQL
+		targetVersion := current.Version
+		if inCatalog {
+			if body.QuerySQL == "" {
+				targetSQL = catalogEntry.QuerySQL
+			}
+			targetVersion = catalogEntry.Version
+		}
+		if targetSQL == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "query_sql required"})
+			return
+		}
+		if targetVersion == current.Version && body.QuerySQL == "" {
 			c.JSON(http.StatusOK, gin.H{"message": "already at latest version"})
 			return
 		}
 
-		var body struct {
-			QuerySQL string `json:"query_sql"`
-		}
-		if err := c.ShouldBindJSON(&body); err != nil || body.QuerySQL == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "query_sql required in body"})
-			return
-		}
-
-		escapedSQL := strings.ReplaceAll(body.QuerySQL, "'", "''")
+		escapedSQL := strings.ReplaceAll(targetSQL, "'", "''")
 		insertSQL := fmt.Sprintf(`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES
 ('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s',now64(3))`,
 			id,
 			strings.ReplaceAll(current.Name, "'", "''"),
-			latestVer,
+			targetVersion,
 			strings.ReplaceAll(current.Description, "'", "''"),
 			escapedSQL,
 			current.Enabled,
@@ -281,12 +278,12 @@ func UpgradeRule(cfg *config.Config) gin.HandlerFunc {
 			log.Printf("rules: upgrade drop MV %s: %v", id, err)
 		}
 		if current.Enabled {
-			if err := tp.CreateRuleMV(&cfg.Timeplus, id, body.QuerySQL); err != nil {
+			if err := tp.CreateRuleMV(&cfg.Timeplus, id, targetSQL); err != nil {
 				log.Printf("rules: upgrade create MV %s: %v", id, err)
 			}
 		}
 
-		c.JSON(http.StatusOK, gin.H{"version": latestVer})
+		c.JSON(http.StatusOK, gin.H{"version": targetVersion})
 	}
 }
 
@@ -327,193 +324,128 @@ GROUP BY rule_id`, id)
 	}
 }
 
-// ListCatalog returns the builtin rule catalog with each entry's installed status.
-func ListCatalog(cfg *config.Config) gin.HandlerFunc {
+// ListCatalog returns all catalog entries with their install status from Proton.
+func ListCatalog(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		installed, err := queryCurrentRulePacks(&cfg.Timeplus)
+		installed, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			log.Printf("rules: catalog query failed: %v", err)
 		}
-		installedIDs := map[string]bool{}
+		installedMap := make(map[string]models.RulePack, len(installed))
 		for _, p := range installed {
-			installedIDs[p.ID] = true
+			installedMap[p.ID] = p
 		}
 
 		type CatalogItem struct {
-			ID          string `json:"id"`
-			Name        string `json:"name"`
-			Version     string `json:"version"`
-			Description string `json:"description"`
-			Severity    string `json:"severity"`
-			Category    string `json:"category"`
-			FPRate      string `json:"fp_rate"`
-			HookSources string `json:"hook_sources"`
-			Installed   bool   `json:"installed"`
-			IsCustom    bool   `json:"is_custom"`
+			ID                string   `json:"id"`
+			Name              string   `json:"name"`
+			Version           string   `json:"version"`
+			Description       string   `json:"description"`
+			Severity          string   `json:"severity"`
+			Category          string   `json:"category"`
+			FPRate            string   `json:"fp_rate"`
+			HookSources       string   `json:"hook_sources"`
+			RequiredTelemetry string   `json:"required_telemetry"`
+			Author            string   `json:"author"`
+			Tags              []string `json:"tags"`
+			Installed         bool     `json:"installed"`
+			Enabled           bool     `json:"enabled"`
+			InstalledVersion  string   `json:"installed_version,omitempty"`
+			Upgradeable       bool     `json:"upgradeable"`
 		}
 
-		catalog := tp.Catalog()
-		items := make([]CatalogItem, 0, len(catalog))
-		for _, e := range catalog {
-			items = append(items, CatalogItem{
-				ID:          e.ID,
-				Name:        e.Name,
-				Version:     e.Version,
-				Description: e.Description,
-				Severity:    e.Severity,
-				Category:    e.Category,
-				FPRate:      e.FPRate,
-				HookSources: e.HookSources,
-				Installed:   installedIDs[e.ID],
-				IsCustom:    false,
-			})
+		entries := mgr.All()
+		items := make([]CatalogItem, 0, len(entries))
+		for _, e := range entries {
+			item := CatalogItem{
+				ID:                e.ID,
+				Name:              e.Name,
+				Version:           e.Version,
+				Description:       e.Description,
+				Severity:          e.Severity,
+				Category:          e.Category,
+				FPRate:            e.FPRate,
+				HookSources:       e.HookSources,
+				RequiredTelemetry: e.RequiredTelemetry,
+				Author:            e.Author,
+				Tags:              e.Tags,
+			}
+			if p, ok := installedMap[e.ID]; ok {
+				item.Installed = true
+				item.Enabled = p.Enabled
+				item.InstalledVersion = p.Version
+				item.Upgradeable = versionGreater(e.Version, p.Version)
+			}
+			items = append(items, item)
 		}
 
-		// Append deleted custom rules so they can be reinstalled.
-		customRows, err := tp.Query(&cfg.Timeplus, sqlDeletedCustomRules)
-		if err != nil {
-			log.Printf("rules: deleted custom rules query failed: %v", err)
-		}
-		for _, row := range customRows {
-			id := strVal(row, "rule_id")
-			if id == "" {
-				continue
+		// Append installed rules not in the catalog (orphaned — deleted from catalog).
+		for _, p := range installed {
+			if !mgr.Exists(p.ID) {
+				items = append(items, CatalogItem{
+					ID:               p.ID,
+					Name:             p.Name,
+					Version:          p.Version,
+					Description:      p.Description,
+					Severity:         p.Severity,
+					Category:         p.Category,
+					FPRate:           p.FPRate,
+					HookSources:      p.HookSources,
+					Author:           "unknown",
+					Tags:             []string{"orphaned"},
+					Installed:        true,
+					Enabled:          p.Enabled,
+					InstalledVersion: p.Version,
+				})
 			}
-			if installedIDs[id] {
-				continue // currently installed, skip
-			}
-			items = append(items, CatalogItem{
-				ID:          id,
-				Name:        strVal(row, "name"),
-				Version:     strVal(row, "version"),
-				Description: strVal(row, "description"),
-				Severity:    strVal(row, "severity"),
-				Category:    strVal(row, "category"),
-				FPRate:      strVal(row, "fp_rate"),
-				HookSources: strVal(row, "hook_sources"),
-				Installed:   false,
-				IsCustom:    true,
-			})
 		}
 
 		c.JSON(http.StatusOK, gin.H{"catalog": items})
 	}
 }
 
-// InstallRule installs a rule. Custom rules (custom- prefix) are reinstalled
-// from their last known stream state. Builtin rules (rp- prefix) are installed
-// from the hardcoded catalog.
-func InstallRule(cfg *config.Config) gin.HandlerFunc {
+// InstallRule installs a rule from the catalog into Proton and creates its MV.
+func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 
-		// Custom rules: reinstall by reading last state from the stream.
-		if strings.HasPrefix(id, "custom-") {
-			rows, err := tp.Query(&cfg.Timeplus, fmt.Sprintf(`
-				SELECT
-				  arg_max(query_sql, updated_at) AS query_sql,
-				  arg_max(deleted,   updated_at) AS deleted
-				FROM table(agentshield_rules)
-				WHERE rule_id = '%s'
-				GROUP BY rule_id
-			`, strings.ReplaceAll(id, "'", "''")))
-			if err != nil || len(rows) == 0 {
-				c.JSON(http.StatusNotFound, gin.H{"error": "custom rule not found in stream"})
-				return
-			}
-			row := rows[0]
-
-			// Guard: rule is currently active — nothing to reinstall.
-			if !boolVal(row, "deleted") {
-				c.JSON(http.StatusConflict, gin.H{"error": "rule is already installed"})
-				return
-			}
-
-			querySQL := strVal(row, "query_sql")
-
-			// Guard: stored SQL is required to recreate the MV.
-			if querySQL == "" {
-				c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "stored rule has no query_sql; cannot reinstall"})
-				return
-			}
-
-			reinstallSQL := fmt.Sprintf(`
-INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
-SELECT
-  rule_id,
-  arg_max(name,               updated_at) AS name,
-  arg_max(version,            updated_at) AS version,
-  arg_max(description,        updated_at) AS description,
-  arg_max(query_sql,          updated_at) AS query_sql,
-  true                                    AS enabled,
-  false                                   AS deleted,
-  arg_max(severity,           updated_at) AS severity,
-  arg_max(category,           updated_at) AS category,
-  arg_max(required_telemetry, updated_at) AS required_telemetry,
-  arg_max(fp_rate,            updated_at) AS fp_rate,
-  arg_max(hook_sources,       updated_at) AS hook_sources,
-  now64(3)                                AS updated_at
-FROM table(agentshield_rules)
-WHERE rule_id = '%s'
-GROUP BY rule_id`, strings.ReplaceAll(id, "'", "''"))
-
-			if err := tp.ExecHTTP(&cfg.Timeplus, reinstallSQL); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "reinstall failed"})
-				return
-			}
-			if err := tp.CreateRuleMV(&cfg.Timeplus, id, querySQL); err != nil {
-				log.Printf("rules: custom reinstall MV %s: %v", id, err)
-			}
-			c.JSON(http.StatusOK, gin.H{"installed": true, "rule_id": id})
+		entry, ok := mgr.Lookup(id)
+		if !ok {
+			c.JSON(http.StatusNotFound, gin.H{"error": "rule not found in catalog"})
 			return
 		}
 
-		// Builtin rules: install from hardcoded catalog.
-		var found *tp.CatalogEntry
-		for _, e := range tp.Catalog() {
-			if e.ID == id {
-				entry := e
-				found = &entry
-				break
-			}
-		}
-		if found == nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not in builtin catalog"})
-			return
-		}
-
-		escapedSQL := strings.ReplaceAll(found.QuerySQL, "'", "''")
+		escapedSQL := strings.ReplaceAll(entry.QuerySQL, "'", "''")
 		insertSQL := fmt.Sprintf(
-			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
+			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s',now64(3))`,
 			id,
-			strings.ReplaceAll(found.Name, "'", "''"),
-			found.Version,
-			strings.ReplaceAll(found.Description, "'", "''"),
+			strings.ReplaceAll(entry.Name, "'", "''"),
+			entry.Version,
+			strings.ReplaceAll(entry.Description, "'", "''"),
 			escapedSQL,
-			found.Severity, found.Category,
-			found.FPRate, found.HookSources,
+			entry.Severity, entry.Category,
+			entry.RequiredTelemetry, entry.FPRate, entry.HookSources,
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "reinstall insert failed"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "install insert failed"})
 			return
 		}
-		if err := tp.CreateRuleMV(&cfg.Timeplus, id, found.QuerySQL); err != nil {
-			log.Printf("rules: reinstall create MV %s: %v", id, err)
+		if err := tp.CreateRuleMV(&cfg.Timeplus, id, entry.QuerySQL); err != nil {
+			log.Printf("rules: install create MV %s: %v", id, err)
 		}
 		c.JSON(http.StatusOK, gin.H{"installed": true, "rule_id": id})
 	}
 }
 
 // MVStatus returns the existence and enabled state of every rule's MV.
-func MVStatus(cfg *config.Config) gin.HandlerFunc {
+func MVStatus(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		packs, err := queryCurrentRulePacks(&cfg.Timeplus)
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
 			return
 		}
 
-		// Query all mv_rule_* views from system.tables
 		rows, err := tp.Query(&cfg.Timeplus, `
 			SELECT name FROM system.tables
 			WHERE name LIKE 'mv_rule_%' AND database = current_database()
@@ -545,24 +477,22 @@ func MVStatus(cfg *config.Config) gin.HandlerFunc {
 				MVName:      mvName,
 				RuleEnabled: p.Enabled,
 				MVExists:    mvExists,
-				Healthy:     !p.Enabled || mvExists, // disabled rules don't need an MV
+				Healthy:     !p.Enabled || mvExists,
 			})
 		}
 		c.JSON(http.StatusOK, gin.H{"mvs": result})
 	}
 }
 
-// SyncMVs reconciles Proton MVs with the current rule enabled states without
-// requiring a server restart. Equivalent to the startupSyncMVs init step.
-func SyncMVs(cfg *config.Config) gin.HandlerFunc {
+// SyncMVs reconciles Proton MVs with current rule states without a server restart.
+func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		packs, err := queryCurrentRulePacks(&cfg.Timeplus)
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
 			return
 		}
 
-		// Query existing MVs
 		rows, err := tp.Query(&cfg.Timeplus, `
 			SELECT name FROM system.tables
 			WHERE name LIKE 'mv_rule_%' AND database = current_database()
@@ -637,13 +567,12 @@ func AlertWebhook(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// CreateRule creates a new custom rule from a user-provided detection SQL query.
-// The SQL body may contain the placeholder literals '__rule_id__' and '__rule_name__'
-// which the handler substitutes with the generated rule ID and the rule name before
-// storing and creating the MV.
-func CreateRule(cfg *config.Config) gin.HandlerFunc {
+// CreateRule creates a new rule from user-provided data, saves it to the catalog,
+// inserts it into Proton, and creates its MV.
+func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
+			ID          string `json:"id"`
 			Name        string `json:"name"`
 			Description string `json:"description"`
 			QuerySQL    string `json:"query_sql"`
@@ -664,21 +593,42 @@ func CreateRule(cfg *config.Config) gin.HandlerFunc {
 			body.Severity = "warning"
 		}
 
-		ruleID := "custom-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+		// Determine rule ID: use provided or auto-generate.
+		ruleID := body.ID
+		if ruleID == "" {
+			ruleID = fmt.Sprintf("custom-%d", time.Now().UnixNano())
+		}
+		if err := mgr.ValidateID(ruleID); err != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
 
-		// Substitute placeholders so the stored SQL is self-contained.
+		// Substitute template placeholders in SQL.
 		escapedName := strings.ReplaceAll(body.Name, "'", "''")
-
-		// finalSQL: substituted SQL used verbatim for MV creation (single-escaped SQL literals).
 		finalSQL := strings.ReplaceAll(body.QuerySQL, "'__rule_id__'", "'"+ruleID+"'")
 		finalSQL = strings.ReplaceAll(finalSQL, "'__rule_name__'", "'"+escapedName+"'")
 
-		// escapedSQL: escape the raw SQL for embedding in a VALUES string, then substitute
-		// (avoids double-escaping: escape first, then replace the now-doubled placeholder quotes).
-		escapedSQL := strings.ReplaceAll(body.QuerySQL, "'", "''")
-		escapedSQL = strings.ReplaceAll(escapedSQL, "''__rule_id__''", "'"+ruleID+"'")
-		escapedSQL = strings.ReplaceAll(escapedSQL, "''__rule_name__''", "'"+escapedName+"'")
+		entry := catalog.Entry{
+			ID:          ruleID,
+			Name:        body.Name,
+			Version:     "1.0.0",
+			Description: body.Description,
+			QuerySQL:    finalSQL,
+			Severity:    body.Severity,
+			Category:    body.Category,
+			FPRate:      body.FPRate,
+			HookSources: body.HookSources,
+			Author:      "custom",
+			Tags:        []string{},
+		}
 
+		// Persist to catalog first.
+		if err := mgr.Save(entry); err != nil {
+			log.Printf("rules: save catalog entry %s: %v", ruleID, err)
+			// Non-fatal — continue to insert into Proton.
+		}
+
+		escapedSQL := strings.ReplaceAll(finalSQL, "'", "''")
 		insertSQL := fmt.Sprintf(
 			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
 			ruleID,
@@ -717,7 +667,7 @@ func CreateRule(cfg *config.Config) gin.HandlerFunc {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-func queryCurrentRulePacks(cfg *config.TimeplusConfig) ([]models.RulePack, error) {
+func queryCurrentRulePacks(cfg *config.TimeplusConfig, mgr *catalog.Manager) ([]models.RulePack, error) {
 	rows, err := tp.Query(cfg, sqlCurrentRules)
 	if err != nil {
 		return nil, err
@@ -739,8 +689,11 @@ func queryCurrentRulePacks(cfg *config.TimeplusConfig) ([]models.RulePack, error
 			FPRate:            strVal(row, "fp_rate"),
 			HookSources:       strVal(row, "hook_sources"),
 		}
-		if latest, ok := latestVersions[id]; ok && latest != pack.Version {
-			pack.LatestVersion = latest
+		// Check catalog for a newer version.
+		if catalogEntry, ok := mgr.Lookup(id); ok {
+			if versionGreater(catalogEntry.Version, pack.Version) {
+				pack.LatestVersion = catalogEntry.Version
+			}
 		}
 		packs = append(packs, pack)
 	}
@@ -813,13 +766,33 @@ func mvExists(cfg *config.TimeplusConfig, ruleID string) (bool, error) {
 	return false, nil
 }
 
+// versionGreater returns true if version string a is strictly greater than b.
+func versionGreater(a, b string) bool {
+	aParts := strings.SplitN(a, ".", 3)
+	bParts := strings.SplitN(b, ".", 3)
+	for i := 0; i < 3; i++ {
+		var av, bv int
+		if i < len(aParts) {
+			fmt.Sscanf(aParts[i], "%d", &av)
+		}
+		if i < len(bParts) {
+			fmt.Sscanf(bParts[i], "%d", &bv)
+		}
+		if av > bv {
+			return true
+		}
+		if av < bv {
+			return false
+		}
+	}
+	return false
+}
+
 func strVal(row map[string]any, key string) string {
 	v, _ := row[key].(string)
 	return v
 }
 
-// boolVal reads a bool column from a Proton HTTP JSON row.
-// Proton serialises bool as 0/1 (json.Number), not JSON true/false.
 func boolVal(row map[string]any, key string) bool {
 	switch v := row[key].(type) {
 	case bool:
@@ -830,3 +803,4 @@ func boolVal(row map[string]any, key string) bool {
 	}
 	return false
 }
+
