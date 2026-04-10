@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
-import Footer from '../components/Footer'
 import PageHeader from '../components/PageHeader'
 import Toggle from '../components/Toggle'
 import { api } from '../api/client'
@@ -24,7 +23,7 @@ export default function RulePacks() {
   const [catalog, setCatalog] = useState([])
   const [loading, setLoading] = useState(true)
   const [totalDetections, setTotalDetections] = useState(0)
-  const [density, setDensity] = useState(0)
+  const density = rules.length > 0 ? Math.round(rules.filter(r => r.enabled).length * 100 / rules.length) : 0
   const [chartData, setChartData] = useState({ openThreats: [], totalEvents: [] })
   const [chartsLoading, setChartsLoading] = useState(true)
   const [importing, setImporting] = useState(false)
@@ -49,7 +48,6 @@ export default function RulePacks() {
         })))
       }
       if (data.total_detections_24h !== undefined) setTotalDetections(data.total_detections_24h)
-      if (data.active_rule_density !== undefined) setDensity(data.active_rule_density)
     })
 
   useEffect(() => {
@@ -108,32 +106,16 @@ export default function RulePacks() {
   const confirmDoToggle = async () => {
     const { id, newVal } = confirmToggle
     setConfirmToggle(null)
+    // Optimistic update — apply immediately and revert on error.
+    // Do NOT re-fetch from the server here: Proton's table() scan has a
+    // commit lag, so an immediate GET /rules would race with the INSERT
+    // and return stale data, snapping the UI back to the old state.
     setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: newVal, active: newVal, version: newVal ? (r.version || '') : null } : r))
     try {
       await api.toggleRule(id)
     } catch {
       setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !newVal, active: !newVal } : r))
-      return
     }
-    // Refresh from API to get authoritative state
-    api.listRules()
-      .then(data => {
-        if (data.rule_packs && data.rule_packs.length > 0) {
-          setRules(data.rule_packs.map(r => ({
-            id: r.id,
-            icon: RULE_ICONS[r.id] || 'shield',
-            name: r.name,
-            desc: r.description,
-            enabled: r.enabled,
-            version: r.enabled ? (r.version || null) : null,
-            active: r.enabled,
-            detections24h: r.detections_24h || 0,
-          })))
-        }
-        if (data.total_detections_24h !== undefined) setTotalDetections(data.total_detections_24h)
-        if (data.active_rule_density !== undefined) setDensity(data.active_rule_density)
-      })
-      .catch(() => {})
   }
 
   const confirmDoInstall = async () => {
@@ -188,7 +170,7 @@ export default function RulePacks() {
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
       <Sidebar />
       <TopNav />
-      <Footer />
+
 
       {/* Toggle confirmation modal */}
       {confirmToggle && (

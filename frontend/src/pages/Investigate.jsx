@@ -5,7 +5,6 @@ import 'prismjs/components/prism-sql'
 import 'prismjs/themes/prism-tomorrow.css'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
-import Footer from '../components/Footer'
 import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
 
@@ -74,7 +73,7 @@ export default function Investigate() {
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
       <Sidebar />
       <TopNav />
-      <Footer />
+
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 flex flex-col gap-6" style={{ height: 'calc(100vh - 64px)' }}>
           <PageHeader

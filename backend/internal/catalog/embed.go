@@ -6,17 +6,17 @@ import (
 	"log"
 )
 
-//go:embed initial
-var rawInitialFS embed.FS
+//go:embed seed
+var rawSeedFS embed.FS
 
-// InitialFS is the embedded initial catalog, rooted at the YAML files directly
-// (the "initial/" prefix is stripped so loadFS sees "rp-001.yaml" etc.).
-var InitialFS fs.FS
+// SeedFS is the embedded seed catalog, rooted at the YAML files directly
+// (the "seed/" prefix is stripped so loadFS sees "rp-001.yaml" etc.).
+var SeedFS fs.FS
 
 func init() {
-	sub, err := fs.Sub(rawInitialFS, "initial")
+	sub, err := fs.Sub(rawSeedFS, "seed")
 	if err != nil {
 		log.Fatalf("catalog: failed to sub embedded FS: %v", err)
 	}
-	InitialFS = sub
+	SeedFS = sub
 }

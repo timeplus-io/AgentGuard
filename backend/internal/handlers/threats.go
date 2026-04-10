@@ -65,11 +65,12 @@ ORDER BY detected_at DESC`
 
 // ListThreats handles GET /api/threats.
 // Runs three Proton snapshot queries concurrently, merges results, applies re-open logic.
-// Query params: ?severity=, ?status=, ?page=, ?limit=
+// Query params: ?severity=, ?status=, ?agent_id=, ?page=, ?limit=
 func ListThreats(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		severityFilter := c.Query("severity")
 		statusFilter := c.Query("status")
+		agentIDFilter := c.Query("agent_id")
 		pageStr := c.DefaultQuery("page", "1")
 		limitStr := c.DefaultQuery("limit", "20")
 
@@ -245,6 +246,9 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 				continue
 			}
 			if statusFilter != "" && t.Status != statusFilter {
+				continue
+			}
+			if agentIDFilter != "" && t.AgentID != agentIDFilter {
 				continue
 			}
 			filtered = append(filtered, t)

@@ -73,8 +73,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading frontend assets: %w", err)
 	}
 
-	// Initialize the rule catalog (embedded initial rules + local overrides/additions).
-	mgr, err := catalog.New(catalog.InitialFS, cfg.CatalogDir)
+	// Initialize the rule catalog (embedded seed rules + local overrides/additions).
+	mgr, err := catalog.New(catalog.SeedFS, cfg.CatalogDir)
 	if err != nil {
 		return fmt.Errorf("loading catalog: %w", err)
 	}

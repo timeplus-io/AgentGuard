@@ -28,25 +28,25 @@ type Entry struct {
 	QuerySQL          string   `yaml:"query_sql"          json:"query_sql"`
 }
 
-// Manager holds the merged view of the embedded initial catalog and the
-// local catalog directory. Local entries override initial ones by ID.
+// Manager holds the merged view of the embedded seed catalog and the
+// local catalog directory. Local entries override seed ones by ID.
 type Manager struct {
-	mu       sync.RWMutex
-	initial  map[string]Entry // from go:embed, read-only
-	local    map[string]Entry // from catalogDir, read-write
-	dir      string
+	mu    sync.RWMutex
+	seed  map[string]Entry // from go:embed, read-only
+	local map[string]Entry // from catalogDir, read-write
+	dir   string
 }
 
-// New creates a Manager. initialFS is the embedded FS rooted at the YAML files.
+// New creates a Manager. seedFS is the embedded FS rooted at the YAML files.
 // catalogDir is the writable directory for user overrides and additions.
-func New(initialFS fs.FS, catalogDir string) (*Manager, error) {
+func New(seedFS fs.FS, catalogDir string) (*Manager, error) {
 	m := &Manager{
-		initial: make(map[string]Entry),
-		local:   make(map[string]Entry),
-		dir:     catalogDir,
+		seed:  make(map[string]Entry),
+		local: make(map[string]Entry),
+		dir:   catalogDir,
 	}
-	if err := m.loadFS(initialFS, m.initial); err != nil {
-		return nil, fmt.Errorf("load initial catalog: %w", err)
+	if err := m.loadFS(seedFS, m.seed); err != nil {
+		return nil, fmt.Errorf("load seed catalog: %w", err)
 	}
 	if catalogDir != "" {
 		if err := os.MkdirAll(catalogDir, 0o755); err != nil {
@@ -103,7 +103,7 @@ func (m *Manager) loadDir(dir string, target map[string]Entry) error {
 	return nil
 }
 
-// All returns all merged entries sorted by ID (local overrides initial).
+// All returns all merged entries sorted by ID (local overrides seed).
 func (m *Manager) All() []Entry {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -116,10 +116,10 @@ func (m *Manager) All() []Entry {
 	return result
 }
 
-// mergedLocked returns the combined map (local wins over initial). Caller must hold mu.
+// mergedLocked returns the combined map (local wins over seed). Caller must hold mu.
 func (m *Manager) mergedLocked() map[string]Entry {
-	out := make(map[string]Entry, len(m.initial)+len(m.local))
-	for id, e := range m.initial {
+	out := make(map[string]Entry, len(m.seed)+len(m.local))
+	for id, e := range m.seed {
 		out[id] = e
 	}
 	for id, e := range m.local {
@@ -128,14 +128,14 @@ func (m *Manager) mergedLocked() map[string]Entry {
 	return out
 }
 
-// Lookup finds an entry by ID (local overrides initial).
+// Lookup finds an entry by ID (local overrides seed).
 func (m *Manager) Lookup(id string) (Entry, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if e, ok := m.local[id]; ok {
 		return e, true
 	}
-	if e, ok := m.initial[id]; ok {
+	if e, ok := m.seed[id]; ok {
 		return e, true
 	}
 	return Entry{}, false
@@ -148,7 +148,7 @@ func (m *Manager) Exists(id string) bool {
 }
 
 // Save writes an entry to the local catalog directory and updates the in-memory map.
-// This is the path for user-created rules and overrides of initial entries.
+// This is the path for user-created rules and overrides of seed entries.
 func (m *Manager) Save(e Entry) error {
 	if m.dir == "" {
 		return fmt.Errorf("no catalog directory configured")

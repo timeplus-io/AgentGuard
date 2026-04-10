@@ -9,7 +9,6 @@ function fmtTokens(n) {
 import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
-import Footer from '../components/Footer'
 import { api } from '../api/client'
 
 function timeAgo(iso) {
@@ -43,7 +42,7 @@ export default function AgentList() {
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
       <Sidebar />
       <TopNav />
-      <Footer />
+
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-8 max-w-7xl w-full mx-auto">
           {/* Header */}
