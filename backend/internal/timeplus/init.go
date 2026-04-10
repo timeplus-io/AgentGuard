@@ -33,6 +33,12 @@ func Init(cfg *config.TimeplusConfig) error {
 	if err := createSecurityStreams(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating security streams: %w", err)
 	}
+	if err := createThreatsStream(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning creating threats stream: %v", err)
+	}
+	if err := createThreatsMV(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning creating threats MV: %v", err)
+	}
 	if err := createPricingStream(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning creating pricing stream: %v", err)
 	}
@@ -680,6 +686,14 @@ func createPricingStream(ctx context.Context, conn proton.Conn) error {
 	return execIfNotExists(ctx, conn, "stream", "agentshield_pricing", ddlPricingStream)
 }
 
+func createThreatsStream(ctx context.Context, conn proton.Conn) error {
+	return execIfNotExists(ctx, conn, "stream", "agentshield_threats", ddlThreatsStream)
+}
+
+func createThreatsMV(ctx context.Context, conn proton.Conn) error {
+	return execIfNotExists(ctx, conn, "view", "mv_threats", ddlThreatsMV)
+}
+
 func seedPricingData(ctx context.Context, conn proton.Conn) error {
 	row := conn.QueryRow(ctx, "SELECT count() FROM table(agentshield_pricing)")
 	var count uint64
@@ -755,3 +769,33 @@ SETTINGS
   metrics_sum_target_stream       = 'otel_metrics_sum',
   metrics_histogram_target_stream = 'otel_metrics_histogram'
 COMMENT 'OpenClaw agent telemetry via OTLP/HTTP'`
+
+const ddlThreatsStream = `
+CREATE MUTABLE STREAM IF NOT EXISTS agentshield_threats
+(
+    agent_id          string,
+    deployment_id     string,
+    session_id        string,
+    rule_id           string,
+    rule_name         string,
+    severity          string,
+    last_seen         datetime64(3),
+    status            string,
+    status_updated_at datetime64(3),
+    FAMILY cf_events(rule_name, severity, last_seen),
+    FAMILY cf_status(status, status_updated_at)
+) PRIMARY KEY (agent_id, deployment_id, session_id, rule_id)
+SETTINGS coalesced = true`
+
+const ddlThreatsMV = `
+CREATE MATERIALIZED VIEW mv_threats
+INTO agentshield_threats (agent_id, deployment_id, session_id, rule_id, rule_name, severity, last_seen)
+AS SELECT
+    agent_id,
+    deployment_id,
+    session_id,
+    rule_id,
+    rule_name,
+    severity,
+    detected_at AS last_seen
+FROM agentshield_security_events`
