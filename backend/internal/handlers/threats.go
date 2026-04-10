@@ -268,6 +268,9 @@ type ThreatStatusBody struct {
 }
 
 func upsertThreatStatus(cfg *config.Config, body ThreatStatusBody, status string) error {
+	if status != "acknowledged" && status != "cleared" {
+		return fmt.Errorf("invalid status %q", status)
+	}
 	sql := fmt.Sprintf(
 		`INSERT INTO agentshield_threats (agent_id, deployment_id, session_id, rule_id, status, status_updated_at) VALUES ('%s', '%s', '%s', '%s', '%s', now64(3))`,
 		escapeSQL(body.AgentID),
@@ -280,12 +283,17 @@ func upsertThreatStatus(cfg *config.Config, body ThreatStatusBody, status string
 }
 
 // AcknowledgeThreat handles POST /api/threats/:id/acknowledge.
-// Upserts cf_status with status='acknowledged'. :id is the computed threat_id (routing only).
+// Upserts cf_status with status='acknowledged'. :id is the computed threat_id and must match the body.
 func AcknowledgeThreat(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		routeID := c.Param("id")
 		var body ThreatStatusBody
 		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id, deployment_id, session_id, rule_id are required"})
+			return
+		}
+		if computeThreatID(body.AgentID, body.DeploymentID, body.SessionID, body.RuleID) != routeID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "body identity does not match threat id"})
 			return
 		}
 		if err := upsertThreatStatus(cfg, body, "acknowledged"); err != nil {
@@ -297,12 +305,17 @@ func AcknowledgeThreat(cfg *config.Config) gin.HandlerFunc {
 }
 
 // ClearThreat handles POST /api/threats/:id/clear.
-// Upserts cf_status with status='cleared'. :id is the computed threat_id (routing only).
+// Upserts cf_status with status='cleared'. :id is the computed threat_id and must match the body.
 func ClearThreat(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		routeID := c.Param("id")
 		var body ThreatStatusBody
 		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id, deployment_id, session_id, rule_id are required"})
+			return
+		}
+		if computeThreatID(body.AgentID, body.DeploymentID, body.SessionID, body.RuleID) != routeID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "body identity does not match threat id"})
 			return
 		}
 		if err := upsertThreatStatus(cfg, body, "cleared"); err != nil {
