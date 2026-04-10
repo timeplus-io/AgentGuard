@@ -789,7 +789,7 @@ SETTINGS coalesced = true`
 
 const ddlThreatsMV = `
 CREATE MATERIALIZED VIEW mv_threats
-INTO agentshield_threats (agent_id, deployment_id, session_id, rule_id, rule_name, severity, last_seen)
+INTO agentshield_threats
 AS SELECT
     agent_id,
     deployment_id,
