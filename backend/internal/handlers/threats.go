@@ -257,3 +257,58 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 		})
 	}
 }
+
+// ThreatStatusBody is the request body for acknowledge/clear endpoints.
+// The client sends the full threat identity to avoid a read-before-write.
+type ThreatStatusBody struct {
+	AgentID      string `json:"agent_id"       binding:"required"`
+	DeploymentID string `json:"deployment_id"   binding:"required"`
+	SessionID    string `json:"session_id"      binding:"required"`
+	RuleID       string `json:"rule_id"         binding:"required"`
+}
+
+func upsertThreatStatus(cfg *config.Config, body ThreatStatusBody, status string) error {
+	sql := fmt.Sprintf(
+		`INSERT INTO agentshield_threats (agent_id, deployment_id, session_id, rule_id, status, status_updated_at) VALUES ('%s', '%s', '%s', '%s', '%s', now64(3))`,
+		escapeSQL(body.AgentID),
+		escapeSQL(body.DeploymentID),
+		escapeSQL(body.SessionID),
+		escapeSQL(body.RuleID),
+		escapeSQL(status),
+	)
+	return tp.ExecHTTP(&cfg.Timeplus, sql)
+}
+
+// AcknowledgeThreat handles POST /api/threats/:id/acknowledge.
+// Upserts cf_status with status='acknowledged'. :id is the computed threat_id (routing only).
+func AcknowledgeThreat(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body ThreatStatusBody
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id, deployment_id, session_id, rule_id are required"})
+			return
+		}
+		if err := upsertThreatStatus(cfg, body, "acknowledged"); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "upsert failed"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "status": "acknowledged"})
+	}
+}
+
+// ClearThreat handles POST /api/threats/:id/clear.
+// Upserts cf_status with status='cleared'. :id is the computed threat_id (routing only).
+func ClearThreat(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body ThreatStatusBody
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id, deployment_id, session_id, rule_id are required"})
+			return
+		}
+		if err := upsertThreatStatus(cfg, body, "cleared"); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "upsert failed"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "status": "cleared"})
+	}
+}
