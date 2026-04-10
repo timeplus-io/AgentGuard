@@ -86,6 +86,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 		AllowCredentials: true,
 	}))
 
+	r.GET("/docs", handlers.APIDocs())
+	r.GET("/docs/redoc", handlers.APIRedoc())
+	r.GET("/docs/openapi.json", handlers.APISpec())
+
 	api := r.Group("/api")
 	{
 		api.GET("/dashboard", handlers.GetDashboard(cfg))
