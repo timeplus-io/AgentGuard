@@ -6,10 +6,10 @@ import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
 import LiveAgentActivity from '../components/LiveAgentActivity'
 
-const sqlThreats = `
-SELECT detected_at, rule_id, rule_name, severity, agent_id, hook_name, message
-FROM agentshield_security_events
-SETTINGS seek_to='-1h'`
+const sqlNotifyEvents = `
+SELECT detected_at, rule_id, rule_name, severity, agent_id, deployment_id, session_id, hook_name, message
+FROM agentshield_notify_events
+SETTINGS seek_to='-24h'`
 
 const severityCard = {
   critical: { border: 'border-[#ffb4ab]', icon: 'security_update_warning', iconColor: 'text-[#ffb4ab]' },
@@ -44,9 +44,13 @@ export default function Dashboard() {
     const ctrl = new AbortController()
     async function stream() {
       let first = true
-      for await (const row of api.protonQuery(sqlThreats, { signal: ctrl.signal })) {
+      for await (const row of api.protonQuery(sqlNotifyEvents, { signal: ctrl.signal })) {
         if (first) { setThreatsConnected(true); first = false }
-        setThreats(prev => [row, ...prev].slice(0, 20))
+        setThreats(prev => {
+          const key = r => `${r.deployment_id}|${r.agent_id}|${r.session_id}|${r.rule_id}`
+          const next = [row, ...prev.filter(r => key(r) !== key(row))]
+          return next.sort((a, b) => new Date(b.detected_at) - new Date(a.detected_at)).slice(0, 20)
+        })
       }
       setThreatsConnected(false)
     }
@@ -134,12 +138,8 @@ export default function Dashboard() {
               </div>
               <div className="overflow-y-auto max-h-[500px] px-6 pb-6 space-y-4">
                 {threats.length === 0 ? (
-                  <p className="text-xs text-zinc-600 py-4">{threatsConnected ? 'Waiting for threats…' : 'Connecting…'}</p>
-                ) : [...threats].sort((a, b) => {
-                  const ta = new Date(typeof a.detected_at === 'string' ? a.detected_at.replace(' ', 'T') : a.detected_at)
-                  const tb = new Date(typeof b.detected_at === 'string' ? b.detected_at.replace(' ', 'T') : b.detected_at)
-                  return tb - ta
-                }).map((t, i) => {
+                  <p className="text-xs text-zinc-600 py-4">{threatsConnected ? 'Waiting for events…' : 'Connecting…'}</p>
+                ) : threats.map((t, i) => {
                   const sev = t.severity?.toLowerCase() || 'info'
                   const { border, icon, iconColor } = severityCard[sev] || severityCard.info
                   return (

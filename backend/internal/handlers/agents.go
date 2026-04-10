@@ -65,7 +65,7 @@ FROM (
            count()                                                               AS event_count,
            count_if(hook_name = 'llm_output')                                   AS llm_call_count,
            sum(if(hook_name = 'llm_output',
-                  to_int64(json_extract_string(event_data, 'usage', 'total')),
+                  to_int64_or_zero(json_extract_string(event_data, 'usage', 'total')),
                   0))                                                            AS total_tokens
     FROM table(agentshield_hook_events)
     WHERE agent_id != ''

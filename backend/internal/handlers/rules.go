@@ -60,8 +60,8 @@ func ListRules(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus)
 		if err != nil {
-			log.Printf("rules: list query failed: %v", err)
-			packs = []models.RulePack{}
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
 		}
 
 		if counts, err := queryDetectionCounts(&cfg.Timeplus); err == nil {
@@ -128,13 +128,17 @@ func GetRule(cfg *config.Config) gin.HandlerFunc {
 			}
 		}
 
-		recentRows, _ := tp.Query(&cfg.Timeplus, fmt.Sprintf(`
+		recentRows, err := tp.Query(&cfg.Timeplus, fmt.Sprintf(`
 			SELECT rule_id, rule_name, severity, agent_id, hook_name, message, detected_at
 			FROM table(agentshield_security_events)
 			WHERE rule_id = '%s'
 			ORDER BY detected_at DESC
 			LIMIT 50
 		`, id))
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
 
 		c.JSON(http.StatusOK, models.RuleDetailResponse{
 			RulePack:         *pack,
@@ -192,7 +196,11 @@ GROUP BY rule_id`, id)
 
 		newEnabled := !current.Enabled
 		if newEnabled {
-			exists, _ := mvExists(&cfg.Timeplus, id)
+			exists, err := mvExists(&cfg.Timeplus, id)
+			if err != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "MV status check failed"})
+				return
+			}
 			if exists {
 				if err := tp.ResumeRuleMV(&cfg.Timeplus, id); err != nil {
 					log.Printf("rules: toggle resume MV %s: %v", id, err)
@@ -506,10 +514,14 @@ func MVStatus(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		// Query all mv_rule_* views from system.tables
-		rows, _ := tp.Query(&cfg.Timeplus, `
+		rows, err := tp.Query(&cfg.Timeplus, `
 			SELECT name FROM system.tables
 			WHERE name LIKE 'mv_rule_%' AND database = current_database()
 		`)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
 		existing := map[string]bool{}
 		for _, row := range rows {
 			if name, ok := row["name"].(string); ok {
@@ -551,10 +563,14 @@ func SyncMVs(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		// Query existing MVs
-		rows, _ := tp.Query(&cfg.Timeplus, `
+		rows, err := tp.Query(&cfg.Timeplus, `
 			SELECT name FROM system.tables
 			WHERE name LIKE 'mv_rule_%' AND database = current_database()
 		`)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
 		existing := map[string]bool{}
 		for _, row := range rows {
 			if name, ok := row["name"].(string); ok {

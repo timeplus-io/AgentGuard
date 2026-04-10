@@ -22,8 +22,12 @@ var priorityStreams = []string{
 func ListTables(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Discover otel_* streams dynamically.
-		otelRows, _ := tp.Query(&cfg.Timeplus,
+		otelRows, err := tp.Query(&cfg.Timeplus,
 			`SELECT name FROM system.tables WHERE name LIKE 'otel_%' ORDER BY name`)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
 		streams := make([]string, 0, len(priorityStreams)+len(otelRows))
 		streams = append(streams, priorityStreams...)
 		for _, r := range otelRows {
@@ -32,10 +36,14 @@ func ListTables(cfg *config.Config) gin.HandlerFunc {
 
 		tables := make([]models.TableInfo, 0, len(streams))
 		for _, name := range streams {
-			colRows, _ := tp.Query(&cfg.Timeplus, fmt.Sprintf(
+			colRows, err := tp.Query(&cfg.Timeplus, fmt.Sprintf(
 				`SELECT name, type FROM system.columns WHERE table = '%s' ORDER BY position`,
 				escapeSQL(name),
 			))
+			if err != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+				return
+			}
 			cols := make([]models.ColumnInfo, 0, len(colRows))
 			for _, r := range colRows {
 				cols = append(cols, models.ColumnInfo{

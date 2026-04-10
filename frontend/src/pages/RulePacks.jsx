@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import Footer from '../components/Footer'
@@ -16,18 +17,6 @@ const RULE_ICONS = {
   'rp-006': 'description',
 }
 
-function severityDot(severity) {
-  if (severity === 'critical') return 'bg-[#ffb0cf] shadow-[0_0_8px_rgba(255,176,207,0.6)]'
-  if (severity === 'warning') return 'bg-[#ffb0cf]/30'
-  return 'bg-zinc-500'
-}
-
-function formatTs(ts) {
-  if (!ts) return ''
-  try {
-    return new Date(ts.replace(' ', 'T')).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  } catch { return ts }
-}
 
 export default function RulePacks() {
   const navigate = useNavigate()
@@ -36,7 +25,8 @@ export default function RulePacks() {
   const [loading, setLoading] = useState(true)
   const [totalDetections, setTotalDetections] = useState(0)
   const [density, setDensity] = useState(0)
-  const [recentDetections, setRecentDetections] = useState([])
+  const [chartData, setChartData] = useState({ openThreats: [], totalEvents: [] })
+  const [chartsLoading, setChartsLoading] = useState(true)
   const [confirmToggle, setConfirmToggle] = useState(null) // { id, newVal, name }
   const [confirmInstall, setConfirmInstall] = useState(null) // catalog entry
   const [installing, setInstalling] = useState(null) // rule id being installed
@@ -57,7 +47,6 @@ export default function RulePacks() {
       }
       if (data.total_detections_24h !== undefined) setTotalDetections(data.total_detections_24h)
       if (data.active_rule_density !== undefined) setDensity(data.active_rule_density)
-      if (data.recent_detections) setRecentDetections(data.recent_detections)
     })
 
   useEffect(() => {
@@ -67,6 +56,45 @@ export default function RulePacks() {
     ])
       .catch(() => {})
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadCharts() {
+      try {
+        // Fetch all threats via pagination
+        const openByRule = {}
+        let page = 1
+        const pageSize = 200
+        while (true) {
+          const res = await api.getThreats({ page, limit: pageSize })
+          for (const t of (res.threats || [])) {
+            if (t.status === 'open') {
+              const key = t.rule_id || 'unknown'
+              openByRule[key] = { rule_id: key, rule_name: t.rule_name || key, cnt: (openByRule[key]?.cnt || 0) + 1 }
+            }
+          }
+          if ((res.threats || []).length < pageSize) break
+          page++
+        }
+        const openThreats = Object.values(openByRule).sort((a, b) => b.cnt - a.cnt)
+
+        const evtMap = {}
+        const sql = `SELECT rule_id, rule_name, count() AS cnt FROM table(agentshield_security_events) GROUP BY rule_id, rule_name ORDER BY cnt DESC`
+        for await (const row of api.protonQuery(sql)) {
+          evtMap[row.rule_id] = { rule_id: row.rule_id, rule_name: row.rule_name || row.rule_id, cnt: Number(row.cnt) }
+        }
+        const totalEvents = Object.values(evtMap).sort((a, b) => b.cnt - a.cnt)
+
+        if (!cancelled) setChartData({ openThreats, totalEvents })
+      } catch (e) {
+        console.error('Chart load failed', e)
+      } finally {
+        if (!cancelled) setChartsLoading(false)
+      }
+    }
+    loadCharts()
+    return () => { cancelled = true }
   }, [])
 
   const handleToggle = (id, newVal) => {
@@ -291,26 +319,61 @@ export default function RulePacks() {
           )}
 
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 bg-[#211e29] p-8 rounded-sm">
-              <div className="flex justify-between items-center mb-8">
-                <h4 className="text-base font-semibold tracking-tight">Recent Detections</h4>
+            {/* Bar Charts */}
+            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Open Threats by Rule */}
+              <div className="bg-[#211e29] p-8 rounded-sm">
+                <h4 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-6">Open Threats by Rule</h4>
+                {chartsLoading ? (
+                  <div className="h-40 animate-pulse bg-[#2c2834] rounded-sm" />
+                ) : chartData.openThreats.length === 0 ? (
+                  <p className="text-xs text-zinc-600 py-4">No open threats.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={chartData.openThreats.length * 44 + 8}>
+                    <BarChart data={chartData.openThreats} layout="vertical" margin={{ left: 0, right: 24, top: 0, bottom: 0 }}>
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="rule_name" width={140} tick={{ fill: '#71717a', fontSize: 10 }} />
+                      <Tooltip
+                        contentStyle={{ background: '#15121d', border: '1px solid #2c2834', borderRadius: 4 }}
+                        labelStyle={{ color: '#e7dff0', fontSize: 11 }}
+                        itemStyle={{ color: '#ffb0cf', fontSize: 11 }}
+                        formatter={(v) => [v, 'Open threats']}
+                      />
+                      <Bar dataKey="cnt" radius={[0, 2, 2, 0]}>
+                        {chartData.openThreats.map(entry => (
+                          <Cell key={entry.rule_id} fill="#f256a3" />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
-              <div className="space-y-6">
-                {recentDetections.length > 0 ? recentDetections.map((evt, i) => (
-                  <div key={i} className="flex items-start gap-4">
-                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${severityDot(evt.severity)}`}></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-[#e7dff0]">
-                        <span className="font-semibold text-white">{evt.rule_name}</span>{' '}
-                        {evt.message}
-                      </p>
-                      <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-tight">
-                        {formatTs(evt.detected_at)} • Agent: {evt.agent_id}
-                      </p>
-                    </div>
-                  </div>
-                )) : (
-                  <p className="text-xs text-zinc-500">No detections yet. Security events detected by rule MVs will appear here.</p>
+
+              {/* Total Security Events by Rule */}
+              <div className="bg-[#211e29] p-8 rounded-sm">
+                <h4 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-6">Security Events by Rule</h4>
+                {chartsLoading ? (
+                  <div className="h-40 animate-pulse bg-[#2c2834] rounded-sm" />
+                ) : chartData.totalEvents.length === 0 ? (
+                  <p className="text-xs text-zinc-600 py-4">No events recorded.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={chartData.totalEvents.length * 44 + 8}>
+                    <BarChart data={chartData.totalEvents} layout="vertical" margin={{ left: 0, right: 24, top: 0, bottom: 0 }}>
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="rule_name" width={140} tick={{ fill: '#71717a', fontSize: 10 }} />
+                      <Tooltip
+                        contentStyle={{ background: '#15121d', border: '1px solid #2c2834', borderRadius: 4 }}
+                        labelStyle={{ color: '#e7dff0', fontSize: 11 }}
+                        itemStyle={{ color: '#ffb0cf', fontSize: 11 }}
+                        formatter={(v) => [v, 'Total events']}
+                      />
+                      <Bar dataKey="cnt" radius={[0, 2, 2, 0]}>
+                        {chartData.totalEvents.map(entry => (
+                          <Cell key={entry.rule_id} fill="#574149" />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 )}
               </div>
             </div>

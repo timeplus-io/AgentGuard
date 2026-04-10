@@ -54,10 +54,12 @@ export const api = {
     const q = new URLSearchParams(params).toString()
     return get(`/metrics/tools${q ? '?' + q : ''}`)
   },
-  listThreats: (params = {}) => {
+  getThreats: (params = {}) => {
     const q = new URLSearchParams(params).toString()
     return get(`/threats${q ? '?' + q : ''}`)
   },
+  acknowledgeThreat: (id, body) => post(`/threats/${id}/acknowledge`, body),
+  clearThreat: (id, body) => post(`/threats/${id}/clear`, body),
   getCost: (params = {}) => {
     const q = new URLSearchParams(params).toString()
     return get(`/cost${q ? '?' + q : ''}`)

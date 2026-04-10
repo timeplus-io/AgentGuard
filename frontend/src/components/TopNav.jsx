@@ -1,18 +1,9 @@
 export default function TopNav({ title }) {
   return (
-    <header className="fixed top-0 right-0 left-64 h-16 bg-[#15121d] z-50 flex justify-between items-center px-8 shadow-[0_0_12px_rgba(213,63,140,0.12)] backdrop-blur-md">
+    <header className="top-nav fixed top-0 right-0 h-16 bg-[#15121d] z-50 flex justify-between items-center px-8 shadow-[0_0_12px_rgba(213,63,140,0.12)] backdrop-blur-md">
       <div className="flex items-center gap-4 flex-1">
-        {title ? (
+        {title && (
           <h2 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] tracking-tight">{title}</h2>
-        ) : (
-          <div className="relative w-full max-w-md">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-base">search</span>
-            <input
-              className="w-full bg-[#0f0c17] border-none text-xs py-2 pl-10 pr-4 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none placeholder-zinc-600 text-[#e7dff0]"
-              placeholder="Global search for threats or agents..."
-              type="text"
-            />
-          </div>
         )}
       </div>
       <div className="flex items-center gap-6">

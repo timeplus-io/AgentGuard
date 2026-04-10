@@ -33,6 +33,12 @@ func Init(cfg *config.TimeplusConfig) error {
 	if err := createSecurityStreams(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating security streams: %w", err)
 	}
+	if err := createThreatsStream(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning creating threats stream: %v", err)
+	}
+	if err := createThreatsMV(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning creating threats MV: %v", err)
+	}
 	if err := createPricingStream(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning creating pricing stream: %v", err)
 	}
@@ -47,6 +53,9 @@ func Init(cfg *config.TimeplusConfig) error {
 	}
 	if err := createNotifyUDF(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning creating UDF: %v", err)
+	}
+	if err := createNotifyFilterMV(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning creating notify filter MV: %v", err)
 	}
 	if err := createNotifierAlert(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning creating alert: %v", err)
@@ -160,7 +169,14 @@ func createSecurityStreams(ctx context.Context, conn proton.Conn) error {
 	if err := execIfNotExists(ctx, conn, "stream", "agentshield_security_events", ddlSecurityEvents); err != nil {
 		return err
 	}
+	if err := execIfNotExists(ctx, conn, "stream", "agentshield_notify_events", ddlNotifyEventsStream); err != nil {
+		return err
+	}
 	return execIfNotExists(ctx, conn, "stream", "agentshield_rules", ddlRulesStream)
+}
+
+func createNotifyFilterMV(ctx context.Context, conn proton.Conn) error {
+	return execIfNotExists(ctx, conn, "stream", "mv_notify_filter", ddlNotifyFilterMV)
 }
 
 // ── Builtin rules ─────────────────────────────────────────────────────────────
@@ -383,6 +399,9 @@ func createNotifyUDF(ctx context.Context, conn proton.Conn) error {
 }
 
 func createNotifierAlert(ctx context.Context, conn proton.Conn) error {
+	// Drop first so the DDL always reflects the current definition on restart.
+	// Ignore the error — it just means the alert didn't exist yet.
+	_ = conn.Exec(ctx, `DROP ALERT IF EXISTS agentshield_notifier`)
 	if err := conn.Exec(ctx, ddlNotifierAlert); err != nil {
 		return fmt.Errorf("create alert: %w", err)
 	}
@@ -630,6 +649,44 @@ CREATE STREAM agentshield_security_events
   event_data    string
 )`
 
+// ddlNotifyEventsStream holds filtered security events that the notifier alert
+// should act on (i.e. events where the matching threat is new or was cleared).
+const ddlNotifyEventsStream = `
+CREATE STREAM agentshield_notify_events
+(
+  detected_at   datetime64(3),
+  rule_id       low_cardinality(string),
+  rule_name     low_cardinality(string),
+  severity      low_cardinality(string),
+  agent_id      string,
+  deployment_id low_cardinality(string),
+  session_id    string,
+  run_id        string,
+  hook_name     low_cardinality(string),
+  tool_name     string,
+  message       string,
+  event_data    string
+)`
+
+// ddlNotifyFilterMV feeds agentshield_notify_events by joining security events
+// with the current threat state. Only events where the threat is new (no row in
+// agentshield_threats) or was previously cleared pass through.
+// Alerts do not support JOINs, so the join lives here instead.
+const ddlNotifyFilterMV = `
+CREATE MATERIALIZED VIEW mv_notify_filter
+INTO agentshield_notify_events
+AS SELECT
+  se.detected_at, se.rule_id, se.rule_name, se.severity,
+  se.agent_id, se.deployment_id, se.session_id, se.run_id,
+  se.hook_name, se.tool_name, se.message, se.event_data
+FROM agentshield_security_events AS se
+LEFT JOIN agentshield_threats AS t
+  ON  se.agent_id      = t.agent_id
+  AND se.deployment_id = t.deployment_id
+  AND se.session_id    = t.session_id
+  AND se.rule_id       = t.rule_id
+WHERE t.status = '' OR t.status = 'cleared'`
+
 const ddlRulesStream = `
 CREATE STREAM agentshield_rules
 (
@@ -678,6 +735,14 @@ var pricingSeedData = []pricingSeed{
 
 func createPricingStream(ctx context.Context, conn proton.Conn) error {
 	return execIfNotExists(ctx, conn, "stream", "agentshield_pricing", ddlPricingStream)
+}
+
+func createThreatsStream(ctx context.Context, conn proton.Conn) error {
+	return execIfNotExists(ctx, conn, "stream", "agentshield_threats", ddlThreatsStream)
+}
+
+func createThreatsMV(ctx context.Context, conn proton.Conn) error {
+	return execIfNotExists(ctx, conn, "view", "mv_threats", ddlThreatsMV)
 }
 
 func seedPricingData(ctx context.Context, conn proton.Conn) error {
@@ -733,14 +798,16 @@ def notify_agentshield_udf(rule_ids, rule_names, severities,
     return rule_ids
 $$`
 
-const ddlNotifierAlert = `CREATE ALERT IF NOT EXISTS agentshield_notifier
+// ddlNotifierAlert fires the notify UDF for events in agentshield_notify_events.
+// The threat-status filter lives in mv_notify_filter (alerts do not support JOINs).
+const ddlNotifierAlert = `CREATE ALERT agentshield_notifier
   BATCH 1 EVENTS WITH TIMEOUT 5s
   LIMIT 10 ALERTS PER 1m
   CALL notify_agentshield_udf
 AS SELECT
   rule_id, rule_name, severity, agent_id, deployment_id,
   session_id, hook_name, tool_name, message, detected_at
-FROM agentshield_security_events`
+FROM agentshield_notify_events`
 
 const ddlOTelInput = `
 CREATE INPUT openclaw_otel_input
@@ -755,3 +822,34 @@ SETTINGS
   metrics_sum_target_stream       = 'otel_metrics_sum',
   metrics_histogram_target_stream = 'otel_metrics_histogram'
 COMMENT 'OpenClaw agent telemetry via OTLP/HTTP'`
+
+const ddlThreatsStream = `
+CREATE MUTABLE STREAM IF NOT EXISTS agentshield_threats
+(
+    agent_id          string,
+    deployment_id     string,
+    session_id        string,
+    rule_id           string,
+    rule_name         string,
+    severity          string,
+    last_seen         datetime64(3),
+    status            string,
+    status_updated_at datetime64(3),
+    FAMILY cf_events(rule_name, severity, last_seen),
+    FAMILY cf_status(status, status_updated_at)
+) PRIMARY KEY (agent_id, deployment_id, session_id, rule_id)
+SETTINGS coalesced = true`
+
+const ddlThreatsMV = `
+CREATE MATERIALIZED VIEW mv_threats
+INTO agentshield_threats
+AS SELECT
+    agent_id,
+    deployment_id,
+    session_id,
+    rule_id,
+    rule_name,
+    severity,
+    detected_at AS last_seen
+FROM agentshield_security_events
+SETTINGS seek_to = 'earliest'`

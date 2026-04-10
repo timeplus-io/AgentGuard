@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import ThreatsList from '../components/ThreatsList'
 import { highlight, languages } from 'prismjs/components/prism-core'
 import 'prismjs/components/prism-sql'
 import 'prismjs/themes/prism-tomorrow.css'
@@ -21,16 +22,10 @@ function severityBadge(severity) {
   return 'bg-zinc-700/40 text-zinc-400 border border-zinc-600/20'
 }
 
-function formatTs(ts) {
-  if (!ts) return '—'
-  try { return new Date(ts.replace(' ', 'T')).toLocaleString() } catch { return ts }
-}
-
 export default function RuleDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [rule, setRule] = useState(null)
-  const [recentDetections, setRecentDetections] = useState([])
   const [detections24h, setDetections24h] = useState(0)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
@@ -42,7 +37,6 @@ export default function RuleDetail() {
     api.getRule(id)
       .then(data => {
         setRule(data)
-        setRecentDetections(data.recent_detections || [])
         setDetections24h(data.detections_24h || 0)
       })
       .catch(() => {})
@@ -62,7 +56,6 @@ export default function RuleDetail() {
       // Refresh from API to get authoritative state
       const data = await api.getRule(id)
       setRule(data)
-      setRecentDetections(data.recent_detections || [])
       setDetections24h(data.detections_24h || 0)
     } catch (e) {
       console.error('Toggle failed', e)
@@ -322,45 +315,12 @@ export default function RuleDetail() {
           </div>
 
           {/* Recent Detections */}
-          <div className="bg-[#1d1a25] p-8 rounded-sm">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest">
-                Recent Detections
-                <span className="ml-2 text-[10px] text-zinc-500 normal-case">(24h: {detections24h})</span>
-              </h2>
-            </div>
-            {recentDetections.length === 0 ? (
-              <p className="text-xs text-zinc-500">No detections for this rule yet.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-[10px] text-zinc-500 uppercase tracking-widest border-b border-zinc-800">
-                      <th className="text-left pb-3 pr-4 font-medium">Time</th>
-                      <th className="text-left pb-3 pr-4 font-medium">Agent</th>
-                      <th className="text-left pb-3 pr-4 font-medium">Hook</th>
-                      <th className="text-left pb-3 pr-4 font-medium">Message</th>
-                      <th className="text-left pb-3 font-medium">Severity</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800/50">
-                    {recentDetections.map((evt, i) => (
-                      <tr key={i} className="hover:bg-[#2c2834]/50">
-                        <td className="py-3 pr-4 text-zinc-400 whitespace-nowrap">{formatTs(evt.detected_at)}</td>
-                        <td className="py-3 pr-4 font-mono text-zinc-300">{evt.agent_id}</td>
-                        <td className="py-3 pr-4 text-zinc-400">{evt.hook_name}</td>
-                        <td className="py-3 pr-4 text-zinc-300 max-w-xs truncate">{evt.message}</td>
-                        <td className="py-3">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${severityBadge(evt.severity)}`}>
-                            {evt.severity}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-4">
+              Recent Detections
+              <span className="ml-2 text-[10px] text-zinc-500 normal-case">(24h: {detections24h})</span>
+            </h2>
+            <ThreatsList ruleId={id} hideRuleCol showFilters={false} />
           </div>
 
         </div>
