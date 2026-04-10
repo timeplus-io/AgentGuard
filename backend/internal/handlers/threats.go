@@ -24,6 +24,23 @@ func computeThreatID(agentID, deploymentID, sessionID, ruleID string) string {
 	return hex.EncodeToString(h[:])
 }
 
+// parseProtonTime parses a datetime64(3) value as returned by the Proton HTTP interface.
+// Proton may return "2006-01-02 15:04:05.000 UTC" or "2006-01-02 15:04:05.000 +0000".
+func parseProtonTime(s string) (time.Time, error) {
+	formats := []string{
+		"2006-01-02 15:04:05.000 UTC",
+		"2006-01-02 15:04:05.000 MST",
+		"2006-01-02 15:04:05.000 -0700",
+		"2006-01-02 15:04:05.000",
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("cannot parse time %q", s)
+}
+
 const sqlListThreats = `
 SELECT agent_id, deployment_id, session_id, rule_id,
        rule_name, severity, last_seen, status, status_updated_at
@@ -153,8 +170,8 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 
 			// Re-open: if cleared but new events arrived after the clear.
 			if status == "cleared" && statusUpdatedAt != "" && lastSeen != "" {
-				ls, errLS := time.Parse("2006-01-02 15:04:05.000", lastSeen)
-				su, errSU := time.Parse("2006-01-02 15:04:05.000", statusUpdatedAt)
+				ls, errLS := parseProtonTime(lastSeen)
+				su, errSU := parseProtonTime(statusUpdatedAt)
 				if errLS == nil && errSU == nil && ls.After(su) {
 					status = "open"
 					toReopen = append(toReopen, k)
