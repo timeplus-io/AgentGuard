@@ -1,11 +1,9 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,39 +16,6 @@ import (
 // metricNameRe validates model names in query params.
 // Allows colons for names like "kimi-k2.5:cloud".
 var metricNameRe = regexp.MustCompile(`^[a-zA-Z0-9._:/-]+$`)
-
-func parseFloat64(v any) float64 {
-	switch n := v.(type) {
-	case float64:
-		return n
-	case interface{ Float64() (float64, error) }:
-		if f, err := n.Float64(); err == nil {
-			return f
-		}
-	}
-	return 0
-}
-
-func parseInt64(v any) int64 {
-	switch n := v.(type) {
-	case float64:
-		return int64(n)
-	case json.Number:
-		if i, err := n.Int64(); err == nil {
-			return i
-		}
-		// Fallback for uint64 values that exceed int64 max (e.g., very large counters).
-		// strconv is available via json.Number's underlying string.
-		if u, err := strconv.ParseUint(string(n), 10, 64); err == nil {
-			return int64(u)
-		}
-	case int64:
-		return n
-	case uint64:
-		return int64(n)
-	}
-	return 0
-}
 
 func bucketFn(granularity string) string {
 	switch granularity {

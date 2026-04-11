@@ -22,6 +22,7 @@ export default function RulePacks() {
   const [rules, setRules] = useState([])
   const [catalog, setCatalog] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [totalDetections, setTotalDetections] = useState(0)
   const density = rules.length > 0 ? Math.round(rules.filter(r => r.enabled).length * 100 / rules.length) : 0
   const [chartData, setChartData] = useState({ openThreats: [], totalEvents: [] })
@@ -55,7 +56,7 @@ export default function RulePacks() {
       loadRules(),
       api.getRulesCatalog().then(data => setCatalog(data.catalog || [])),
     ])
-      .catch(() => {})
+      .catch(() => { setLoadError('Failed to load rules. Please refresh.') })
       .finally(() => setLoading(false))
   }, [])
 
@@ -272,6 +273,12 @@ export default function RulePacks() {
               </div>
             }
           />
+
+          {loadError && (
+            <div className="mb-6 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/20 rounded text-sm text-[#ffb4ab]">
+              {loadError}
+            </div>
+          )}
 
           {importResult && (
             <div className={`p-4 rounded-sm text-xs flex items-start gap-3 ${importResult.errors?.length ? 'bg-[#93000a]/20 border border-[#ffb4ab]/20 text-[#ffb4ab]' : 'bg-[#1d2a1d] border border-green-700/30 text-green-400'}`}>

@@ -110,7 +110,7 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			FROM table(agentshield_security_events)
 			WHERE rule_id = '%s'
 			  AND detected_at >= now() - interval 24 hour
-		`, id))
+		`, escapeSQL(id)))
 		if err == nil && len(countRows) > 0 {
 			if num, ok := countRows[0]["cnt"].(json.Number); ok {
 				cnt, _ := num.Int64()
@@ -124,7 +124,7 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			WHERE rule_id = '%s'
 			ORDER BY detected_at DESC
 			LIMIT 50
-		`, id))
+		`, escapeSQL(id)))
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
@@ -287,9 +287,26 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	}
 }
 
-func UninstallRule(cfg *config.Config) gin.HandlerFunc {
+func UninstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
+
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			return
+		}
+		var current *models.RulePack
+		for i := range packs {
+			if packs[i].ID == id {
+				current = &packs[i]
+				break
+			}
+		}
+		if current == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "rule not found"})
+			return
+		}
 
 		sql := fmt.Sprintf(`
 INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
@@ -309,7 +326,7 @@ SELECT
   now64(3)                                AS updated_at
 FROM table(agentshield_rules)
 WHERE rule_id = '%s'
-GROUP BY rule_id`, id)
+GROUP BY rule_id`, escapeSQL(id))
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "uninstall failed"})
@@ -674,20 +691,20 @@ func queryCurrentRulePacks(cfg *config.TimeplusConfig, mgr *catalog.Manager) ([]
 	}
 	packs := make([]models.RulePack, 0, len(rows))
 	for _, row := range rows {
-		id := strVal(row, "rule_id")
-		enabled := boolVal(row, "enabled")
+		id := parseStr(row["rule_id"])
+		enabled := parseBool(row["enabled"])
 		pack := models.RulePack{
 			ID:                id,
-			Name:              strVal(row, "name"),
-			Version:           strVal(row, "version"),
-			Description:       strVal(row, "description"),
-			QuerySQL:          strVal(row, "query_sql"),
+			Name:              parseStr(row["name"]),
+			Version:           parseStr(row["version"]),
+			Description:       parseStr(row["description"]),
+			QuerySQL:          parseStr(row["query_sql"]),
 			Enabled:           enabled,
-			Severity:          strVal(row, "severity"),
-			Category:          strVal(row, "category"),
-			RequiredTelemetry: strVal(row, "required_telemetry"),
-			FPRate:            strVal(row, "fp_rate"),
-			HookSources:       strVal(row, "hook_sources"),
+			Severity:          parseStr(row["severity"]),
+			Category:          parseStr(row["category"]),
+			RequiredTelemetry: parseStr(row["required_telemetry"]),
+			FPRate:            parseStr(row["fp_rate"]),
+			HookSources:       parseStr(row["hook_sources"]),
 		}
 		// Check catalog for a newer version.
 		if catalogEntry, ok := mgr.Lookup(id); ok {
@@ -712,7 +729,7 @@ func queryDetectionCounts(cfg *config.TimeplusConfig) (map[string]int, error) {
 	}
 	result := make(map[string]int, len(rows))
 	for _, row := range rows {
-		ruleID := strVal(row, "rule_id")
+		ruleID := parseStr(row["rule_id"])
 		if num, ok := row["cnt"].(json.Number); ok {
 			cnt, _ := num.Int64()
 			result[ruleID] = int(cnt)
@@ -738,13 +755,13 @@ func rowsToSecurityEvents(rows []tp.Row) []models.SecurityEvent {
 	events := make([]models.SecurityEvent, 0, len(rows))
 	for _, row := range rows {
 		events = append(events, models.SecurityEvent{
-			RuleID:     strVal(row, "rule_id"),
-			RuleName:   strVal(row, "rule_name"),
-			Severity:   strVal(row, "severity"),
-			AgentID:    strVal(row, "agent_id"),
-			HookName:   strVal(row, "hook_name"),
-			Message:    strVal(row, "message"),
-			DetectedAt: strVal(row, "detected_at"),
+			RuleID:     parseStr(row["rule_id"]),
+			RuleName:   parseStr(row["rule_name"]),
+			Severity:   parseStr(row["severity"]),
+			AgentID:    parseStr(row["agent_id"]),
+			HookName:   parseStr(row["hook_name"]),
+			Message:    parseStr(row["message"]),
+			DetectedAt: parseStr(row["detected_at"]),
 		})
 	}
 	return events
@@ -754,7 +771,7 @@ func mvExists(cfg *config.TimeplusConfig, ruleID string) (bool, error) {
 	mvName := tp.MVName(ruleID)
 	rows, err := tp.Query(cfg, fmt.Sprintf(
 		"SELECT count() AS cnt FROM system.tables WHERE name = '%s' AND database = current_database()",
-		mvName,
+		escapeSQL(mvName),
 	))
 	if err != nil || len(rows) == 0 {
 		return false, err
@@ -788,19 +805,4 @@ func versionGreater(a, b string) bool {
 	return false
 }
 
-func strVal(row map[string]any, key string) string {
-	v, _ := row[key].(string)
-	return v
-}
-
-func boolVal(row map[string]any, key string) bool {
-	switch v := row[key].(type) {
-	case bool:
-		return v
-	case json.Number:
-		i, _ := v.Int64()
-		return i != 0
-	}
-	return false
-}
 

@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/mock"
 	"github.com/timeplus/agentshield/internal/models"
 	tp "github.com/timeplus/agentshield/internal/timeplus"
 )
@@ -91,14 +90,11 @@ func GetCost(cfg *config.Config) gin.HandlerFunc {
 			MonthToDate:     mtd,
 			Forecasted:      forecasted,
 			AvgTokenCost:    avgTokenCost,
-			PolicyBreaches:  2, // mock — out of scope
 			DailySpend:      daily,
 			TokenBreakdown:  breakdown,
 			CacheSavings:    cacheSavings,
 			WastedSpend:     0,
 			AgentModelCosts: allCosts,
-			BudgetPolicies:  mock.BudgetPolicies,
-			Anomalies:       mock.CostAnomalies,
 		})
 	}
 }
@@ -351,11 +347,6 @@ GROUP BY e.provider, e.model`
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
-
-// escapeSQL replaces single quotes to prevent SQL injection in string literals.
-func escapeSQL(s string) string {
-	return strings.ReplaceAll(s, "'", "''")
-}
 
 // formatCostCount formats a raw count into "14.2K" or "1.4M" for display.
 func formatCostCount(n int64) string {

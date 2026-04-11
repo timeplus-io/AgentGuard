@@ -195,7 +195,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <LiveAgentActivity timeRange="-1h" limit={10} />
+          <LiveAgentActivity timeRange="-24h" limit={10} />
         </div>
       </main>
     </div>

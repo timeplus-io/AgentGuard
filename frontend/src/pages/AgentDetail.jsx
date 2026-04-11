@@ -83,7 +83,7 @@ function presetToISO(preset) {
   return new Date(Date.now() - secs * 1000).toISOString()
 }
 
-// ── EventDetail: structured detail panel per hook type ────────────────────────
+// ── KVRow ─────────────────────────────────────────────────────────────────────
 
 function KVRow({ label, value }) {
   if (value == null || value === '') return null
@@ -91,133 +91,6 @@ function KVRow({ label, value }) {
     <div className="grid grid-cols-[130px_1fr] gap-2 py-1 border-b border-[#574149]/10 last:border-0">
       <span className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</span>
       <span className="text-xs font-mono text-[#e7dff0] break-all">{String(value)}</span>
-    </div>
-  )
-}
-
-function EventDetail({ event }) {
-  const data = safeParse(event.event_data) || {}
-  const hook = event.hook_name
-  const isBlock = event.hook_decision === 'block'
-
-  if (isBlock) {
-    const rule = data.rule ?? data.ruleName ?? data.rule_name ?? data.ruleId ?? ''
-    return (
-      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#ffb4ab]/20 space-y-0.5">
-        <KVRow label="Block Reason" value={event.block_reason} />
-        <KVRow label="Rule" value={rule} />
-      </div>
-    )
-  }
-
-  if (hook === 'llm_input') {
-    const msgCount = Array.isArray(data.messages) ? data.messages.length : (data.messageCount ?? data.message_count ?? '')
-    return (
-      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
-        <KVRow label="Provider" value={event.provider} />
-        <KVRow label="Model" value={event.model} />
-        <KVRow label="Run ID" value={event.run_id} />
-        <KVRow label="Session ID" value={event.session_id} />
-        {msgCount !== '' && <KVRow label="Messages" value={msgCount} />}
-      </div>
-    )
-  }
-
-  if (hook === 'llm_output') {
-    const finish = data.finishReason ?? data.finish_reason ?? data.stop_reason ?? ''
-    return (
-      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
-        <KVRow label="Provider" value={event.provider} />
-        <KVRow label="Model" value={event.model} />
-        <KVRow label="Run ID" value={event.run_id} />
-        <KVRow label="Finish Reason" value={finish} />
-      </div>
-    )
-  }
-
-  if (hook === 'before_tool_call' || hook === 'after_tool_call') {
-    const input = data.input ?? data.tool_input ?? data.args ?? {}
-    return (
-      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
-        <KVRow label="Tool Name" value={event.tool_name} />
-        <KVRow label="Run ID" value={event.run_id} />
-        {typeof input === 'object'
-          ? Object.entries(input).map(([k, v]) => (
-              <KVRow key={k} label={k} value={typeof v === 'object' ? JSON.stringify(v) : v} />
-            ))
-          : <KVRow label="Input" value={input} />
-        }
-      </div>
-    )
-  }
-
-  if (hook === 'tool_result_persist') {
-    const raw = data.result ?? data.output ?? data.content ?? JSON.stringify(data)
-    const preview = String(raw).slice(0, 200)
-    return (
-      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
-        <KVRow label="Tool Name" value={event.tool_name} />
-        <KVRow label="Result" value={preview + (String(raw).length > 200 ? '…' : '')} />
-      </div>
-    )
-  }
-
-  if (hook === 'before_agent_start' || hook === 'agent_end') {
-    const duration = data.duration_ms ?? data.duration ?? data.elapsed_ms ?? data.elapsed ?? ''
-    return (
-      <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
-        <KVRow label="Run ID" value={event.run_id} />
-        <KVRow label="Session ID" value={event.session_id} />
-        {duration !== '' && <KVRow label="Duration" value={`${duration}ms`} />}
-      </div>
-    )
-  }
-
-  // fallback: all non-empty top-level fields from event_data
-  const entries = Object.entries(data).filter(([, v]) => v != null && v !== '' && v !== false)
-  return (
-    <div className="mt-2 bg-[#0f0c17] p-3 rounded-sm border border-[#574149]/20 space-y-0.5">
-      {entries.length === 0
-        ? <span className="text-[10px] text-zinc-600">No structured data</span>
-        : entries.map(([k, v]) => (
-            <KVRow key={k} label={k} value={typeof v === 'object' ? JSON.stringify(v) : v} />
-          ))
-      }
-    </div>
-  )
-}
-
-// ── EventRow ──────────────────────────────────────────────────────────────────
-
-function EventRow({ event }) {
-  const [expanded, setExpanded] = useState(false)
-  const color = dotColor(event)
-  const subtitle = [event.provider, event.model, event.tool_name, event.hook_decision]
-    .filter(Boolean).join(' · ')
-
-  return (
-    <div className="group flex gap-4 px-6 py-4 hover:bg-[#2c2834]/50 transition-all border-l-2 border-transparent hover:border-[#574149]/40">
-      <div className="flex flex-col items-center pt-1">
-        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-        <div className="w-px flex-1 bg-[#574149]/20 my-2" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex justify-between items-start gap-4">
-          <span className="text-xs font-medium text-[#e7dff0]">{event.hook_name}</span>
-          <span className="text-[10px] text-zinc-500 font-mono shrink-0">{fmtTime(event.event_time)}</span>
-        </div>
-        {subtitle && <p className="text-[11px] text-zinc-500 mt-0.5">{subtitle}</p>}
-        <button
-          onClick={() => setExpanded(e => !e)}
-          className="mt-1 flex items-center gap-1 text-[10px] text-zinc-500 hover:text-[#ffb0cf] transition-colors"
-        >
-          <span className="material-symbols-outlined text-[12px]">
-            {expanded ? 'expand_less' : 'expand_more'}
-          </span>
-          Event Details
-        </button>
-        {expanded && <EventDetail event={event} />}
-      </div>
     </div>
   )
 }
