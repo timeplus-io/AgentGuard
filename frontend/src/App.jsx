@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard'
 import AgentList from './pages/AgentList'
 import AgentDetail from './pages/AgentDetail'
 import Threats from './pages/Threats'
+import ThreatDetail from './pages/ThreatDetail'
 import CostGovernance from './pages/CostGovernance'
 import RulePacks from './pages/RulePacks'
 import RuleDetail from './pages/RuleDetail'
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/agents" element={<AgentList />} />
         <Route path="/agents/:id" element={<AgentDetail />} />
         <Route path="/threats" element={<Threats />} />
+        <Route path="/threats/:id" element={<ThreatDetail />} />
         <Route path="/cost" element={<CostGovernance />} />
         <Route path="/rules" element={<RulePacks />} />
         <Route path="/rules/new" element={<RuleCreate />} />
