@@ -1,5 +1,5 @@
 .PHONY: all dev build clean test \
-        backend-build backend-run backend-clean backend-lint \
+        backend-build backend-run backend-clean backend-fmt backend-lint \
         frontend-install frontend-dev frontend-build frontend-preview frontend-lint \
         lint \
         docker-build docker-run docker-stop docker-push docker-release
@@ -47,6 +47,10 @@ backend-tidy:
 ## backend-check: compile check without producing a binary
 backend-check:
 	cd backend && CGO_ENABLED=0 go build -tags embed ./...
+
+## backend-fmt: format Go source files
+backend-fmt:
+	cd backend && gofmt -w .
 
 ## backend-lint: run golangci-lint on the backend (requires golangci-lint in PATH)
 backend-lint:
