@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { SeverityBadge } from './Badge'
+import { Link, useNavigate } from 'react-router-dom'
+import { SeverityBadge, ThreatStatusBadge } from './Badge'
 import { api } from '../api/client'
 
 function formatTs(ts) {
@@ -15,19 +15,6 @@ function formatTs(ts) {
   } catch { return String(ts) }
 }
 
-function StatusBadge({ status }) {
-  const map = {
-    open:         { label: 'Open',         cls: 'bg-blue-500/10 text-blue-400 border border-blue-400/30' },
-    acknowledged: { label: 'Acknowledged', cls: 'bg-yellow-500/10 text-yellow-400 border border-yellow-400/30' },
-    cleared:      { label: 'Cleared',      cls: 'bg-green-500/10 text-green-400 border border-green-400/30' },
-  }
-  const { label, cls } = map[status] || { label: status, cls: 'bg-zinc-500/10 text-zinc-400 border border-zinc-400/30' }
-  return (
-    <span className={`text-[10px] font-bold uppercase rounded-full px-2 py-0.5 ${cls}`}>
-      {label}
-    </span>
-  )
-}
 
 /**
  * ThreatsList — reusable deduplicated threats table.
@@ -42,7 +29,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
   const [loading, setLoading] = useState(true)
   const [severityFilter, setSeverityFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
-  const [expandedId, setExpandedId] = useState(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     let cancelled = false
@@ -189,16 +176,16 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                   </td>
                 </tr>
               ) : filtered.map(t => (
-                <React.Fragment key={t.threat_id}>
-                  <tr
-                    onClick={() => setExpandedId(prev => prev === t.threat_id ? null : t.threat_id)}
+                <tr
+                    key={t.threat_id}
+                    onClick={() => navigate(`/threats/${t.threat_id}`)}
                     className="hover:bg-[#2c2834] transition-colors cursor-pointer"
                   >
                     <td className="px-6 py-4">
                       <SeverityBadge severity={t.severity} />
                     </td>
                     <td className="px-6 py-4">
-                      <StatusBadge status={t.status} />
+                      <ThreatStatusBadge status={t.status} />
                     </td>
                     {!hideRuleCol && (
                       <td className="px-6 py-4 max-w-xs">
@@ -273,32 +260,6 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                       </div>
                     </td>
                   </tr>
-
-                  {expandedId === t.threat_id && (
-                    <tr key={`${t.threat_id}-expanded`} className="bg-[#0f0c17]">
-                      <td colSpan={colSpan} className="px-6 py-4">
-                        <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-3">
-                          Event History
-                        </p>
-                        <div className="space-y-2">
-                          {t.events && t.events.length > 0 ? (
-                            t.events.map((ev, i) => (
-                              <div key={i} className="flex items-start gap-4 text-xs text-zinc-400">
-                                <span className="text-zinc-600 font-mono text-[10px] whitespace-nowrap">
-                                  {formatTs(ev.detected_at)}
-                                </span>
-                                <span className="text-zinc-400">{ev.hook_name}</span>
-                                <span className="text-zinc-300 flex-1">{ev.message}</span>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-zinc-600">No event history available.</p>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
               ))}
             </tbody>
           </table>
