@@ -60,6 +60,9 @@ AgentShield is a real-time security monitoring and governance platform for AI co
 │  React SPA  (:5173 dev / embedded in binary for prod)                 │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+All resource overview 
+<img width="1168" height="403" alt="image" src="https://github.com/user-attachments/assets/10633d9b-a6b4-4fe4-8550-34b4d08f4569" />
+
 
 ### Technology Stack
 
