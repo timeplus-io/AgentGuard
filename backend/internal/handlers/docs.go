@@ -823,32 +823,6 @@ const openAPISpec = `{
       }
     },
 
-    "/investigate/query": {
-      "post": {
-        "tags": ["Investigate"],
-        "summary": "Run an ad-hoc SQL query",
-        "description": "Executes an arbitrary SQL SELECT against Proton and returns the result rows as a JSON array.\n\nUse \u0060table(stream_name)\u0060 to query historical (batch) data rather than streaming. Queries are forwarded directly to Proton — apply appropriate \u0060LIMIT\u0060 clauses to avoid large result sets.",
-        "operationId": "runQuery",
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": {
-            "type": "object",
-            "required": ["query"],
-            "properties": { "query": { "type": "string", "description": "SQL SELECT statement." } }
-          }, "example": { "query": "SELECT hook_name, count() AS n FROM table(agentshield_hook_events) GROUP BY hook_name ORDER BY n DESC LIMIT 10" }
-          }}
-        },
-        "responses": {
-          "200": { "description": "Query results", "content": { "application/json": { "example": {
-            "rows": [
-              { "hook_name": "before_tool_call", "n": 1840 },
-              { "hook_name": "llm_output",       "n": 412 }
-            ]
-          }}}}
-        }
-      }
-    },
-
     "/proton/query": {
       "post": {
         "tags": ["Proton"],

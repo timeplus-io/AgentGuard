@@ -62,6 +62,3 @@ func ListTables(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-func RunQuery(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "use /api/proton/query for streaming SQL execution"})
-}

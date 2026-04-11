@@ -134,7 +134,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
 		api.GET("/notifications/stream", handlers.NotificationsSSEHandler())
 		api.GET("/investigate/tables", handlers.ListTables(cfg))
-		api.POST("/investigate/query", handlers.RunQuery)
 		api.POST("/onboarding/generate", handlers.GenerateConfig)
 		api.POST("/proton/query", handlers.ProtonQueryHandler(cfg))
 	}

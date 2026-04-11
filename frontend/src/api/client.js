@@ -88,7 +88,6 @@ export const api = {
     fetch(`${BASE}/rules/${id}`, { method: 'DELETE' })
       .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() }),
   listTables: () => get('/investigate/tables'),
-  runQuery: (query) => post('/investigate/query', { query }),
   generateConfig: (data) => post('/onboarding/generate', data),
 
   // Streams rows from Proton/Timeplus via the backend proxy.
