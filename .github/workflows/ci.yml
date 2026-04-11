@@ -27,7 +27,7 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           working-directory: backend
-          version: latest
+          version: v2.11.4  # pin; update intentionally via https://github.com/golangci/golangci-lint/releases
 
       - name: Test
         run: go test ./...
