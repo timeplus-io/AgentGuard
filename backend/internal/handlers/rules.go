@@ -110,7 +110,7 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			FROM table(agentshield_security_events)
 			WHERE rule_id = '%s'
 			  AND detected_at >= now() - interval 24 hour
-		`, id))
+		`, escapeSQL(id)))
 		if err == nil && len(countRows) > 0 {
 			if num, ok := countRows[0]["cnt"].(json.Number); ok {
 				cnt, _ := num.Int64()
@@ -124,7 +124,7 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			WHERE rule_id = '%s'
 			ORDER BY detected_at DESC
 			LIMIT 50
-		`, id))
+		`, escapeSQL(id)))
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
@@ -309,7 +309,7 @@ SELECT
   now64(3)                                AS updated_at
 FROM table(agentshield_rules)
 WHERE rule_id = '%s'
-GROUP BY rule_id`, id)
+GROUP BY rule_id`, escapeSQL(id))
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "uninstall failed"})
@@ -754,7 +754,7 @@ func mvExists(cfg *config.TimeplusConfig, ruleID string) (bool, error) {
 	mvName := tp.MVName(ruleID)
 	rows, err := tp.Query(cfg, fmt.Sprintf(
 		"SELECT count() AS cnt FROM system.tables WHERE name = '%s' AND database = current_database()",
-		mvName,
+		escapeSQL(mvName),
 	))
 	if err != nil || len(rows) == 0 {
 		return false, err
