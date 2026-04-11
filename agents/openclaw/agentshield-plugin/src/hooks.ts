@@ -43,6 +43,7 @@ export function baseEvent(hookName: string, ctx: BaseCtx, config: AgentShieldCon
     hook_decision: "observe",
     block_reason: "",
     event_data: "",
+    agent_type: "openclaw",
   };
 }
 

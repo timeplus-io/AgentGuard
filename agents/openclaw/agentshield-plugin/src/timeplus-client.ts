@@ -15,6 +15,7 @@ export type HookEvent = {
   hook_decision: string;
   block_reason: string;
   event_data: string;
+  agent_type: string;   // "openclaw" | "" for unknown/legacy
 };
 
 export type TimeplusClient = {
@@ -27,7 +28,7 @@ const COLUMNS: (keyof HookEvent)[] = [
   "hook_name", "event_time", "session_id", "run_id", "agent_id",
   "deployment_id", "deployment_name",
   "session_key", "tool_name", "provider", "model",
-  "hook_decision", "block_reason", "event_data",
+  "hook_decision", "block_reason", "event_data", "agent_type",
 ];
 
 async function postBatch(

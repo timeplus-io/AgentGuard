@@ -481,7 +481,8 @@ CREATE STREAM agentshield_hook_events
   model            string,
   hook_decision    low_cardinality(string),
   block_reason     string,
-  event_data       string
+  event_data       string,
+  agent_type       low_cardinality(string)
 )`
 
 const ddlSecurityEvents = `
