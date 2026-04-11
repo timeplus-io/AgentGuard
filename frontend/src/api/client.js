@@ -60,6 +60,7 @@ export const api = {
   },
   acknowledgeThreat: (id, body) => post(`/threats/${id}/acknowledge`, body),
   clearThreat: (id, body) => post(`/threats/${id}/clear`, body),
+  getThreat: (id) => get(`/threats/${id}`),
   getCost: (params = {}) => {
     const q = new URLSearchParams(params).toString()
     return get(`/cost${q ? '?' + q : ''}`)
