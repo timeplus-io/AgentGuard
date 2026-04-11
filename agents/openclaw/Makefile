@@ -2,7 +2,14 @@ PWD := $(shell pwd)
 CONFIG_FILE := .openclaw/openclaw.json
 IMAGE := ghcr.io/openclaw/openclaw:2026.4.5
 
-.PHONY: workspace init run start configure add-agents url devices approve clean install-plugin build-plugin deploy-plugin test
+LITELLM_IMAGE := ghcr.io/berriai/litellm:main-latest
+LITELLM_API_KEY := sk-openclaw-proxy
+LITELLM_CONFIG := .openclaw/litellm_config.yaml
+GCP_CREDENTIALS := .openclaw/tpdemo2025-9699db62024d.json
+GOOGLE_CLOUD_PROJECT := tpdemo2025
+GOOGLE_CLOUD_LOCATION := global
+
+.PHONY: workspace init run start start-litellm stop-litellm configure add-agents url devices approve clean install-plugin build-plugin deploy-plugin test
 
 workspace:
 	# Create the folder and the nested workspace
@@ -12,13 +19,28 @@ workspace:
 	# Ensure the directory is actually writable
 	sudo chmod -R 777 .openclaw
 
-init: 
+init:
 	docker run -it --rm \
 		-v "$(PWD)/.openclaw":/home/node/.openclaw \
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
 		-e HOME=/home/node \
 		$(IMAGE) \
 		node dist/index.js onboard
+
+start-litellm:
+	docker stop litellm-proxy || true
+	docker rm litellm-proxy || true
+	docker run -d \
+		--name litellm-proxy \
+		-p 4000:4000 \
+		-v "$(PWD)/$(LITELLM_CONFIG)":/app/config.yaml:ro \
+		-v "$(PWD)/$(GCP_CREDENTIALS)":/app/credentials.json:ro \
+		$(LITELLM_IMAGE) \
+		--config /app/config.yaml --port 4000
+
+stop-litellm:
+	docker stop litellm-proxy || true
+	docker rm litellm-proxy || true
 
 run:
 	docker run -d \
@@ -27,6 +49,11 @@ run:
 		-v "$(PWD)/.openclaw":/home/node/.openclaw \
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
 		-v "$(PWD)/agentshield-plugin":/home/node/.openclaw/agentshield-plugin \
+		-e HOME=/home/node \
+		-e GOOGLE_APPLICATION_CREDENTIALS=/home/node/.openclaw/$(notdir $(GCP_CREDENTIALS)) \
+		-e GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT) \
+		-e GOOGLE_CLOUD_LOCATION=$(GOOGLE_CLOUD_LOCATION) \
+		-e LITELLM_API_KEY=$(LITELLM_API_KEY) \
 		--restart unless-stopped \
 		$(IMAGE) \
 		node dist/index.js gateway run
@@ -82,6 +109,35 @@ data["plugins"]["entries"]["agentshield"] = {
     }
 }
 
+# 7. Configure LiteLLM as the default model provider (workaround for openclaw#54073:
+#    anthropic-vertex provider fails to register its stream function because pi-ai
+#    pre-registers the anthropic-messages API, causing requests to hit the wrong URL)
+data.setdefault("agents", {}).setdefault("defaults", {})["model"] = "litellm/claude-sonnet-4-6"
+data.setdefault("models", {}).setdefault("providers", {})["litellm"] = {
+    "api": "openai-completions",
+    "baseUrl": "http://host.docker.internal:4000",
+    "models": [
+        {
+            "id": "claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6",
+            "reasoning": True,
+            "input": ["text", "image"],
+            "cost": {"input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75},
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+        },
+        {
+            "id": "claude-opus-4-6",
+            "name": "Claude Opus 4.6",
+            "reasoning": True,
+            "input": ["text", "image"],
+            "cost": {"input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25},
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+        }
+    ]
+}
+
 with open(path, "w") as f:
     json.dump(data, f, indent=2)
 print("Config updated:", path)
@@ -91,17 +147,7 @@ export CONFIGURE_SCRIPT
 configure:
 	@python3 -c "$$CONFIGURE_SCRIPT"
 
-add-agents:
-	# Create an 'analyst' agent with its own isolated workspace.
-	# Idempotent: safe to re-run — openclaw skips creation if already present.
-	mkdir -p .openclaw/workspace-analyst
-	docker exec openclaw node dist/index.js agents add analyst \
-		--workspace /home/node/.openclaw/workspace-analyst \
-		--non-interactive 2>&1 | grep -v "already exists" || true
-	@echo "Agents:"
-	@docker exec openclaw node dist/index.js agents list
-
-start:
+start: start-litellm
 	docker stop openclaw || true
 	docker rm openclaw || true
 	docker run -d \
@@ -111,6 +157,10 @@ start:
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
 		-v "$(PWD)/agentshield-plugin":/home/node/.openclaw/agentshield-plugin \
 		-e HOME=/home/node \
+		-e GOOGLE_APPLICATION_CREDENTIALS=/home/node/.openclaw/$(notdir $(GCP_CREDENTIALS)) \
+		-e GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT) \
+		-e GOOGLE_CLOUD_LOCATION=$(GOOGLE_CLOUD_LOCATION) \
+		-e LITELLM_API_KEY=$(LITELLM_API_KEY) \
 		--restart unless-stopped \
 		$(IMAGE) \
 		node dist/index.js gateway run
@@ -133,6 +183,16 @@ approve:
 		done; \
 	fi
 
+add-agents:
+	# Create an 'analyst' agent with its own isolated workspace.
+	# Idempotent: safe to re-run — openclaw skips creation if already present.
+	mkdir -p .openclaw/workspace-analyst
+	docker exec openclaw node dist/index.js agents add analyst \
+		--workspace /home/node/.openclaw/workspace-analyst \
+		--non-interactive 2>&1 | grep -v "already exists" || true
+	@echo "Agents:"
+	@docker exec openclaw node dist/index.js agents list
+
 install-plugin:
 	cd agentshield-plugin && npm install
 
@@ -144,6 +204,6 @@ deploy-plugin: build-plugin start
 test:
 	python3 tests/run_scenarios.py
 
-clean:
+clean: stop-litellm
 	docker stop openclaw || true
 	docker rm openclaw || true

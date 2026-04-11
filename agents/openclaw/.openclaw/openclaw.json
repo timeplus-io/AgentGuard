@@ -1,7 +1,8 @@
 {
   "agents": {
     "defaults": {
-      "workspace": "/home/node/.openclaw/workspace"
+      "workspace": "/home/node/.openclaw/workspace",
+      "model": "litellm/claude-sonnet-4-6"
     },
     "list": [
       {
@@ -69,6 +70,46 @@
   "models": {
     "mode": "merge",
     "providers": {
+      "litellm": {
+        "api": "openai-completions",
+        "baseUrl": "http://host.docker.internal:4000",
+        "models": [
+          {
+            "id": "claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-4-6",
+            "name": "Claude Opus 4.6",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          }
+        ]
+      },
       "ollama": {
         "baseUrl": "http://host.docker.internal:11434",
         "api": "ollama",
@@ -287,6 +328,12 @@
           "deploymentId": "local",
           "deploymentName": "Local Dev"
         }
+      },
+      "anthropic-vertex": {
+        "enabled": true
+      },
+      "litellm": {
+        "enabled": true
       }
     }
   },
@@ -298,7 +345,7 @@
   },
   "meta": {
     "lastTouchedVersion": "2026.4.5",
-    "lastTouchedAt": "2026-04-07T23:59:10.386Z"
+    "lastTouchedAt": "2026-04-11T20:30:44.940Z"
   },
   "diagnostics": {
     "enabled": true,
