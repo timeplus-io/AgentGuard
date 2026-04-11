@@ -1,6 +1,7 @@
 .PHONY: all dev build clean test \
-        backend-build backend-run backend-clean \
-        frontend-install frontend-dev frontend-build frontend-preview \
+        backend-build backend-run backend-clean backend-lint \
+        frontend-install frontend-dev frontend-build frontend-preview frontend-lint \
+        lint \
         docker-build docker-run docker-stop docker-push docker-release
 
 BINARY      := backend/server
@@ -47,6 +48,10 @@ backend-tidy:
 backend-check:
 	cd backend && CGO_ENABLED=0 go build -tags embed ./...
 
+## backend-lint: run golangci-lint on the backend (requires golangci-lint in PATH)
+backend-lint:
+	cd backend && golangci-lint run
+
 ## backend-clean: remove compiled binary
 backend-clean:
 	rm -f $(BINARY)
@@ -65,9 +70,18 @@ frontend-dev:
 frontend-build:
 	cd frontend && npm run build
 
+## frontend-lint: run ESLint on the frontend source
+frontend-lint:
+	cd frontend && npm run lint
+
 ## frontend-preview: preview the production build locally
 frontend-preview: frontend-build
 	cd frontend && npm run preview
+
+# ── Lint ─────────────────────────────────────────────────────────────────────
+
+## lint: run all linters (backend golangci-lint + frontend ESLint)
+lint: backend-lint frontend-lint
 
 # ── Docker ───────────────────────────────────────────────────────────────────
 
