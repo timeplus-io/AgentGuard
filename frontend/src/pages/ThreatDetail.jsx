@@ -18,53 +18,120 @@ function formatTs(ts) {
   } catch { return String(ts) }
 }
 
-function prettyJson(raw) {
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2)
-  } catch {
-    return raw
+// ── JsonTree ──────────────────────────────────────────────────────────────────
+// Recursive collapsible JSON tree. Nested objects/arrays start collapsed.
+
+function JsonValue({ value, depth }) {
+  const [open, setOpen] = useState(depth === 0)
+
+  if (value === null) return <span className="text-zinc-500">null</span>
+  if (typeof value === 'boolean') return <span className="text-purple-400">{String(value)}</span>
+  if (typeof value === 'number') return <span className="text-amber-400">{value}</span>
+  if (typeof value === 'string') {
+    return (
+      <span className="text-green-400 break-all">
+        "{value.length > 200 ? value.slice(0, 200) + '…' : value}"
+      </span>
+    )
   }
+
+  const isArr = Array.isArray(value)
+  const entries = isArr
+    ? value.map((v, i) => [String(i), v])
+    : Object.entries(value)
+  const [ob, cb] = isArr ? ['[', ']'] : ['{', '}']
+
+  if (entries.length === 0) return <span className="text-zinc-500">{ob}{cb}</span>
+
+  return (
+    <span>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="text-zinc-500 hover:text-zinc-200 transition-colors mr-1"
+      >
+        {open ? '▾' : '▸'}
+      </button>
+      {open ? (
+        <>
+          <span className="text-zinc-500">{ob}</span>
+          <div className="pl-4 border-l border-[#574149]/20 ml-0.5 mt-0.5 space-y-0.5">
+            {entries.map(([k, v]) => (
+              <div key={k} className="flex gap-1.5 items-start">
+                <span className="text-[#93c5fd] shrink-0 select-none">
+                  {isArr ? k : `"${k}"`}:
+                </span>
+                <JsonValue value={v} depth={depth + 1} />
+              </div>
+            ))}
+          </div>
+          <span className="text-zinc-500">{cb}</span>
+        </>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="text-zinc-600 hover:text-zinc-400 transition-colors"
+        >
+          {ob}&hellip;{cb}
+        </button>
+      )}
+    </span>
+  )
 }
 
 // ── EventCard ─────────────────────────────────────────────────────────────────
 
 function EventCard({ event }) {
+  const [expanded, setExpanded] = useState(false)
+
+  let parsedData = null
+  if (event.event_data) {
+    try { parsedData = JSON.parse(event.event_data) } catch { /* use raw */ }
+  }
+
+  const hasDetail = event.run_id || event.event_data
+
   return (
-    <div className="bg-[#211e29] border border-[#574149]/10 rounded p-5">
-      {/* Header row */}
-      <div className="flex flex-wrap items-center gap-3 mb-3">
-        <span className="text-[10px] font-mono text-zinc-400 whitespace-nowrap">
+    <div className="bg-[#211e29] border border-[#574149]/10 rounded">
+      {/* Summary row — always visible, click to expand */}
+      <div
+        className="flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none"
+        onClick={() => hasDetail && setExpanded(e => !e)}
+      >
+        <span className="material-symbols-outlined text-[14px] text-zinc-600 shrink-0">
+          {expanded ? 'expand_more' : 'chevron_right'}
+        </span>
+        <span className="text-[10px] font-mono text-zinc-500 whitespace-nowrap shrink-0">
           {formatTs(event.detected_at)}
         </span>
         {event.hook_name && (
-          <span className="bg-[#2c2834] text-zinc-300 uppercase rounded-full text-[10px] font-semibold px-2.5 py-0.5 tracking-wide">
+          <span className="bg-[#2c2834] text-zinc-400 uppercase rounded-full text-[10px] font-semibold px-2 py-0.5 tracking-wide shrink-0">
             {event.hook_name}
           </span>
         )}
         {event.tool_name && (
-          <span className="text-xs font-mono text-blue-400">
-            {event.tool_name}
-          </span>
+          <span className="text-[10px] font-mono text-[#93c5fd] shrink-0">{event.tool_name}</span>
+        )}
+        {event.message && (
+          <span className="text-xs text-zinc-300 truncate" title={event.message}>{event.message}</span>
         )}
       </div>
 
-      {/* Message */}
-      {event.message && (
-        <p className="text-sm text-[#e7dff0] mb-3 leading-relaxed">{event.message}</p>
-      )}
-
-      {/* Run ID */}
-      {event.run_id && (
-        <p className="text-[10px] font-mono text-zinc-500 mb-3">
-          run: {event.run_id}
-        </p>
-      )}
-
-      {/* event_data */}
-      {event.event_data && (
-        <pre className="bg-[#0f0c17] text-[11px] font-mono text-zinc-300 rounded p-3 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
-          {prettyJson(event.event_data)}
-        </pre>
+      {/* Expanded detail — run_id + JSON tree */}
+      {expanded && hasDetail && (
+        <div className="px-4 pb-3 pt-1 border-t border-[#574149]/10">
+          {event.run_id && (
+            <p className="text-[10px] font-mono text-zinc-600 mb-2">run: {event.run_id}</p>
+          )}
+          {parsedData !== null ? (
+            <div className="text-[11px] font-mono text-[#e7dff0] leading-relaxed">
+              <JsonValue value={parsedData} depth={0} />
+            </div>
+          ) : event.event_data ? (
+            <pre className="text-[11px] font-mono text-zinc-400 whitespace-pre-wrap break-all">
+              {event.event_data}
+            </pre>
+          ) : null}
+        </div>
       )}
     </div>
   )
@@ -281,7 +348,7 @@ export default function ThreatDetail() {
               {events.length === 0 ? (
                 <p className="text-sm text-zinc-600">No event history available.</p>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-2">
                   {sortedEvents.map((ev) => (
                     <EventCard key={`${ev.run_id ?? ''}-${ev.detected_at ?? ''}`} event={ev} />
                   ))}
