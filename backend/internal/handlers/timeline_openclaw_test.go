@@ -33,7 +33,7 @@ func TestAnalyzeOpenClaw_EmptyRows(t *testing.T) {
 
 func TestAnalyzeOpenClaw_LLMPair(t *testing.T) {
 	rows := []map[string]any{
-		makeRow("agent_start", "2026-04-11 10:00:00.000", "", "observe", ""),
+		makeRow("before_agent_start", "2026-04-11 10:00:00.000", "", "observe", ""),
 		makeRow("llm_input", "2026-04-11 10:00:01.000", "", "observe", `{"runId":"r1"}`),
 		makeRow("llm_output", "2026-04-11 10:00:05.000", "", "observe", `{"runId":"r1"}`),
 		makeRow("agent_end", "2026-04-11 10:00:06.000", "", "observe", `{"durationMs":6000}`),

@@ -9,7 +9,7 @@ import (
 
 // spanNameMap translates hook_name values to human-readable span names.
 var spanNameMap = map[string]string{
-	"agent_start":         "Agent Start",
+	"before_agent_start":  "Agent Start",
 	"agent_end":           "Agent End",
 	"llm_input":           "LLM Call",
 	"llm_output":          "LLM Response",
