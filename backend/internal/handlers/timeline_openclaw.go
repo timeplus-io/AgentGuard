@@ -23,7 +23,7 @@ var spanNameMap = map[string]string{
 	"session_end":         "Session End",
 }
 
-func humanName(hookName, toolName string) string {
+func humanName(hookName string) string {
 	if n, ok := spanNameMap[hookName]; ok {
 		return n
 	}
@@ -164,6 +164,10 @@ func analyzeOpenClaw(runID string, rows []map[string]any) []models.TraceSpan {
 		// ── Step 3 + 4: Tool calls that occurred during this LLM window ─────
 		toolCount := 0
 		for j := i + 1; j < len(prows); j++ {
+			// Stop at the next LLM turn regardless of whether llm_output was found.
+			if prows[j].hookName == "llm_input" {
+				break
+			}
 			if prows[j].evtMs >= llmEndMs && llmEndMs > llmStartMs {
 				break // past the LLM window
 			}
@@ -196,8 +200,12 @@ func analyzeOpenClaw(runID string, rows []map[string]any) []models.TraceSpan {
 					toolDurationMs = prows[afterIdx].evtMs - toolStartMs
 				}
 			} else {
-				// Blocked or unmatched: gap-fill from next row (regardless of consumed state).
-				status = "blocked"
+				// Unmatched (no toolCallId or no after_tool_call found): gap-fill duration.
+				// Only mark blocked if hook_decision was already block; don't upgrade to blocked
+				// just because event_data was missing toolCallId.
+				if prows[j].decision == "block" {
+					status = "blocked"
+				}
 				for k := j + 1; k < len(prows); k++ {
 					toolDurationMs = prows[k].evtMs - toolStartMs
 					break
@@ -286,7 +294,7 @@ func analyzeOpenClaw(runID string, rows []map[string]any) []models.TraceSpan {
 			SpanID:     fmt.Sprintf("lifecycle-%d", i),
 			ParentID:   runID,
 			Kind:       kind,
-			Name:       humanName(pr.hookName, pr.toolName),
+			Name:       humanName(pr.hookName),
 			StartMs:    pr.evtMs,
 			DurationMs: durationMs,
 			Status:     "ok",
