@@ -8,6 +8,7 @@ linters:
     - misspell
 
 run:
+  go: '1.23'
   timeout: 3m
 
 issues:
@@ -15,5 +16,3 @@ issues:
     - path: _test\.go
       linters:
         - errcheck
-  exclude-dirs:
-    - vendor
