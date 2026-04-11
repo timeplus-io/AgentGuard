@@ -77,6 +77,7 @@ export default function ThreatDetail() {
   const [threat, setThreat] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -88,7 +89,9 @@ export default function ThreatDetail() {
   }, [id])
 
   async function handleAcknowledge() {
+    if (actionLoading) return
     const prev = threat.status
+    setActionLoading(true)
     setThreat(t => ({ ...t, status: 'acknowledged' }))
     try {
       await api.acknowledgeThreat(threat.threat_id, {
@@ -99,11 +102,15 @@ export default function ThreatDetail() {
       })
     } catch {
       setThreat(t => ({ ...t, status: prev }))
+    } finally {
+      setActionLoading(false)
     }
   }
 
   async function handleClear() {
+    if (actionLoading) return
     const prev = threat.status
+    setActionLoading(true)
     setThreat(t => ({ ...t, status: 'cleared' }))
     try {
       await api.clearThreat(threat.threat_id, {
@@ -114,6 +121,8 @@ export default function ThreatDetail() {
       })
     } catch {
       setThreat(t => ({ ...t, status: prev }))
+    } finally {
+      setActionLoading(false)
     }
   }
 
@@ -172,12 +181,14 @@ export default function ThreatDetail() {
               <>
                 <button
                   onClick={handleAcknowledge}
+                  disabled={actionLoading}
                   className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors whitespace-nowrap"
                 >
                   Acknowledge
                 </button>
                 <button
                   onClick={handleClear}
+                  disabled={actionLoading}
                   className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
                 >
                   Clear
@@ -187,6 +198,7 @@ export default function ThreatDetail() {
             {threat.status === 'acknowledged' && (
               <button
                 onClick={handleClear}
+                disabled={actionLoading}
                 className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
               >
                 Clear
@@ -270,8 +282,8 @@ export default function ThreatDetail() {
                 <p className="text-sm text-zinc-600">No event history available.</p>
               ) : (
                 <div className="space-y-4">
-                  {sortedEvents.map((ev, i) => (
-                    <EventCard key={i} event={ev} />
+                  {sortedEvents.map((ev) => (
+                    <EventCard key={`${ev.run_id ?? ''}-${ev.detected_at ?? ''}`} event={ev} />
                   ))}
                 </div>
               )}
