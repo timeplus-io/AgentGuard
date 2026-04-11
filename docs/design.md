@@ -1,6 +1,6 @@
 # AgentShield — Technical Design
 
-AgentShield is a real-time security monitoring and governance platform for AI coding agents. It ingests telemetry from agents via OpenTelemetry, applies streaming SQL rules to detect threats, and exposes results through a live security dashboard.
+AgentShield is a real-time security monitoring and governance platform for AI coding agents. It ingests telemetry from agents via two paths — hook events posted directly to Timeplus on port 3218, and OTel telemetry (traces, logs, metrics) via OTLP/HTTP on port 4318 — applies streaming SQL rules to detect threats, and exposes results through a live security dashboard.
 
 ---
 
@@ -18,42 +18,47 @@ AgentShield is a real-time security monitoring and governance platform for AI co
 ## 1. Overall Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Agent (OpenClaw / Claude Code)                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Hook events → agentshield plugin → OTLP/HTTP :4318      │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │ OpenTelemetry / custom HTTP
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Timeplus (streaming SQL engine)                                  │
-│                                                                   │
-│  Inputs         Streams                     MVs / Alerts          │
-│  ──────────     ────────────────────────    ──────────────────── │
-│  openclaw_      agentshield_hook_events  →  mv_rule_rp001        │
-│  otel_input     agentshield_security_    →  mv_rule_rp002   ┐    │
-│                 events                      mv_rule_rp003   │    │
-│  otel_logs      agentshield_threats      ←  mv_threats      │    │
-│  otel_traces    agentshield_notify_      ←  mv_notify_filter│    │
-│  otel_metrics_* events                                       │    │
-│                 agentshield_rules           agentshield_     │    │
-│                 agentshield_pricing         notifier (alert) ┘    │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │ HTTP / native TCP
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  AgentShield Backend  (Go / Gin, :8080)                          │
-│                                                                   │
-│  /api/agents        /api/threats     /api/rules                  │
-│  /api/metrics       /api/cost        /api/notifications/stream   │
-│  /api/proton/query  /api/investigate /api/onboarding             │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │ REST + SSE
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  React SPA  (:5173 dev / embedded in binary for prod)            │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Agent (OpenClaw / Claude Code)                                       │
+│                                                                       │
+│  ┌─────────────────────────┐   ┌──────────────────────────────────┐  │
+│  │  AgentShield hook plugin│   │  OTel plugin                     │  │
+│  │  (captures hook events) │   │  (traces, logs, metrics)         │  │
+│  └───────────┬─────────────┘   └──────────────┬───────────────────┘  │
+└──────────────┼──────────────────────────────── ┼────────────────────-─┘
+               │ HTTP ingest                      │ OTLP/HTTP
+               │ POST /ingest  :3218              │ :4318
+               ▼                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  Timeplus (streaming SQL engine)                                      │
+│                                                                       │
+│  :3218 ingest   Streams                        MVs / Alerts           │
+│  ────────────   ──────────────────────────     ───────────────────    │
+│  hook events →  agentshield_hook_events    →   mv_rule_rp001         │
+│                 agentshield_security_events →   mv_rule_rp002    ┐    │
+│                 agentshield_notify_events   ←   mv_rule_rp003    │    │
+│  :4318 input    agentshield_threats         ←   mv_threats       │    │
+│  ────────────   agentshield_rules           ←   mv_notify_filter │    │
+│  OTLP/HTTP  →   agentshield_pricing             agentshield_     │    │
+│  otel_traces                                    notifier (alert) ┘    │
+│  otel_logs                                                            │
+│  otel_metrics_*                                                       │
+└──────────────────────────┬───────────────────────────────────────────┘
+                           │ SQL queries :3218 (HTTP) / :8463 (native TCP)
+                           │ Alert UDF callback → POST /api/alerts/webhook
+                           ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  AgentShield Backend  (Go / Gin, :8080)                               │
+│                                                                       │
+│  /api/agents        /api/threats     /api/rules                       │
+│  /api/metrics       /api/cost        /api/notifications/stream (SSE)  │
+│  /api/proton/query  /api/investigate /api/onboarding                  │
+└──────────────────────────┬───────────────────────────────────────────┘
+                           │ REST + SSE
+                           ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  React SPA  (:5173 dev / embedded in binary for prod)                 │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Technology Stack
@@ -207,7 +212,7 @@ Extends the sum schema (minus `is_monotonic`) with histogram-specific columns: `
 
 ### 2.2 Hook Events (Primary Security Stream)
 
-Agent hook events are written directly by the AgentShield plugin into `agentshield_hook_events`. This is the primary stream consumed by all security rules.
+The AgentShield hook plugin posts events directly to the Timeplus HTTP ingest API on port 3218, writing rows into `agentshield_hook_events`. This path bypasses the AgentShield backend entirely — the backend only reads from this stream. It is the primary stream consumed by all security rules.
 
 ```sql
 CREATE STREAM agentshield_hook_events (
