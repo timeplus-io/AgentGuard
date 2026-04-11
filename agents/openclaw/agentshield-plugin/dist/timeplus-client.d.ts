@@ -14,6 +14,7 @@ export type HookEvent = {
     hook_decision: string;
     block_reason: string;
     event_data: string;
+    agent_type: string;
 };
 export type TimeplusClient = {
     enqueue: (event: HookEvent) => void;

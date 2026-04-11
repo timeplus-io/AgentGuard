@@ -29,6 +29,7 @@ export function baseEvent(hookName, ctx, config) {
         hook_decision: "observe",
         block_reason: "",
         event_data: "",
+        agent_type: "openclaw",
     };
 }
 export function registerAllHooks(api, client, config) {
