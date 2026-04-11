@@ -444,6 +444,7 @@ function RunWaterfall({ spans }) {
     if (span.status === 'blocked' || span.status === 'error') return '#ffb4ab' // red
     if (span.kind === 'llm') return '#93c5fd'         // blue  — llm_input / llm_output
     if (span.kind === 'tool') return '#6ee7b7'        // green — tool calls
+    if (span.kind === 'subagent') return '#c084fc'    // violet — subagent spans
     return '#c4b5fd'                                  // purple — lifecycle events
   }
 
