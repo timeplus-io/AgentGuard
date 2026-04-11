@@ -118,6 +118,13 @@ export default function ThreatDetail() {
   }
 
   const events = threat?.events ?? []
+  const sortedEvents = [...events].sort(
+    (a, b) => {
+      const ta = a.detected_at ? new Date(String(a.detected_at).replace(' ', 'T')) : 0
+      const tb = b.detected_at ? new Date(String(b.detected_at).replace(' ', 'T')) : 0
+      return tb - ta
+    }
+  )
   const agentCompoundId = threat
     ? `${threat.deployment_id}__${threat.agent_id}`
     : null
@@ -263,7 +270,7 @@ export default function ThreatDetail() {
                 <p className="text-sm text-zinc-600">No event history available.</p>
               ) : (
                 <div className="space-y-4">
-                  {events.map((ev, i) => (
+                  {sortedEvents.map((ev, i) => (
                     <EventCard key={i} event={ev} />
                   ))}
                 </div>
