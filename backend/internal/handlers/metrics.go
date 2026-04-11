@@ -127,9 +127,9 @@ func GetLLMMetrics(cfg *config.Config) gin.HandlerFunc {
 SELECT
     count_if(hook_name = 'llm_input')                                                                           AS total_calls,
     count_if(hook_name = 'llm_output')                                                                          AS success_calls,
-    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'usage', 'input')),  0))          AS input_tokens,
-    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'usage', 'output')), 0))          AS output_tokens,
-    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'usage', 'total')),  0))          AS total_tokens,
+    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'input')),        0)) AS input_tokens,
+    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'output')),       0)) AS output_tokens,
+    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'totalTokens')), 0)) AS total_tokens,
     sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'cacheRead')),  0)) AS cache_read_tokens,
     sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'cacheWrite')), 0)) AS cache_write_tokens
 FROM table(agentshield_hook_events)
@@ -236,9 +236,9 @@ FROM (
 SELECT
     %s(event_time)                                                                    AS bucket,
     count()                                                                           AS llm_calls,
-    sum(to_int64_or_zero(json_extract_string(event_data, 'usage', 'input')))                  AS input_tokens,
-    sum(to_int64_or_zero(json_extract_string(event_data, 'usage', 'output')))                 AS output_tokens,
-    sum(to_int64_or_zero(json_extract_string(event_data, 'usage', 'total')))                  AS total_tokens
+    sum(to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'input')))        AS input_tokens,
+    sum(to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'output')))       AS output_tokens,
+    sum(to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'totalTokens'))) AS total_tokens
 FROM table(agentshield_hook_events)
 WHERE %s
 GROUP BY bucket

@@ -5,6 +5,7 @@ services:
     container_name: timeplus
     ports:
       - "3218:3218"   # HTTP query API (used by AgentShield)
+      - "8123:8123"   # HTTP query API normal
       - "8463:8463"   # Native TCP protocol
       - "4317:4317"   # OTLP gRPC (OpenClaw telemetry)
       - "4318:4318"   # OTLP HTTP (OpenClaw telemetry)
