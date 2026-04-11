@@ -351,11 +351,6 @@ GROUP BY e.provider, e.model`
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-// escapeSQL replaces single quotes to prevent SQL injection in string literals.
-func escapeSQL(s string) string {
-	return strings.ReplaceAll(s, "'", "''")
-}
-
 // formatCostCount formats a raw count into "14.2K" or "1.4M" for display.
 func formatCostCount(n int64) string {
 	if n >= 1_000_000 {

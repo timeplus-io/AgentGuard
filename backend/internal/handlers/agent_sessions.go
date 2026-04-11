@@ -44,59 +44,6 @@ func sessionType(key string) string {
 	}
 }
 
-// parseTime handles the multiple time formats Proton returns.
-func parseTime(v any) time.Time {
-	switch s := v.(type) {
-	case string:
-		if s == "" {
-			return time.Time{}
-		}
-		// Proton returns timestamps without timezone: "2026-04-08 03:25:17.544"
-		if t, err := time.ParseInLocation("2006-01-02 15:04:05.999999999", s, time.UTC); err == nil {
-			return t
-		}
-		if t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", s); err == nil {
-			return t
-		}
-		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
-			return t
-		}
-	case float64:
-		return time.Unix(int64(s), 0)
-	case json.Number:
-		if n, err := s.Float64(); err == nil {
-			return time.Unix(int64(n), 0)
-		}
-	}
-	return time.Time{}
-}
-
-// parseInt handles json.Number / float64 / int from Proton rows.
-func parseInt(v any) int {
-	switch n := v.(type) {
-	case float64:
-		return int(n)
-	case json.Number:
-		if i, err := n.Int64(); err == nil {
-			return int(i)
-		}
-	case int:
-		return n
-	}
-	return 0
-}
-
-// parseBool handles Proton's count_if(...) result (returned as 0/1).
-func parseBool(v any) bool {
-	return parseInt(v) != 0
-}
-
-// parseStr safely casts any to string.
-func parseStr(v any) string {
-	s, _ := v.(string)
-	return s
-}
-
 // parseRFC3339 parses an RFC3339 timestamp string into Proton-compatible format.
 // Returns ("", nil) when s is empty. Returns an error when s is non-empty but invalid.
 func parseRFC3339(s string) (string, error) {

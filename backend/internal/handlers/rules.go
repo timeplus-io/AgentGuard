@@ -691,20 +691,20 @@ func queryCurrentRulePacks(cfg *config.TimeplusConfig, mgr *catalog.Manager) ([]
 	}
 	packs := make([]models.RulePack, 0, len(rows))
 	for _, row := range rows {
-		id := strVal(row, "rule_id")
-		enabled := boolVal(row, "enabled")
+		id := parseStr(row["rule_id"])
+		enabled := parseBool(row["enabled"])
 		pack := models.RulePack{
 			ID:                id,
-			Name:              strVal(row, "name"),
-			Version:           strVal(row, "version"),
-			Description:       strVal(row, "description"),
-			QuerySQL:          strVal(row, "query_sql"),
+			Name:              parseStr(row["name"]),
+			Version:           parseStr(row["version"]),
+			Description:       parseStr(row["description"]),
+			QuerySQL:          parseStr(row["query_sql"]),
 			Enabled:           enabled,
-			Severity:          strVal(row, "severity"),
-			Category:          strVal(row, "category"),
-			RequiredTelemetry: strVal(row, "required_telemetry"),
-			FPRate:            strVal(row, "fp_rate"),
-			HookSources:       strVal(row, "hook_sources"),
+			Severity:          parseStr(row["severity"]),
+			Category:          parseStr(row["category"]),
+			RequiredTelemetry: parseStr(row["required_telemetry"]),
+			FPRate:            parseStr(row["fp_rate"]),
+			HookSources:       parseStr(row["hook_sources"]),
 		}
 		// Check catalog for a newer version.
 		if catalogEntry, ok := mgr.Lookup(id); ok {
@@ -729,7 +729,7 @@ func queryDetectionCounts(cfg *config.TimeplusConfig) (map[string]int, error) {
 	}
 	result := make(map[string]int, len(rows))
 	for _, row := range rows {
-		ruleID := strVal(row, "rule_id")
+		ruleID := parseStr(row["rule_id"])
 		if num, ok := row["cnt"].(json.Number); ok {
 			cnt, _ := num.Int64()
 			result[ruleID] = int(cnt)
@@ -755,13 +755,13 @@ func rowsToSecurityEvents(rows []tp.Row) []models.SecurityEvent {
 	events := make([]models.SecurityEvent, 0, len(rows))
 	for _, row := range rows {
 		events = append(events, models.SecurityEvent{
-			RuleID:     strVal(row, "rule_id"),
-			RuleName:   strVal(row, "rule_name"),
-			Severity:   strVal(row, "severity"),
-			AgentID:    strVal(row, "agent_id"),
-			HookName:   strVal(row, "hook_name"),
-			Message:    strVal(row, "message"),
-			DetectedAt: strVal(row, "detected_at"),
+			RuleID:     parseStr(row["rule_id"]),
+			RuleName:   parseStr(row["rule_name"]),
+			Severity:   parseStr(row["severity"]),
+			AgentID:    parseStr(row["agent_id"]),
+			HookName:   parseStr(row["hook_name"]),
+			Message:    parseStr(row["message"]),
+			DetectedAt: parseStr(row["detected_at"]),
 		})
 	}
 	return events
@@ -805,19 +805,4 @@ func versionGreater(a, b string) bool {
 	return false
 }
 
-func strVal(row map[string]any, key string) string {
-	v, _ := row[key].(string)
-	return v
-}
-
-func boolVal(row map[string]any, key string) bool {
-	switch v := row[key].(type) {
-	case bool:
-		return v
-	case json.Number:
-		i, _ := v.Int64()
-		return i != 0
-	}
-	return false
-}
 
