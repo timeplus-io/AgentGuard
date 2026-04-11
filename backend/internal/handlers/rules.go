@@ -287,9 +287,26 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	}
 }
 
-func UninstallRule(cfg *config.Config) gin.HandlerFunc {
+func UninstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
+
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			return
+		}
+		var current *models.RulePack
+		for i := range packs {
+			if packs[i].ID == id {
+				current = &packs[i]
+				break
+			}
+		}
+		if current == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "rule not found"})
+			return
+		}
 
 		sql := fmt.Sprintf(`
 INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)

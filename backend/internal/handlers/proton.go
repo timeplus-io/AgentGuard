@@ -73,6 +73,7 @@ func ProtonQueryHandler(cfg *config.Config) gin.HandlerFunc {
 		// before writing, which means individual live rows stall until the buffer
 		// fills — unacceptable for real-time streaming.
 		flusher, canFlush := c.Writer.(http.Flusher)
+		newline := []byte{'\n'}
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 256*1024), 256*1024) // 256 KB max line (large event_data)
 		for scanner.Scan() {
@@ -80,10 +81,20 @@ func ProtonQueryHandler(cfg *config.Config) gin.HandlerFunc {
 			if len(line) == 0 {
 				continue
 			}
-			c.Writer.Write(append(line, '\n')) //nolint:errcheck
+			if _, err := c.Writer.Write(line); err != nil {
+				break
+			}
+			if _, err := c.Writer.Write(newline); err != nil {
+				break
+			}
 			if canFlush {
 				flusher.Flush()
 			}
+		}
+		if err := scanner.Err(); err != nil {
+			// scanner hit an error (e.g. line too long, connection reset)
+			// headers already sent so we can't change status, but we can log
+			_ = err // replace with actual logging if a logger is available
 		}
 	}
 }

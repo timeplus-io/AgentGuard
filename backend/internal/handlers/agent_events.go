@@ -24,12 +24,12 @@ func ListEvents(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		// Pagination
-		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-		if page < 1 {
+		page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+		if err != nil || page < 1 {
 			page = 1
 		}
-		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
-		if limit < 1 {
+		limit, err := strconv.Atoi(c.DefaultQuery("limit", "100"))
+		if err != nil || limit < 1 {
 			limit = 100
 		}
 		if limit > 500 {
