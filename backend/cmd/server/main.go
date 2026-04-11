@@ -112,6 +112,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.GET("/metrics/llm", handlers.GetLLMMetrics(cfg))
 		api.GET("/metrics/tools", handlers.GetToolMetrics(cfg))
 		api.GET("/threats", handlers.ListThreats(cfg))
+		api.GET("/threats/:id", handlers.GetThreat(cfg))
 		api.POST("/threats/:id/acknowledge", handlers.AcknowledgeThreat(cfg))
 		api.POST("/threats/:id/clear", handlers.ClearThreat(cfg))
 		api.GET("/cost", handlers.GetCost(cfg))
