@@ -44,13 +44,13 @@ func newRootCmd() *cobra.Command {
 	flags.Int("timeplus-native-port", 8463, "Proton/Timeplus native TCP port")
 	flags.String("catalog-dir", "", "catalog directory for rule overrides and custom rules (default: ./catalog)")
 
-	viper.BindPFlag("server.port", flags.Lookup("port"))
-	viper.BindPFlag("catalog.dir", flags.Lookup("catalog-dir"))
-	viper.BindPFlag("timeplus.host", flags.Lookup("timeplus-host"))
-	viper.BindPFlag("timeplus.port", flags.Lookup("timeplus-port"))
-	viper.BindPFlag("timeplus.user", flags.Lookup("timeplus-user"))
-	viper.BindPFlag("timeplus.password", flags.Lookup("timeplus-password"))
-	viper.BindPFlag("timeplus.native-port", flags.Lookup("timeplus-native-port"))
+	_ = viper.BindPFlag("server.port", flags.Lookup("port"))
+	_ = viper.BindPFlag("catalog.dir", flags.Lookup("catalog-dir"))
+	_ = viper.BindPFlag("timeplus.host", flags.Lookup("timeplus-host"))
+	_ = viper.BindPFlag("timeplus.port", flags.Lookup("timeplus-port"))
+	_ = viper.BindPFlag("timeplus.user", flags.Lookup("timeplus-user"))
+	_ = viper.BindPFlag("timeplus.password", flags.Lookup("timeplus-password"))
+	_ = viper.BindPFlag("timeplus.native-port", flags.Lookup("timeplus-native-port"))
 
 	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if cfgFile, _ := flags.GetString("config"); cfgFile != "" {

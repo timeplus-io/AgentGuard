@@ -87,7 +87,7 @@ func waitForTimeplus(cfg *config.TimeplusConfig) (proton.Conn, error) {
 				log.Printf("timeplus: connected after %d attempt(s)", attempt)
 				return conn, nil
 			} else {
-				conn.Close()
+				_ = conn.Close()
 				err = pingErr
 			}
 		}

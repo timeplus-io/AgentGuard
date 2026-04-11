@@ -77,7 +77,7 @@ func NotificationsSSEHandler() gin.HandlerFunc {
 		defer cancel()
 
 		// Send an initial comment so the browser confirms the connection is live.
-		fmt.Fprintf(c.Writer, ": connected\n\n")
+		_, _ = fmt.Fprintf(c.Writer, ": connected\n\n")
 		if canFlush {
 			flusher.Flush()
 		}
@@ -90,7 +90,7 @@ func NotificationsSSEHandler() gin.HandlerFunc {
 			case <-c.Request.Context().Done():
 				return
 			case <-ticker.C:
-				fmt.Fprintf(c.Writer, ": keepalive\n\n")
+				_, _ = fmt.Fprintf(c.Writer, ": keepalive\n\n")
 				if canFlush {
 					flusher.Flush()
 				}
@@ -98,7 +98,7 @@ func NotificationsSSEHandler() gin.HandlerFunc {
 				if !ok {
 					return
 				}
-				fmt.Fprintf(c.Writer, "event: alert\ndata: %s\n\n", data)
+				_, _ = fmt.Fprintf(c.Writer, "event: alert\ndata: %s\n\n", data)
 				if canFlush {
 					flusher.Flush()
 				}

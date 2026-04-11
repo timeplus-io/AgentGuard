@@ -38,7 +38,7 @@ func (m *Manager) ImportZip(r io.ReaderAt, size int64, force bool) (ImportResult
 			continue
 		}
 		data, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: read: %v", f.Name, err))
 			continue

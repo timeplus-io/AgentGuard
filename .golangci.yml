@@ -13,6 +13,9 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+      - source: "defer .*\\.Close\\(\\)"
+        linters:
+          - errcheck
 
 run:
   go: '1.23'
