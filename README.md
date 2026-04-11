@@ -1,5 +1,11 @@
 # AgentShield
 
+[![CI](https://github.com/timeplus-io/agentshield/actions/workflows/ci.yml/badge.svg)](https://github.com/timeplus-io/agentshield/actions/workflows/ci.yml)
+[![Release](https://github.com/timeplus-io/agentshield/actions/workflows/release.yml/badge.svg)](https://github.com/timeplus-io/agentshield/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/timeplus-io/agentshield)](https://github.com/timeplus-io/agentshield/releases/latest)
+[![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/timeplus-io/agentshield/pkgs/container/agentshield)
+[![Go Version](https://img.shields.io/badge/go-1.23-00ADD8?logo=go)](https://golang.org)
+
 Real-time security monitoring and governance platform for AI coding agents. AgentShield ingests telemetry from **OpenClaw** agents (Claude Code support coming soon), detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), enforces cost budgets, and surfaces everything through a streaming security dashboard.
 
 Built on [Timeplus](https://timeplus.com) — a streaming SQL engine for real-time data.
