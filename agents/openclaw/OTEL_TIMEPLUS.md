@@ -17,7 +17,7 @@ OpenClaw Gateway
 
 ## Prerequisites
 
-- Timeplus Proton running and accessible (default: `localhost:3218` for SQL, `localhost:8463` for native)
+- Timeplus running and accessible (default: `localhost:3218` for SQL, `localhost:8463` for native)
 - OpenClaw gateway running via Docker (`make start`)
 
 ---
