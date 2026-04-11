@@ -90,14 +90,11 @@ func GetCost(cfg *config.Config) gin.HandlerFunc {
 			MonthToDate:     mtd,
 			Forecasted:      forecasted,
 			AvgTokenCost:    avgTokenCost,
-			PolicyBreaches:  0,
 			DailySpend:      daily,
 			TokenBreakdown:  breakdown,
 			CacheSavings:    cacheSavings,
 			WastedSpend:     0,
 			AgentModelCosts: allCosts,
-			BudgetPolicies:  []models.BudgetPolicy{},
-			Anomalies:       []models.CostAnomaly{},
 		})
 	}
 }

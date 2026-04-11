@@ -273,34 +273,15 @@ type AgentModelCost struct {
 	CacheTokens  int64   `json:"cache_tokens"`
 }
 
-type BudgetPolicy struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Trigger     string `json:"trigger"`
-	Enforcement string `json:"enforcement"`
-	Status      string `json:"status"` // active, paused
-}
-
-type CostAnomaly struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	TimeAgo     string `json:"time_ago"`
-	Severity    string `json:"severity"` // error, warning, info
-}
-
 type CostResponse struct {
 	MonthToDate     float64          `json:"month_to_date"`
 	Forecasted      float64          `json:"forecasted"`
 	AvgTokenCost    float64          `json:"avg_token_cost"`
-	PolicyBreaches  int              `json:"policy_breaches"`
 	DailySpend      []DailySpend     `json:"daily_spend"`
 	TokenBreakdown  []TokenBreakdown `json:"token_breakdown"`
 	CacheSavings    float64          `json:"cache_savings"`
 	WastedSpend     float64          `json:"wasted_spend"`
 	AgentModelCosts []AgentModelCost `json:"agent_model_costs"`
-	BudgetPolicies  []BudgetPolicy   `json:"budget_policies"`
-	Anomalies       []CostAnomaly    `json:"anomalies"`
 }
 
 // PricingEntry is one row in the agentshield_pricing mutable stream.
@@ -382,26 +363,3 @@ type TableInfo struct {
 	Columns []ColumnInfo `json:"columns"`
 }
 
-type Integration struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Enabled bool   `json:"enabled"`
-	URL     string `json:"url"`
-}
-
-type User struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Role  string `json:"role"` // admin, analyst, viewer
-}
-
-type SettingsResponse struct {
-	OrgName        string        `json:"org_name"`
-	OtelEndpoint   string        `json:"otel_endpoint"`
-	RetentionDays  int           `json:"retention_days"`
-	ContentCapture bool          `json:"content_capture"`
-	Integrations   []Integration `json:"integrations"`
-	Users          []User        `json:"users"`
-}
