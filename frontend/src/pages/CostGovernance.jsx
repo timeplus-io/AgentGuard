@@ -100,6 +100,7 @@ export default function CostGovernance() {
       await api.deletePricing(provider, model)
       fetchPricing()
     } catch {
+      // intentionally swallow error — UI handles state via finally
     } finally {
       setDeletingKey(null)
     }
