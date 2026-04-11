@@ -44,20 +44,3 @@ var CostAnomalies = []models.CostAnomaly{
 	{ID: "ca-002", Title: "Unexpected Model Upgrade", Description: "AS-SIGMA-4421 switched from claude-3-haiku to claude-3-5-sonnet without policy approval", TimeAgo: "1d ago", Severity: "warning"},
 	{ID: "ca-003", Title: "Cache Hit Rate Drop", Description: "Global cache hit rate dropped from 68% to 10%, increasing costs by ~$420", TimeAgo: "2d ago", Severity: "warning"},
 }
-
-var MockSettings = models.SettingsResponse{
-	OrgName:        "Timeplus Security",
-	OtelEndpoint:   "https://otel.timeplus.io:4317",
-	RetentionDays:  30,
-	ContentCapture: true,
-	Integrations: []models.Integration{
-		{ID: "int-001", Name: "Slack", Type: "alerting", Enabled: true, URL: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"},
-		{ID: "int-002", Name: "PagerDuty", Type: "incident", Enabled: false, URL: "https://events.pagerduty.com/v2/enqueue"},
-	},
-	Users: []models.User{
-		{ID: "usr-001", Name: "Alice Chen", Email: "alice@timeplus.io", Role: "admin"},
-		{ID: "usr-002", Name: "Bob Martinez", Email: "bob@timeplus.io", Role: "analyst"},
-		{ID: "usr-003", Name: "Carol Kim", Email: "carol@timeplus.io", Role: "analyst"},
-		{ID: "usr-004", Name: "David Osei", Email: "david@timeplus.io", Role: "viewer"},
-	},
-}

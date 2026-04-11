@@ -135,8 +135,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.GET("/notifications/stream", handlers.NotificationsSSEHandler())
 		api.GET("/investigate/tables", handlers.ListTables(cfg))
 		api.POST("/investigate/query", handlers.RunQuery)
-		api.GET("/settings", handlers.GetSettings)
-		api.PUT("/settings", handlers.UpdateSettings)
 		api.POST("/onboarding/generate", handlers.GenerateConfig)
 		api.POST("/proton/query", handlers.ProtonQueryHandler(cfg))
 	}

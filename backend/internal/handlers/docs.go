@@ -107,7 +107,6 @@ const openAPISpec = `{
     { "name": "Catalog",     "description": "File-based rule catalog. The initial catalog ships embedded in the binary as YAML files; users can override entries or add new ones via import. Proton tracks *install state*; the catalog tracks *definitions*." },
     { "name": "Alerts",      "description": "Real-time alert delivery — webhook receiver and SSE notification stream." },
     { "name": "Investigate", "description": "Ad-hoc SQL query interface against Proton streams." },
-    { "name": "Settings",    "description": "Application-level configuration." },
     { "name": "Proton",      "description": "Streaming proxy — send arbitrary SQL to Proton and receive NDJSON rows." }
   ],
   "paths": {
@@ -850,35 +849,6 @@ const openAPISpec = `{
       }
     },
 
-    "/settings": {
-      "get": {
-        "tags": ["Settings"],
-        "summary": "Get application settings",
-        "description": "Returns current application-level configuration.",
-        "operationId": "getSettings",
-        "responses": {
-          "200": { "description": "Current settings", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Settings" },
-            "example": { "notifications_enabled": true, "alert_email": "security@example.com", "retention_days": 90 }
-          }}}
-        }
-      },
-      "put": {
-        "tags": ["Settings"],
-        "summary": "Update application settings",
-        "description": "Replaces application-level configuration.",
-        "operationId": "updateSettings",
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Settings" },
-            "example": { "notifications_enabled": true, "alert_email": "security@example.com", "retention_days": 30 }
-          }}
-        },
-        "responses": {
-          "200": { "description": "Updated settings.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Settings" } } } }
-        }
-      }
-    },
-
     "/proton/query": {
       "post": {
         "tags": ["Proton"],
@@ -909,7 +879,7 @@ const openAPISpec = `{
 
     "/onboarding/generate": {
       "post": {
-        "tags": ["Settings"],
+        "tags": ["Onboarding"],
         "summary": "Generate an agent configuration snippet",
         "description": "Generates a configuration snippet for connecting an AI agent to AgentShield. Used by the onboarding wizard.",
         "operationId": "generateConfig",
@@ -1228,14 +1198,6 @@ const openAPISpec = `{
           "detected_at": { "type": "string",  "description": "Detection timestamp (string, as sent by Proton UDF)." }
         }
       },
-      "Settings": {
-        "type": "object",
-        "properties": {
-          "notifications_enabled": { "type": "boolean", "description": "Whether real-time alert notifications are enabled." },
-          "alert_email":           { "type": "string",  "description": "Email address for alert delivery." },
-          "retention_days":        { "type": "integer", "description": "Number of days to retain event data." }
-        }
-      }
     }
   }
 }`

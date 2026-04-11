@@ -89,8 +89,6 @@ export const api = {
       .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() }),
   listTables: () => get('/investigate/tables'),
   runQuery: (query) => post('/investigate/query', { query }),
-  getSettings: () => get('/settings'),
-  updateSettings: (data) => put('/settings', data),
   generateConfig: (data) => post('/onboarding/generate', data),
 
   // Streams rows from Proton/Timeplus via the backend proxy.
