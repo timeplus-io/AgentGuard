@@ -46,12 +46,27 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  publish-binaries:
-    name: Build ${{ matrix.name }}
+  create-release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    steps:
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+
+  publish-binaries:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    needs: [create-release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: linux
@@ -110,7 +125,71 @@ jobs:
           retention-days: 14
 
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.name }}
+
+  publish-binaries-main:
+    name: Build artifact ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: agentshield-linux-amd64
+          - goos: linux
+            goarch: arm64
+            name: agentshield-linux-arm64
+          - goos: darwin
+            goarch: amd64
+            name: agentshield-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            name: agentshield-darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: backend/go.sum
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Sync frontend into backend embed dir
+        run: |
+          mkdir -p backend/internal/web/dist
+          cp -r frontend/dist/. backend/internal/web/dist/
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          cd backend
+          go build -tags embed -o ../${{ matrix.name }} cmd/server/main.go
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+          retention-days: 14
