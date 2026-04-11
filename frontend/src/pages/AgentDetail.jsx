@@ -271,6 +271,146 @@ function buildRunData(events) {
   return { runInfo, steps }
 }
 
+// ── JsonValue ─────────────────────────────────────────────────────────────────
+// Recursive collapsible JSON tree. Nested objects/arrays start collapsed.
+
+function JsonValue({ value, depth }) {
+  const [open, setOpen] = useState(depth === 0)
+
+  if (value === null) return <span className="text-zinc-500">null</span>
+  if (typeof value === 'boolean') return <span className="text-purple-400">{String(value)}</span>
+  if (typeof value === 'number') return <span className="text-amber-400">{value}</span>
+  if (typeof value === 'string') {
+    return (
+      <span className="text-green-400 break-all">
+        &quot;{value.length > 300 ? value.slice(0, 300) + '…' : value}&quot;
+      </span>
+    )
+  }
+
+  const isArr = Array.isArray(value)
+  const entries = isArr ? value.map((v, i) => [String(i), v]) : Object.entries(value)
+  const [ob, cb] = isArr ? ['[', ']'] : ['{', '}']
+
+  if (entries.length === 0) return <span className="text-zinc-500">{ob}{cb}</span>
+
+  return (
+    <span>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="text-zinc-500 hover:text-zinc-200 transition-colors mr-1"
+      >
+        {open ? '▾' : '▸'}
+      </button>
+      {open ? (
+        <>
+          <span className="text-zinc-500">{ob}</span>
+          <div className="pl-4 border-l border-[#574149]/20 ml-0.5 mt-0.5 space-y-0.5">
+            {entries.map(([k, v]) => (
+              <div key={k} className="flex gap-1.5 items-start">
+                <span className="text-[#93c5fd] shrink-0 select-none">
+                  {isArr ? k : `"${k}"`}:
+                </span>
+                <JsonValue value={v} depth={depth + 1} />
+              </div>
+            ))}
+          </div>
+          <span className="text-zinc-500">{cb}</span>
+        </>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="text-zinc-600 hover:text-zinc-400 transition-colors"
+        >
+          {ob}&hellip;{cb}
+        </button>
+      )}
+    </span>
+  )
+}
+
+// ── RunEventCard ──────────────────────────────────────────────────────────────
+
+const hookBadgeColor = {
+  llm_input:           'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  llm_output:          'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  before_tool_call:    'text-[#93c5fd] bg-[#93c5fd]/10',
+  after_tool_call:     'text-[#93c5fd] bg-[#93c5fd]/10',
+  tool_result_persist: 'text-[#93c5fd] bg-[#93c5fd]/10',
+  session_start:       'text-zinc-400  bg-zinc-700/30',
+  session_end:         'text-zinc-400  bg-zinc-700/30',
+}
+
+function RunEventCard({ event }) {
+  const [expanded, setExpanded] = useState(false)
+
+  let parsedData = null
+  if (event.event_data) {
+    try { parsedData = JSON.parse(event.event_data) } catch { /* use raw */ }
+  }
+
+  const isBlocked = event.hook_decision === 'block'
+  const badgeCls = hookBadgeColor[event.hook_name] ?? 'text-zinc-500 bg-zinc-700/20'
+
+  return (
+    <div className={`rounded-sm border transition-colors ${isBlocked ? 'border-[#ffb4ab]/30 bg-[#93000a]/10' : 'border-[#574149]/10 bg-[#1d1a25]'}`}>
+      {/* Summary row */}
+      <div
+        className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer select-none"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span className={`material-symbols-outlined text-[13px] text-zinc-600 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}>
+          chevron_right
+        </span>
+        <span className="text-[10px] font-mono text-zinc-500 whitespace-nowrap shrink-0 tabular-nums">
+          {fmtShortTime(event.event_time)}
+        </span>
+        <span className={`text-[10px] font-semibold uppercase rounded-full px-2 py-0.5 tracking-wide shrink-0 ${badgeCls}`}>
+          {event.hook_name}
+        </span>
+        {event.tool_name && (
+          <span className="text-[11px] font-mono text-[#93c5fd] shrink-0">{event.tool_name}</span>
+        )}
+        {(event.model || event.provider) && (
+          <span className="text-[10px] text-zinc-600 shrink-0 hidden sm:inline">
+            {[event.provider, event.model].filter(Boolean).join(' · ')}
+          </span>
+        )}
+        <span className="flex-1" />
+        {isBlocked && (
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-[#ffb4ab] shrink-0">
+            <span className="material-symbols-outlined text-[13px]">block</span>
+            blocked
+          </span>
+        )}
+        {event.event_data && (
+          <span className="text-[10px] text-zinc-700 shrink-0">JSON</span>
+        )}
+      </div>
+
+      {/* Expanded: JSON tree */}
+      {expanded && (
+        <div className="px-4 pb-3 pt-1 border-t border-[#574149]/10">
+          {event.block_reason && (
+            <p className="text-[11px] text-[#ffb4ab] mb-2 font-mono">block reason: {event.block_reason}</p>
+          )}
+          {parsedData !== null ? (
+            <div className="text-[11px] font-mono text-[#e7dff0] leading-relaxed">
+              <JsonValue value={parsedData} depth={0} />
+            </div>
+          ) : event.event_data ? (
+            <pre className="text-[11px] font-mono text-zinc-400 whitespace-pre-wrap break-all">
+              {event.event_data}
+            </pre>
+          ) : (
+            <p className="text-[11px] text-zinc-600">No event data</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── RunWaterfall ──────────────────────────────────────────────────────────────
 
 function RunWaterfall({ spans }) {
@@ -887,6 +1027,7 @@ export default function AgentDetail() {
               <div role="tablist" className="flex border-b border-[#574149]/20 shrink-0">
                 {[
                   { id: 'timeline', label: 'Timeline' },
+                  { id: 'events',   label: 'Events' },
                   { id: 'trace',    label: 'Trace' },
                 ].map(tab => (
                   <button
@@ -924,6 +1065,24 @@ export default function AgentDetail() {
                   </div>
                 ) : (
                   <RunWaterfall spans={traceData?.spans ?? []} />
+                )
+              ) : activeTab === 'events' ? (
+                loadingEvents ? (
+                  <div className="flex items-center justify-center h-full">
+                    <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                  </div>
+                ) : events.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                    <span className="material-symbols-outlined text-4xl">inbox</span>
+                    <p className="text-sm">No events for this run</p>
+                  </div>
+                ) : (
+                  <div className="p-4 space-y-1.5">
+                    <p className="text-[10px] text-zinc-600 mb-2">{events.length} events</p>
+                    {events.map((evt, i) => (
+                      <RunEventCard key={`${evt.hook_name}-${i}`} event={evt} />
+                    ))}
+                  </div>
                 )
               ) : loadingEvents ? (
                 <div className="flex items-center justify-center h-full">
