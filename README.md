@@ -2,7 +2,7 @@
 
 Real-time security monitoring and governance platform for AI coding agents. AgentShield ingests telemetry from **OpenClaw** agents (Claude Code support coming soon), detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), enforces cost budgets, and surfaces everything through a streaming security dashboard.
 
-Built on [Timeplus Proton](https://github.com/timeplus-io/proton) — a streaming SQL engine processing 90M events/second at 4ms latency.
+Built on [Timeplus](https://timeplus.com) — a streaming SQL engine for real-time data.
 
 ---
 
@@ -10,7 +10,7 @@ Built on [Timeplus Proton](https://github.com/timeplus-io/proton) — a streamin
 
 ### Docker Compose (recommended)
 
-Starts AgentShield + Proton together. AgentShield waits for Proton to be healthy before starting.
+Starts AgentShield + Timeplus together. AgentShield waits for Timeplus to be healthy before starting.
 
 ```bash
 docker compose up --build
@@ -25,11 +25,11 @@ docker compose down -v
 
 ### Docker (pre-built image)
 
-Pull the latest image from GitHub Container Registry and run it against an existing Proton instance:
+Pull the latest image from GitHub Container Registry and run it against an existing Timeplus instance:
 
 ```bash
 docker run -p 8080:8080 \
-  -e TIMEPLUS_HOST=proton.example.com \
+  -e TIMEPLUS_HOST=timeplus.example.com \
   -e TIMEPLUS_USER=default \
   ghcr.io/timeplus-io/agentshield:latest
 ```
@@ -38,18 +38,18 @@ Pin to a specific release:
 
 ```bash
 docker run -p 8080:8080 \
-  -e TIMEPLUS_HOST=proton.example.com \
+  -e TIMEPLUS_HOST=timeplus.example.com \
   ghcr.io/timeplus-io/agentshield:v0.1.0
 ```
 
 ### Docker (build from source)
 
-Builds a single image with the frontend compiled in. Requires a separately running Proton instance.
+Builds a single image with the frontend compiled in. Requires a separately running Timeplus instance.
 
 ```bash
 docker build -t agentshield .
 docker run -p 8080:8080 \
-  -e TIMEPLUS_HOST=proton.example.com \
+  -e TIMEPLUS_HOST=timeplus.example.com \
   -e TIMEPLUS_USER=default \
   agentshield
 ```
@@ -102,11 +102,11 @@ timeplus:
 | Variable | Default | Description |
 |---|---|---|
 | `SERVER_PORT` | `8080` | HTTP port the server listens on |
-| `TIMEPLUS_HOST` | `localhost` | Proton/Timeplus hostname |
-| `TIMEPLUS_PORT` | `3218` | Proton HTTP query port |
-| `TIMEPLUS_NATIVE_PORT` | `8463` | Proton native TCP port (used for streaming inserts) |
-| `TIMEPLUS_USER` | `default` | Proton username |
-| `TIMEPLUS_PASSWORD` | _(empty)_ | Proton password |
+| `TIMEPLUS_HOST` | `localhost` | Timeplus hostname |
+| `TIMEPLUS_PORT` | `3218` | HTTP query port |
+| `TIMEPLUS_NATIVE_PORT` | `8463` | native TCP port (used for streaming inserts) |
+| `TIMEPLUS_USER` | `default` |  username |
+| `TIMEPLUS_PASSWORD` | _(empty)_ | password |
 
 ### CLI flags
 
@@ -116,11 +116,11 @@ timeplus:
 Flags:
   --config string                config file path
   --port int                     server port (default 8080)
-  --timeplus-host string         Proton/Timeplus host (default "localhost")
-  --timeplus-port int            Proton/Timeplus HTTP port (default 3218)
-  --timeplus-native-port int     Proton/Timeplus native TCP port (default 8463)
-  --timeplus-user string         Proton username (default "default")
-  --timeplus-password string     Proton password
+  --timeplus-host string         Timeplus host (default "localhost")
+  --timeplus-port int            Timeplus HTTP port (default 3218)
+  --timeplus-native-port int     Timeplus native TCP port (default 8463)
+  --timeplus-user string         Timeplus username (default "default")
+  --timeplus-password string     Timeplus password
 ```
 
 ---
@@ -135,7 +135,7 @@ Flags:
 | Threats | `/threats` | Filterable threat feed by severity and category, newest-first |
 | Cost Governance | `/cost` | Daily spend trends, per-model token breakdown, configurable pricing table |
 | Rule Packs | `/rules` | Install, enable/disable, and upgrade detection rules; real-time MV health status |
-| Investigate | `/investigate` | Ad-hoc streaming SQL console backed by Proton |
+| Investigate | `/investigate` | Ad-hoc streaming SQL console backed by Timeplus |
 | Onboarding | `/onboarding` | 4-step wizard to connect an OpenClaw agent (Claude Code coming soon) |
 | Settings | `/settings` | Application configuration |
 
@@ -160,4 +160,4 @@ See [`agents/openclaw/README.md`](agents/openclaw/README.md) for the full OpenCl
 
 **Backend:** Go 1.23, Gin, Cobra, Viper, `proton-go-driver`
 
-**Database:** [Timeplus Proton](https://github.com/timeplus-io/proton) (streaming SQL engine)
+**Database:** [Timeplus](https://timeplus.com) (streaming SQL engine)
