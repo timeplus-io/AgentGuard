@@ -207,9 +207,8 @@ func analyzeOpenClaw(runID string, rows []map[string]any) []models.TraceSpan {
 				if prows[j].decision == "block" {
 					status = "blocked"
 				}
-				for k := j + 1; k < len(prows); k++ {
-					toolDurationMs = prows[k].evtMs - toolStartMs
-					break
+				if j+1 < len(prows) {
+					toolDurationMs = prows[j+1].evtMs - toolStartMs
 				}
 			}
 			if toolDurationMs < 0 {
