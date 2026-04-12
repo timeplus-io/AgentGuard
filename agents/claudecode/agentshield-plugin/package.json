@@ -4,6 +4,7 @@
   "description": "AgentShield security monitoring hook for Claude Code",
   "type": "module",
   "main": "./dist/index.js",
+  "exports": "./dist/index.js",
   "engines": { "node": ">=18.0.0" },
   "scripts": {
     "build": "tsc",
