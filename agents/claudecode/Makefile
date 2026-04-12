@@ -9,7 +9,13 @@ AGENTSHIELD_STREAM ?= agentshield_hook_events
 AGENTSHIELD_USERNAME ?= proton
 AGENTSHIELD_PASSWORD ?= timeplus@t+
 
-.PHONY: configure unconfigure start build install
+# OTEL configuration — shares Timeplus OTEL HTTP input on port 4318 with OpenClaw
+OTEL_ENDPOINT ?= http://localhost:4318
+OTEL_PROTOCOL ?= http/protobuf
+OTEL_METRIC_EXPORT_INTERVAL ?= 10000
+OTEL_LOGS_EXPORT_INTERVAL ?= 5000
+
+.PHONY: configure unconfigure configure-otel unconfigure-otel start build install
 
 define CONFIGURE_SCRIPT
 import json, os, sys
@@ -103,18 +109,92 @@ print("AgentShield hooks removed from", settings_path)
 endef
 export UNCONFIGURE_SCRIPT
 
+define CONFIGURE_OTEL_SCRIPT
+import json, os
+
+settings_path = os.path.expanduser("$(SETTINGS_FILE)")
+otel_env = {
+    "CLAUDE_CODE_ENABLE_TELEMETRY":       "1",
+    "OTEL_METRICS_EXPORTER":              "otlp",
+    "OTEL_LOGS_EXPORTER":                 "otlp",
+    "OTEL_TRACES_EXPORTER":               "otlp",
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
+    "OTEL_EXPORTER_OTLP_PROTOCOL":        "$(OTEL_PROTOCOL)",
+    "OTEL_EXPORTER_OTLP_ENDPOINT":        "$(OTEL_ENDPOINT)",
+    "OTEL_METRIC_EXPORT_INTERVAL":        "$(OTEL_METRIC_EXPORT_INTERVAL)",
+    "OTEL_LOGS_EXPORT_INTERVAL":          "$(OTEL_LOGS_EXPORT_INTERVAL)",
+    "OTEL_LOG_TOOL_DETAILS":              "1",
+}
+
+os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+if os.path.exists(settings_path):
+    with open(settings_path, "r") as f:
+        data = json.load(f)
+else:
+    data = {}
+
+data.setdefault("env", {}).update(otel_env)
+
+with open(settings_path, "w") as f:
+    json.dump(data, f, indent=2)
+print("AgentShield OTEL configured in", settings_path)
+endef
+export CONFIGURE_OTEL_SCRIPT
+
+define UNCONFIGURE_OTEL_SCRIPT
+import json, os
+
+settings_path = os.path.expanduser("$(SETTINGS_FILE)")
+otel_keys = [
+    "CLAUDE_CODE_ENABLE_TELEMETRY",
+    "OTEL_METRICS_EXPORTER",
+    "OTEL_LOGS_EXPORTER",
+    "OTEL_TRACES_EXPORTER",
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA",
+    "OTEL_EXPORTER_OTLP_PROTOCOL",
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_METRIC_EXPORT_INTERVAL",
+    "OTEL_LOGS_EXPORT_INTERVAL",
+    "OTEL_LOG_TOOL_DETAILS",
+]
+
+if not os.path.exists(settings_path):
+    print("No settings file found at", settings_path)
+    exit(0)
+
+with open(settings_path, "r") as f:
+    data = json.load(f)
+
+env = data.get("env", {})
+for key in otel_keys:
+    env.pop(key, None)
+if not env:
+    data.pop("env", None)
+
+with open(settings_path, "w") as f:
+    json.dump(data, f, indent=2)
+print("AgentShield OTEL removed from", settings_path)
+endef
+export UNCONFIGURE_OTEL_SCRIPT
+
 configure:
 	@python3 -c "$$CONFIGURE_SCRIPT"
 
 unconfigure:
 	@python3 -c "$$UNCONFIGURE_SCRIPT"
 
+configure-otel:
+	@python3 -c "$$CONFIGURE_OTEL_SCRIPT"
+
+unconfigure-otel:
+	@python3 -c "$$UNCONFIGURE_OTEL_SCRIPT"
+
 build:
 	cd $(PLUGIN_DIR) && npm install && npm run build
 
-install: build configure
+install: build configure configure-otel
 
-start: configure
+start: configure configure-otel
 	AGENTSHIELD_AGENT_ID="$(AGENTSHIELD_AGENT_ID)" \
 	AGENTSHIELD_DEPLOYMENT_ID="$(AGENTSHIELD_DEPLOYMENT_ID)" \
 	AGENTSHIELD_DEPLOYMENT_NAME="$(AGENTSHIELD_DEPLOYMENT_NAME)" \
