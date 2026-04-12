@@ -4,6 +4,7 @@ Thumbs.db
 spec/
 .openclaw/
 agents/openclaw/tests/__pycache__
+agents/litellm/config/*.json
 
 # Frontend
 frontend/node_modules/

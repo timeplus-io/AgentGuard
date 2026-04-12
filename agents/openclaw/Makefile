@@ -2,14 +2,9 @@ PWD := $(shell pwd)
 CONFIG_FILE := .openclaw/openclaw.json
 IMAGE := ghcr.io/openclaw/openclaw:2026.4.5
 
-LITELLM_IMAGE := ghcr.io/berriai/litellm:main-latest
 LITELLM_API_KEY := sk-openclaw-proxy
-LITELLM_CONFIG := .openclaw/litellm_config.yaml
-GCP_CREDENTIALS := .openclaw/tpdemo2025-9699db62024d.json
-GOOGLE_CLOUD_PROJECT := tpdemo2025
-GOOGLE_CLOUD_LOCATION := global
 
-.PHONY: workspace init run start start-litellm stop-litellm configure add-agents url devices approve clean install-plugin build-plugin deploy-plugin test
+.PHONY: workspace init run start configure add-agents url devices approve clean install-plugin build-plugin deploy-plugin test
 
 workspace:
 	# Create the folder and the nested workspace
@@ -27,21 +22,6 @@ init:
 		$(IMAGE) \
 		node dist/index.js onboard
 
-start-litellm:
-	docker stop litellm-proxy || true
-	docker rm litellm-proxy || true
-	docker run -d \
-		--name litellm-proxy \
-		-p 4000:4000 \
-		-v "$(PWD)/$(LITELLM_CONFIG)":/app/config.yaml:ro \
-		-v "$(PWD)/$(GCP_CREDENTIALS)":/app/credentials.json:ro \
-		$(LITELLM_IMAGE) \
-		--config /app/config.yaml --port 4000
-
-stop-litellm:
-	docker stop litellm-proxy || true
-	docker rm litellm-proxy || true
-
 run:
 	docker run -d \
 		--name openclaw \
@@ -50,9 +30,6 @@ run:
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
 		-v "$(PWD)/agentshield-plugin":/home/node/.openclaw/agentshield-plugin \
 		-e HOME=/home/node \
-		-e GOOGLE_APPLICATION_CREDENTIALS=/home/node/.openclaw/$(notdir $(GCP_CREDENTIALS)) \
-		-e GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT) \
-		-e GOOGLE_CLOUD_LOCATION=$(GOOGLE_CLOUD_LOCATION) \
 		-e LITELLM_API_KEY=$(LITELLM_API_KEY) \
 		--restart unless-stopped \
 		$(IMAGE) \
@@ -147,7 +124,7 @@ export CONFIGURE_SCRIPT
 configure:
 	@python3 -c "$$CONFIGURE_SCRIPT"
 
-start: start-litellm
+start:
 	docker stop openclaw || true
 	docker rm openclaw || true
 	docker run -d \
@@ -157,9 +134,6 @@ start: start-litellm
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
 		-v "$(PWD)/agentshield-plugin":/home/node/.openclaw/agentshield-plugin \
 		-e HOME=/home/node \
-		-e GOOGLE_APPLICATION_CREDENTIALS=/home/node/.openclaw/$(notdir $(GCP_CREDENTIALS)) \
-		-e GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT) \
-		-e GOOGLE_CLOUD_LOCATION=$(GOOGLE_CLOUD_LOCATION) \
 		-e LITELLM_API_KEY=$(LITELLM_API_KEY) \
 		--restart unless-stopped \
 		$(IMAGE) \
@@ -204,6 +178,6 @@ deploy-plugin: build-plugin start
 test:
 	python3 tests/run_scenarios.py
 
-clean: stop-litellm
+clean:
 	docker stop openclaw || true
 	docker rm openclaw || true
