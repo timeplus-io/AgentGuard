@@ -72,6 +72,7 @@ export default function AgentList() {
                 <tr className="bg-[#211e29] text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500">
                   <th className="px-6 py-4">Agent ID</th>
                   <th className="px-6 py-4">Deployment</th>
+                  <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">Events</th>
                   <th className="px-6 py-4">Sessions</th>
                   <th className="px-6 py-4">Tokens</th>
@@ -82,13 +83,13 @@ export default function AgentList() {
               <tbody className="divide-y divide-[#574149]/10">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
+                    <td colSpan={8} className="px-6 py-12 text-center text-zinc-500">
                       <span className="material-symbols-outlined animate-spin text-[#ffb0cf]">refresh</span>
                     </td>
                   </tr>
                 ) : agents.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500 text-xs">
+                    <td colSpan={8} className="px-6 py-12 text-center text-zinc-500 text-xs">
                       No agents found. Connect an agent to start monitoring.
                     </td>
                   </tr>
@@ -103,6 +104,16 @@ export default function AgentList() {
                       <td className="px-6 py-5">
                         <div className="text-xs font-mono text-[#e7dff0]">{agent.deployment_id}</div>
                         <div className="text-[10px] text-zinc-500">{agent.deployment_name}</div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                          agent.status === 'active'
+                            ? 'bg-emerald-500/10 text-emerald-400'
+                            : 'bg-zinc-700/30 text-zinc-500'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${agent.status === 'active' ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                          {agent.status === 'active' ? 'Active' : 'Idle'}
+                        </span>
                       </td>
                       <td className="px-6 py-5">
                         <div className="text-xs font-mono text-[#e7dff0]">{agent.event_count?.toLocaleString()}</div>

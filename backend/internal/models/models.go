@@ -100,6 +100,7 @@ type Agent struct {
 	AgentID        string    `json:"agent_id"`
 	DeploymentID   string    `json:"deployment_id"`
 	DeploymentName string    `json:"deployment_name"`
+	Status         string    `json:"status"` // "active" | "idle"
 	LastSeen       time.Time `json:"last_seen"`
 	EventCount     int       `json:"event_count"`
 	SessionCount   int       `json:"session_count"`
@@ -172,6 +173,7 @@ type Session struct {
 	SessionID   string    `json:"session_id"`
 	SessionKey  string    `json:"session_key"`
 	SessionType string    `json:"session_type"`
+	Status      string    `json:"status"` // "active" | "ended"
 	RunCount    int       `json:"run_count"`
 	EventCount  int       `json:"event_count"`
 	FirstSeen   time.Time `json:"first_seen"`

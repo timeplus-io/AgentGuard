@@ -1,11 +1,13 @@
 {
   "name": "@timeplus/agentshield-openclaw-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AgentShield security monitoring plugin for OpenClaw",
   "type": "module",
   "main": "./dist/index.js",
   "openclaw": {
-    "extensions": ["./dist/index.js"]
+    "extensions": [
+      "./dist/index.js"
+    ]
   },
   "exports": {
     ".": {
@@ -13,7 +15,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=18.0.0"
   },
