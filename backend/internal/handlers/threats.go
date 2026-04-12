@@ -156,6 +156,14 @@ func buildThreatsList(cfg *config.Config) ([]models.Threat, error) {
 			parseStr(row["rule_id"]),
 		}
 
+		// Skip threats with no session_id: the mutable stream primary key includes
+		// session_id, so an empty value would collapse all sessions into one key,
+		// making status management (acknowledge/clear) affect all sessions at once.
+		// Root cause: hook contexts such as tool_result_persist do not carry sessionId.
+		if k.sessionID == "" {
+			continue
+		}
+
 		status := parseStr(row["status"])
 		if status == "" {
 			status = "open"

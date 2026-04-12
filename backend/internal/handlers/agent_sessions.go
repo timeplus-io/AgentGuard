@@ -106,11 +106,12 @@ func ListSessions(cfg *config.Config) gin.HandlerFunc {
 		sql := fmt.Sprintf(`
 SELECT
     session_id,
-    any_if(session_key, session_key != '')              AS session_key,
-    count_distinct(if(run_id != '', run_id, null))      AS run_count,
-    count()                               AS event_count,
-    min(event_time)                       AS first_seen,
-    max(event_time)                       AS last_seen
+    any_if(session_key, session_key != '')               AS session_key,
+    count_distinct(if(run_id != '', run_id, null))       AS run_count,
+    count()                                              AS event_count,
+    min(event_time)                                      AS first_seen,
+    max(event_time)                                      AS last_seen,
+    count_if(hook_name = 'session_end')                  AS ended_event_count
 FROM table(agentshield_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
@@ -131,10 +132,15 @@ ORDER BY last_seen DESC`,
 		sessions := make([]models.Session, 0, len(rows))
 		for _, row := range rows {
 			key := parseStr(row["session_key"])
+			status := "active"
+			if parseInt(row["ended_event_count"]) > 0 {
+				status = "ended"
+			}
 			sessions = append(sessions, models.Session{
 				SessionID:   parseStr(row["session_id"]),
 				SessionKey:  key,
 				SessionType: sessionType(key),
+				Status:      status,
 				RunCount:    parseInt(row["run_count"]),
 				EventCount:  parseInt(row["event_count"]),
 				FirstSeen:   parseTime(row["first_seen"]),

@@ -45,6 +45,9 @@ export function registerAllHooks(api, client, config) {
     api.on("before_agent_start", (event, ctx) => {
         const base = baseEvent("before_agent_start", ctx, config);
         client.enqueue({ ...base, event_data: safeStringify(event) });
+        // Return a non-undefined value so the SDK's legacyBeforeAgentStartResult ?? ...
+        // guard short-circuits the second before_agent_start call in the prompt-build path.
+        return {};
     });
     api.on("before_agent_reply", (event, ctx) => {
         const base = baseEvent("before_agent_reply", ctx, config);

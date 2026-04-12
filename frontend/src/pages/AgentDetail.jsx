@@ -959,9 +959,12 @@ export default function AgentDetail() {
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
-                            <span className={`text-xs font-medium truncate ${isActive ? 'text-[#ffb0cf]' : 'text-[#e7dff0]'}`}>
-                              {session.session_type}
-                            </span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${session.status === 'active' ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                              <span className={`text-xs font-medium truncate ${isActive ? 'text-[#ffb0cf]' : 'text-[#e7dff0]'}`}>
+                                {session.session_type}
+                              </span>
+                            </div>
                             <div className="flex items-center gap-1 shrink-0">
                               <span className="text-[9px] bg-[#574149]/30 text-zinc-400 px-1.5 py-0.5 rounded-full">
                                 {session.run_count}

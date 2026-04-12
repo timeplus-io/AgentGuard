@@ -21,11 +21,13 @@ const filteredSessionCountSQL = `
 SELECT agent_id, deployment_id,
        count()                         AS session_count,
        sum(run_count)                  AS run_count,
-       sum(tool_call_count)            AS tool_call_count
+       sum(tool_call_count)            AS tool_call_count,
+       sum(is_active)                  AS active_session_count
 FROM (
     SELECT agent_id, deployment_id, session_id,
-           count_distinct(if(run_id != '', run_id, null)) AS run_count,
-           count_if(hook_name = 'before_tool_call')       AS tool_call_count
+           count_distinct(if(run_id != '', run_id, null))    AS run_count,
+           count_if(hook_name = 'before_tool_call')          AS tool_call_count,
+           if(count_if(hook_name = 'session_end') = 0, 1, 0) AS is_active
     FROM table(agentshield_hook_events)
     WHERE session_id != ''
     GROUP BY agent_id, deployment_id, session_id
@@ -55,9 +57,10 @@ func ListAgents(cfg *config.Config) gin.HandlerFunc {
 		sql := fmt.Sprintf(`
 SELECT agent_id, deployment_id, deployment_name, last_seen, event_count,
        llm_call_count, total_tokens,
-       coalesce(session_count, 0)   AS session_count,
-       coalesce(run_count, 0)       AS run_count,
-       coalesce(tool_call_count, 0) AS tool_call_count
+       coalesce(session_count, 0)        AS session_count,
+       coalesce(run_count, 0)            AS run_count,
+       coalesce(tool_call_count, 0)      AS tool_call_count,
+       coalesce(active_session_count, 0) AS active_session_count
 FROM (
     SELECT agent_id, deployment_id,
            any(deployment_name)                                                  AS deployment_name,
@@ -157,9 +160,10 @@ LIMIT 1`, deploymentID, agentID)
 		// Returns 0 rows when no events fall in the time window — counts default to 0.
 		countsSQL := fmt.Sprintf(`
 SELECT event_count,
-       coalesce(session_count, 0)   AS session_count,
-       coalesce(run_count, 0)       AS run_count,
-       coalesce(tool_call_count, 0) AS tool_call_count
+       coalesce(session_count, 0)        AS session_count,
+       coalesce(run_count, 0)            AS run_count,
+       coalesce(tool_call_count, 0)      AS tool_call_count,
+       coalesce(active_session_count, 0) AS active_session_count
 FROM (
     SELECT count() AS event_count
     FROM table(agentshield_hook_events)
@@ -167,13 +171,15 @@ FROM (
       AND agent_id      = '%s'%s
 ) AS ev
 LEFT JOIN (
-    SELECT count()       AS session_count,
+    SELECT count()              AS session_count,
            sum(run_count)       AS run_count,
-           sum(tool_call_count) AS tool_call_count
+           sum(tool_call_count) AS tool_call_count,
+           sum(is_active)       AS active_session_count
     FROM (
         SELECT session_id,
-               count_distinct(if(run_id != '', run_id, null)) AS run_count,
-               count_if(hook_name = 'before_tool_call')       AS tool_call_count
+               count_distinct(if(run_id != '', run_id, null))    AS run_count,
+               count_if(hook_name = 'before_tool_call')          AS tool_call_count,
+               if(count_if(hook_name = 'session_end') = 0, 1, 0) AS is_active
         FROM table(agentshield_hook_events)
         WHERE deployment_id = '%s'
           AND agent_id      = '%s'
@@ -196,6 +202,7 @@ LIMIT 1`, deploymentID, agentID, timeWhere, deploymentID, agentID, timeWhere)
 			AgentID:        parseStr(irows[0]["agent_id"]),
 			DeploymentID:   parseStr(irows[0]["deployment_id"]),
 			DeploymentName: parseStr(irows[0]["deployment_name"]),
+			Status:         "idle",
 			LastSeen:       parseTime(irows[0]["last_seen"]),
 		}
 		if len(crows) > 0 {
@@ -203,6 +210,9 @@ LIMIT 1`, deploymentID, agentID, timeWhere, deploymentID, agentID, timeWhere)
 			agent.SessionCount = parseInt(crows[0]["session_count"])
 			agent.RunCount = parseInt(crows[0]["run_count"])
 			agent.ToolCallCount = parseInt(crows[0]["tool_call_count"])
+			if parseInt(crows[0]["active_session_count"]) > 0 {
+				agent.Status = "active"
+			}
 		}
 
 		c.JSON(http.StatusOK, agent)
@@ -210,10 +220,15 @@ LIMIT 1`, deploymentID, agentID, timeWhere, deploymentID, agentID, timeWhere)
 }
 
 func rowToAgent(row map[string]any) models.Agent {
+	status := "idle"
+	if parseInt(row["active_session_count"]) > 0 {
+		status = "active"
+	}
 	return models.Agent{
 		AgentID:        parseStr(row["agent_id"]),
 		DeploymentID:   parseStr(row["deployment_id"]),
 		DeploymentName: parseStr(row["deployment_name"]),
+		Status:         status,
 		LastSeen:       parseTime(row["last_seen"]),
 		EventCount:     parseInt(row["event_count"]),
 		SessionCount:   parseInt(row["session_count"]),

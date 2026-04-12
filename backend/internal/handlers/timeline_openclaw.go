@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/timeplus/agentshield/internal/models"
 )
@@ -206,9 +207,8 @@ func analyzeOpenClaw(runID string, rows []map[string]any) []models.TraceSpan {
 				if prows[j].decision == "block" {
 					status = "blocked"
 				}
-				for k := j + 1; k < len(prows); k++ {
-					toolDurationMs = prows[k].evtMs - toolStartMs
-					break
+				if j+1 < len(prows) {
+					toolDurationMs = prows[j+1].evtMs - toolStartMs
 				}
 			}
 			if toolDurationMs < 0 {
@@ -301,6 +301,14 @@ func analyzeOpenClaw(runID string, rows []map[string]any) []models.TraceSpan {
 			Attributes: map[string]string{},
 		})
 	}
+
+	// Sort spans chronologically by start_ms so the waterfall renders top-to-bottom
+	// in time order. StableSlice preserves the original insertion order for equal
+	// start_ms values, which keeps the root span (appended first at firstMs) before
+	// any lifecycle events that share the same timestamp.
+	sort.SliceStable(spans, func(i, j int) bool {
+		return spans[i].StartMs < spans[j].StartMs
+	})
 
 	return spans
 }
