@@ -5,6 +5,14 @@
   "type": "module",
   "main": "./dist/index.js",
   "exports": "./dist/index.js",
+  "bin": {
+    "agentshield-hook": "./dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "hooks.json",
+    "README.md"
+  ],
   "engines": {
     "node": ">=18.0.0"
   },

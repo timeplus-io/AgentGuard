@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { resolveConfig } from "./config.js";
 import { send } from "./timeplus-client.js";
 import { normalize } from "./normalize.js";
