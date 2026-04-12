@@ -1,0 +1,18 @@
+{
+  "name": "@timeplus/agentshield-claudecode-plugin",
+  "version": "0.1.0",
+  "description": "AgentShield security monitoring hook for Claude Code",
+  "type": "module",
+  "main": "./dist/index.js",
+  "engines": { "node": ">=18.0.0" },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}
