@@ -5,7 +5,7 @@ description: "Scans outbound agent communication for PII, API keys, and sensitiv
 severity: critical
 category: dlp
 fp_rate: low
-hook_sources: "before_tool_call,after_tool_call,llm_output"
+hook_sources: "tool_complete,llm_response"
 required_telemetry: content_capture
 author: "Timeplus"
 tags:
@@ -22,20 +22,20 @@ query_sql: |
     deployment_id,
     session_id,
     run_id,
-    hook_name,
+    raw_hook_name  AS hook_name,
     tool_name,
-    concat('Sensitive data in ', hook_name, if(tool_name != '', concat(' (', tool_name, ')'), ''), ' from agent ', agent_id) AS message,
-    event_data
-  FROM agentshield_hook_events
-  WHERE hook_name IN ('before_tool_call', 'after_tool_call', 'llm_output')
+    concat('Sensitive data in ', raw_hook_name, if(tool_name != '', concat(' (', tool_name, ')'), ''), ' from agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM agentshield_cim_event
+  WHERE event_type IN ('tool_complete', 'llm_response')
     AND session_id != ''
     AND (
-         match(event_data, '[0-9]{3}-[0-9]{2}-[0-9]{4}')
-      OR lower(event_data) LIKE '%api_key%'
-      OR lower(event_data) LIKE '%secret_key%'
-      OR lower(event_data) LIKE '%bearer %'
-      OR lower(event_data) LIKE '%sk-ant-%'
-      OR lower(event_data) LIKE '%ghp_%'
-      OR lower(event_data) LIKE '%private_key%'
-      OR lower(event_data) LIKE '%aws_secret%'
+         match(concat(tool_result, ' ', assistant_message, ' ', raw_event_data), '[0-9]{3}-[0-9]{2}-[0-9]{4}')
+      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%api_key%'
+      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%secret_key%'
+      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%bearer %'
+      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%sk-ant-%'
+      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%ghp_%'
+      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%private_key%'
+      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%aws_secret%'
     )
