@@ -28,10 +28,10 @@ query_sql: |
   FROM agentshield_cim_event
   WHERE event_type = 'tool_invoke'
     AND (
-         lower(concat(tool_input, ' ', raw_event_data)) LIKE '%npm install%'
-      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%pip install%'
-      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%yarn add%'
-      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%cargo install%'
-      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%apt-get install%'
-      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%brew install%'
+         lower(tool_input) LIKE '%npm install%'
+      OR lower(tool_input) LIKE '%pip install%'
+      OR lower(tool_input) LIKE '%yarn add%'
+      OR lower(tool_input) LIKE '%cargo install%'
+      OR lower(tool_input) LIKE '%apt-get install%'
+      OR lower(tool_input) LIKE '%brew install%'
     )
