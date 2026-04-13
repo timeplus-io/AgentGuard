@@ -28,18 +28,11 @@ query_sql: |
   FROM agentshield_cim_event
   WHERE event_type IN ('user_input', 'llm_request')
     AND (
-         lower(user_message)   LIKE '%ignore previous instructions%'
-      OR lower(user_message)   LIKE '%ignore all previous%'
-      OR lower(user_message)   LIKE '%jailbreak%'
-      OR lower(user_message)   LIKE '%disregard your%'
-      OR lower(user_message)   LIKE '%you are now a%'
-      OR lower(user_message)   LIKE '%forget everything%'
-      OR lower(user_message)   LIKE '%new instructions:%'
-      OR lower(raw_event_data) LIKE '%ignore previous instructions%'
-      OR lower(raw_event_data) LIKE '%ignore all previous%'
-      OR lower(raw_event_data) LIKE '%jailbreak%'
-      OR lower(raw_event_data) LIKE '%disregard your%'
-      OR lower(raw_event_data) LIKE '%you are now a%'
-      OR lower(raw_event_data) LIKE '%forget everything%'
-      OR lower(raw_event_data) LIKE '%new instructions:%'
+         lower(user_message) LIKE '%ignore previous instructions%'
+      OR lower(user_message) LIKE '%ignore all previous%'
+      OR lower(user_message) LIKE '%jailbreak%'
+      OR lower(user_message) LIKE '%disregard your%'
+      OR lower(user_message) LIKE '%you are now a%'
+      OR lower(user_message) LIKE '%forget everything%'
+      OR lower(user_message) LIKE '%new instructions:%'
     )
