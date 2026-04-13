@@ -5,7 +5,7 @@ description: "Monitors privilege escalation attempts through tool abuse, shell e
 severity: warning
 category: privilege
 fp_rate: low
-hook_sources: before_tool_call
+hook_sources: "tool_invoke"
 required_telemetry: ""
 author: "Timeplus"
 tags:
@@ -21,17 +21,17 @@ query_sql: |
     deployment_id,
     session_id,
     run_id,
-    hook_name,
+    raw_hook_name     AS hook_name,
     tool_name,
     concat('Dangerous tool call: ', tool_name, ' by agent ', agent_id) AS message,
-    event_data
-  FROM agentshield_hook_events
-  WHERE hook_name = 'before_tool_call'
+    raw_event_data    AS event_data
+  FROM agentshield_cim_event
+  WHERE event_type = 'tool_invoke'
     AND (
          lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
-      OR lower(event_data) LIKE '%sudo %'
-      OR lower(event_data) LIKE '%rm -rf%'
-      OR lower(event_data) LIKE '%chmod %'
-      OR lower(event_data) LIKE '%/etc/passwd%'
-      OR lower(event_data) LIKE '%/etc/shadow%'
+      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%sudo %'
+      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%rm -rf%'
+      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%chmod %'
+      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%/etc/passwd%'
+      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%/etc/shadow%'
     )
