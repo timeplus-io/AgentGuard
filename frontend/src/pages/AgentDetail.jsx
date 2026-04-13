@@ -136,8 +136,8 @@ function SessionSummary({ sessionDetail }) {
             <p className="text-xs font-mono text-[#e7dff0]">{endedAt ? fmtTime(endedAt) : '—'}</p>
           </div>
           <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Total Runs</p>
-            <p className="text-2xl font-bold text-[#e7dff0]">{runs.length}</p>
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Total Events</p>
+            <p className="text-2xl font-bold text-[#e7dff0]">{sessionDetail.event_count ?? 0}</p>
           </div>
           <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
             <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Tool Calls</p>
@@ -163,7 +163,7 @@ function SessionHeader({ sessionDetail }) {
         <span className={`w-1.5 h-1.5 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
         {isEnded ? 'Ended' : 'Active'}
       </span>
-      <span className="text-[10px] text-zinc-500">{sessionDetail.runs?.length ?? 0} Runs</span>
+      <span className="text-[10px] text-zinc-500">{sessionDetail.event_count ?? 0} Events</span>
       <span className="text-[10px] text-zinc-500">{sessionDetail.total_tool_calls ?? 0} Tool Calls</span>
     </div>
   )
@@ -815,7 +815,7 @@ export default function AgentDetail() {
   const volumeMetrics = [
     { label: 'Active Threats',  value: activeThreats ?? '—', icon: 'security', accent: activeThreats > 0 },
     { label: 'Total Sessions',  value: agent ? agent.session_count   : '—', icon: 'layers' },
-    { label: 'Total Runs',      value: agent ? agent.run_count       : '—', icon: 'sync_alt' },
+    { label: 'Total Events',     value: agent ? agent.event_count     : '—', icon: 'sync_alt' },
     { label: 'Total Tool Calls',value: agent ? agent.tool_call_count : '—', icon: 'handyman' },
   ]
 
@@ -962,7 +962,7 @@ export default function AgentDetail() {
                             <div className="flex items-center gap-1.5 min-w-0">
                               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${session.status === 'active' ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
                               <span className={`text-xs font-medium truncate ${isActive ? 'text-[#ffb0cf]' : 'text-[#e7dff0]'}`}>
-                                {session.session_type}
+                                {session.session_type === 'Unknown' ? session.session_id?.slice(0, 8) : session.session_type}
                               </span>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
@@ -976,7 +976,7 @@ export default function AgentDetail() {
                               )}
                             </div>
                           </div>
-                          <p className="text-[10px] text-zinc-600 break-all mt-0.5">{session.session_key}</p>
+                          <p className="text-[10px] text-zinc-600 break-all mt-0.5">{session.session_key || session.session_id}</p>
                           <p className="text-[9px] text-zinc-700 font-mono mt-0.5">{fmtTime(session.last_seen)}</p>
                         </div>
                       </button>

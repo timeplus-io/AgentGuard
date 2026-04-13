@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-"use strict";
 
 // src/config.ts
 var DEFAULTS = {
@@ -80,15 +79,11 @@ var HOOK_NAME_MAP = {
   Stop: "llm_output",
   PermissionDenied: "permission_denied"
 };
-function normalize(input, config, transcript = []) {
+function normalize(input, config) {
   const hookEventName = input.hook_event_name ?? "";
   const hookName = HOOK_NAME_MAP[hookEventName] ?? hookEventName.toLowerCase();
   const isToolEvent = hookEventName === "PreToolUse" || hookEventName === "PostToolUse" || hookEventName === "PostToolUseFailure";
   const model = hookEventName === "SessionStart" ? typeof input.model === "string" ? input.model : "" : "";
-  const eventData = { ...input };
-  if (transcript.length > 0) {
-    eventData["_transcript"] = transcript;
-  }
   return {
     hook_name: hookName,
     event_time: (/* @__PURE__ */ new Date()).toISOString(),
@@ -103,14 +98,33 @@ function normalize(input, config, transcript = []) {
     model,
     hook_decision: "observe",
     block_reason: "",
-    event_data: JSON.stringify(eventData),
+    event_data: JSON.stringify(input),
+    agent_type: "claudecode"
+  };
+}
+function normalizeContextEvent(input, config, hookName, transcript) {
+  return {
+    hook_name: hookName,
+    event_time: (/* @__PURE__ */ new Date()).toISOString(),
+    session_id: typeof input.session_id === "string" ? input.session_id : "",
+    run_id: typeof input.session_id === "string" ? input.session_id : "",
+    agent_id: config.agentId,
+    deployment_id: config.deploymentId,
+    deployment_name: config.deploymentName,
+    session_key: "",
+    tool_name: "",
+    provider: "",
+    model: "",
+    hook_decision: "observe",
+    block_reason: "",
+    event_data: JSON.stringify({ message_count: transcript.length, messages: transcript }),
     agent_type: "claudecode"
   };
 }
 
 // src/transcript.ts
-var import_fs = require("fs");
-var import_os = require("os");
+import { readFileSync } from "fs";
+import { homedir } from "os";
 var MAX_MESSAGES = parseInt(process.env.AGENTSHIELD_TRANSCRIPT_MESSAGES ?? "50", 10);
 var MAX_CONTENT_CHARS = parseInt(process.env.AGENTSHIELD_TRANSCRIPT_CONTENT_CHARS ?? "10000", 10);
 function truncateContent(content) {
@@ -134,8 +148,8 @@ function truncateContent(content) {
 }
 function readTranscript(transcriptPath) {
   try {
-    const resolvedPath = transcriptPath.startsWith("~/") ? transcriptPath.replace("~", (0, import_os.homedir)()) : transcriptPath;
-    const raw = (0, import_fs.readFileSync)(resolvedPath, "utf8");
+    const resolvedPath = transcriptPath.startsWith("~/") ? transcriptPath.replace("~", homedir()) : transcriptPath;
+    const raw = readFileSync(resolvedPath, "utf8");
     const messages = [];
     for (const line of raw.split("\n")) {
       const trimmed = line.trim();
@@ -159,6 +173,10 @@ function readTranscript(transcriptPath) {
 }
 
 // src/index.ts
+var CONTEXT_HOOKS = {
+  UserPromptSubmit: "prompt_context",
+  Stop: "llm_context"
+};
 async function main() {
   const chunks = [];
   for await (const chunk of process.stdin) {
@@ -176,11 +194,21 @@ async function main() {
 `);
     return;
   }
-  const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;
-  const transcript = transcriptPath ? readTranscript(transcriptPath) : [];
   const config = resolveConfig();
-  const event = normalize(input, config, transcript);
+  const event = normalize(input, config);
   await send(event, config);
+  const hookEventName = typeof input["hook_event_name"] === "string" ? input["hook_event_name"] : "";
+  const contextHookName = CONTEXT_HOOKS[hookEventName];
+  if (contextHookName) {
+    const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;
+    if (transcriptPath) {
+      const transcript = readTranscript(transcriptPath);
+      if (transcript.length > 0) {
+        const contextEvent = normalizeContextEvent(input, config, contextHookName, transcript);
+        await send(contextEvent, config);
+      }
+    }
+  }
 }
 main().catch((err) => {
   process.stderr.write(`[agentshield] unexpected error: ${String(err)}

@@ -612,6 +612,8 @@ SELECT
     hook_name = 'llm_output',         'llm_response',
     hook_name = 'before_tool_call',   'tool_invoke',
     hook_name = 'after_tool_call',    'tool_complete',
+    hook_name = 'prompt_context',     'prompt_context',
+    hook_name = 'llm_context',        'llm_context',
     'other'
   )                                                                AS event_type,
   agent_type,
@@ -639,7 +641,8 @@ WHERE agent_type = 'claudecode'
     'session_start', 'subagent_spawning',
     'user_prompt_submit',
     'before_tool_call', 'after_tool_call',
-    'llm_output'
+    'llm_output',
+    'prompt_context', 'llm_context'
   )`
 
 const ddlCIMOpenClawMV = `

@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { highlight, languages } from 'prismjs/components/prism-core'
+import 'prismjs/components/prism-sql'
+import 'prismjs/themes/prism-tomorrow.css'
 import ThreatsList from '../components/ThreatsList'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
@@ -298,9 +301,9 @@ export default function RuleDetail() {
                 {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
-            <pre className="bg-[#0f0c17] text-[11px] font-mono text-zinc-300 rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
-              {rule.query_sql || ''}
-            </pre>
+            <pre className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: highlight(rule.query_sql || '', languages.sql, 'sql') }}
+            />
           </div>
 
           {/* Recent Detections */}
