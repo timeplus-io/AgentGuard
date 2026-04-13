@@ -80,16 +80,20 @@ var HOOK_NAME_MAP = {
   Stop: "llm_output",
   PermissionDenied: "permission_denied"
 };
-function normalize(input, config) {
+function normalize(input, config, transcript = []) {
   const hookEventName = input.hook_event_name ?? "";
   const hookName = HOOK_NAME_MAP[hookEventName] ?? hookEventName.toLowerCase();
   const isToolEvent = hookEventName === "PreToolUse" || hookEventName === "PostToolUse" || hookEventName === "PostToolUseFailure";
   const model = hookEventName === "SessionStart" ? typeof input.model === "string" ? input.model : "" : "";
+  const eventData = { ...input };
+  if (transcript.length > 0) {
+    eventData["_transcript"] = transcript;
+  }
   return {
     hook_name: hookName,
     event_time: (/* @__PURE__ */ new Date()).toISOString(),
     session_id: typeof input.session_id === "string" ? input.session_id : "",
-    run_id: isToolEvent && typeof input.tool_use_id === "string" ? input.tool_use_id : "",
+    run_id: typeof input.session_id === "string" ? input.session_id : "",
     agent_id: config.agentId,
     deployment_id: config.deploymentId,
     deployment_name: config.deploymentName,
@@ -99,9 +103,59 @@ function normalize(input, config) {
     model,
     hook_decision: "observe",
     block_reason: "",
-    event_data: JSON.stringify(input),
+    event_data: JSON.stringify(eventData),
     agent_type: "claudecode"
   };
+}
+
+// src/transcript.ts
+var import_fs = require("fs");
+var import_os = require("os");
+var MAX_MESSAGES = parseInt(process.env.AGENTSHIELD_TRANSCRIPT_MESSAGES ?? "50", 10);
+var MAX_CONTENT_CHARS = parseInt(process.env.AGENTSHIELD_TRANSCRIPT_CONTENT_CHARS ?? "10000", 10);
+function truncateContent(content) {
+  if (typeof content === "string") {
+    return content.length > MAX_CONTENT_CHARS ? content.slice(0, MAX_CONTENT_CHARS) + `...[truncated ${content.length - MAX_CONTENT_CHARS} chars]` : content;
+  }
+  if (Array.isArray(content)) {
+    return content.map((block) => {
+      if (typeof block !== "object" || block === null) return block;
+      const b = block;
+      if (typeof b["text"] === "string") {
+        return { ...b, text: truncateContent(b["text"]) };
+      }
+      if (Array.isArray(b["content"])) {
+        return { ...b, content: truncateContent(b["content"]) };
+      }
+      return b;
+    });
+  }
+  return content;
+}
+function readTranscript(transcriptPath) {
+  try {
+    const resolvedPath = transcriptPath.startsWith("~/") ? transcriptPath.replace("~", (0, import_os.homedir)()) : transcriptPath;
+    const raw = (0, import_fs.readFileSync)(resolvedPath, "utf8");
+    const messages = [];
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const entry = JSON.parse(trimmed);
+        const msg = entry["message"];
+        if (!msg) continue;
+        messages.push({
+          role: typeof msg["role"] === "string" ? msg["role"] : String(entry["type"] ?? "unknown"),
+          timestamp: typeof entry["timestamp"] === "string" ? entry["timestamp"] : "",
+          content: truncateContent(msg["content"])
+        });
+      } catch {
+      }
+    }
+    return messages.slice(-MAX_MESSAGES);
+  } catch {
+    return [];
+  }
 }
 
 // src/index.ts
@@ -122,8 +176,10 @@ async function main() {
 `);
     return;
   }
+  const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;
+  const transcript = transcriptPath ? readTranscript(transcriptPath) : [];
   const config = resolveConfig();
-  const event = normalize(input, config);
+  const event = normalize(input, config, transcript);
   await send(event, config);
 }
 main().catch((err) => {

@@ -45,7 +45,7 @@ describe("normalize", () => {
     }, BASE_CONFIG);
     expect(e.hook_name).toBe("before_tool_call");
     expect(e.tool_name).toBe("Bash");
-    expect(e.run_id).toBe("tu-123");
+    expect(e.run_id).toBe("s1");
   });
 
   it("maps PostToolUse → 'after_tool_call' with tool_name and run_id", () => {
@@ -57,7 +57,7 @@ describe("normalize", () => {
     }, BASE_CONFIG);
     expect(e.hook_name).toBe("after_tool_call");
     expect(e.tool_name).toBe("Write");
-    expect(e.run_id).toBe("tu-456");
+    expect(e.run_id).toBe("s1");
   });
 
   it("maps PostToolUseFailure → 'tool_call_failure'", () => {
@@ -121,9 +121,9 @@ describe("normalize", () => {
     expect(JSON.parse(e.event_data)).toEqual(input);
   });
 
-  it("defaults run_id to empty string for non-tool events", () => {
+  it("sets run_id to session_id for all events", () => {
     const e = normalize({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG);
-    expect(e.run_id).toBe("");
+    expect(e.run_id).toBe("s1");
   });
 
   it("defaults model to empty string for non-SessionStart events", () => {
@@ -144,5 +144,39 @@ describe("normalize", () => {
   it("event_time is an ISO 8601 timestamp", () => {
     const e = normalize({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG);
     expect(e.event_time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+
+  it("omits _transcript from event_data when no transcript provided", () => {
+    const e = normalize({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG);
+    const data = JSON.parse(e.event_data);
+    expect(data["_transcript"]).toBeUndefined();
+  });
+
+  it("omits _transcript from event_data when empty transcript provided", () => {
+    const e = normalize({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG, []);
+    const data = JSON.parse(e.event_data);
+    expect(data["_transcript"]).toBeUndefined();
+  });
+
+  it("embeds transcript in event_data when provided", () => {
+    const transcript = [
+      { role: "user", timestamp: "2026-01-01T00:00:00.000Z", content: [{ type: "text", text: "Hello" }] },
+      { role: "assistant", timestamp: "2026-01-01T00:00:01.000Z", content: [{ type: "text", text: "Hi" }] },
+    ];
+    const e = normalize({ hook_event_name: "PreToolUse", session_id: "s1", tool_name: "Bash" }, BASE_CONFIG, transcript);
+    const data = JSON.parse(e.event_data);
+    expect(data["_transcript"]).toEqual(transcript);
+    expect(data["_transcript"]).toHaveLength(2);
+  });
+
+  it("preserves original input fields alongside _transcript in event_data", () => {
+    const transcript = [
+      { role: "user", timestamp: "2026-01-01T00:00:00.000Z", content: "hi" },
+    ];
+    const input = { hook_event_name: "Stop", session_id: "s1", some_field: 99 };
+    const e = normalize(input, BASE_CONFIG, transcript);
+    const data = JSON.parse(e.event_data);
+    expect(data["some_field"]).toBe(99);
+    expect(data["_transcript"]).toHaveLength(1);
   });
 });
