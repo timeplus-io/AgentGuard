@@ -19,7 +19,7 @@ func MVName(ruleID string) string {
 func CreateRuleMV(cfg *config.TimeplusConfig, ruleID, querySQLBody string) error {
 	mvName := MVName(ruleID)
 	ddl := fmt.Sprintf(
-		"CREATE MATERIALIZED VIEW %s INTO agentshield_security_events AS %s",
+		"CREATE MATERIALIZED VIEW IF NOT EXISTS %s INTO agentshield_security_events AS %s",
 		mvName, querySQLBody,
 	)
 	if err := ExecHTTP(cfg, ddl); err != nil {
