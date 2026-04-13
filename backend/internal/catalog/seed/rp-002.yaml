@@ -30,12 +30,12 @@ query_sql: |
   WHERE event_type IN ('tool_complete', 'llm_response')
     AND session_id != ''
     AND (
-         match(concat(tool_result, ' ', assistant_message, ' ', raw_event_data), '[0-9]{3}-[0-9]{2}-[0-9]{4}')
-      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%api_key%'
-      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%secret_key%'
-      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%bearer %'
-      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%sk-ant-%'
-      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%ghp_%'
-      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%private_key%'
-      OR lower(concat(tool_result, ' ', assistant_message, ' ', raw_event_data)) LIKE '%aws_secret%'
+         match(concat(tool_result, ' ', assistant_message), '[0-9]{3}-[0-9]{2}-[0-9]{4}')
+      OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%api_key%'
+      OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%secret_key%'
+      OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%bearer %'
+      OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%sk-ant-%'
+      OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%ghp_%'
+      OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%private_key%'
+      OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%aws_secret%'
     )
