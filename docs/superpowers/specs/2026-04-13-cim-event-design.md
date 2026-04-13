@@ -76,8 +76,7 @@ CREATE STREAM IF NOT EXISTS agentshield_cim_event
   -- Raw passthrough
   raw_hook_name     low_cardinality(string),
   raw_event_data    string
-)
-SETTINGS logstore_codec = 'ZSTD(1)', logstore_flush_interval_ms = 1000;
+);
 ```
 
 ### `event_type` Values
@@ -122,7 +121,7 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS mv_cim_claudecode
 INTO agentshield_cim_event AS
 SELECT
   event_time,
-  multiIf(
+  multi_if(
     hook_name = 'session_start',      'session_start',
     hook_name = 'subagent_spawning',  'session_start',
     hook_name = 'user_prompt_submit', 'user_input',
@@ -171,7 +170,7 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS mv_cim_openclaw
 INTO agentshield_cim_event AS
 SELECT
   event_time,
-  multiIf(
+  multi_if(
     hook_name = 'session_start',    'session_start',
     hook_name = 'session_end',      'session_end',
     hook_name = 'message_received', 'user_input',
@@ -195,8 +194,7 @@ SELECT
   json_query(event_data, '$.params')                                       AS tool_input,
   json_query(event_data, '$.result')                                       AS tool_result,
   json_value(event_data, '$.error') = ''                                   AS tool_success,
-  to_int64(if(json_value(event_data, '$.durationMs') != '',
-              json_value(event_data, '$.durationMs'), '0'))                AS tool_duration_ms,
+  json_extract_int(event_data, 'durationMs')                               AS tool_duration_ms,
   json_value(event_data, '$.content')                                      AS user_message,
   json_value(event_data, '$.assistantTexts[0]')                            AS assistant_message,
   hook_decision,
@@ -268,8 +266,8 @@ WHERE event_type = 'tool_invoke';
 
 -- Tool error rate by agent and tool (historical)
 SELECT agent_type, tool_name,
-       countIf(NOT tool_success) AS errors,
-       countIf(tool_success)     AS successes
+       count_if(NOT tool_success) AS errors,
+       count_if(tool_success)     AS successes
 FROM table(agentshield_cim_event)
 WHERE event_type = 'tool_complete'
 GROUP BY agent_type, tool_name
