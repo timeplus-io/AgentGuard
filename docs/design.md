@@ -34,13 +34,16 @@ AgentShield is a real-time security monitoring and governance platform for AI co
 │                                                                       │
 │  :3218 ingest   Streams                        MVs / Alerts           │
 │  ────────────   ──────────────────────────     ───────────────────    │
-│  hook events →  agentshield_hook_events    →   mv_rule_rp001         │
-│                 agentshield_security_events →   mv_rule_rp002    ┐    │
-│                 agentshield_notify_events   ←   mv_rule_rp003    │    │
-│  :4318 input    agentshield_threats         ←   mv_threats       │    │
-│  ────────────   agentshield_rules           ←   mv_notify_filter │    │
-│  OTLP/HTTP  →   agentshield_pricing             agentshield_     │    │
-│  otel_traces                                    notifier (alert) ┘    │
+│  hook events →  agentshield_hook_events                               │
+│                   ├─ mv_cim_claudecode ─┐                             │
+│                   └─ mv_cim_openclaw ───┴► agentshield_cim_event      │
+│                                              ├─ mv_rule_rp001    ┐    │
+│                 agentshield_security_events ◄─ mv_rule_rp002    │    │
+│                 agentshield_notify_events   ◄─ mv_rule_rp003    │    │
+│  :4318 input    agentshield_threats         ←  mv_threats       │    │
+│  ────────────   agentshield_rules           ←  mv_notify_filter │    │
+│  OTLP/HTTP  →   agentshield_pricing             agentshield_    │    │
+│  otel_traces                                    notifier (alert)┘    │
 │  otel_logs                                                            │
 │  otel_metrics_*                                                       │
 └──────────────────────────┬───────────────────────────────────────────┘
@@ -91,17 +94,19 @@ The backend uses two separate connections to Timeplus:
 2. Create 5 OTel streams (`otel_traces`, `otel_logs`, `otel_metrics_gauge/sum/histogram`)
 3. Create `openclaw_otel_input` (OTLP/HTTP input on port 4318)
 4. Create `agentshield_hook_events`
-5. Create `agentshield_security_events`, `agentshield_notify_events`, `agentshield_rules`
-6. Create `agentshield_threats` (mutable stream)
-7. Create `mv_threats`
-8. Create `agentshield_pricing` (mutable stream)
-9. Seed 6 default pricing rows (skipped if any rows exist)
-10. Seed catalog rules as disabled (skipped if any rows exist)
-11. Drop 4 legacy named security MVs
-12. `CREATE OR REPLACE` the `notify_agentshield_udf` Python UDF
-13. Create `mv_notify_filter`
-14. Drop and recreate `agentshield_notifier` alert
-15. Sync per-rule MVs to match current `agentshield_rules` state
+5. Create `agentshield_cim_event` (CIM unified event stream)
+6. Create `mv_cim_claudecode` and `mv_cim_openclaw` (CIM normalization MVs)
+7. Create `agentshield_security_events`, `agentshield_notify_events`, `agentshield_rules`
+8. Create `agentshield_threats` (mutable stream)
+9. Create `mv_threats`
+10. Create `agentshield_pricing` (mutable stream)
+11. Seed 6 default pricing rows (skipped if any rows exist)
+12. Seed catalog rules as disabled (skipped if any rows exist)
+13. Drop 4 legacy named security MVs
+14. `CREATE OR REPLACE` the `notify_agentshield_udf` Python UDF
+15. Create `mv_notify_filter`
+16. Drop and recreate `agentshield_notifier` alert
+17. Sync per-rule MVs to match current `agentshield_rules` state
 
 ---
 
@@ -213,13 +218,13 @@ CREATE STREAM otel_metrics_gauge (  -- otel_metrics_sum adds 2 extra columns
 
 Extends the sum schema (minus `is_monotonic`) with histogram-specific columns: `count uint64`, `sum float64`, `bucket_counts array(uint64)`, `explicit_bounds array(float64)`, `min float64`, `max float64`.
 
-### 2.2 Hook Events (Primary Security Stream)
+### 2.2 Hook Events (Raw Ingestion Stream)
 
-The AgentShield hook plugin posts events directly to the Timeplus HTTP ingest API on port 3218, writing rows into `agentshield_hook_events`. This path bypasses the AgentShield backend entirely — the backend only reads from this stream. It is the primary stream consumed by all security rules.
+The AgentShield hook plugin posts events directly to the Timeplus HTTP ingest API on port 3218, writing rows into `agentshield_hook_events`. This path bypasses the AgentShield backend entirely. Security rules do **not** read from this stream directly — they read from `agentshield_cim_event` (see §2.4). The raw stream is still available for low-level investigation.
 
 ```sql
 CREATE STREAM agentshield_hook_events (
-  hook_name        low_cardinality(string),  -- e.g. 'llm_input', 'before_tool_call'
+  hook_name        low_cardinality(string),  -- agent-specific hook name
   event_time       datetime64(3),
   session_id       string,
   run_id           string,
@@ -230,24 +235,48 @@ CREATE STREAM agentshield_hook_events (
   tool_name        string,
   provider         string,                   -- e.g. 'anthropic', 'openai'
   model            string,                   -- e.g. 'claude-sonnet-4-6'
-  hook_decision    low_cardinality(string),  -- 'allow' | 'block'
+  hook_decision    low_cardinality(string),  -- 'observe' | 'block'
   block_reason     string,
-  event_data       string                    -- JSON blob; schema varies by hook
+  event_data       string,                   -- JSON blob; schema varies by hook
+  agent_type       low_cardinality(string)   -- 'claudecode' | 'openclaw'
 )
 ```
 
-**Key hook names and their `event_data` payloads:**
+**OpenClaw hook names and their `event_data` payloads:**
 
 | `hook_name` | Payload fields of interest |
 |-------------|---------------------------|
-| `llm_input` | `prompt`, `system` |
-| `llm_output` | `content`, `usage.input`, `usage.output`, `stop_reason` |
-| `before_tool_call` | `tool_name`, `tool_input` |
-| `after_tool_call` | `tool_name`, `tool_output`, `duration_ms` |
-| `tool_result_persist` | `tool_name`, `content` |
+| `session_start` | `session_key` (format: `agent:main:subagent:uuid`) |
+| `session_end` | (none) |
+| `message_received` | `content` (user message text) |
+| `llm_input` | `prompt`, `system`, `provider`, `model` |
+| `llm_output` | `assistantTexts[]`, `usage.input`, `usage.output` |
+| `before_tool_call` | `toolName`, `params` |
+| `after_tool_call` | `toolName`, `result`, `error`, `durationMs` |
 | `before_install` | `package_name`, `registry` |
-| `session_start` | `session_key` |
-| `session_end` | (no additional fields) |
+
+**Claude Code hook names and their `event_data` payloads:**
+
+| `hook_name` | Source | Payload fields of interest |
+|-------------|--------|---------------------------|
+| `session_start` | `SessionStart` hook | `model` |
+| `session_end` | `SessionEnd` hook | (none) |
+| `user_prompt_submit` | `UserPromptSubmit` hook | `prompt` |
+| `before_tool_call` | `PreToolUse` hook | `tool_name`, `tool_input` |
+| `after_tool_call` | `PostToolUse` hook | `tool_name`, `tool_response` |
+| `tool_call_failure` | `PostToolUseFailure` hook | `tool_name` |
+| `llm_output` | `Stop` hook | (stop event, no LLM content in payload) |
+| `subagent_spawning` | `SubagentStart` hook | (none) |
+| `subagent_ended` | `SubagentStop` hook | (none) |
+| `permission_denied` | `PermissionDenied` hook | `tool_name` |
+| `prompt_context` | virtual (UserPromptSubmit) | `message_count`, `messages[]` — full transcript |
+| `llm_context` | virtual (Stop) | `message_count`, `messages[]` — full transcript |
+
+> **`run_id` for Claude Code:** Claude Code has no "run" concept. `run_id` is always set to `session_id` for all Claude Code hook events.
+>
+> **Virtual events (`prompt_context` / `llm_context`):** Not fired by Claude Code itself. The plugin reads the `transcript_path` JSONL (provided in every hook payload) and synthesizes two additional events per LLM turn. `prompt_context` carries the conversation state before the turn; `llm_context` carries the complete turn including all tool call/result pairs. Both are sent to Timeplus alongside the triggering real event. These are the primary source for full-prompt security analysis.
+>
+> **`session_key` for Claude Code:** Always an empty string. Use `session_id` for session identity. OpenClaw uses `session_key` in `agent:main:subagent:uuid` format to express session hierarchy.
 
 ### 2.3 API — Data Collection
 
@@ -257,6 +286,84 @@ CREATE STREAM agentshield_hook_events (
 | GET | `/api/notifications/stream` | SSE long-poll stream; sends `event: alert\ndata: {...}` on each detection; 20 s keepalive |
 | POST | `/api/onboarding/generate` | Returns plugin config snippet for `openclaw` or `claude_code` agent types |
 | POST | `/api/proton/query` | Streams arbitrary SQL directly to Timeplus; returns NDJSON rows line-by-line |
+
+### 2.4 CIM Layer (Common Information Model)
+
+The CIM layer normalizes heterogeneous hook events from multiple agent types into a single unified schema. Security rules query `agentshield_cim_event` rather than raw `agentshield_hook_events`, so rule SQL is agent-agnostic.
+
+#### `agentshield_cim_event` — Unified event stream
+
+```sql
+CREATE STREAM agentshield_cim_event (
+  event_time        datetime64(3),
+  event_type        low_cardinality(string),  -- canonical event type (see table below)
+  agent_type        low_cardinality(string),  -- 'claudecode' | 'openclaw'
+  agent_id          string,
+  deployment_id     low_cardinality(string),
+  session_id        string,
+  run_id            string,
+  provider          low_cardinality(string),  -- 'anthropic', 'openai', etc.
+  model             low_cardinality(string),  -- e.g. 'claude-sonnet-4-6'
+  tool_name         string,
+  tool_input        string,                   -- JSON: tool parameters
+  tool_result       string,                   -- JSON: tool output
+  tool_success      bool,
+  tool_duration_ms  int64,
+  user_message      string,                   -- user text content
+  assistant_message string,                   -- first assistant response text
+  hook_decision     low_cardinality(string),  -- 'observe' | 'block'
+  block_reason      string,
+  raw_hook_name     low_cardinality(string),  -- original hook_name from source agent
+  raw_event_data    string                    -- original event_data JSON blob
+)
+```
+
+**CIM `event_type` values:**
+
+| `event_type` | Description | Claude Code source | OpenClaw source |
+|--------------|-------------|-------------------|-----------------|
+| `session_start` | Session or subagent started | `session_start`, `subagent_spawning` | `session_start` |
+| `session_end` | Session ended | — | `session_end` |
+| `user_input` | User message submitted | `user_prompt_submit` | `message_received` |
+| `llm_request` | Full prompt assembled and sent to LLM | — | `llm_input` |
+| `llm_response` | LLM response received | `llm_output` | `llm_output` |
+| `tool_invoke` | Tool call initiated | `before_tool_call` | `before_tool_call` |
+| `tool_complete` | Tool call completed | `after_tool_call` | `after_tool_call` |
+| `prompt_context` | Full conversation context before LLM turn | `prompt_context` (virtual) | — |
+| `llm_context` | Full conversation context after LLM turn | `llm_context` (virtual) | — |
+| `other` | Any hook not matched above | — | — |
+
+> **Note:** `llm_request` only exists for OpenClaw (which fires an `llm_input` hook with the complete assembled prompt). For Claude Code, the full prompt context is captured via the virtual `prompt_context` / `llm_context` events in `raw_event_data.messages[]`.
+
+#### `mv_cim_claudecode` — Claude Code normalizer
+
+Reads from `agentshield_hook_events` where `agent_type = 'claudecode'` and maps Claude Code-specific hook names to CIM `event_type` values. Key field mappings:
+
+| CIM field | Source |
+|-----------|--------|
+| `event_type` | `multi_if(hook_name = 'user_prompt_submit', 'user_input', hook_name = 'llm_output', 'llm_response', ...)` |
+| `tool_input` | `json_query(event_data, '$.tool_input')` |
+| `tool_result` | `json_query(event_data, '$.tool_response')` |
+| `user_message` | `json_value(event_data, '$.prompt')` |
+| `assistant_message` | `json_value(event_data, '$.last_assistant_message')` |
+| `raw_event_data` | `event_data` (full original JSON; for `prompt_context`/`llm_context`, contains `messages[]` array) |
+
+Filters: `hook_name IN ('session_start', 'subagent_spawning', 'user_prompt_submit', 'before_tool_call', 'after_tool_call', 'llm_output', 'prompt_context', 'llm_context')`
+
+#### `mv_cim_openclaw` — OpenClaw normalizer
+
+Reads from `agentshield_hook_events` where `agent_type = 'openclaw'` and maps OpenClaw-specific hook names to CIM `event_type` values. Key field mappings:
+
+| CIM field | Source |
+|-----------|--------|
+| `event_type` | `multi_if(hook_name = 'message_received', 'user_input', hook_name = 'llm_input', 'llm_request', ...)` |
+| `tool_input` | `json_query(event_data, '$.params')` |
+| `tool_result` | `json_query(event_data, '$.result')` |
+| `tool_duration_ms` | `json_extract_int(event_data, 'durationMs')` |
+| `user_message` | `json_value(event_data, '$.content')` |
+| `assistant_message` | `json_value(event_data, '$.assistantTexts[0]')` |
+
+Filters: `hook_name IN ('session_start', 'session_end', 'message_received', 'llm_input', 'llm_output', 'before_tool_call', 'after_tool_call')`
 
 ---
 
@@ -533,7 +640,7 @@ WHERE t.status = '' OR t.status = 'cleared'
 
 #### Per-rule MVs — Detection pipeline
 
-Each enabled rule has a MV named `mv_rule_<ruleID_no_hyphens>` (e.g., `rp-001` → `mv_rule_rp001`). The MV query reads `agentshield_hook_events` with user-defined logic and writes to `agentshield_security_events`.
+Each enabled rule has a MV named `mv_rule_<ruleID_no_hyphens>` (e.g., `rp-001` → `mv_rule_rp001`). The MV query reads **`agentshield_cim_event`** (not the raw hook events stream) and writes matches to `agentshield_security_events`. Using the CIM stream means rules are agent-agnostic: the same SQL detects threats from both Claude Code and OpenClaw agents without any agent-specific conditionals.
 
 **Create:**
 ```sql
@@ -690,87 +797,116 @@ The `Manager` merges two layers (local overrides seed by ID):
 
 ### 5.3 Built-in Rules
 
-| ID | Name | Severity | Category | Hook Sources |
-|----|------|----------|----------|-------------|
-| `rp-001` | Prompt Injection Shield | critical | prompt_injection | `llm_input` |
-| `rp-002` | DLP Sentinel | critical | dlp | `tool_result_persist`, `after_tool_call`, `llm_output` |
-| `rp-003` | Privilege Guard | warning | privilege | `before_tool_call` |
-| `rp-004` | Supply Chain Watch | warning | supply_chain | `before_install`, `before_tool_call` |
+All built-in rules query `agentshield_cim_event` using normalized `event_type` values, making them agent-agnostic (they detect threats from both Claude Code and OpenClaw without modification). The `hook_sources` field in the catalog entry lists the CIM `event_type` values the rule inspects.
+
+| ID | Name | Severity | Category | CIM Event Types |
+|----|------|----------|----------|----------------|
+| `rp-001` | Prompt Injection Shield | critical | prompt_injection | `user_input`, `llm_request` |
+| `rp-002` | DLP Sentinel | critical | dlp | `tool_complete`, `llm_response` |
+| `rp-003` | Privilege Guard | warning | privilege | `tool_invoke` |
+| `rp-004` | Supply Chain Watch | warning | supply_chain | `tool_invoke` |
 
 **`rp-001` — Prompt Injection Shield:**
 ```sql
 SELECT
-  now64(3) AS detected_at,
-  'rp-001' AS rule_id, 'Prompt Injection Shield' AS rule_name, 'critical' AS severity,
-  agent_id, deployment_id, session_id, run_id, hook_name, tool_name,
-  concat('Prompt injection pattern detected in input from ', agent_id) AS message,
-  event_data
-FROM agentshield_hook_events
-WHERE hook_name = 'llm_input'
-  AND (lower(event_data) LIKE '%ignore previous instructions%'
-    OR lower(event_data) LIKE '%ignore all previous%'
-    OR lower(event_data) LIKE '%jailbreak%'
-    OR lower(event_data) LIKE '%disregard your%'
-    OR lower(event_data) LIKE '%you are now a%'
-    OR lower(event_data) LIKE '%forget everything%'
-    OR lower(event_data) LIKE '%new instructions:%')
+  event_time                AS detected_at,
+  'rp-001'                  AS rule_id,
+  'Prompt Injection Shield' AS rule_name,
+  'critical'                AS severity,
+  agent_id, deployment_id, session_id, run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Potential prompt injection in ', raw_hook_name, ' from agent ', agent_id) AS message,
+  raw_event_data            AS event_data
+FROM agentshield_cim_event
+WHERE event_type IN ('user_input', 'llm_request')
+  AND (
+       lower(user_message) LIKE '%ignore previous instructions%'
+    OR lower(user_message) LIKE '%ignore all previous%'
+    OR lower(user_message) LIKE '%jailbreak%'
+    OR lower(user_message) LIKE '%disregard your%'
+    OR lower(user_message) LIKE '%you are now a%'
+    OR lower(user_message) LIKE '%forget everything%'
+    OR lower(user_message) LIKE '%new instructions:%'
+  )
 ```
 
 **`rp-002` — DLP Sentinel:**
 ```sql
 SELECT
-  now64(3) AS detected_at,
-  'rp-002' AS rule_id, 'DLP Sentinel' AS rule_name, 'critical' AS severity,
-  agent_id, deployment_id, session_id, run_id, hook_name, tool_name,
-  concat('Sensitive data pattern detected in output from ', agent_id) AS message,
-  event_data
-FROM agentshield_hook_events
-WHERE hook_name IN ('tool_result_persist', 'after_tool_call', 'llm_output')
-  AND (match(event_data, '[0-9]{3}-[0-9]{2}-[0-9]{4}')  -- SSN
-    OR lower(event_data) LIKE '%api_key%'
-    OR lower(event_data) LIKE '%secret_key%'
-    OR lower(event_data) LIKE '%bearer %'
-    OR lower(event_data) LIKE '%sk-ant-%'
-    OR lower(event_data) LIKE '%ghp_%'
-    OR lower(event_data) LIKE '%private_key%'
-    OR lower(event_data) LIKE '%aws_secret%')
+  event_time     AS detected_at,
+  'rp-002'       AS rule_id,
+  'DLP Sentinel' AS rule_name,
+  'critical'     AS severity,
+  agent_id, deployment_id, session_id, run_id,
+  raw_hook_name  AS hook_name,
+  tool_name,
+  concat('Sensitive data in ', raw_hook_name,
+    if(tool_name != '', concat(' (', tool_name, ')'), ''),
+    ' from agent ', agent_id) AS message,
+  raw_event_data AS event_data
+FROM agentshield_cim_event
+WHERE event_type IN ('tool_complete', 'llm_response')
+  AND session_id != ''
+  AND (
+       match(concat(tool_result, ' ', assistant_message), '[0-9]{3}-[0-9]{2}-[0-9]{4}')
+    OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%api_key%'
+    OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%secret_key%'
+    OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%bearer %'
+    OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%sk-ant-%'
+    OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%ghp_%'
+    OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%private_key%'
+    OR lower(concat(tool_result, ' ', assistant_message)) LIKE '%aws_secret%'
+  )
 ```
 
 **`rp-003` — Privilege Guard:**
 ```sql
 SELECT
-  now64(3) AS detected_at,
-  'rp-003' AS rule_id, 'Privilege Guard' AS rule_name, 'warning' AS severity,
-  agent_id, deployment_id, session_id, run_id, hook_name, tool_name,
-  concat('Privileged tool or command usage by ', agent_id) AS message,
-  event_data
-FROM agentshield_hook_events
-WHERE hook_name = 'before_tool_call'
-  AND (tool_name IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
-    OR lower(event_data) LIKE '%sudo %'
-    OR lower(event_data) LIKE '%rm -rf%'
-    OR lower(event_data) LIKE '%chmod %'
-    OR lower(event_data) LIKE '%/etc/passwd%'
-    OR lower(event_data) LIKE '%/etc/shadow%')
+  event_time        AS detected_at,
+  'rp-003'          AS rule_id,
+  'Privilege Guard' AS rule_name,
+  'warning'         AS severity,
+  agent_id, deployment_id, session_id, run_id,
+  raw_hook_name     AS hook_name,
+  tool_name,
+  concat('Dangerous tool call: ', tool_name, ' by agent ', agent_id) AS message,
+  raw_event_data    AS event_data
+FROM agentshield_cim_event
+WHERE event_type = 'tool_invoke'
+  AND (
+       lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
+    OR lower(tool_input) LIKE '%sudo %'
+    OR lower(tool_input) LIKE '%rm -rf%'
+    OR lower(tool_input) LIKE '%chmod%'
+    OR lower(tool_input) LIKE '%/etc/passwd%'
+    OR lower(tool_input) LIKE '%/etc/shadow%'
+  )
 ```
 
 **`rp-004` — Supply Chain Watch:**
 ```sql
 SELECT
-  now64(3) AS detected_at,
-  'rp-004' AS rule_id, 'Supply Chain Watch' AS rule_name, 'warning' AS severity,
-  agent_id, deployment_id, session_id, run_id, hook_name, tool_name,
-  concat('Package installation attempt detected from ', agent_id) AS message,
-  event_data
-FROM agentshield_hook_events
-WHERE hook_name = 'before_install'
-  OR (hook_name = 'before_tool_call'
-    AND (lower(event_data) LIKE '%npm install%'
-      OR lower(event_data) LIKE '%pip install%'
-      OR lower(event_data) LIKE '%yarn add%'
-      OR lower(event_data) LIKE '%cargo install%'
-      OR lower(event_data) LIKE '%apt-get install%'
-      OR lower(event_data) LIKE '%brew install%'))
+  event_time           AS detected_at,
+  'rp-004'             AS rule_id,
+  'Supply Chain Watch' AS rule_name,
+  'warning'            AS severity,
+  agent_id, deployment_id, session_id, run_id,
+  raw_hook_name        AS hook_name,
+  tool_name,
+  concat('Package install by agent ', agent_id,
+    ' via ', if(tool_name != '', tool_name, raw_hook_name)) AS message,
+  raw_event_data       AS event_data
+FROM agentshield_cim_event
+WHERE event_type = 'tool_invoke'
+  AND (
+       lower(tool_input) LIKE '%npm install%'
+    OR lower(tool_input) LIKE '%pip install%'
+    OR lower(tool_input) LIKE '%yarn add%'
+    OR lower(tool_input) LIKE '%cargo install%'
+    OR lower(tool_input) LIKE '%apt-get install%'
+    OR lower(tool_input) LIKE '%brew install%'
+  )
 ```
 
 ### 5.4 Version Comparison

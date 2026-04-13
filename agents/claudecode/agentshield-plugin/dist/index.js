@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-"use strict";
 
 // src/config.ts
 var DEFAULTS = {
@@ -89,7 +88,7 @@ function normalize(input, config) {
     hook_name: hookName,
     event_time: (/* @__PURE__ */ new Date()).toISOString(),
     session_id: typeof input.session_id === "string" ? input.session_id : "",
-    run_id: isToolEvent && typeof input.tool_use_id === "string" ? input.tool_use_id : "",
+    run_id: typeof input.session_id === "string" ? input.session_id : "",
     agent_id: config.agentId,
     deployment_id: config.deploymentId,
     deployment_name: config.deploymentName,
@@ -103,8 +102,81 @@ function normalize(input, config) {
     agent_type: "claudecode"
   };
 }
+function normalizeContextEvent(input, config, hookName, transcript) {
+  return {
+    hook_name: hookName,
+    event_time: (/* @__PURE__ */ new Date()).toISOString(),
+    session_id: typeof input.session_id === "string" ? input.session_id : "",
+    run_id: typeof input.session_id === "string" ? input.session_id : "",
+    agent_id: config.agentId,
+    deployment_id: config.deploymentId,
+    deployment_name: config.deploymentName,
+    session_key: "",
+    tool_name: "",
+    provider: "",
+    model: "",
+    hook_decision: "observe",
+    block_reason: "",
+    event_data: JSON.stringify({ message_count: transcript.length, messages: transcript }),
+    agent_type: "claudecode"
+  };
+}
+
+// src/transcript.ts
+import { readFileSync } from "fs";
+import { homedir } from "os";
+var MAX_MESSAGES = parseInt(process.env.AGENTSHIELD_TRANSCRIPT_MESSAGES ?? "50", 10);
+var MAX_CONTENT_CHARS = parseInt(process.env.AGENTSHIELD_TRANSCRIPT_CONTENT_CHARS ?? "10000", 10);
+function truncateContent(content) {
+  if (typeof content === "string") {
+    return content.length > MAX_CONTENT_CHARS ? content.slice(0, MAX_CONTENT_CHARS) + `...[truncated ${content.length - MAX_CONTENT_CHARS} chars]` : content;
+  }
+  if (Array.isArray(content)) {
+    return content.map((block) => {
+      if (typeof block !== "object" || block === null) return block;
+      const b = block;
+      if (typeof b["text"] === "string") {
+        return { ...b, text: truncateContent(b["text"]) };
+      }
+      if (Array.isArray(b["content"])) {
+        return { ...b, content: truncateContent(b["content"]) };
+      }
+      return b;
+    });
+  }
+  return content;
+}
+function readTranscript(transcriptPath) {
+  try {
+    const resolvedPath = transcriptPath.startsWith("~/") ? transcriptPath.replace("~", homedir()) : transcriptPath;
+    const raw = readFileSync(resolvedPath, "utf8");
+    const messages = [];
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const entry = JSON.parse(trimmed);
+        const msg = entry["message"];
+        if (!msg) continue;
+        messages.push({
+          role: typeof msg["role"] === "string" ? msg["role"] : String(entry["type"] ?? "unknown"),
+          timestamp: typeof entry["timestamp"] === "string" ? entry["timestamp"] : "",
+          content: truncateContent(msg["content"])
+        });
+      } catch {
+      }
+    }
+    return messages.slice(-MAX_MESSAGES);
+  } catch {
+    return [];
+  }
+}
 
 // src/index.ts
+var CONTEXT_HOOKS = {
+  UserPromptSubmit: "prompt_context",
+  Stop: "llm_context"
+};
 async function main() {
   const chunks = [];
   for await (const chunk of process.stdin) {
@@ -125,6 +197,18 @@ async function main() {
   const config = resolveConfig();
   const event = normalize(input, config);
   await send(event, config);
+  const hookEventName = typeof input["hook_event_name"] === "string" ? input["hook_event_name"] : "";
+  const contextHookName = CONTEXT_HOOKS[hookEventName];
+  if (contextHookName) {
+    const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;
+    if (transcriptPath) {
+      const transcript = readTranscript(transcriptPath);
+      if (transcript.length > 0) {
+        const contextEvent = normalizeContextEvent(input, config, contextHookName, transcript);
+        await send(contextEvent, config);
+      }
+    }
+  }
 }
 main().catch((err) => {
   process.stderr.write(`[agentshield] unexpected error: ${String(err)}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalize } from "./normalize.js";
+import { normalize, normalizeContextEvent } from "./normalize.js";
 
 const BASE_CONFIG = {
   timeplusUrl: "http://localhost:3218",
@@ -35,7 +35,7 @@ describe("normalize", () => {
     expect(e.deployment_name).toBe("Test");
   });
 
-  it("maps PreToolUse → hook_name 'before_tool_call' with tool_name and run_id", () => {
+  it("maps PreToolUse → hook_name 'before_tool_call' with tool_name", () => {
     const e = normalize({
       hook_event_name: "PreToolUse",
       session_id: "s1",
@@ -45,10 +45,10 @@ describe("normalize", () => {
     }, BASE_CONFIG);
     expect(e.hook_name).toBe("before_tool_call");
     expect(e.tool_name).toBe("Bash");
-    expect(e.run_id).toBe("tu-123");
+    expect(e.run_id).toBe("s1");
   });
 
-  it("maps PostToolUse → 'after_tool_call' with tool_name and run_id", () => {
+  it("maps PostToolUse → 'after_tool_call' with tool_name", () => {
     const e = normalize({
       hook_event_name: "PostToolUse",
       session_id: "s1",
@@ -57,7 +57,7 @@ describe("normalize", () => {
     }, BASE_CONFIG);
     expect(e.hook_name).toBe("after_tool_call");
     expect(e.tool_name).toBe("Write");
-    expect(e.run_id).toBe("tu-456");
+    expect(e.run_id).toBe("s1");
   });
 
   it("maps PostToolUseFailure → 'tool_call_failure'", () => {
@@ -121,9 +121,11 @@ describe("normalize", () => {
     expect(JSON.parse(e.event_data)).toEqual(input);
   });
 
-  it("defaults run_id to empty string for non-tool events", () => {
-    const e = normalize({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG);
-    expect(e.run_id).toBe("");
+  it("sets run_id to session_id for all events (no run concept in Claude Code)", () => {
+    const tool = normalize({ hook_event_name: "PreToolUse", session_id: "s1", tool_use_id: "tu-abc" }, BASE_CONFIG);
+    expect(tool.run_id).toBe("s1");
+    const stop = normalize({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG);
+    expect(stop.run_id).toBe("s1");
   });
 
   it("defaults model to empty string for non-SessionStart events", () => {
@@ -144,5 +146,79 @@ describe("normalize", () => {
   it("event_time is an ISO 8601 timestamp", () => {
     const e = normalize({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG);
     expect(e.event_time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+
+  it("never embeds _transcript in regular hook event_data", () => {
+    const e = normalize({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG);
+    const data = JSON.parse(e.event_data);
+    expect(data["_transcript"]).toBeUndefined();
+  });
+});
+
+describe("normalizeContextEvent", () => {
+  const transcript = [
+    { role: "user", timestamp: "2026-01-01T00:00:00.000Z", content: [{ type: "text", text: "Hello" }] },
+    { role: "assistant", timestamp: "2026-01-01T00:00:01.000Z", content: [{ type: "text", text: "Hi" }] },
+  ];
+
+  it("produces hook_name 'prompt_context' for UserPromptSubmit trigger", () => {
+    const e = normalizeContextEvent(
+      { hook_event_name: "UserPromptSubmit", session_id: "s1" },
+      BASE_CONFIG, "prompt_context", transcript,
+    );
+    expect(e.hook_name).toBe("prompt_context");
+  });
+
+  it("produces hook_name 'llm_context' for Stop trigger", () => {
+    const e = normalizeContextEvent(
+      { hook_event_name: "Stop", session_id: "s1" },
+      BASE_CONFIG, "llm_context", transcript,
+    );
+    expect(e.hook_name).toBe("llm_context");
+  });
+
+  it("carries session_id from triggering input", () => {
+    const e = normalizeContextEvent(
+      { hook_event_name: "Stop", session_id: "sess-xyz" },
+      BASE_CONFIG, "llm_context", transcript,
+    );
+    expect(e.session_id).toBe("sess-xyz");
+  });
+
+  it("sets run_id to session_id, tool_name/model/provider to empty strings", () => {
+    const e = normalizeContextEvent(
+      { hook_event_name: "Stop", session_id: "s1" },
+      BASE_CONFIG, "llm_context", transcript,
+    );
+    expect(e.run_id).toBe("s1");
+    expect(e.tool_name).toBe("");
+    expect(e.model).toBe("");
+    expect(e.provider).toBe("");
+  });
+
+  it("embeds messages array and message_count in event_data", () => {
+    const e = normalizeContextEvent(
+      { hook_event_name: "Stop", session_id: "s1" },
+      BASE_CONFIG, "llm_context", transcript,
+    );
+    const data = JSON.parse(e.event_data);
+    expect(data["message_count"]).toBe(2);
+    expect(data["messages"]).toEqual(transcript);
+  });
+
+  it("sets agent_type to 'claudecode'", () => {
+    const e = normalizeContextEvent(
+      { hook_event_name: "Stop", session_id: "s1" },
+      BASE_CONFIG, "llm_context", transcript,
+    );
+    expect(e.agent_type).toBe("claudecode");
+  });
+
+  it("sets hook_decision to 'observe'", () => {
+    const e = normalizeContextEvent(
+      { hook_event_name: "Stop", session_id: "s1" },
+      BASE_CONFIG, "llm_context", transcript,
+    );
+    expect(e.hook_decision).toBe("observe");
   });
 });

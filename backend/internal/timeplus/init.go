@@ -31,6 +31,12 @@ func Init(cfg *config.TimeplusConfig, catalogEntries []catalog.Entry) error {
 	if err := createAgentShieldStreams(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating agentshield streams: %w", err)
 	}
+	if err := createCIMStream(ctx, conn); err != nil {
+		return fmt.Errorf("timeplus init: creating CIM stream: %w", err)
+	}
+	if err := createCIMMVs(ctx, conn); err != nil {
+		return fmt.Errorf("timeplus init: creating CIM MVs: %w", err)
+	}
 	if err := createSecurityStreams(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating security streams: %w", err)
 	}
@@ -164,6 +170,17 @@ func createOTelInput(ctx context.Context, conn proton.Conn) error {
 
 func createAgentShieldStreams(ctx context.Context, conn proton.Conn) error {
 	return execIfNotExists(ctx, conn, "stream", "agentshield_hook_events", ddlAgentShieldHookEvents)
+}
+
+func createCIMStream(ctx context.Context, conn proton.Conn) error {
+	return execIfNotExists(ctx, conn, "stream", "agentshield_cim_event", ddlCIMEvent)
+}
+
+func createCIMMVs(ctx context.Context, conn proton.Conn) error {
+	if err := execIfNotExists(ctx, conn, "view", "mv_cim_claudecode", ddlCIMClaudeCodeMV); err != nil {
+		return err
+	}
+	return execIfNotExists(ctx, conn, "view", "mv_cim_openclaw", ddlCIMOpenClawMV)
 }
 
 func createSecurityStreams(ctx context.Context, conn proton.Conn) error {
@@ -557,6 +574,121 @@ CREATE STREAM agentshield_rules
   hook_sources       string,
   updated_at         datetime64(3)
 )`
+
+const ddlCIMEvent = `
+CREATE STREAM agentshield_cim_event
+(
+  event_time        datetime64(3),
+  event_type        low_cardinality(string),
+  agent_type        low_cardinality(string),
+  agent_id          string,
+  deployment_id     low_cardinality(string),
+  session_id        string,
+  run_id            string,
+  provider          low_cardinality(string),
+  model             low_cardinality(string),
+  tool_name         string,
+  tool_input        string,
+  tool_result       string,
+  tool_success      bool,
+  tool_duration_ms  int64,
+  user_message      string,
+  assistant_message string,
+  hook_decision     low_cardinality(string),
+  block_reason      string,
+  raw_hook_name     low_cardinality(string),
+  raw_event_data    string
+)`
+
+const ddlCIMClaudeCodeMV = `
+CREATE MATERIALIZED VIEW mv_cim_claudecode
+INTO agentshield_cim_event AS
+SELECT
+  event_time,
+  multi_if(
+    hook_name = 'session_start',      'session_start',
+    hook_name = 'subagent_spawning',  'session_start',
+    hook_name = 'user_prompt_submit', 'user_input',
+    hook_name = 'llm_output',         'llm_response',
+    hook_name = 'before_tool_call',   'tool_invoke',
+    hook_name = 'after_tool_call',    'tool_complete',
+    hook_name = 'prompt_context',     'prompt_context',
+    hook_name = 'llm_context',        'llm_context',
+    'other'
+  )                                                                AS event_type,
+  agent_type,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  ''                                                               AS provider,
+  if(model != '', model, json_value(event_data, '$.model'))       AS model,
+  if(tool_name != '', tool_name,
+     json_value(event_data, '$.tool_name'))                       AS tool_name,
+  json_query(event_data, '$.tool_input')                          AS tool_input,
+  json_query(event_data, '$.tool_response')                       AS tool_result,
+  json_value(event_data, '$.tool_response.interrupted') != 'true' AS tool_success,
+  0                                                               AS tool_duration_ms,
+  json_value(event_data, '$.prompt')                              AS user_message,
+  json_value(event_data, '$.last_assistant_message')              AS assistant_message,
+  hook_decision,
+  block_reason,
+  hook_name                                                       AS raw_hook_name,
+  event_data                                                      AS raw_event_data
+FROM agentshield_hook_events
+WHERE agent_type = 'claudecode'
+  AND hook_name IN (
+    'session_start', 'subagent_spawning',
+    'user_prompt_submit',
+    'before_tool_call', 'after_tool_call',
+    'llm_output',
+    'prompt_context', 'llm_context'
+  )`
+
+const ddlCIMOpenClawMV = `
+CREATE MATERIALIZED VIEW mv_cim_openclaw
+INTO agentshield_cim_event AS
+SELECT
+  event_time,
+  multi_if(
+    hook_name = 'session_start',    'session_start',
+    hook_name = 'session_end',      'session_end',
+    hook_name = 'message_received', 'user_input',
+    hook_name = 'llm_input',        'llm_request',
+    hook_name = 'llm_output',       'llm_response',
+    hook_name = 'before_tool_call', 'tool_invoke',
+    hook_name = 'after_tool_call',  'tool_complete',
+    'other'
+  )                                                                        AS event_type,
+  agent_type,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  if(provider != '', provider,
+     json_value(event_data, '$.provider'))                                 AS provider,
+  if(model != '', model,
+     json_value(event_data, '$.model'))                                    AS model,
+  if(tool_name != '', tool_name,
+     json_value(event_data, '$.toolName'))                                 AS tool_name,
+  json_query(event_data, '$.params')                                       AS tool_input,
+  json_query(event_data, '$.result')                                       AS tool_result,
+  json_value(event_data, '$.error') = ''                                   AS tool_success,
+  json_extract_int(event_data, 'durationMs')                               AS tool_duration_ms,
+  json_value(event_data, '$.content')                                      AS user_message,
+  json_value(event_data, '$.assistantTexts[0]')                            AS assistant_message,
+  hook_decision,
+  block_reason,
+  hook_name                                                                AS raw_hook_name,
+  event_data                                                               AS raw_event_data
+FROM agentshield_hook_events
+WHERE agent_type = 'openclaw'
+  AND hook_name IN (
+    'session_start', 'session_end',
+    'message_received',
+    'llm_input', 'llm_output',
+    'before_tool_call', 'after_tool_call'
+  )`
 
 const ddlPricingStream = `
 CREATE MUTABLE STREAM IF NOT EXISTS agentshield_pricing

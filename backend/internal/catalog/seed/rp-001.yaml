@@ -5,7 +5,7 @@ description: "Detects direct and indirect prompt injection attacks, jailbreak at
 severity: critical
 category: prompt_injection
 fp_rate: medium
-hook_sources: llm_input
+hook_sources: "user_input,llm_request"
 required_telemetry: ""
 author: "Timeplus"
 tags:
@@ -21,18 +21,18 @@ query_sql: |
     deployment_id,
     session_id,
     run_id,
-    hook_name,
-    ''                        AS tool_name,
-    concat('Potential prompt injection in ', hook_name, ' from agent ', agent_id) AS message,
-    event_data
-  FROM agentshield_hook_events
-  WHERE hook_name = 'llm_input'
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Potential prompt injection in ', raw_hook_name, ' from agent ', agent_id) AS message,
+    raw_event_data            AS event_data
+  FROM agentshield_cim_event
+  WHERE event_type IN ('user_input', 'llm_request')
     AND (
-         lower(event_data) LIKE '%ignore previous instructions%'
-      OR lower(event_data) LIKE '%ignore all previous%'
-      OR lower(event_data) LIKE '%jailbreak%'
-      OR lower(event_data) LIKE '%disregard your%'
-      OR lower(event_data) LIKE '%you are now a%'
-      OR lower(event_data) LIKE '%forget everything%'
-      OR lower(event_data) LIKE '%new instructions:%'
+         lower(user_message) LIKE '%ignore previous instructions%'
+      OR lower(user_message) LIKE '%ignore all previous%'
+      OR lower(user_message) LIKE '%jailbreak%'
+      OR lower(user_message) LIKE '%disregard your%'
+      OR lower(user_message) LIKE '%you are now a%'
+      OR lower(user_message) LIKE '%forget everything%'
+      OR lower(user_message) LIKE '%new instructions:%'
     )

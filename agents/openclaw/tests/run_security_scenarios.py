@@ -198,11 +198,11 @@ def scenario_7(model: str | None):
 
     # Verify the MV produced a detection event
     detection_rows = tpq(f"""
-        SELECT event_time, rule_id, hook_name, message
+        SELECT detected_at, rule_id, hook_name, message
         FROM table(agentshield_security_events)
         WHERE rule_id = 'rp-001'
-          AND event_time >= '{t_start}'
-        ORDER BY event_time DESC
+          AND detected_at >= '{t_start}'
+        ORDER BY detected_at DESC
     """)
 
     results = [
@@ -215,7 +215,7 @@ def scenario_7(model: str | None):
     ]
     if detection_rows:
         print()
-        print_table(detection_rows, ["event_time", "rule_id", "hook_name", "message"])
+        print_table(detection_rows, ["detected_at", "rule_id", "hook_name", "message"])
     return all(results)
 
 
@@ -262,11 +262,11 @@ def scenario_8(model: str | None):
     """)
 
     detection_rows = tpq(f"""
-        SELECT event_time, rule_id, hook_name, message
+        SELECT detected_at, rule_id, hook_name, message
         FROM table(agentshield_security_events)
         WHERE rule_id = 'rp-002'
-          AND event_time >= '{t_start}'
-        ORDER BY event_time DESC
+          AND detected_at >= '{t_start}'
+        ORDER BY detected_at DESC
     """)
 
     # Show which DLP patterns appeared in the reply for debugging
@@ -284,7 +284,7 @@ def scenario_8(model: str | None):
     ]
     if detection_rows:
         print()
-        print_table(detection_rows, ["event_time", "rule_id", "hook_name", "message"])
+        print_table(detection_rows, ["detected_at", "rule_id", "hook_name", "message"])
     return all(results)
 
 
@@ -324,11 +324,11 @@ def scenario_9(model: str | None):
     """)
 
     detection_rows = tpq(f"""
-        SELECT event_time, rule_id, hook_name, tool_name, message
+        SELECT detected_at, rule_id, hook_name, tool_name, message
         FROM table(agentshield_security_events)
         WHERE rule_id = 'rp-003'
-          AND event_time >= '{t_start}'
-        ORDER BY event_time DESC
+          AND detected_at >= '{t_start}'
+        ORDER BY detected_at DESC
     """)
 
     results = [
@@ -342,7 +342,7 @@ def scenario_9(model: str | None):
     ]
     if detection_rows:
         print()
-        print_table(detection_rows, ["event_time", "rule_id", "hook_name", "tool_name", "message"])
+        print_table(detection_rows, ["detected_at", "rule_id", "hook_name", "tool_name", "message"])
     return all(results)
 
 
@@ -379,11 +379,11 @@ def scenario_10(model: str | None):
     """)
 
     detection_rows = tpq(f"""
-        SELECT event_time, rule_id, hook_name, message
+        SELECT detected_at, rule_id, hook_name, message
         FROM table(agentshield_security_events)
         WHERE rule_id = 'rp-004'
-          AND event_time >= '{t_start}'
-        ORDER BY event_time DESC
+          AND detected_at >= '{t_start}'
+        ORDER BY detected_at DESC
     """)
 
     results = [
@@ -396,7 +396,7 @@ def scenario_10(model: str | None):
     ]
     if detection_rows:
         print()
-        print_table(detection_rows, ["event_time", "rule_id", "hook_name", "message"])
+        print_table(detection_rows, ["detected_at", "rule_id", "hook_name", "message"])
     return all(results)
 
 
