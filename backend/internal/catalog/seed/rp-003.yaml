@@ -31,7 +31,7 @@ query_sql: |
          lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
       OR lower(tool_input) LIKE '%sudo %'
       OR lower(tool_input) LIKE '%rm -rf%'
-      OR lower(tool_input) LIKE '%chmod %'
+      OR lower(tool_input) LIKE '%chmod%'
       OR lower(tool_input) LIKE '%/etc/passwd%'
       OR lower(tool_input) LIKE '%/etc/shadow%'
     )
