@@ -29,9 +29,9 @@ query_sql: |
   WHERE event_type = 'tool_invoke'
     AND (
          lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
-      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%sudo %'
-      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%rm -rf%'
-      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%chmod %'
-      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%/etc/passwd%'
-      OR lower(concat(tool_input, ' ', raw_event_data)) LIKE '%/etc/shadow%'
+      OR lower(tool_input) LIKE '%sudo %'
+      OR lower(tool_input) LIKE '%rm -rf%'
+      OR lower(tool_input) LIKE '%chmod %'
+      OR lower(tool_input) LIKE '%/etc/passwd%'
+      OR lower(tool_input) LIKE '%/etc/shadow%'
     )
