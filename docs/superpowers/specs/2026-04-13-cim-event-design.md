@@ -100,9 +100,9 @@ Note: `tool_result_persist` (OpenClaw) is dropped — it duplicates `after_tool_
 |---|---|
 | `event_type` | Normalized event category — rules filter on this instead of `hook_name` |
 | `agent_type` | `claudecode` or `openclaw` |
-| `tool_name` | Normalized from `tool_name` (CC) or `$.toolName` (OC) |
-| `tool_input` | JSON string: `$.tool_input` (CC) or `$.params` (OC) |
-| `tool_result` | Text output: `$.tool_response.stdout` (CC) or `$.result` (OC) |
+| `tool_name` | Normalized from `tool_name` col (CC) or `json_value(event_data, '$.toolName')` (OC) |
+| `tool_input` | JSON object string: `json_query(event_data, '$.tool_input')` (CC) or `json_query(event_data, '$.params')` (OC) |
+| `tool_result` | `json_value(event_data, '$.tool_response.stdout')` (CC) or `json_query(event_data, '$.result')` (OC) |
 | `tool_success` | `true` unless interrupted (CC) or `$.error != ''` (OC) |
 | `tool_duration_ms` | OpenClaw provides `$.durationMs`; Claude Code defaults to `0` |
 | `user_message` | From `$.prompt` (CC) or `$.content` (OC) |
@@ -130,26 +130,26 @@ SELECT
     hook_name = 'before_tool_call',   'tool_invoke',
     hook_name = 'after_tool_call',    'tool_complete',
     'other'
-  )                                                            AS event_type,
+  )                                                                AS event_type,
   agent_type,
   agent_id,
   deployment_id,
   session_id,
   run_id,
-  ''                                                           AS provider,
-  if(model != '', model, JSON_VALUE(event_data, '$.model'))   AS model,
+  ''                                                               AS provider,
+  if(model != '', model, json_value(event_data, '$.model'))       AS model,
   if(tool_name != '', tool_name,
-     JSON_VALUE(event_data, '$.tool_name'))                   AS tool_name,
-  JSON_VALUE(event_data, '$.tool_input')                      AS tool_input,
-  JSON_VALUE(event_data, '$.tool_response.stdout')            AS tool_result,
-  JSON_VALUE(event_data, '$.tool_response.interrupted') != 'true' AS tool_success,
-  0                                                           AS tool_duration_ms,
-  JSON_VALUE(event_data, '$.prompt')                          AS user_message,
-  JSON_VALUE(event_data, '$.last_assistant_message')          AS assistant_message,
+     json_value(event_data, '$.tool_name'))                       AS tool_name,
+  json_query(event_data, '$.tool_input')                          AS tool_input,
+  json_value(event_data, '$.tool_response.stdout')                AS tool_result,
+  json_value(event_data, '$.tool_response.interrupted') != 'true' AS tool_success,
+  0                                                               AS tool_duration_ms,
+  json_value(event_data, '$.prompt')                              AS user_message,
+  json_value(event_data, '$.last_assistant_message')              AS assistant_message,
   hook_decision,
   block_reason,
-  hook_name                                                   AS raw_hook_name,
-  event_data                                                  AS raw_event_data
+  hook_name                                                       AS raw_hook_name,
+  event_data                                                      AS raw_event_data
 FROM agentshield_hook_events
 WHERE agent_type = 'claudecode'
   AND hook_name IN (
@@ -187,18 +187,18 @@ SELECT
   session_id,
   run_id,
   if(provider != '', provider,
-     JSON_VALUE(event_data, '$.provider'))                                 AS provider,
+     json_value(event_data, '$.provider'))                                 AS provider,
   if(model != '', model,
-     JSON_VALUE(event_data, '$.model'))                                    AS model,
+     json_value(event_data, '$.model'))                                    AS model,
   if(tool_name != '', tool_name,
-     JSON_VALUE(event_data, '$.toolName'))                                 AS tool_name,
-  JSON_VALUE(event_data, '$.params')                                       AS tool_input,
-  JSON_VALUE(event_data, '$.result')                                       AS tool_result,
-  JSON_VALUE(event_data, '$.error') = ''                                   AS tool_success,
-  to_int64(if(JSON_VALUE(event_data, '$.durationMs') != '',
-              JSON_VALUE(event_data, '$.durationMs'), '0'))                AS tool_duration_ms,
-  JSON_VALUE(event_data, '$.content')                                      AS user_message,
-  JSON_VALUE(event_data, '$.assistantTexts[0]')                            AS assistant_message,
+     json_value(event_data, '$.toolName'))                                 AS tool_name,
+  json_query(event_data, '$.params')                                       AS tool_input,
+  json_query(event_data, '$.result')                                       AS tool_result,
+  json_value(event_data, '$.error') = ''                                   AS tool_success,
+  to_int64(if(json_value(event_data, '$.durationMs') != '',
+              json_value(event_data, '$.durationMs'), '0'))                AS tool_duration_ms,
+  json_value(event_data, '$.content')                                      AS user_message,
+  json_value(event_data, '$.assistantTexts[0]')                            AS assistant_message,
   hook_decision,
   block_reason,
   hook_name                                                                AS raw_hook_name,
