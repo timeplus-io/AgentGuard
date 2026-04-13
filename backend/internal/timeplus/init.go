@@ -624,7 +624,7 @@ SELECT
   if(tool_name != '', tool_name,
      json_value(event_data, '$.tool_name'))                       AS tool_name,
   json_query(event_data, '$.tool_input')                          AS tool_input,
-  json_value(event_data, '$.tool_response.stdout')                AS tool_result,
+  json_query(event_data, '$.tool_response')                       AS tool_result,
   json_value(event_data, '$.tool_response.interrupted') != 'true' AS tool_success,
   0                                                               AS tool_duration_ms,
   json_value(event_data, '$.prompt')                              AS user_message,
