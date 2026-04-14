@@ -111,7 +111,7 @@ timeplus:
 | Variable | Default | Description |
 |---|---|---|
 | `SERVER_PORT` | `8080` | HTTP port the server listens on |
-| `AGENTGUARD_URL` | `http://localhost:8080` | URL Proton uses to call back AgentGuard for alert webhooks — set to the externally-reachable address (e.g. `http://agentguard:8080` in Docker) |
+| `AGENTGUARD_URL` | `http://localhost:8080` | AgentGuard's own base URL — see [Alert UDF webhook](#alert-udf-webhook) below |
 | `TIMEPLUS_HOST` | `localhost` | Timeplus hostname |
 | `TIMEPLUS_PORT` | `3218` | HTTP query port |
 | `TIMEPLUS_NATIVE_PORT` | `8463` | native TCP port (used for streaming inserts) |
@@ -126,13 +126,31 @@ timeplus:
 Flags:
   --config string                config file path
   --port int                     server port (default 8080)
-  --agentguard-url string        URL Proton uses to call back AgentGuard for alert webhooks (default "http://localhost:8080")
+  --agentguard-url string        AgentGuard base URL used by the alert UDF (default "http://localhost:8080")
   --timeplus-host string         Timeplus host (default "localhost")
   --timeplus-port int            Timeplus HTTP port (default 3218)
   --timeplus-native-port int     Timeplus native TCP port (default 8463)
   --timeplus-user string         Timeplus username (default "default")
   --timeplus-password string     Timeplus password
 ```
+
+### Alert UDF webhook
+
+When a security rule fires, Timeplus executes a Python UDF (`notify_agentguard_udf`) that HTTP-POSTs the alert to AgentGuard at:
+
+```
+<AGENTGUARD_URL>/api/alerts/webhook
+```
+
+This call goes from **Timeplus → AgentGuard**, so it must use the address where AgentGuard is reachable _from Timeplus's perspective_, which differs by deployment:
+
+| Deployment | `AGENTGUARD_URL` |
+|---|---|
+| Local dev (everything on host) | `http://localhost:8080` _(default — no action needed)_ |
+| Docker Compose | `http://agentguard:8080` _(pre-set in `docker-compose.yaml`)_ |
+| Docker, custom host/port | `http://<host-or-ip>:<port>` |
+
+If this URL is wrong, security rules will still detect events and write to the `agentguard_security_events` stream, but no live alerts will appear in the dashboard notification stream.
 
 ---
 
