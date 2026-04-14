@@ -54,7 +54,9 @@ func ListRules(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 
-		if counts, err := queryDetectionCounts(&cfg.Timeplus); err == nil {
+		if counts, err := queryDetectionCounts(&cfg.Timeplus); err != nil {
+			log.Printf("rules: queryDetectionCounts: %v", err)
+		} else {
 			for i := range packs {
 				packs[i].Detections24h = counts[packs[i].ID]
 			}
@@ -192,16 +194,19 @@ GROUP BY rule_id`, id)
 			}
 			if exists {
 				if err := tp.ResumeRuleMV(&cfg.Timeplus, id); err != nil {
-					log.Printf("rules: toggle resume MV %s: %v", id, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV resume failed: %v", err)})
+					return
 				}
 			} else {
 				if err := tp.CreateRuleMV(&cfg.Timeplus, id, current.QuerySQL); err != nil {
-					log.Printf("rules: toggle create MV %s: %v", id, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
+					return
 				}
 			}
 		} else {
 			if err := tp.PauseRuleMV(&cfg.Timeplus, id); err != nil {
-				log.Printf("rules: toggle pause MV %s: %v", id, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV pause failed: %v", err)})
+				return
 			}
 		}
 
@@ -275,11 +280,13 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		if err := tp.DropRuleMV(&cfg.Timeplus, id); err != nil {
-			log.Printf("rules: upgrade drop MV %s: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV drop failed: %v", err)})
+			return
 		}
 		if current.Enabled {
 			if err := tp.CreateRuleMV(&cfg.Timeplus, id, targetSQL); err != nil {
-				log.Printf("rules: upgrade create MV %s: %v", id, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
+				return
 			}
 		}
 
@@ -334,7 +341,8 @@ GROUP BY rule_id`, escapeSQL(id))
 		}
 
 		if err := tp.DropRuleMV(&cfg.Timeplus, id); err != nil {
-			log.Printf("rules: uninstall drop MV %s: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV drop failed: %v", err)})
+			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{"deleted": true})
@@ -346,7 +354,8 @@ func ListCatalog(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		installed, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
-			log.Printf("rules: catalog query failed: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("catalog query failed: %v", err)})
+			return
 		}
 		installedMap := make(map[string]models.RulePack, len(installed))
 		for _, p := range installed {
@@ -448,7 +457,8 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 		if err := tp.CreateRuleMV(&cfg.Timeplus, id, entry.QuerySQL); err != nil {
-			log.Printf("rules: install create MV %s: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
+			return
 		}
 		c.JSON(http.StatusOK, gin.H{"installed": true, "rule_id": id})
 	}
@@ -664,7 +674,8 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		if err := tp.CreateRuleMV(&cfg.Timeplus, ruleID, finalSQL); err != nil {
-			log.Printf("rules: create custom MV %s: %v", ruleID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
+			return
 		}
 
 		c.JSON(http.StatusCreated, models.RulePack{
@@ -745,7 +756,11 @@ func queryRecentDetections(cfg *config.TimeplusConfig) []models.SecurityEvent {
 		ORDER BY detected_at DESC
 		LIMIT 10
 	`)
-	if err != nil || len(rows) == 0 {
+	if err != nil {
+		log.Printf("rules: queryRecentDetections: %v", err)
+		return nil
+	}
+	if len(rows) == 0 {
 		return nil
 	}
 	return rowsToSecurityEvents(rows)
