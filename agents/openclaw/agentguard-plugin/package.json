@@ -16,7 +16,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "openclaw.plugin.json"
   ],
   "engines": {
     "node": ">=18.0.0"
