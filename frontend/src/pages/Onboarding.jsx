@@ -458,12 +458,9 @@ export default function Onboarding() {
               {step === 2 && selectedAgent === 'openclaw' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-white tracking-tight">
-                      OpenTelemetry Config
-                      <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#37333f] text-zinc-500 align-middle">Optional</span>
-                    </h2>
+                    <h2 className="text-xl font-semibold text-white tracking-tight">OpenTelemetry Config</h2>
                     <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
-                      Enable the built-in OTel diagnostics plugin to export traces, metrics, and logs from OpenClaw to Timeplus. Recommended for full observability, but you can skip this step.
+                      Enable the built-in OTel diagnostics plugin to export traces, metrics, and logs from OpenClaw to Timeplus.
                     </p>
                   </div>
 
@@ -490,12 +487,9 @@ export default function Onboarding() {
               {step === 2 && selectedAgent === 'claude-code' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-white tracking-tight">
-                      OpenTelemetry Config
-                      <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#37333f] text-zinc-500 align-middle">Optional</span>
-                    </h2>
+                    <h2 className="text-xl font-semibold text-white tracking-tight">OpenTelemetry Config</h2>
                     <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
-                      Enable Claude Code's built-in OTel telemetry to export LLM metrics and logs to Timeplus. This unlocks token usage, cost, and latency data. You can skip this step — hook events will still be captured.
+                      Enable Claude Code's built-in OTel telemetry to export LLM metrics and logs to Timeplus. This unlocks token usage, cost, and latency data.
                     </p>
                   </div>
 
@@ -587,14 +581,6 @@ export default function Onboarding() {
                 Back
               </button>
               <div className="flex items-center gap-3">
-                {step === 2 && (
-                  <button
-                    onClick={() => setStep(3)}
-                    className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-[#ffb0cf] transition-colors"
-                  >
-                    Skip
-                  </button>
-                )}
                 {step < 3 ? (
                   <button
                     onClick={handleNext}
