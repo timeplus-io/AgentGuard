@@ -22,7 +22,7 @@ const defaultSQL = `SELECT
   tool_name,
   concat('Custom rule triggered: ', hook_name)      AS message,
   event_data
-FROM agentshield_hook_events
+FROM agentguard_hook_events
 WHERE 1 = 0 -- replace with your detection condition`
 
 export default function RuleCreate() {
@@ -118,7 +118,7 @@ export default function RuleCreate() {
         <div className="p-6 lg:p-10 flex flex-col gap-6" style={{ height: 'calc(100vh - 64px)' }}>
           <PageHeader
             title="New Custom Rule"
-            subtitle="Write a detection SQL query against agentshield_hook_events."
+            subtitle="Write a detection SQL query against agentguard_hook_events."
             actions={
               <div className="flex items-center gap-3">
                 <button

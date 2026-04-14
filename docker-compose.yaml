@@ -4,7 +4,7 @@ services:
     platform: linux/amd64
     container_name: timeplus
     ports:
-      - "3218:3218"   # HTTP query API (used by AgentShield)
+      - "3218:3218"   # HTTP query API (used by AgentGuard)
       - "8123:8123"   # HTTP query API normal
       - "8463:8463"   # Native TCP protocol
       - "4317:4317"   # OTLP gRPC (OpenClaw telemetry)
@@ -20,9 +20,9 @@ services:
       retries: 10
       start_period: 30s
 
-  agentshield:
+  agentguard:
     build: .
-    container_name: agentshield
+    container_name: agentguard
     ports:
       - "8080:8080"
     environment:

@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/models"
-	"github.com/timeplus/agentshield/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/models"
+	"github.com/timeplus/agentguard/internal/timeplus"
 )
 
 // ListEvents handles GET /api/agents/:id/events
@@ -88,7 +88,7 @@ func ListEvents(cfg *config.Config) gin.HandlerFunc {
 		// Count total matching rows
 		countSQL := fmt.Sprintf(`
 SELECT count() AS total
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE %s`, whereClause)
 
 		countRows, err := timeplus.Query(&cfg.Timeplus, countSQL)
@@ -124,7 +124,7 @@ SELECT
     hook_decision,
     block_reason,
     event_data
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE %s
 ORDER BY event_time ASC
 LIMIT %d OFFSET %d`,

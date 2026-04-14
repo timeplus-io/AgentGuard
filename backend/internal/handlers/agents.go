@@ -7,9 +7,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/models"
-	"github.com/timeplus/agentshield/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/models"
+	"github.com/timeplus/agentguard/internal/timeplus"
 )
 
 var idPartRe = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -28,7 +28,7 @@ FROM (
            count_distinct(if(run_id != '', run_id, null))    AS run_count,
            count_if(hook_name = 'before_tool_call')          AS tool_call_count,
            if(count_if(hook_name = 'session_end') = 0, 1, 0) AS is_active
-    FROM table(agentshield_hook_events)
+    FROM table(agentguard_hook_events)
     WHERE session_id != ''
     GROUP BY agent_id, deployment_id, session_id
     HAVING any_if(session_key, session_key != '') NOT LIKE 'temp:%%'
@@ -70,7 +70,7 @@ FROM (
            sum(if(hook_name = 'llm_output',
                   to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'totalTokens')),
                   0))                                                            AS total_tokens
-    FROM table(agentshield_hook_events)
+    FROM table(agentguard_hook_events)
     WHERE agent_id != ''
     GROUP BY agent_id, deployment_id
 ) AS agents
@@ -140,7 +140,7 @@ func GetAgent(cfg *config.Config) gin.HandlerFunc {
 SELECT agent_id, deployment_id,
        any(deployment_name) AS deployment_name,
        max(event_time)      AS last_seen
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
 GROUP BY agent_id, deployment_id
@@ -166,7 +166,7 @@ SELECT event_count,
        coalesce(active_session_count, 0) AS active_session_count
 FROM (
     SELECT count() AS event_count
-    FROM table(agentshield_hook_events)
+    FROM table(agentguard_hook_events)
     WHERE deployment_id = '%s'
       AND agent_id      = '%s'%s
 ) AS ev
@@ -180,7 +180,7 @@ LEFT JOIN (
                count_distinct(if(run_id != '', run_id, null))    AS run_count,
                count_if(hook_name = 'before_tool_call')          AS tool_call_count,
                if(count_if(hook_name = 'session_end') = 0, 1, 0) AS is_active
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE deployment_id = '%s'
           AND agent_id      = '%s'
           AND session_id    != ''%s

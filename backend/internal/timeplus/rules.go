@@ -5,7 +5,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/timeplus/agentshield/internal/config"
+	"github.com/timeplus/agentguard/internal/config"
 )
 
 // MVName returns the materialized view name for a rule ID.
@@ -15,11 +15,11 @@ func MVName(ruleID string) string {
 }
 
 // CreateRuleMV creates a new materialized view for the rule.
-// querySQLBody is the full SELECT ... FROM agentshield_hook_events WHERE ... body.
+// querySQLBody is the full SELECT ... FROM agentguard_hook_events WHERE ... body.
 func CreateRuleMV(cfg *config.TimeplusConfig, ruleID, querySQLBody string) error {
 	mvName := MVName(ruleID)
 	ddl := fmt.Sprintf(
-		"CREATE MATERIALIZED VIEW %s INTO agentshield_security_events AS %s",
+		"CREATE MATERIALIZED VIEW %s INTO agentguard_security_events AS %s",
 		mvName, querySQLBody,
 	)
 	if err := ExecHTTP(cfg, ddl); err != nil {

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AgentShield OpenClaw Test Runner
+AgentGuard OpenClaw Test Runner
 
 Sends messages to OpenClaw via /v1/chat/completions, then queries Timeplus to
 verify that hook events, OTel traces, and OTel metrics were collected.
@@ -54,7 +54,7 @@ def _load_proton_config() -> tuple[str, str, str]:
     config_path = Path(__file__).parent.parent / ".openclaw" / "openclaw.json"
     with config_path.open() as f:
         data = json.load(f)
-    plugin_cfg = data["plugins"]["entries"]["agentshield"]["config"]
+    plugin_cfg = data["plugins"]["entries"]["agentguard"]["config"]
     url = plugin_cfg.get("timeplusUrl", "http://localhost:3218")
     # timeplusUrl uses host.docker.internal inside Docker — remap to localhost for host-side Python
     url = url.replace("host.docker.internal", "localhost")
@@ -66,7 +66,7 @@ def _load_proton_config() -> tuple[str, str, str]:
 OPENCLAW_TOKEN = _load_openclaw_token()
 TIMEPLUS_URL, TIMEPLUS_USER, TIMEPLUS_PASSWORD = _load_proton_config()
 
-FLUSH_WAIT_S = 5       # seconds to wait for agentshield batch flush
+FLUSH_WAIT_S = 5       # seconds to wait for agentguard batch flush
 REPLY_TIMEOUT_S = 120  # seconds to wait for OpenClaw to reply
 
 # ---------------------------------------------------------------------------
@@ -171,7 +171,7 @@ def print_table(rows: list[dict], cols: list[str] | None = None, limit: int = 10
 
 def scenario_1(model: str | None):
     section("Scenario 1 — Basic Conversation (Baseline)")
-    user_id = "agentshield-test-s1"
+    user_id = "agentguard-test-s1"
     t_start = now_iso()
 
     print(f"  [{INFO}] Sending message...")
@@ -186,7 +186,7 @@ def scenario_1(model: str | None):
 
     rows = tpq(f"""
         SELECT hook_name, count() as cnt
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE event_time >= '{t_start}'
         GROUP BY hook_name
         ORDER BY cnt DESC
@@ -224,7 +224,7 @@ def scenario_1(model: str | None):
 
 def scenario_2(model: str | None):
     section("Scenario 2 — Multi-Turn with Tool Calls (File System)")
-    user_id = "agentshield-test-s2"
+    user_id = "agentguard-test-s2"
     t_start = now_iso()
     history = []
 
@@ -236,7 +236,7 @@ def scenario_2(model: str | None):
         return reply
 
     print(f"  [{INFO}] Turn 1: create file")
-    turn('Create a file called agentshield_test.txt in the workspace with the text "Hello from AgentShield". Then read it back and confirm its contents.')
+    turn('Create a file called agentguard_test.txt in the workspace with the text "Hello from AgentGuard". Then read it back and confirm its contents.')
 
     print(f"  [{INFO}] Turn 2: append + read")
     turn("Now append the current UTC date and time as a new line to the same file, then show me the full file contents.")
@@ -246,7 +246,7 @@ def scenario_2(model: str | None):
 
     tool_rows = tpq(f"""
         SELECT hook_name, tool_name, count() as cnt
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE hook_name IN ('before_tool_call','after_tool_call','tool_result_persist')
           AND event_time >= '{t_start}'
         GROUP BY hook_name, tool_name
@@ -254,7 +254,7 @@ def scenario_2(model: str | None):
     """)
 
     llm_rows = tpq(f"""
-        SELECT count() as cnt FROM table(agentshield_hook_events)
+        SELECT count() as cnt FROM table(agentguard_hook_events)
         WHERE hook_name = 'llm_input' AND event_time >= '{t_start}'
     """)
 
@@ -277,7 +277,7 @@ def scenario_2(model: str | None):
 
 def scenario_3(model: str | None):
     section("Scenario 3 — Sub-Agent Spawn Chain")
-    user_id = "agentshield-test-s3"
+    user_id = "agentguard-test-s3"
     t_start = now_iso()
 
     print(f"  [{INFO}] Sending orchestration prompt...")
@@ -300,7 +300,7 @@ def scenario_3(model: str | None):
 
     subagent_rows = tpq(f"""
         SELECT hook_name, count() as cnt
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE hook_name IN ('subagent_spawning','subagent_delivery_target','subagent_spawned','subagent_ended')
           AND event_time >= '{t_start}'
         GROUP BY hook_name
@@ -309,7 +309,7 @@ def scenario_3(model: str | None):
 
     session_rows = tpq(f"""
         SELECT count(DISTINCT session_key) as distinct_sessions
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE event_time >= '{t_start}'
     """)
 
@@ -317,7 +317,7 @@ def scenario_3(model: str | None):
         SELECT
             json_extract_string(event_data, '$._ctx.childSessionKey') AS child_key,
             json_extract_string(event_data, '$._ctx.requesterSessionKey') AS parent_key
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE hook_name = 'subagent_spawning'
           AND event_time >= '{t_start}'
         LIMIT 3
@@ -327,7 +327,7 @@ def scenario_3(model: str | None):
     # Use regex extraction (Proton's JSON path functions require specific syntax).
     child_rows = tpq(
         f"SELECT extract(event_data, '\"childSessionKey\":\"([^\"]+)\"') AS child_key "
-        f"FROM table(agentshield_hook_events) "
+        f"FROM table(agentguard_hook_events) "
         f"WHERE hook_name = 'subagent_spawned' AND event_time >= '{t_start}' LIMIT 3"
     )
 
@@ -367,7 +367,7 @@ def scenario_4(model: str | None):
         [
             "docker", "exec", "openclaw",
             "node", "dist/index.js", "cron", "add",
-            "--name", "agentshield-test-cron",
+            "--name", "agentguard-test-cron",
             "--at", f"{DELAY_MIN}m",
             "--session", "isolated",
             "--message", "Count the files in the workspace directory. Reply with only the integer count.",
@@ -382,13 +382,13 @@ def scenario_4(model: str | None):
     # Isolated cron sessions use session key pattern: agent:<agentId>:cron:<jobId>
     cron_rows = tpq(
         f"SELECT hook_name, session_key, count() as cnt "
-        f"FROM table(agentshield_hook_events) "
+        f"FROM table(agentguard_hook_events) "
         f"WHERE session_key LIKE '%:cron:%' AND event_time >= '{t_start}' "
         f"GROUP BY hook_name, session_key ORDER BY hook_name"
     )
     session_rows = tpq(
         f"SELECT count(DISTINCT session_key) as cron_sessions "
-        f"FROM table(agentshield_hook_events) "
+        f"FROM table(agentguard_hook_events) "
         f"WHERE session_key LIKE '%:cron:%' AND event_time >= '{t_start}'"
     )
 
@@ -418,7 +418,7 @@ def scenario_4(model: str | None):
 
 def scenario_5(model: str | None):
     section("Scenario 5 — Complex Coding Task + Context Compaction")
-    user_id = "agentshield-test-s5"
+    user_id = "agentguard-test-s5"
     t_start = now_iso()
     history = []
 
@@ -448,13 +448,13 @@ def scenario_5(model: str | None):
     time.sleep(FLUSH_WAIT_S)
 
     llm_rows = tpq(f"""
-        SELECT count() as cnt FROM table(agentshield_hook_events)
+        SELECT count() as cnt FROM table(agentguard_hook_events)
         WHERE hook_name = 'llm_input' AND event_time >= '{t_start}'
     """)
 
     tool_rows = tpq(f"""
         SELECT tool_name, count() as cnt
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE hook_name = 'before_tool_call' AND event_time >= '{t_start}'
         GROUP BY tool_name
         ORDER BY cnt DESC
@@ -466,7 +466,7 @@ def scenario_5(model: str | None):
     # overflow inside the gateway process, not from a /compact slash command.
     # They are observable when running long enough to hit the model context limit.
     compact_rows = tpq(
-        f"SELECT hook_name, count() as cnt FROM table(agentshield_hook_events) "
+        f"SELECT hook_name, count() as cnt FROM table(agentguard_hook_events) "
         f"WHERE hook_name IN ('before_compaction','after_compaction') "
         f"AND event_time >= '{t_start}' GROUP BY hook_name"
     )
@@ -516,7 +516,7 @@ def scenario_6(model: str | None):
     print(f"  [{INFO}] Sending message to main agent...")
     reply_main = chat(
         [{"role": "user", "content": "Reply with exactly: 'I am main.'"}],
-        user_id="agentshield-test-s6-main",
+        user_id="agentguard-test-s6-main",
         model_override=model,
         # no model field change — defaults to openclaw/main in chat()
     )
@@ -531,7 +531,7 @@ def scenario_6(model: str | None):
     payload = {
         "model": "openclaw/analyst",
         "messages": [{"role": "user", "content": "Reply with exactly: 'I am analyst.'"}],
-        "user": "agentshield-test-s6-analyst",
+        "user": "agentguard-test-s6-analyst",
     }
     req = urllib.request.Request(
         f"{OPENCLAW_URL}/v1/chat/completions",
@@ -549,7 +549,7 @@ def scenario_6(model: str | None):
     # Verify hook events for both agents are in Timeplus.
     agent_rows = tpq(f"""
         SELECT agent_id, count() as cnt
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE event_time >= '{t_start}'
           AND agent_id != ''
         GROUP BY agent_id
@@ -610,21 +610,21 @@ def preflight():
         print("\nTimeplus is not reachable. Check it is running on port 3218.")
         sys.exit(1)
 
-    # agentshield stream
+    # agentguard stream
     try:
-        rows = tpq("SELECT count() as cnt FROM table(agentshield_hook_events)")
-        check("agentshield_hook_events stream exists",
+        rows = tpq("SELECT count() as cnt FROM table(agentguard_hook_events)")
+        check("agentguard_hook_events stream exists",
               True, f"{rows[0]['cnt']} existing rows")
     except Exception as e:
-        check("agentshield_hook_events stream exists", False, str(e))
-        print("\nStream missing. Start the AgentShield backend to create it.")
+        check("agentguard_hook_events stream exists", False, str(e))
+        print("\nStream missing. Start the AgentGuard backend to create it.")
         sys.exit(1)
 
     print()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AgentShield OpenClaw test runner")
+    parser = argparse.ArgumentParser(description="AgentGuard OpenClaw test runner")
     parser.add_argument("--scenario", type=int, choices=SCENARIOS.keys(),
                         help="Run only this scenario (default: all)")
     parser.add_argument("--model", type=str, default=None,

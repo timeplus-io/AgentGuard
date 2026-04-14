@@ -7,8 +7,8 @@ import (
 	"time"
 
 	proton "github.com/timeplus-io/proton-go-driver/v2"
-	"github.com/timeplus/agentshield/internal/catalog"
-	"github.com/timeplus/agentshield/internal/config"
+	"github.com/timeplus/agentguard/internal/catalog"
+	"github.com/timeplus/agentguard/internal/config"
 )
 
 // Init waits until Timeplus is reachable, then ensures all streams, MVs, and
@@ -28,14 +28,20 @@ func Init(cfg *config.TimeplusConfig, catalogEntries []catalog.Entry) error {
 	if err := createOTelInput(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating otel input: %w", err)
 	}
-	if err := createAgentShieldStreams(ctx, conn); err != nil {
-		return fmt.Errorf("timeplus init: creating agentshield streams: %w", err)
+	if err := createAgentGuardStreams(ctx, conn); err != nil {
+		return fmt.Errorf("timeplus init: creating agentguard streams: %w", err)
 	}
 	if err := createCIMStream(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating CIM stream: %w", err)
 	}
 	if err := createCIMMVs(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating CIM MVs: %w", err)
+	}
+	if err := createCIMMetricsStream(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning creating CIM metrics stream: %v", err)
+	}
+	if err := createCIMMetricsMVs(ctx, conn); err != nil {
+		log.Printf("timeplus init: warning creating CIM metrics MVs: %v", err)
 	}
 	if err := createSecurityStreams(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating security streams: %w", err)
@@ -168,29 +174,80 @@ func createOTelInput(ctx context.Context, conn proton.Conn) error {
 	return execIfNotExists(ctx, conn, "input", "openclaw_otel_input", ddlOTelInput)
 }
 
-func createAgentShieldStreams(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "stream", "agentshield_hook_events", ddlAgentShieldHookEvents)
+func createAgentGuardStreams(ctx context.Context, conn proton.Conn) error {
+	return execIfNotExists(ctx, conn, "stream", "agentguard_hook_events", ddlAgentGuardHookEvents)
 }
 
 func createCIMStream(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "stream", "agentshield_cim_event", ddlCIMEvent)
+	return execIfNotExists(ctx, conn, "stream", "agentguard_cim_event", ddlCIMEvent)
 }
 
 func createCIMMVs(ctx context.Context, conn proton.Conn) error {
-	if err := execIfNotExists(ctx, conn, "view", "mv_cim_claudecode", ddlCIMClaudeCodeMV); err != nil {
+	// Drop and recreate CIM MVs on every startup so DDL changes (e.g. field
+	// extraction fixes) take effect without manual intervention. The gap between
+	// DROP and CREATE during startup is harmless — no agent traffic is flowing.
+	for _, name := range []string{"mv_cim_claudecode", "mv_cim_openclaw"} {
+		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", name)); err != nil {
+			log.Printf("timeplus: warning dropping %s for recreation: %v", name, err)
+		}
+	}
+	if err := conn.Exec(ctx, ddlCIMClaudeCodeMV); err != nil {
+		return fmt.Errorf("creating view %q: %w", "mv_cim_claudecode", err)
+	}
+	if err := conn.Exec(ctx, ddlCIMOpenClawMV); err != nil {
+		return fmt.Errorf("creating view %q: %w", "mv_cim_openclaw", err)
+	}
+	return nil
+}
+
+func createCIMMetricsStream(ctx context.Context, conn proton.Conn) error {
+	if err := execIfNotExists(ctx, conn, "stream", "agentguard_session_agents", ddlSessionAgentsStream); err != nil {
 		return err
 	}
-	return execIfNotExists(ctx, conn, "view", "mv_cim_openclaw", ddlCIMOpenClawMV)
+	if err := execIfNotExists(ctx, conn, "stream", "agentguard_run_latency", ddlRunLatencyStream); err != nil {
+		return err
+	}
+	return execIfNotExists(ctx, conn, "stream", "agentguard_cim_metrics", ddlCIMMetrics)
+}
+
+func createCIMMetricsMVs(ctx context.Context, conn proton.Conn) error {
+	mvs := []struct {
+		name string
+		ddl  string
+	}{
+		// Lookup feeders must come first — the metrics MVs JOIN against these
+		// mutable streams, so the streams must be populated before the joins run.
+		{"mv_session_agents", ddlSessionAgentsMV},
+		{"mv_run_latency", ddlRunLatencyMV},
+		{"mv_cim_metrics_openclaw_llm", ddlCIMMetricsOpenClawLlmMV},
+		{"mv_cim_metrics_openclaw_tools", ddlCIMMetricsOpenClawToolsMV},
+		{"mv_cim_metrics_claudecode_otel", ddlCIMMetricsClaudeCodeOtelMV},
+		{"mv_cim_metrics_claudecode_tools", ddlCIMMetricsClaudeCodeToolsMV},
+	}
+	// Drop and recreate all CIM metrics MVs on every startup so DDL fixes take
+	// effect without manual intervention. The startup gap is harmless.
+	for _, mv := range mvs {
+		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", mv.name)); err != nil {
+			log.Printf("timeplus: warning dropping %s for recreation: %v", mv.name, err)
+		}
+	}
+	for _, mv := range mvs {
+		if err := conn.Exec(ctx, mv.ddl); err != nil {
+			return fmt.Errorf("creating view %q: %w", mv.name, err)
+		}
+		log.Printf("timeplus: view %q created", mv.name)
+	}
+	return nil
 }
 
 func createSecurityStreams(ctx context.Context, conn proton.Conn) error {
-	if err := execIfNotExists(ctx, conn, "stream", "agentshield_security_events", ddlSecurityEvents); err != nil {
+	if err := execIfNotExists(ctx, conn, "stream", "agentguard_security_events", ddlSecurityEvents); err != nil {
 		return err
 	}
-	if err := execIfNotExists(ctx, conn, "stream", "agentshield_notify_events", ddlNotifyEventsStream); err != nil {
+	if err := execIfNotExists(ctx, conn, "stream", "agentguard_notify_events", ddlNotifyEventsStream); err != nil {
 		return err
 	}
-	return execIfNotExists(ctx, conn, "stream", "agentshield_rules", ddlRulesStream)
+	return execIfNotExists(ctx, conn, "stream", "agentguard_rules", ddlRulesStream)
 }
 
 func createNotifyFilterMV(ctx context.Context, conn proton.Conn) error {
@@ -199,14 +256,14 @@ func createNotifyFilterMV(ctx context.Context, conn proton.Conn) error {
 
 // ── Catalog rule seeding ──────────────────────────────────────────────────────
 
-// seedCatalogRules seeds the agentshield_rules stream with entries from the
+// seedCatalogRules seeds the agentguard_rules stream with entries from the
 // catalog on first startup (when the stream is empty). Subsequent starts skip
 // seeding so that user toggle/install state is preserved.
 func seedCatalogRules(ctx context.Context, conn proton.Conn, entries []catalog.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
-	row := conn.QueryRow(ctx, "SELECT count() FROM table(agentshield_rules)")
+	row := conn.QueryRow(ctx, "SELECT count() FROM table(agentguard_rules)")
 	var count uint64
 	if err := row.Scan(&count); err != nil {
 		return fmt.Errorf("seed check: %w", err)
@@ -216,7 +273,7 @@ func seedCatalogRules(ctx context.Context, conn proton.Conn, entries []catalog.E
 		return nil
 	}
 
-	batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)")
+	batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)")
 	if err != nil {
 		return fmt.Errorf("seed prepare: %w", err)
 	}
@@ -263,18 +320,18 @@ func createNotifyUDF(ctx context.Context, conn proton.Conn) error {
 	if err := conn.Exec(ctx, ddlNotifyUDF); err != nil {
 		return fmt.Errorf("create UDF: %w", err)
 	}
-	log.Printf("timeplus: UDF notify_agentshield_udf created/updated")
+	log.Printf("timeplus: UDF notify_agentguard_udf created/updated")
 	return nil
 }
 
 func createNotifierAlert(ctx context.Context, conn proton.Conn) error {
 	// Drop first so the DDL always reflects the current definition on restart.
 	// Ignore the error — it just means the alert didn't exist yet.
-	_ = conn.Exec(ctx, `DROP ALERT IF EXISTS agentshield_notifier`)
+	_ = conn.Exec(ctx, `DROP ALERT IF EXISTS agentguard_notifier`)
 	if err := conn.Exec(ctx, ddlNotifierAlert); err != nil {
 		return fmt.Errorf("create alert: %w", err)
 	}
-	log.Printf("timeplus: alert agentshield_notifier created")
+	log.Printf("timeplus: alert agentguard_notifier created")
 	return nil
 }
 
@@ -283,7 +340,7 @@ SELECT
   rule_id,
   arg_max(query_sql, updated_at) AS query_sql,
   arg_max(enabled,   updated_at) AS enabled
-FROM table(agentshield_rules)
+FROM table(agentguard_rules)
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = false`
 
@@ -314,7 +371,7 @@ func startupSyncMVs(cfg *config.TimeplusConfig, ctx context.Context, conn proton
 		exists, _ := streamExists(ctx, conn, mvName)
 		if r.enabled {
 			if !exists {
-				ddl := fmt.Sprintf("CREATE MATERIALIZED VIEW %s INTO agentshield_security_events AS %s", mvName, r.querySQL)
+				ddl := fmt.Sprintf("CREATE MATERIALIZED VIEW %s INTO agentguard_security_events AS %s", mvName, r.querySQL)
 				if err := conn.Exec(ctx, ddl); err != nil {
 					log.Printf("timeplus: startup create MV %s: %v", mvName, err)
 				} else {
@@ -482,8 +539,8 @@ CREATE STREAM otel_metrics_histogram
   aggregation_temporality      int32                                         CODEC(ZSTD(1))
 )`
 
-const ddlAgentShieldHookEvents = `
-CREATE STREAM agentshield_hook_events
+const ddlAgentGuardHookEvents = `
+CREATE STREAM agentguard_hook_events
 (
   hook_name        low_cardinality(string),
   event_time       datetime64(3),
@@ -503,7 +560,7 @@ CREATE STREAM agentshield_hook_events
 )`
 
 const ddlSecurityEvents = `
-CREATE STREAM agentshield_security_events
+CREATE STREAM agentguard_security_events
 (
   detected_at   datetime64(3),
   rule_id       low_cardinality(string),
@@ -522,7 +579,7 @@ CREATE STREAM agentshield_security_events
 // ddlNotifyEventsStream holds filtered security events that the notifier alert
 // should act on (i.e. events where the matching threat is new or was cleared).
 const ddlNotifyEventsStream = `
-CREATE STREAM agentshield_notify_events
+CREATE STREAM agentguard_notify_events
 (
   detected_at   datetime64(3),
   rule_id       low_cardinality(string),
@@ -538,19 +595,19 @@ CREATE STREAM agentshield_notify_events
   event_data    string
 )`
 
-// ddlNotifyFilterMV feeds agentshield_notify_events by joining security events
+// ddlNotifyFilterMV feeds agentguard_notify_events by joining security events
 // with the current threat state. Only events where the threat is new (no row in
-// agentshield_threats) or was previously cleared pass through.
+// agentguard_threats) or was previously cleared pass through.
 // Alerts do not support JOINs, so the join lives here instead.
 const ddlNotifyFilterMV = `
 CREATE MATERIALIZED VIEW mv_notify_filter
-INTO agentshield_notify_events
+INTO agentguard_notify_events
 AS SELECT
   se.detected_at, se.rule_id, se.rule_name, se.severity,
   se.agent_id, se.deployment_id, se.session_id, se.run_id,
   se.hook_name, se.tool_name, se.message, se.event_data
-FROM agentshield_security_events AS se
-LEFT JOIN agentshield_threats AS t
+FROM agentguard_security_events AS se
+LEFT JOIN agentguard_threats AS t
   ON  se.agent_id      = t.agent_id
   AND se.deployment_id = t.deployment_id
   AND se.session_id    = t.session_id
@@ -558,7 +615,7 @@ LEFT JOIN agentshield_threats AS t
 WHERE t.status = '' OR t.status = 'cleared'`
 
 const ddlRulesStream = `
-CREATE STREAM agentshield_rules
+CREATE STREAM agentguard_rules
 (
   rule_id            low_cardinality(string),
   name               string,
@@ -576,7 +633,7 @@ CREATE STREAM agentshield_rules
 )`
 
 const ddlCIMEvent = `
-CREATE STREAM agentshield_cim_event
+CREATE STREAM agentguard_cim_event
 (
   event_time        datetime64(3),
   event_type        low_cardinality(string),
@@ -602,7 +659,7 @@ CREATE STREAM agentshield_cim_event
 
 const ddlCIMClaudeCodeMV = `
 CREATE MATERIALIZED VIEW mv_cim_claudecode
-INTO agentshield_cim_event AS
+INTO agentguard_cim_event AS
 SELECT
   event_time,
   multi_if(
@@ -635,7 +692,7 @@ SELECT
   block_reason,
   hook_name                                                       AS raw_hook_name,
   event_data                                                      AS raw_event_data
-FROM agentshield_hook_events
+FROM agentguard_hook_events
 WHERE agent_type = 'claudecode'
   AND hook_name IN (
     'session_start', 'subagent_spawning',
@@ -647,7 +704,7 @@ WHERE agent_type = 'claudecode'
 
 const ddlCIMOpenClawMV = `
 CREATE MATERIALIZED VIEW mv_cim_openclaw
-INTO agentshield_cim_event AS
+INTO agentguard_cim_event AS
 SELECT
   event_time,
   multi_if(
@@ -675,13 +732,15 @@ SELECT
   json_query(event_data, '$.result')                                       AS tool_result,
   json_value(event_data, '$.error') = ''                                   AS tool_success,
   json_extract_int(event_data, 'durationMs')                               AS tool_duration_ms,
-  json_value(event_data, '$.content')                                      AS user_message,
+  if(hook_name = 'llm_input',
+     json_value(event_data, '$.prompt'),
+     json_value(event_data, '$.content'))                                  AS user_message,
   json_value(event_data, '$.assistantTexts[0]')                            AS assistant_message,
   hook_decision,
   block_reason,
   hook_name                                                                AS raw_hook_name,
   event_data                                                               AS raw_event_data
-FROM agentshield_hook_events
+FROM agentguard_hook_events
 WHERE agent_type = 'openclaw'
   AND hook_name IN (
     'session_start', 'session_end',
@@ -690,8 +749,182 @@ WHERE agent_type = 'openclaw'
     'before_tool_call', 'after_tool_call'
   )`
 
+// ddlSessionAgentsStream is a mutable stream keyed by session_id that maps each
+// Claude Code session to its agent_id and deployment_id (set by the plugin via
+// environment variables). It is used as a live lookup in the OTel metrics MV so
+// that LLM metrics get the same agent_id as all other hook-based events.
+const ddlSessionAgentsStream = `
+CREATE MUTABLE STREAM IF NOT EXISTS agentguard_session_agents
+(
+  session_id    string,
+  agent_id      string,
+  deployment_id string,
+  first_seen    datetime64(3)
+) PRIMARY KEY (session_id)`
+
+// ddlSessionAgentsMV feeds agentguard_session_agents from hook events for all
+// agent types. Because agentguard_session_agents is a mutable stream
+// (primary-key dedup on session_id), duplicate inserts are harmless — the stream
+// always holds the latest agent_id/deployment_id seen for each session.
+const ddlSessionAgentsMV = `
+CREATE MATERIALIZED VIEW mv_session_agents
+INTO agentguard_session_agents AS
+SELECT
+  session_id,
+  agent_id,
+  deployment_id,
+  event_time AS first_seen
+FROM agentguard_hook_events`
+
+// ddlRunLatencyStream is a mutable stream keyed by run_id that captures LLM
+// call latency from OpenClaw's agent_end hook events (which carry durationMs).
+// It is joined in mv_cim_metrics_openclaw_llm to populate llm.latency_ms.
+const ddlRunLatencyStream = `
+CREATE MUTABLE STREAM IF NOT EXISTS agentguard_run_latency
+(
+  run_id     string,
+  latency_ms float64
+) PRIMARY KEY (run_id)`
+
+// ddlRunLatencyMV feeds agentguard_run_latency from agent_end hook events.
+// agent_end fires ~2ms before llm_output for the same run_id, so the entry is
+// available in the mutable stream by the time the metrics MV processes the
+// corresponding llm_response CIM event.
+const ddlRunLatencyMV = `
+CREATE MATERIALIZED VIEW mv_run_latency
+INTO agentguard_run_latency AS
+SELECT
+  run_id,
+  to_float64_or_zero(json_extract_string(event_data, 'durationMs')) AS latency_ms
+FROM agentguard_hook_events
+WHERE hook_name = 'agent_end'`
+
+const ddlCIMMetrics = `
+CREATE STREAM agentguard_cim_metrics
+(
+  event_time    datetime64(3),
+  metric_name   low_cardinality(string),
+  metric_value  float64,
+  agent_type    low_cardinality(string),
+  agent_id      string,
+  deployment_id low_cardinality(string),
+  session_id    string,
+  tags          map(low_cardinality(string), string)
+)`
+
+const ddlCIMMetricsOpenClawLlmMV = `
+CREATE MATERIALIZED VIEW mv_cim_metrics_openclaw_llm
+INTO agentguard_cim_metrics AS
+SELECT
+  e.event_time,
+  metric_name,
+  metric_value,
+  'openclaw'                                                              AS agent_type,
+  e.agent_id,
+  e.deployment_id,
+  e.session_id,
+  map_cast(
+    ['model', 'stop_reason', 'run_id'],
+    [e.model, json_value(e.raw_event_data, '$.lastAssistant.stopReason'), e.run_id]
+  )                                                                       AS tags
+FROM agentguard_cim_event AS e
+LEFT JOIN agentguard_run_latency AS r ON r.run_id = e.run_id
+ARRAY JOIN
+  ['llm.call', 'llm.input_tokens', 'llm.output_tokens', 'llm.total_tokens',
+   'llm.cache_read_tokens', 'llm.cache_write_tokens', 'llm.latency_ms']  AS metric_name,
+  [
+    to_float64(1),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'input')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'output')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'totalTokens')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'cacheRead')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'cacheWrite')),
+    r.latency_ms
+  ]                                                                       AS metric_value
+WHERE e.agent_type = 'openclaw'
+  AND e.event_type = 'llm_response'`
+
+const ddlCIMMetricsOpenClawToolsMV = `
+CREATE MATERIALIZED VIEW mv_cim_metrics_openclaw_tools
+INTO agentguard_cim_metrics AS
+SELECT
+  event_time,
+  metric_name,
+  metric_value,
+  'openclaw'                                                   AS agent_type,
+  agent_id,
+  deployment_id,
+  session_id,
+  map_cast(['tool_name', 'run_id'], [tool_name, run_id])      AS tags
+FROM agentguard_cim_event
+ARRAY JOIN
+  ['tool.call', 'tool.success', 'tool.duration_ms']           AS metric_name,
+  [
+    to_float64(1),
+    if(tool_success, to_float64(1), to_float64(0)),
+    to_float64(tool_duration_ms)
+  ]                                                            AS metric_value
+WHERE agent_type = 'openclaw'
+  AND event_type = 'tool_complete'`
+
+const ddlCIMMetricsClaudeCodeOtelMV = `
+CREATE MATERIALIZED VIEW mv_cim_metrics_claudecode_otel
+INTO agentguard_cim_metrics AS
+SELECT
+  o._tp_time                                                              AS event_time,
+  metric_name,
+  metric_value,
+  'claudecode'                                                            AS agent_type,
+  if(s.agent_id != '', s.agent_id, o.log_attributes['user.id'])          AS agent_id,
+  s.deployment_id                                                         AS deployment_id,
+  o.log_attributes['session.id']                                         AS session_id,
+  map_cast(
+    ['model', 'run_id'],
+    [o.log_attributes['model'], o.log_attributes['session.id']]
+  )                                                                       AS tags
+FROM otel_logs AS o
+LEFT JOIN agentguard_session_agents AS s
+  ON s.session_id = o.log_attributes['session.id']
+ARRAY JOIN
+  ['llm.call', 'llm.input_tokens', 'llm.output_tokens', 'llm.total_tokens',
+   'llm.cache_read_tokens', 'llm.cache_write_tokens', 'llm.latency_ms']  AS metric_name,
+  [
+    to_float64(1),
+    to_float64_or_zero(o.log_attributes['input_tokens']),
+    to_float64_or_zero(o.log_attributes['output_tokens']),
+    to_float64_or_zero(o.log_attributes['input_tokens'])
+      + to_float64_or_zero(o.log_attributes['output_tokens']),
+    to_float64_or_zero(o.log_attributes['cache_read_tokens']),
+    to_float64_or_zero(o.log_attributes['cache_creation_tokens']),
+    to_float64_or_zero(o.log_attributes['duration_ms'])
+  ]                                                                       AS metric_value
+WHERE o.log_attributes['event.name'] = 'api_request'`
+
+const ddlCIMMetricsClaudeCodeToolsMV = `
+CREATE MATERIALIZED VIEW mv_cim_metrics_claudecode_tools
+INTO agentguard_cim_metrics AS
+SELECT
+  event_time,
+  metric_name,
+  metric_value,
+  'claudecode' AS agent_type,
+  agent_id,
+  deployment_id,
+  session_id,
+  map_cast(['tool_name', 'run_id'], [tool_name, run_id]) AS tags
+FROM agentguard_cim_event
+ARRAY JOIN
+  ['tool.call', 'tool.success']             AS metric_name,
+  [
+    to_float64(1),
+    if(tool_success, to_float64(1), to_float64(0))
+  ]                                         AS metric_value
+WHERE agent_type = 'claudecode'
+  AND event_type = 'tool_complete'`
+
+
 const ddlPricingStream = `
-CREATE MUTABLE STREAM IF NOT EXISTS agentshield_pricing
+CREATE MUTABLE STREAM IF NOT EXISTS agentguard_pricing
 (
   provider                    low_cardinality(string),
   model                       low_cardinality(string),
@@ -719,11 +952,11 @@ var pricingSeedData = []pricingSeed{
 }
 
 func createPricingStream(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "stream", "agentshield_pricing", ddlPricingStream)
+	return execIfNotExists(ctx, conn, "stream", "agentguard_pricing", ddlPricingStream)
 }
 
 func createThreatsStream(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "stream", "agentshield_threats", ddlThreatsStream)
+	return execIfNotExists(ctx, conn, "stream", "agentguard_threats", ddlThreatsStream)
 }
 
 func createThreatsMV(ctx context.Context, conn proton.Conn) error {
@@ -731,7 +964,7 @@ func createThreatsMV(ctx context.Context, conn proton.Conn) error {
 }
 
 func seedPricingData(ctx context.Context, conn proton.Conn) error {
-	row := conn.QueryRow(ctx, "SELECT count() FROM table(agentshield_pricing)")
+	row := conn.QueryRow(ctx, "SELECT count() FROM table(agentguard_pricing)")
 	var count uint64
 	if err := row.Scan(&count); err != nil {
 		return fmt.Errorf("pricing seed check: %w", err)
@@ -741,7 +974,7 @@ func seedPricingData(ctx context.Context, conn proton.Conn) error {
 		return nil
 	}
 
-	batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentshield_pricing (provider, model, input_cost_per_million, output_cost_per_million, cache_read_cost_per_million, updated_at)")
+	batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentguard_pricing (provider, model, input_cost_per_million, output_cost_per_million, cache_read_cost_per_million, updated_at)")
 	if err != nil {
 		return fmt.Errorf("pricing seed prepare: %w", err)
 	}
@@ -759,18 +992,18 @@ func seedPricingData(ctx context.Context, conn proton.Conn) error {
 	return nil
 }
 
-const ddlNotifyUDF = `CREATE OR REPLACE FUNCTION notify_agentshield_udf(
+const ddlNotifyUDF = `CREATE OR REPLACE FUNCTION notify_agentguard_udf(
   rule_id string, rule_name string, severity string,
   agent_id string, deployment_id string, session_id string,
   hook_name string, tool_name string, message string, detected_at string
 ) RETURNS string LANGUAGE PYTHON AS $$
 import requests
-def notify_agentshield_udf(rule_ids, rule_names, severities,
+def notify_agentguard_udf(rule_ids, rule_names, severities,
                             agent_ids, deployment_ids, session_ids,
                             hook_names, tool_names, messages, detected_ats):
     for i in range(len(rule_ids)):
         try:
-            requests.post("http://agentshield:8080/api/alerts/webhook", json={
+            requests.post("http://agentguard:8080/api/alerts/webhook", json={
                 "rule_id": rule_ids[i],
                 "rule_name": rule_names[i],
                 "severity": severities[i],
@@ -783,16 +1016,16 @@ def notify_agentshield_udf(rule_ids, rule_names, severities,
     return rule_ids
 $$`
 
-// ddlNotifierAlert fires the notify UDF for events in agentshield_notify_events.
+// ddlNotifierAlert fires the notify UDF for events in agentguard_notify_events.
 // The threat-status filter lives in mv_notify_filter (alerts do not support JOINs).
-const ddlNotifierAlert = `CREATE ALERT agentshield_notifier
+const ddlNotifierAlert = `CREATE ALERT agentguard_notifier
   BATCH 1 EVENTS WITH TIMEOUT 5s
   LIMIT 10 ALERTS PER 1m
-  CALL notify_agentshield_udf
+  CALL notify_agentguard_udf
 AS SELECT
   rule_id, rule_name, severity, agent_id, deployment_id,
   session_id, hook_name, tool_name, message, detected_at
-FROM agentshield_notify_events`
+FROM agentguard_notify_events`
 
 const ddlOTelInput = `
 CREATE INPUT openclaw_otel_input
@@ -809,7 +1042,7 @@ SETTINGS
 COMMENT 'OpenClaw agent telemetry via OTLP/HTTP'`
 
 const ddlThreatsStream = `
-CREATE MUTABLE STREAM IF NOT EXISTS agentshield_threats
+CREATE MUTABLE STREAM IF NOT EXISTS agentguard_threats
 (
     agent_id          string,
     deployment_id     string,
@@ -827,7 +1060,7 @@ SETTINGS coalesced = true`
 
 const ddlThreatsMV = `
 CREATE MATERIALIZED VIEW mv_threats
-INTO agentshield_threats
+INTO agentguard_threats
 AS SELECT
     agent_id,
     deployment_id,
@@ -836,5 +1069,5 @@ AS SELECT
     rule_name,
     severity,
     detected_at AS last_seen
-FROM agentshield_security_events
+FROM agentguard_security_events
 SETTINGS seek_to = 'earliest'`

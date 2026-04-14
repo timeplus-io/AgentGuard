@@ -1,0 +1,34 @@
+{
+  "id": "agentguard",
+  "enabledByDefault": false,
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "timeplusUrl": {
+        "type": "string"
+      },
+      "stream": {
+        "type": "string"
+      },
+      "flushMs": {
+        "type": "number"
+      },
+      "batchSize": {
+        "type": "number"
+      },
+      "username": {
+        "type": "string"
+      },
+      "password": {
+        "type": "string"
+      },
+      "deploymentId": {
+        "type": "string"
+      },
+      "deploymentName": {
+        "type": "string"
+      }
+    }
+  }
+}

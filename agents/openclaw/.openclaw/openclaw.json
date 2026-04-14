@@ -306,7 +306,7 @@
   "plugins": {
     "load": {
       "paths": [
-        "/home/node/.openclaw/agentshield-plugin"
+        "/home/node/.openclaw/agentguard-plugin"
       ]
     },
     "entries": {
@@ -316,11 +316,11 @@
       "diagnostics-otel": {
         "enabled": true
       },
-      "agentshield": {
+      "agentguard": {
         "enabled": true,
         "config": {
           "timeplusUrl": "http://host.docker.internal:3218",
-          "stream": "agentshield_hook_events",
+          "stream": "agentguard_hook_events",
           "flushMs": 2000,
           "batchSize": 50,
           "username": "proton",

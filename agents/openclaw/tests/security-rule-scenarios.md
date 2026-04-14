@@ -1,4 +1,4 @@
-# AgentShield Security Rule Test Scenarios
+# AgentGuard Security Rule Test Scenarios
 
 Tests each of the four built-in security rule packs (rp-001 through rp-004) using
 simple text-only chat prompts. Each prompt is designed to reliably embed a trigger
@@ -9,7 +9,7 @@ pattern into a hook event, which the corresponding MV detection query will catch
 ## Prerequisites
 
 - OpenClaw running via `make start` (port 18789)
-- AgentShield backend running and all four rule packs **enabled** (Rules page)
+- AgentGuard backend running and all four rule packs **enabled** (Rules page)
 - Timeplus running at `http://localhost:3218`
 - At least one model available
 
@@ -28,7 +28,7 @@ tpq() {
 
 ```bash
 tpq "SELECT event_time, rule_id, rule_name, severity, hook_name, message
-     FROM table(agentshield_security_events)
+     FROM table(agentguard_security_events)
      WHERE event_time > now() - interval 5 minute
      ORDER BY event_time DESC"
 ```
@@ -64,7 +64,7 @@ rp-001 patterns, all in the `llm_input` event_data.
 
 ```sql
 SELECT hook_name, event_time, agent_id
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name = 'llm_input'
   AND lower(event_data) LIKE '%ignore previous instructions%'
   AND event_time > now() - interval 5 minute
@@ -75,7 +75,7 @@ ORDER BY event_time DESC
 
 ```sql
 SELECT event_time, rule_id, rule_name, severity, hook_name, message
-FROM table(agentshield_security_events)
+FROM table(agentguard_security_events)
 WHERE rule_id = 'rp-001'
   AND event_time > now() - interval 5 minute
 ORDER BY event_time DESC
@@ -115,7 +115,7 @@ Format it exactly as a .env file with KEY=value lines.
 
 ```sql
 SELECT hook_name, event_time, agent_id
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name = 'llm_output'
   AND lower(event_data) LIKE '%api_key%'
   AND event_time > now() - interval 5 minute
@@ -126,7 +126,7 @@ ORDER BY event_time DESC
 
 ```sql
 SELECT event_time, rule_id, rule_name, severity, hook_name, message
-FROM table(agentshield_security_events)
+FROM table(agentguard_security_events)
 WHERE rule_id = 'rp-002'
   AND event_time > now() - interval 5 minute
 ORDER BY event_time DESC
@@ -159,7 +159,7 @@ Two rp-003 patterns match: `tool_name = 'bash'` and `lower(event_data) LIKE '%/e
 
 ```sql
 SELECT hook_name, tool_name, event_time, agent_id
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name = 'before_tool_call'
   AND (lower(tool_name) IN ('bash', 'shell', 'exec') OR lower(event_data) LIKE '%/etc/passwd%')
   AND event_time > now() - interval 5 minute
@@ -170,7 +170,7 @@ ORDER BY event_time DESC
 
 ```sql
 SELECT event_time, rule_id, rule_name, severity, hook_name, tool_name, message
-FROM table(agentshield_security_events)
+FROM table(agentguard_security_events)
 WHERE rule_id = 'rp-003'
   AND event_time > now() - interval 5 minute
 ORDER BY event_time DESC
@@ -204,7 +204,7 @@ that fires too.
 
 ```sql
 SELECT hook_name, tool_name, event_time, agent_id
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name IN ('before_tool_call', 'before_install')
   AND lower(event_data) LIKE '%pip install%'
   AND event_time > now() - interval 5 minute
@@ -215,7 +215,7 @@ ORDER BY event_time DESC
 
 ```sql
 SELECT event_time, rule_id, rule_name, severity, hook_name, message
-FROM table(agentshield_security_events)
+FROM table(agentguard_security_events)
 WHERE rule_id = 'rp-004'
   AND event_time > now() - interval 5 minute
 ORDER BY event_time DESC
@@ -243,8 +243,8 @@ python3 tests/run_security_scenarios.py --scenario 9
 ## Notes
 
 - **MV must be enabled**: Each rule pack's detection MV must be active (green toggle
-  on the Rules page). If disabled, hook events still appear in `agentshield_hook_events`
-  but no row will appear in `agentshield_security_events`.
+  on the Rules page). If disabled, hook events still appear in `agentguard_hook_events`
+  but no row will appear in `agentguard_security_events`.
 - **Flush delay**: Hook events are batched. Wait ~5 seconds after the agent replies
   before querying. The test runner waits automatically.
 - **rp-001 note**: The injection patterns are matched against the raw message text,

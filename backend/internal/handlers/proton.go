@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/config"
+	"github.com/timeplus/agentguard/internal/config"
 )
 
 type protonQueryRequest struct {

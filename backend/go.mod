@@ -1,4 +1,4 @@
-module github.com/timeplus/agentshield
+module github.com/timeplus/agentguard
 
 go 1.23.0
 

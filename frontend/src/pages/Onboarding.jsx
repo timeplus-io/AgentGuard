@@ -21,7 +21,7 @@ const agentTypes = [
   {
     id: 'claude-code',
     name: 'Claude Code',
-    desc: "Anthropic's Claude Code CLI. Native AgentShield integration coming soon.",
+    desc: "Anthropic's Claude Code CLI. Native AgentGuard integration coming soon.",
     icon: 'code',
     badge: 'Coming Soon',
     disabled: true,
@@ -57,7 +57,7 @@ function CodeBlock({ label, code }) {
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const alreadyOnboarded = localStorage.getItem('agentshield_onboarded') === '1'
+  const alreadyOnboarded = localStorage.getItem('agentguard_onboarded') === '1'
 
   const [step, setStep] = useState(0)
   const [selectedAgent, setSelectedAgent] = useState('openclaw')
@@ -107,18 +107,18 @@ export default function Onboarding() {
   }, [step])
 
   const envVarsCode =
-    `export AGENTSHIELD_TIMEPLUS_URL=${timeplusUrl}\nexport AGENTSHIELD_DEPLOYMENT_ID=${deploymentId}\nexport AGENTSHIELD_DEPLOYMENT_NAME="${deploymentName}"`
+    `export AGENTGUARD_TIMEPLUS_URL=${timeplusUrl}\nexport AGENTGUARD_DEPLOYMENT_ID=${deploymentId}\nexport AGENTGUARD_DEPLOYMENT_NAME="${deploymentName}"`
 
   const jsonConfigCode = JSON.stringify({
     plugins: {
       entries: {
-        agentshield: {
+        agentguard: {
           enabled: true,
           config: {
             timeplusUrl,
             deploymentId,
             deploymentName,
-            stream: 'agentshield_hook_events',
+            stream: 'agentguard_hook_events',
             flushMs: 2000,
             batchSize: 50,
           },
@@ -164,7 +164,7 @@ export default function Onboarding() {
         // best effort
       }
     }
-    localStorage.setItem('agentshield_onboarded', '1')
+    localStorage.setItem('agentguard_onboarded', '1')
     setActivating(false)
     setDone(true)
   }
@@ -177,7 +177,7 @@ export default function Onboarding() {
             <span className="material-symbols-outlined text-3xl text-[#ffb0cf]">check_circle</span>
           </div>
           <h2 className="text-2xl font-semibold text-white">Agent Activated</h2>
-          <p className="text-zinc-400 text-sm leading-relaxed">Your agent is now protected by AgentShield. Head to the dashboard to monitor activity.</p>
+          <p className="text-zinc-400 text-sm leading-relaxed">Your agent is now protected by AgentGuard. Head to the dashboard to monitor activity.</p>
           <button
             onClick={() => navigate('/dashboard')}
             className="bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] px-8 py-2.5 rounded-sm text-xs font-semibold text-[#3d0023] hover:scale-[1.02] transition-transform"
@@ -193,7 +193,7 @@ export default function Onboarding() {
     <div className="bg-[#15121d] text-[#e7dff0] min-h-screen flex flex-col">
       {/* TopNav */}
       <nav className="bg-[#15121d] shadow-[0_0_12px_rgba(213,63,140,0.12)] sticky top-0 z-50 h-16 w-full flex justify-between items-center px-6 backdrop-blur-md">
-        <span className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] tracking-tight">AgentShield</span>
+        <span className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] tracking-tight">AgentGuard</span>
         {alreadyOnboarded && (
           <button
             onClick={() => navigate('/dashboard')}
@@ -214,7 +214,7 @@ export default function Onboarding() {
               <p className="text-zinc-500 text-xs leading-relaxed">
                 {alreadyOnboarded
                   ? "You've already connected an agent. Update your configuration or enable additional rules."
-                  : 'Follow these steps to connect your AI agent to AgentShield.'}
+                  : 'Follow these steps to connect your AI agent to AgentGuard.'}
               </p>
             </div>
 
@@ -263,7 +263,7 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Select Agent Type</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Choose the AI agent framework you want to protect with AgentShield.</p>
+                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Choose the AI agent framework you want to protect with AgentGuard.</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {agentTypes.map(at => (
@@ -302,10 +302,10 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Install the AgentShield plugin into your OpenClaw project and configure it to point at your Timeplus instance.</p>
+                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Install the AgentGuard plugin into your OpenClaw project and configure it to point at your Timeplus instance.</p>
                   </div>
 
-                  <CodeBlock label="1. Install via npm" code="npm install @timeplus/agentshield-openclaw-plugin" />
+                  <CodeBlock label="1. Install via npm" code="npm install @timeplus/agentguard-openclaw-plugin" />
 
                   <div className="space-y-3">
                     <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">2. Configuration</p>
@@ -342,7 +342,7 @@ export default function Onboarding() {
                       ))}
                     </div>
                     <CodeBlock
-                      label={configTab === 'env' ? '.env / shell export' : 'plugins.entries.agentshield (openclaw.json)'}
+                      label={configTab === 'env' ? '.env / shell export' : 'plugins.entries.agentguard (openclaw.json)'}
                       code={configTab === 'env' ? envVarsCode : jsonConfigCode}
                     />
                   </div>

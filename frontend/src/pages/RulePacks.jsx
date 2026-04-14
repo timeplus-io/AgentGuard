@@ -82,7 +82,7 @@ export default function RulePacks() {
         const openThreats = Object.values(openByRule).sort((a, b) => b.cnt - a.cnt)
 
         const evtMap = {}
-        const sql = `SELECT rule_id, rule_name, count() AS cnt FROM table(agentshield_security_events) GROUP BY rule_id, rule_name ORDER BY cnt DESC`
+        const sql = `SELECT rule_id, rule_name, count() AS cnt FROM table(agentguard_security_events) GROUP BY rule_id, rule_name ORDER BY cnt DESC`
         for await (const row of api.protonQuery(sql)) {
           evtMap[row.rule_id] = { rule_id: row.rule_id, rule_name: row.rule_name || row.rule_id, cnt: Number(row.cnt) }
         }
@@ -161,7 +161,7 @@ export default function RulePacks() {
   const handleExport = () => {
     const a = document.createElement('a')
     a.href = api.exportCatalogUrl()
-    a.download = 'agentshield-catalog.zip'
+    a.download = 'agentguard-catalog.zip'
     a.click()
   }
 

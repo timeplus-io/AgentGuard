@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/catalog"
+	"github.com/timeplus/agentguard/internal/catalog"
 )
 
 // ImportCatalog handles POST /api/rules/catalog/import.
@@ -49,7 +49,7 @@ func ImportCatalog(mgr *catalog.Manager) gin.HandlerFunc {
 func ExportCatalog(mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Content-Type", "application/zip")
-		c.Header("Content-Disposition", `attachment; filename="agentshield-catalog.zip"`)
+		c.Header("Content-Disposition", `attachment; filename="agentguard-catalog.zip"`)
 		c.Status(http.StatusOK)
 
 		if err := mgr.ExportZip(c.Writer); err != nil {

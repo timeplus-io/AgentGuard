@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/models"
-	tp "github.com/timeplus/agentshield/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/models"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
 // pricingKeyRe validates provider and model values used in SQL path params.
@@ -105,7 +105,7 @@ func ListPricing(cfg *config.Config) gin.HandlerFunc {
 		rows, err := tp.Query(&cfg.Timeplus, `
 			SELECT provider, model, input_cost_per_million, output_cost_per_million,
 			       cache_read_cost_per_million, updated_at
-			FROM table(agentshield_pricing)
+			FROM table(agentguard_pricing)
 			ORDER BY provider ASC, model ASC`)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
@@ -142,7 +142,7 @@ func UpsertPricing(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		sql := fmt.Sprintf(
-			`INSERT INTO agentshield_pricing
+			`INSERT INTO agentguard_pricing
 			 (provider, model, input_cost_per_million, output_cost_per_million, cache_read_cost_per_million, updated_at)
 			 VALUES ('%s', '%s', %f, %f, %f, now64(3))`,
 			escapeSQL(body.Provider),
@@ -174,7 +174,7 @@ func DeletePricing(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		sql := fmt.Sprintf(
-			`DELETE FROM agentshield_pricing WHERE provider = '%s' AND model = '%s'`,
+			`DELETE FROM agentguard_pricing WHERE provider = '%s' AND model = '%s'`,
 			escapeSQL(provider),
 			escapeSQL(model),
 		)
@@ -214,8 +214,8 @@ SELECT
     + sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
       * any(p.cache_read_cost_per_million)
   ) / 1000000.0                                                                               AS total_cost
-FROM table(agentshield_hook_events) AS e
-LEFT JOIN table(agentshield_pricing) AS p
+FROM table(agentguard_hook_events) AS e
+LEFT JOIN table(agentguard_pricing) AS p
   ON e.provider = p.provider AND e.model = p.model
 WHERE %s
 GROUP BY e.agent_id, e.deployment_id, e.provider, e.model
@@ -261,8 +261,8 @@ SELECT
     + sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
       * any(p.cache_read_cost_per_million)
   ) / 1000000.0                                                                              AS cost_per_model
-FROM table(agentshield_hook_events) AS e
-LEFT JOIN table(agentshield_pricing) AS p
+FROM table(agentguard_hook_events) AS e
+LEFT JOIN table(agentguard_pricing) AS p
   ON e.provider = p.provider AND e.model = p.model
 WHERE e.hook_name = 'llm_output'
   AND e.event_time >= now() - interval 30 day
@@ -308,8 +308,8 @@ SELECT
     * any(p.output_cost_per_million) / 1000000.0                                             AS output_cost,
   sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
     * any(p.cache_read_cost_per_million) / 1000000.0                                         AS cache_cost
-FROM table(agentshield_hook_events) AS e
-LEFT JOIN table(agentshield_pricing) AS p
+FROM table(agentguard_hook_events) AS e
+LEFT JOIN table(agentguard_pricing) AS p
   ON e.provider = p.provider AND e.model = p.model
 WHERE e.hook_name = 'llm_output'
 GROUP BY e.provider, e.model`

@@ -25,7 +25,7 @@ query_sql: |
     tool_name,
     concat('Package install by agent ', agent_id, ' via ', if(tool_name != '', tool_name, raw_hook_name)) AS message,
     raw_event_data       AS event_data
-  FROM agentshield_cim_event
+  FROM agentguard_cim_event
   WHERE event_type = 'tool_invoke'
     AND (
          lower(tool_input) LIKE '%npm install%'

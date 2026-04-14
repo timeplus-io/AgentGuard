@@ -1,6 +1,6 @@
-# AgentShield — Technical Design
+# AgentGuard — Technical Design
 
-AgentShield is a real-time security monitoring and governance platform for AI coding agents. It ingests telemetry from agents via two paths — hook events posted directly to Timeplus on port 3218, and OTel telemetry (traces, logs, metrics) via OTLP/HTTP on port 4318 — applies streaming SQL rules to detect threats, and exposes results through a live security dashboard.
+AgentGuard is a real-time security monitoring and governance platform for AI coding agents. It ingests telemetry from agents via two paths — hook events posted directly to Timeplus on port 3218, and OTel telemetry (traces, logs, metrics) via OTLP/HTTP on port 4318 — applies streaming SQL rules to detect threats, and exposes results through a live security dashboard.
 
 ---
 
@@ -12,6 +12,7 @@ AgentShield is a real-time security monitoring and governance platform for AI co
 4. [Threats and Rules](#4-threats-and-rules)
 5. [Rule Catalog](#5-rule-catalog)
 6. [Cost Governance](#6-cost-governance)
+7. [CIM Metrics](#7-cim-metrics)
 
 ---
 
@@ -22,7 +23,7 @@ AgentShield is a real-time security monitoring and governance platform for AI co
 │  Agent (OpenClaw / Claude Code)                                       │
 │                                                                       │
 │  ┌─────────────────────────┐   ┌──────────────────────────────────┐  │
-│  │  AgentShield hook plugin│   │  OTel plugin                     │  │
+│  │  AgentGuard hook plugin│   │  OTel plugin                     │  │
 │  │  (captures hook events) │   │  (traces, logs, metrics)         │  │
 │  └───────────┬─────────────┘   └──────────────┬───────────────────┘  │
 └──────────────┼──────────────────────────────── ┼────────────────────-─┘
@@ -34,24 +35,32 @@ AgentShield is a real-time security monitoring and governance platform for AI co
 │                                                                       │
 │  :3218 ingest   Streams                        MVs / Alerts           │
 │  ────────────   ──────────────────────────     ───────────────────    │
-│  hook events →  agentshield_hook_events                               │
+│  hook events →  agentguard_hook_events                               │
 │                   ├─ mv_cim_claudecode ─┐                             │
-│                   └─ mv_cim_openclaw ───┴► agentshield_cim_event      │
+│                   └─ mv_cim_openclaw ───┴► agentguard_cim_event      │
 │                                              ├─ mv_rule_rp001    ┐    │
-│                 agentshield_security_events ◄─ mv_rule_rp002    │    │
-│                 agentshield_notify_events   ◄─ mv_rule_rp003    │    │
-│  :4318 input    agentshield_threats         ←  mv_threats       │    │
-│  ────────────   agentshield_rules           ←  mv_notify_filter │    │
-│  OTLP/HTTP  →   agentshield_pricing             agentshield_    │    │
+│                 agentguard_security_events ◄─ mv_rule_rp002    │    │
+│                 agentguard_notify_events   ◄─ mv_rule_rp003    │    │
+│  :4318 input    agentguard_threats         ←  mv_threats       │    │
+│  ────────────   agentguard_rules           ←  mv_notify_filter │    │
+│  OTLP/HTTP  →   agentguard_pricing             agentguard_    │    │
 │  otel_traces                                    notifier (alert)┘    │
-│  otel_logs                                                            │
-│  otel_metrics_*                                                       │
+│  otel_logs  ─── mv_cim_metrics_claudecode_otel ──────────────────┐   │
+│  otel_metrics_*                                                   │   │
+│                 agentguard_hook_events                           │   │
+│                   ├─ mv_session_agents ──► agentguard_session_agents │
+│                   ├─ mv_run_latency ─────► agentguard_run_latency    │
+│                   ├─ mv_cim_metrics_openclaw_llm  ───────────────┐    │
+│                   ├─ mv_cim_metrics_openclaw_tools ──────────────┤    │
+│                   └─ mv_cim_metrics_claudecode_tools ────────────┤    │
+│                 (+ otel_logs above) ─────────────────────────────┘    │
+│                                              agentguard_cim_metrics  │
 └──────────────────────────┬───────────────────────────────────────────┘
                            │ SQL queries :3218 (HTTP) / :8463 (native TCP)
                            │ Alert UDF callback → POST /api/alerts/webhook
                            ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  AgentShield Backend  (Go / Gin, :8080)                               │
+│  AgentGuard Backend  (Go / Gin, :8080)                               │
 │                                                                       │
 │  /api/agents        /api/threats     /api/rules                       │
 │  /api/metrics       /api/cost        /api/notifications/stream (SSE)  │
@@ -93,26 +102,30 @@ The backend uses two separate connections to Timeplus:
 1. Wait for Timeplus native port 8463 to respond (polls every 5 s indefinitely)
 2. Create 5 OTel streams (`otel_traces`, `otel_logs`, `otel_metrics_gauge/sum/histogram`)
 3. Create `openclaw_otel_input` (OTLP/HTTP input on port 4318)
-4. Create `agentshield_hook_events`
-5. Create `agentshield_cim_event` (CIM unified event stream)
-6. Create `mv_cim_claudecode` and `mv_cim_openclaw` (CIM normalization MVs)
-7. Create `agentshield_security_events`, `agentshield_notify_events`, `agentshield_rules`
-8. Create `agentshield_threats` (mutable stream)
-9. Create `mv_threats`
-10. Create `agentshield_pricing` (mutable stream)
-11. Seed 6 default pricing rows (skipped if any rows exist)
-12. Seed catalog rules as disabled (skipped if any rows exist)
-13. Drop 4 legacy named security MVs
-14. `CREATE OR REPLACE` the `notify_agentshield_udf` Python UDF
-15. Create `mv_notify_filter`
-16. Drop and recreate `agentshield_notifier` alert
-17. Sync per-rule MVs to match current `agentshield_rules` state
+4. Create `agentguard_hook_events`
+5. Create `agentguard_cim_event` (CIM unified event stream)
+6. Drop and recreate `mv_cim_claudecode` and `mv_cim_openclaw` (CIM normalization MVs — always recreated so DDL fixes apply without manual drops)
+7. Create `agentguard_session_agents` (mutable, session→agent_id lookup), `agentguard_run_latency` (mutable, run→latency lookup), and `agentguard_cim_metrics` (CIM metrics sink stream)
+8. Drop and recreate 6 CIM metrics MVs in dependency order: `mv_session_agents`, `mv_run_latency`, `mv_cim_metrics_openclaw_llm`, `mv_cim_metrics_openclaw_tools`, `mv_cim_metrics_claudecode_otel`, `mv_cim_metrics_claudecode_tools`
+9. Create `agentguard_security_events`, `agentguard_notify_events`, `agentguard_rules`
+10. Create `agentguard_threats` (mutable stream) — warning only
+11. Create `mv_threats` — warning only
+12. Create `agentguard_pricing` (mutable stream) — warning only
+13. Seed 6 default pricing rows (skipped if any rows exist) — warning only
+14. Seed catalog rules as disabled (skipped if any rows exist) — warning only
+15. Drop 4 legacy named security MVs — warning only
+16. `CREATE OR REPLACE` the `notify_agentguard_udf` Python UDF — warning only
+17. Create `mv_notify_filter` — warning only
+18. Drop and recreate `agentguard_notifier` alert — warning only
+19. Sync per-rule MVs to match current `agentguard_rules` state — warning only
+
+> Steps 10–19 are non-fatal: logged as warnings but the server starts regardless.
 
 ---
 
 ## 2. Data Collection
 
-AgentShield receives two types of telemetry from agents:
+AgentGuard receives two types of telemetry from agents:
 
 ### 2.1 OTel Telemetry (via OTLP/HTTP Input)
 
@@ -220,10 +233,10 @@ Extends the sum schema (minus `is_monotonic`) with histogram-specific columns: `
 
 ### 2.2 Hook Events (Raw Ingestion Stream)
 
-The AgentShield hook plugin posts events directly to the Timeplus HTTP ingest API on port 3218, writing rows into `agentshield_hook_events`. This path bypasses the AgentShield backend entirely. Security rules do **not** read from this stream directly — they read from `agentshield_cim_event` (see §2.4). The raw stream is still available for low-level investigation.
+The AgentGuard hook plugin posts events directly to the Timeplus HTTP ingest API on port 3218, writing rows into `agentguard_hook_events`. This path bypasses the AgentGuard backend entirely. Security rules do **not** read from this stream directly — they read from `agentguard_cim_event` (see §2.4). The raw stream is still available for low-level investigation.
 
 ```sql
-CREATE STREAM agentshield_hook_events (
+CREATE STREAM agentguard_hook_events (
   hook_name        low_cardinality(string),  -- agent-specific hook name
   event_time       datetime64(3),
   session_id       string,
@@ -289,12 +302,12 @@ CREATE STREAM agentshield_hook_events (
 
 ### 2.4 CIM Layer (Common Information Model)
 
-The CIM layer normalizes heterogeneous hook events from multiple agent types into a single unified schema. Security rules query `agentshield_cim_event` rather than raw `agentshield_hook_events`, so rule SQL is agent-agnostic.
+The CIM layer normalizes heterogeneous hook events from multiple agent types into a single unified schema. Security rules query `agentguard_cim_event` rather than raw `agentguard_hook_events`, so rule SQL is agent-agnostic.
 
-#### `agentshield_cim_event` — Unified event stream
+#### `agentguard_cim_event` — Unified event stream
 
 ```sql
-CREATE STREAM agentshield_cim_event (
+CREATE STREAM agentguard_cim_event (
   event_time        datetime64(3),
   event_type        low_cardinality(string),  -- canonical event type (see table below)
   agent_type        low_cardinality(string),  -- 'claudecode' | 'openclaw'
@@ -337,7 +350,7 @@ CREATE STREAM agentshield_cim_event (
 
 #### `mv_cim_claudecode` — Claude Code normalizer
 
-Reads from `agentshield_hook_events` where `agent_type = 'claudecode'` and maps Claude Code-specific hook names to CIM `event_type` values. Key field mappings:
+Reads from `agentguard_hook_events` where `agent_type = 'claudecode'` and maps Claude Code-specific hook names to CIM `event_type` values. Key field mappings:
 
 | CIM field | Source |
 |-----------|--------|
@@ -352,7 +365,7 @@ Filters: `hook_name IN ('session_start', 'subagent_spawning', 'user_prompt_submi
 
 #### `mv_cim_openclaw` — OpenClaw normalizer
 
-Reads from `agentshield_hook_events` where `agent_type = 'openclaw'` and maps OpenClaw-specific hook names to CIM `event_type` values. Key field mappings:
+Reads from `agentguard_hook_events` where `agent_type = 'openclaw'` and maps OpenClaw-specific hook names to CIM `event_type` values. Key field mappings:
 
 | CIM field | Source |
 |-----------|--------|
@@ -371,7 +384,7 @@ Filters: `hook_name IN ('session_start', 'session_end', 'message_received', 'llm
 
 ### 3.1 Data Model
 
-Agent identity is derived from `(deployment_id, agent_id)` pairs in `agentshield_hook_events`. There is no separate agents table — all agent data is computed on-the-fly from the hook event stream.
+Agent identity is derived from `(deployment_id, agent_id)` pairs in `agentguard_hook_events`. There is no separate agents table — all agent data is computed on-the-fly from the hook event stream.
 
 **Key computed fields per agent:**
 
@@ -401,7 +414,7 @@ SELECT
   sum(to_int64_or_zero(json_extract_string(event_data, 'usage', 'input'))
     + to_int64_or_zero(json_extract_string(event_data, 'usage', 'output'))) AS total_tokens,
   count_if(hook_name = 'llm_output')   AS llm_call_count
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 GROUP BY agent_id, deployment_id
 ORDER BY last_seen DESC
 ```
@@ -415,7 +428,7 @@ SELECT
   max(event_time)                     AS last_seen,
   count()                             AS event_count,
   count(distinct run_id)              AS run_count
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE agent_id = '<id>'
   AND deployment_id = '<id>'
   AND session_id NOT LIKE 'temp:%'
@@ -429,59 +442,80 @@ ORDER BY last_seen DESC
 ```sql
 SELECT hook_name, event_time, run_id, session_id,
        tool_name, provider, model, hook_decision, block_reason, event_data
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE session_id = '<id>' AND run_id = '<id>'
 ORDER BY event_time ASC
 ```
 Each row becomes a span; duration is computed as the gap to the next event. Spans are typed (`run`, `llm`, `tool`, `lifecycle`) based on `hook_name`.
 
-**LLM metrics — tokens and calls:**
+**LLM metrics — tokens, calls, and latency** (from `agentguard_cim_metrics`; see §7 for how this stream is populated):
 ```sql
+-- Token and call counts (Q1)
 SELECT
-  count()                                          AS total_calls,
-  count_if(json_extract_string(event_data,'stop_reason') != 'error') AS success,
-  sum(to_int64_or_zero(json_extract_string(event_data,'usage','input')))  AS input_tokens,
-  sum(to_int64_or_zero(json_extract_string(event_data,'usage','output'))) AS output_tokens,
-  sum(to_int64_or_zero(json_extract_string(event_data,'usage','input'))
-    + to_int64_or_zero(json_extract_string(event_data,'usage','output'))) AS total_tokens
-FROM table(agentshield_hook_events)
-WHERE hook_name = 'llm_output'
+    to_int64(sum_if(metric_value, metric_name = 'llm.call'))               AS total_calls,
+    to_int64(sum_if(metric_value, metric_name = 'llm.input_tokens'))       AS input_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.output_tokens'))      AS output_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.total_tokens'))       AS total_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.cache_read_tokens'))  AS cache_read_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.cache_write_tokens')) AS cache_write_tokens
+FROM table(agentguard_cim_metrics)
+WHERE metric_name IN ('llm.call','llm.input_tokens','llm.output_tokens',
+                      'llm.total_tokens','llm.cache_read_tokens','llm.cache_write_tokens')
+
+-- Stop reason breakdown (Q2)
+SELECT tags['stop_reason'] AS stop_reason, to_int64(sum(metric_value)) AS cnt
+FROM table(agentguard_cim_metrics)
+WHERE metric_name = 'llm.call'
+GROUP BY stop_reason
+
+-- Latency percentiles (Q3)
+SELECT
+    quantile(0.5)(metric_value)  AS p50_ms,
+    quantile(0.95)(metric_value) AS p95_ms,
+    quantile(0.99)(metric_value) AS p99_ms,
+    avg(metric_value)            AS avg_ms,
+    min(metric_value)            AS min_ms,
+    max(metric_value)            AS max_ms,
+    count()                      AS sample_count
+FROM table(agentguard_cim_metrics)
+WHERE metric_name = 'llm.latency_ms' AND metric_value > 0
+
+-- Throughput time series (Q4; granularity = to_start_of_hour/minute/day)
+SELECT
+    to_start_of_hour(event_time)                                                 AS bucket,
+    to_int64(sum_if(metric_value, metric_name = 'llm.call'))                    AS llm_calls,
+    to_int64(sum_if(metric_value, metric_name = 'llm.input_tokens'))            AS input_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.output_tokens'))           AS output_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.total_tokens'))            AS total_tokens
+FROM table(agentguard_cim_metrics)
+WHERE metric_name IN ('llm.call','llm.input_tokens','llm.output_tokens','llm.total_tokens')
+GROUP BY bucket ORDER BY bucket ASC
 ```
 
-**LLM latency** (self-join `llm_input` ↔ `llm_output` on `run_id`):
-```sql
-SELECT
-  quantile(0.50)(date_diff('millisecond', i.event_time, o.event_time)) AS p50,
-  quantile(0.95)(date_diff('millisecond', i.event_time, o.event_time)) AS p95,
-  quantile(0.99)(date_diff('millisecond', i.event_time, o.event_time)) AS p99,
-  avg(date_diff('millisecond', i.event_time, o.event_time))            AS avg,
-  min(date_diff('millisecond', i.event_time, o.event_time))            AS min,
-  max(date_diff('millisecond', i.event_time, o.event_time))            AS max,
-  count()                                                               AS samples
-FROM table(agentshield_hook_events) AS i
-JOIN table(agentshield_hook_events) AS o ON i.run_id = o.run_id
-WHERE i.hook_name = 'llm_input' AND o.hook_name = 'llm_output'
-```
+All four queries accept optional `WHERE` filters on `agent_id`, `deployment_id`, `tags['model']`, and `event_time`.
 
-**Tool metrics — calls and latency:**
+**Tool metrics — calls and latency** (from `agentguard_cim_metrics`):
 ```sql
--- Call counts by tool
+-- Call counts and success/fail per tool (Q1)
 SELECT
-  tool_name,
-  count()                                        AS total_calls,
-  count_if(hook_decision != 'block')             AS success_calls,
-  count_if(hook_decision  = 'block')             AS failed_calls
-FROM table(agentshield_hook_events)
-WHERE hook_name = 'tool_result_persist'
-GROUP BY tool_name
+    tags['tool_name']                                                          AS tool_name,
+    to_int64(sum_if(metric_value, metric_name = 'tool.call'))                 AS total_calls,
+    to_int64(sum_if(metric_value, metric_name = 'tool.success'))              AS success_calls,
+    to_int64(sum_if(metric_value, metric_name = 'tool.call'))
+      - to_int64(sum_if(metric_value, metric_name = 'tool.success'))          AS failed_calls
+FROM table(agentguard_cim_metrics)
+WHERE metric_name IN ('tool.call', 'tool.success')
+GROUP BY tool_name ORDER BY total_calls DESC
 
--- Latency by tool (from after_tool_call event_data)
+-- Latency per tool (Q2; OpenClaw only — Claude Code does not emit tool.duration_ms)
 SELECT
-  tool_name,
-  quantile(0.50)(to_float64(json_extract_string(event_data, 'duration_ms'))) AS p50,
-  quantile(0.95)(to_float64(json_extract_string(event_data, 'duration_ms'))) AS p95
-FROM table(agentshield_hook_events)
-WHERE hook_name = 'after_tool_call'
+    tags['tool_name']            AS tool_name,
+    quantile(0.5)(metric_value)  AS p50_ms,
+    quantile(0.95)(metric_value) AS p95_ms,
+    avg(metric_value)            AS avg_ms,
+    count()                      AS sample_count
+FROM table(agentguard_cim_metrics)
+WHERE metric_name = 'tool.duration_ms' AND metric_value > 0
 GROUP BY tool_name
 ```
 
@@ -504,12 +538,12 @@ GROUP BY tool_name
 
 ### 4.1 Streams
 
-#### `agentshield_security_events` — Detection sink
+#### `agentguard_security_events` — Detection sink
 
 Written to by each per-rule materialized view. Every row is one rule match.
 
 ```sql
-CREATE STREAM agentshield_security_events (
+CREATE STREAM agentguard_security_events (
   detected_at   datetime64(3),
   rule_id       low_cardinality(string),
   rule_name     low_cardinality(string),
@@ -525,12 +559,12 @@ CREATE STREAM agentshield_security_events (
 )
 ```
 
-#### `agentshield_rules` — Append-only rule log
+#### `agentguard_rules` — Append-only rule log
 
 Every rule mutation (install, toggle, upgrade, delete) appends a new row. Current state is resolved via `arg_max`.
 
 ```sql
-CREATE STREAM agentshield_rules (
+CREATE STREAM agentguard_rules (
   rule_id            low_cardinality(string),
   name               string,
   version            string,
@@ -561,17 +595,17 @@ SELECT
   arg_max(required_telemetry, updated_at) AS required_telemetry,
   arg_max(fp_rate,            updated_at) AS fp_rate,
   arg_max(hook_sources,       updated_at) AS hook_sources
-FROM table(agentshield_rules)
+FROM table(agentguard_rules)
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = false
 ```
 
-#### `agentshield_threats` — Mutable threat state
+#### `agentguard_threats` — Mutable threat state
 
 A mutable stream deduplicated by `(agent_id, deployment_id, session_id, rule_id)`. Uses column families to separate detection data from status data, allowing independent upserts.
 
 ```sql
-CREATE MUTABLE STREAM agentshield_threats (
+CREATE MUTABLE STREAM agentguard_threats (
   agent_id          string,
   deployment_id     string,
   session_id        string,
@@ -587,13 +621,13 @@ CREATE MUTABLE STREAM agentshield_threats (
 SETTINGS coalesced = true
 ```
 
-#### `agentshield_notify_events` — Alert filter stream
+#### `agentguard_notify_events` — Alert filter stream
 
 Receives only threats that are new or have re-opened after being cleared, avoiding alert storms for already-known threats.
 
 ```sql
-CREATE STREAM agentshield_notify_events (
-  -- same schema as agentshield_security_events
+CREATE STREAM agentguard_notify_events (
+  -- same schema as agentguard_security_events
 )
 ```
 
@@ -601,11 +635,11 @@ CREATE STREAM agentshield_notify_events (
 
 #### `mv_threats` — Threat deduplication
 
-Continuously upserts into `agentshield_threats` as security events arrive. Sets `status = ''` (empty) so `mv_notify_filter` can distinguish new from already-triaged threats.
+Continuously upserts into `agentguard_threats` as security events arrive. Sets `status = ''` (empty) so `mv_notify_filter` can distinguish new from already-triaged threats.
 
 ```sql
 CREATE MATERIALIZED VIEW mv_threats
-INTO agentshield_threats
+INTO agentguard_threats
 AS SELECT
   agent_id,
   deployment_id,
@@ -614,7 +648,7 @@ AS SELECT
   rule_name,
   severity,
   detected_at AS last_seen
-FROM agentshield_security_events
+FROM agentguard_security_events
 SETTINGS seek_to = 'earliest'
 ```
 
@@ -624,13 +658,13 @@ Passes only detections where the threat has no status or was previously cleared 
 
 ```sql
 CREATE MATERIALIZED VIEW mv_notify_filter
-INTO agentshield_notify_events
+INTO agentguard_notify_events
 AS SELECT
   se.detected_at, se.rule_id, se.rule_name, se.severity,
   se.agent_id, se.deployment_id, se.session_id, se.run_id,
   se.hook_name, se.tool_name, se.message, se.event_data
-FROM agentshield_security_events AS se
-LEFT JOIN agentshield_threats AS t
+FROM agentguard_security_events AS se
+LEFT JOIN agentguard_threats AS t
   ON  se.agent_id      = t.agent_id
   AND se.deployment_id = t.deployment_id
   AND se.session_id    = t.session_id
@@ -640,12 +674,12 @@ WHERE t.status = '' OR t.status = 'cleared'
 
 #### Per-rule MVs — Detection pipeline
 
-Each enabled rule has a MV named `mv_rule_<ruleID_no_hyphens>` (e.g., `rp-001` → `mv_rule_rp001`). The MV query reads **`agentshield_cim_event`** (not the raw hook events stream) and writes matches to `agentshield_security_events`. Using the CIM stream means rules are agent-agnostic: the same SQL detects threats from both Claude Code and OpenClaw agents without any agent-specific conditionals.
+Each enabled rule has a MV named `mv_rule_<ruleID_no_hyphens>` (e.g., `rp-001` → `mv_rule_rp001`). The MV query reads **`agentguard_cim_event`** (not the raw hook events stream) and writes matches to `agentguard_security_events`. Using the CIM stream means rules are agent-agnostic: the same SQL detects threats from both Claude Code and OpenClaw agents without any agent-specific conditionals.
 
 **Create:**
 ```sql
 CREATE MATERIALIZED VIEW mv_rule_rp001
-INTO agentshield_security_events
+INTO agentguard_security_events
 AS <rule query_sql>
 ```
 
@@ -673,23 +707,23 @@ WHERE name LIKE 'mv_rule_%'
 
 ### 4.3 Alert Pipeline
 
-#### UDF — `notify_agentshield_udf`
+#### UDF — `notify_agentguard_udf`
 
-A Python UDF that POSTs each detection to the AgentShield backend webhook endpoint. The backend then fans the event to all SSE-connected browser clients.
+A Python UDF that POSTs each detection to the AgentGuard backend webhook endpoint. The backend then fans the event to all SSE-connected browser clients.
 
 ```sql
-CREATE OR REPLACE FUNCTION notify_agentshield_udf(
+CREATE OR REPLACE FUNCTION notify_agentguard_udf(
   rule_id string, rule_name string, severity string,
   agent_id string, deployment_id string, session_id string,
   hook_name string, tool_name string, message string, detected_at string
 ) RETURNS string LANGUAGE PYTHON AS $$
 import requests
-def notify_agentshield_udf(rule_ids, rule_names, severities,
+def notify_agentguard_udf(rule_ids, rule_names, severities,
                             agent_ids, deployment_ids, session_ids,
                             hook_names, tool_names, messages, detected_ats):
     for i in range(len(rule_ids)):
         try:
-            requests.post("http://agentshield:8080/api/alerts/webhook", json={
+            requests.post("http://agentguard:8080/api/alerts/webhook", json={
                 "rule_id":     rule_ids[i],
                 "rule_name":   rule_names[i],
                 "severity":    severities[i],
@@ -703,19 +737,19 @@ def notify_agentshield_udf(rule_ids, rule_names, severities,
 $$
 ```
 
-#### Alert — `agentshield_notifier`
+#### Alert — `agentguard_notifier`
 
 Batches up to 1 event at a time with a 5 s timeout, rate-limited to 10 alerts per minute.
 
 ```sql
-CREATE ALERT agentshield_notifier
+CREATE ALERT agentguard_notifier
   BATCH 1 EVENTS WITH TIMEOUT 5s
   LIMIT 10 ALERTS PER 1m
-  CALL notify_agentshield_udf
+  CALL notify_agentguard_udf
 AS SELECT
   rule_id, rule_name, severity, agent_id, deployment_id,
   session_id, hook_name, tool_name, message, detected_at
-FROM agentshield_notify_events
+FROM agentguard_notify_events
 ```
 
 ### 4.4 Threat Identity and Status
@@ -728,17 +762,17 @@ FROM agentshield_notify_events
 - `"acknowledged"` — operator has seen it
 - `"cleared"` — operator has resolved it
 
-**Re-open logic:** If a threat's `last_seen > status_updated_at` and its status is `"cleared"`, the API re-opens it to `"open"` and fires an async upsert to `agentshield_threats`.
+**Re-open logic:** If a threat's `last_seen > status_updated_at` and its status is `"cleared"`, the API re-opens it to `"open"` and fires an async upsert to `agentguard_threats`.
 
 **Status upsert:**
 ```sql
 -- Acknowledge:
-INSERT INTO agentshield_threats
+INSERT INTO agentguard_threats
   (agent_id, deployment_id, session_id, rule_id, status, status_updated_at)
 VALUES ('<id>', '<id>', '<id>', '<id>', 'acknowledged', now64(3))
 
 -- Clear:
-INSERT INTO agentshield_threats
+INSERT INTO agentguard_threats
   (agent_id, deployment_id, session_id, rule_id, status, status_updated_at)
 VALUES ('<id>', '<id>', '<id>', '<id>', 'cleared', now64(3))
 ```
@@ -749,11 +783,11 @@ VALUES ('<id>', '<id>', '<id>', '<id>', 'cleared', now64(3))
 |--------|------|-------------|
 | GET | `/api/threats` | List all threats; `?severity=&category=`; merges threats table + stats + events |
 | GET | `/api/threats/:id` | Single threat by ThreatID (MD5 of 4 key fields) |
-| POST | `/api/threats/:id/acknowledge` | Upsert `status='acknowledged'` into `agentshield_threats` |
-| POST | `/api/threats/:id/clear` | Upsert `status='cleared'` into `agentshield_threats` |
+| POST | `/api/threats/:id/acknowledge` | Upsert `status='acknowledged'` into `agentguard_threats` |
+| POST | `/api/threats/:id/clear` | Upsert `status='cleared'` into `agentguard_threats` |
 | GET | `/api/rules` | List installed rules with 24 h detection counts |
 | GET | `/api/rules/:id` | Rule detail with 50 most recent detections |
-| POST | `/api/rules/:id/install` | Install from catalog: insert to `agentshield_rules`, create MV |
+| POST | `/api/rules/:id/install` | Install from catalog: insert to `agentguard_rules`, create MV |
 | POST | `/api/rules/:id/toggle` | Flip `enabled`; pause or resume MV accordingly |
 | POST | `/api/rules/:id/upgrade` | Insert new version row; drop and recreate MV with updated query |
 | DELETE | `/api/rules/:id` | Soft-delete: insert `deleted=true` row, drop MV |
@@ -782,7 +816,7 @@ type Entry struct {
     RequiredTelemetry string   `yaml:"required_telemetry"`
     Author            string   `yaml:"author"`
     Tags              []string `yaml:"tags"`
-    QuerySQL          string   `yaml:"query_sql"`          // SELECT into agentshield_security_events
+    QuerySQL          string   `yaml:"query_sql"`          // SELECT into agentguard_security_events
 }
 ```
 
@@ -797,7 +831,7 @@ The `Manager` merges two layers (local overrides seed by ID):
 
 ### 5.3 Built-in Rules
 
-All built-in rules query `agentshield_cim_event` using normalized `event_type` values, making them agent-agnostic (they detect threats from both Claude Code and OpenClaw without modification). The `hook_sources` field in the catalog entry lists the CIM `event_type` values the rule inspects.
+All built-in rules query `agentguard_cim_event` using normalized `event_type` values, making them agent-agnostic (they detect threats from both Claude Code and OpenClaw without modification). The `hook_sources` field in the catalog entry lists the CIM `event_type` values the rule inspects.
 
 | ID | Name | Severity | Category | CIM Event Types |
 |----|------|----------|----------|----------------|
@@ -818,7 +852,7 @@ SELECT
   tool_name,
   concat('Potential prompt injection in ', raw_hook_name, ' from agent ', agent_id) AS message,
   raw_event_data            AS event_data
-FROM agentshield_cim_event
+FROM agentguard_cim_event
 WHERE event_type IN ('user_input', 'llm_request')
   AND (
        lower(user_message) LIKE '%ignore previous instructions%'
@@ -845,7 +879,7 @@ SELECT
     if(tool_name != '', concat(' (', tool_name, ')'), ''),
     ' from agent ', agent_id) AS message,
   raw_event_data AS event_data
-FROM agentshield_cim_event
+FROM agentguard_cim_event
 WHERE event_type IN ('tool_complete', 'llm_response')
   AND session_id != ''
   AND (
@@ -872,7 +906,7 @@ SELECT
   tool_name,
   concat('Dangerous tool call: ', tool_name, ' by agent ', agent_id) AS message,
   raw_event_data    AS event_data
-FROM agentshield_cim_event
+FROM agentguard_cim_event
 WHERE event_type = 'tool_invoke'
   AND (
        lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
@@ -897,7 +931,7 @@ SELECT
   concat('Package install by agent ', agent_id,
     ' via ', if(tool_name != '', tool_name, raw_hook_name)) AS message,
   raw_event_data       AS event_data
-FROM agentshield_cim_event
+FROM agentguard_cim_event
 WHERE event_type = 'tool_invoke'
   AND (
        lower(tool_input) LIKE '%npm install%'
@@ -939,12 +973,12 @@ func versionGreater(a, b string) bool {
 
 ### 6.1 Streams
 
-#### `agentshield_pricing` — Provider pricing table
+#### `agentguard_pricing` — Provider pricing table
 
 A mutable stream used as a key-value store. Upserts by `(provider, model)` primary key.
 
 ```sql
-CREATE MUTABLE STREAM agentshield_pricing (
+CREATE MUTABLE STREAM agentguard_pricing (
   provider                    low_cardinality(string),
   model                       low_cardinality(string),
   input_cost_per_million      float64,
@@ -1002,8 +1036,8 @@ SELECT
        + to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead'))
          * p.cache_read_cost_per_million
       ) / 1000000.0)  AS cost_usd
-FROM table(agentshield_hook_events) AS e
-LEFT JOIN table(agentshield_pricing) AS p
+FROM table(agentguard_hook_events) AS e
+LEFT JOIN table(agentguard_pricing) AS p
   ON e.provider = p.provider AND e.model = p.model
 WHERE e.hook_name = 'llm_output'
 GROUP BY e.agent_id, e.deployment_id, e.provider, e.model
@@ -1021,8 +1055,8 @@ SELECT
        + to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead'))
          * p.cache_read_cost_per_million
       ) / 1000000.0)  AS cost_usd
-FROM table(agentshield_hook_events) AS e
-LEFT JOIN table(agentshield_pricing) AS p
+FROM table(agentguard_hook_events) AS e
+LEFT JOIN table(agentguard_pricing) AS p
   ON e.provider = p.provider AND e.model = p.model
 WHERE e.hook_name = 'llm_output'
   AND e.event_time >= now() - interval 30 day
@@ -1038,8 +1072,8 @@ SELECT
        + to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead'))
          * p.cache_read_cost_per_million
       ) / 1000000.0)  AS total_cost
-FROM table(agentshield_hook_events) AS e
-LEFT JOIN table(agentshield_pricing) AS p
+FROM table(agentguard_hook_events) AS e
+LEFT JOIN table(agentguard_pricing) AS p
   ON e.provider = p.provider AND e.model = p.model
 WHERE e.hook_name = 'llm_output'
   AND e.event_time >= now() - interval 1 day
@@ -1060,7 +1094,7 @@ cache_savings = cache_amount * 9
 
 **Upsert pricing:**
 ```sql
-INSERT INTO agentshield_pricing
+INSERT INTO agentguard_pricing
   (provider, model, input_cost_per_million, output_cost_per_million, cache_read_cost_per_million, updated_at)
 VALUES ('<provider>', '<model>', <input>, <output>, <cache>, now64(3))
 -- Mutable stream semantics: upserts by PRIMARY KEY (provider, model)
@@ -1068,7 +1102,7 @@ VALUES ('<provider>', '<model>', <input>, <output>, <cache>, now64(3))
 
 **Delete pricing:**
 ```sql
-DELETE FROM agentshield_pricing
+DELETE FROM agentguard_pricing
 WHERE provider = '<provider>' AND model = '<model>'
 ```
 
@@ -1077,9 +1111,271 @@ WHERE provider = '<provider>' AND model = '<model>'
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/cost` | Full cost report: MTD, forecast, daily trend (30 d), token breakdown, per-agent/model costs, cache savings |
-| GET | `/api/cost/pricing` | List all pricing entries from `agentshield_pricing` |
+| GET | `/api/cost/pricing` | List all pricing entries from `agentguard_pricing` |
 | POST | `/api/cost/pricing` | Upsert a pricing entry (insert into mutable stream) |
 | DELETE | `/api/cost/pricing/:provider/:model` | Delete a pricing entry by primary key |
+
+---
+
+## 7. CIM Metrics
+
+The CIM Metrics layer is a pre-aggregated metrics pipeline that normalizes per-call LLM and tool telemetry from all agent types into a single `agentguard_cim_metrics` stream. The `/api/metrics/llm` and `/api/metrics/tools` handlers query this stream exclusively.
+
+### 7.1 Design Rationale
+
+**Why a separate metrics stream instead of querying raw events?**
+
+- **Multi-source fusion**: Claude Code LLM metrics come from OTel logs (`otel_logs`), not hook events. OpenClaw LLM metrics come from `agentguard_cim_event`. A single metrics stream hides this difference from the API layer.
+- **Agent-ID reconciliation**: OTel logs carry Claude Code's internal SHA hash as `user.id`. The metrics MVs resolve this to the configured hostname by joining `agentguard_session_agents` (populated from hook events where the correct `agent_id` is always present).
+- **Latency sourcing**: OpenClaw emits `durationMs` in its `agent_end` hook, not in `llm_output`. A `agentguard_run_latency` mutable stream bridges the gap, allowing `mv_cim_metrics_openclaw_llm` to join latency into the same row as the token counts.
+- **Pre-computed fan-out**: Each LLM call emits 7 metric rows in a single `ARRAY JOIN`; each tool call emits 2–3. This trades storage for query simplicity — aggregation queries are simple `sum_if` pivots.
+
+### 7.2 Lookup Streams
+
+Two mutable streams act as live key-value lookup tables joined by the metrics MVs.
+
+#### `agentguard_session_agents` — Session → Agent mapping
+
+```sql
+CREATE MUTABLE STREAM IF NOT EXISTS agentguard_session_agents
+(
+  session_id    string,
+  agent_id      string,
+  deployment_id string,
+  first_seen    datetime64(3)
+) PRIMARY KEY (session_id)
+```
+
+Fed by `mv_session_agents` which reads **all** hook events (both agent types):
+
+```sql
+CREATE MATERIALIZED VIEW mv_session_agents
+INTO agentguard_session_agents AS
+SELECT session_id, agent_id, deployment_id, event_time AS first_seen
+FROM agentguard_hook_events
+```
+
+Because this is a mutable stream, duplicate inserts (many events per session) are harmless — only the latest row per `session_id` is retained. Used by `mv_cim_metrics_claudecode_otel` to resolve the OTel `user.id` hash to the human-readable `agent_id` set in the hook plugin config.
+
+#### `agentguard_run_latency` — Run → LLM latency mapping
+
+```sql
+CREATE MUTABLE STREAM IF NOT EXISTS agentguard_run_latency
+(
+  run_id     string,
+  latency_ms float64
+) PRIMARY KEY (run_id)
+```
+
+Fed by `mv_run_latency` which reads `agent_end` hook events (OpenClaw only):
+
+```sql
+CREATE MATERIALIZED VIEW mv_run_latency
+INTO agentguard_run_latency AS
+SELECT
+  run_id,
+  to_float64_or_zero(json_extract_string(event_data, 'durationMs')) AS latency_ms
+FROM agentguard_hook_events
+WHERE hook_name = 'agent_end'
+```
+
+OpenClaw fires `agent_end` ~2 ms before `llm_output` for the same `run_id`, so the latency entry is available in the mutable stream by the time `mv_cim_metrics_openclaw_llm` processes the corresponding `llm_response` CIM event.
+
+### 7.3 `agentguard_cim_metrics` — Metrics Sink
+
+```sql
+CREATE STREAM agentguard_cim_metrics
+(
+  event_time    datetime64(3),
+  metric_name   low_cardinality(string),
+  metric_value  float64,
+  agent_type    low_cardinality(string),
+  agent_id      string,
+  deployment_id low_cardinality(string),
+  session_id    string,
+  tags          map(low_cardinality(string), string)
+)
+```
+
+**Metric names and their sources:**
+
+| `metric_name` | Unit | OpenClaw source | Claude Code source |
+|---------------|------|-----------------|-------------------|
+| `llm.call` | count (1 per call) | `llm_response` CIM event | `api_request` OTel log |
+| `llm.input_tokens` | tokens | `raw_event_data.lastAssistant.usage.input` | `log_attributes['input_tokens']` |
+| `llm.output_tokens` | tokens | `raw_event_data.lastAssistant.usage.output` | `log_attributes['output_tokens']` |
+| `llm.total_tokens` | tokens | `totalTokens` field | `input_tokens + output_tokens` |
+| `llm.cache_read_tokens` | tokens | `usage.cacheRead` | `log_attributes['cache_read_tokens']` |
+| `llm.cache_write_tokens` | tokens | `usage.cacheWrite` | `log_attributes['cache_creation_tokens']` |
+| `llm.latency_ms` | milliseconds | `agentguard_run_latency.latency_ms` (from `agent_end`) | `log_attributes['duration_ms']` |
+| `tool.call` | count (1 per call) | `tool_complete` CIM event | `tool_complete` CIM event |
+| `tool.success` | 0 or 1 | `tool_success` field | `tool_success` field |
+| `tool.duration_ms` | milliseconds | `tool_duration_ms` field | — (not emitted) |
+
+**Tags per metric type:**
+
+| Metric family | Tags |
+|---------------|------|
+| `llm.*` | `model`, `stop_reason`, `run_id` |
+| `tool.*` | `tool_name`, `run_id` |
+
+### 7.4 Metrics Materialized Views
+
+Four MVs feed `agentguard_cim_metrics`. They are **dropped and recreated on every startup** so DDL fixes apply without manual intervention.
+
+**Creation order** (dependency-safe):
+1. `mv_session_agents` — populates lookup before any MV joins it
+2. `mv_run_latency` — populates lookup before OpenClaw LLM MV joins it
+3. `mv_cim_metrics_openclaw_llm` — JOINs `agentguard_run_latency`
+4. `mv_cim_metrics_openclaw_tools`
+5. `mv_cim_metrics_claudecode_otel` — JOINs `agentguard_session_agents`
+6. `mv_cim_metrics_claudecode_tools`
+
+#### `mv_cim_metrics_openclaw_llm`
+
+```sql
+CREATE MATERIALIZED VIEW mv_cim_metrics_openclaw_llm
+INTO agentguard_cim_metrics AS
+SELECT
+  e.event_time,
+  metric_name,
+  metric_value,
+  'openclaw'                                                              AS agent_type,
+  e.agent_id,
+  e.deployment_id,
+  e.session_id,
+  map_cast(
+    ['model', 'stop_reason', 'run_id'],
+    [e.model, json_value(e.raw_event_data, '$.lastAssistant.stopReason'), e.run_id]
+  )                                                                       AS tags
+FROM agentguard_cim_event AS e
+LEFT JOIN agentguard_run_latency AS r ON r.run_id = e.run_id
+ARRAY JOIN
+  ['llm.call', 'llm.input_tokens', 'llm.output_tokens', 'llm.total_tokens',
+   'llm.cache_read_tokens', 'llm.cache_write_tokens', 'llm.latency_ms']  AS metric_name,
+  [
+    to_float64(1),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'input')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'output')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'totalTokens')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'cacheRead')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'cacheWrite')),
+    r.latency_ms
+  ]                                                                       AS metric_value
+WHERE e.agent_type = 'openclaw'
+  AND e.event_type = 'llm_response'
+```
+
+#### `mv_cim_metrics_openclaw_tools`
+
+```sql
+CREATE MATERIALIZED VIEW mv_cim_metrics_openclaw_tools
+INTO agentguard_cim_metrics AS
+SELECT
+  event_time,
+  metric_name,
+  metric_value,
+  'openclaw'                                                   AS agent_type,
+  agent_id, deployment_id, session_id,
+  map_cast(['tool_name', 'run_id'], [tool_name, run_id])      AS tags
+FROM agentguard_cim_event
+ARRAY JOIN
+  ['tool.call', 'tool.success', 'tool.duration_ms']           AS metric_name,
+  [
+    to_float64(1),
+    if(tool_success, to_float64(1), to_float64(0)),
+    to_float64(tool_duration_ms)
+  ]                                                            AS metric_value
+WHERE agent_type = 'openclaw' AND event_type = 'tool_complete'
+```
+
+#### `mv_cim_metrics_claudecode_otel`
+
+Reads directly from `otel_logs` (not from `agentguard_cim_event`) because Claude Code's OTel plugin emits accurate per-call token and latency data that is not available in hook events.
+
+```sql
+CREATE MATERIALIZED VIEW mv_cim_metrics_claudecode_otel
+INTO agentguard_cim_metrics AS
+SELECT
+  o._tp_time                                                              AS event_time,
+  metric_name,
+  metric_value,
+  'claudecode'                                                            AS agent_type,
+  if(s.agent_id != '', s.agent_id, o.log_attributes['user.id'])          AS agent_id,
+  s.deployment_id                                                         AS deployment_id,
+  o.log_attributes['session.id']                                         AS session_id,
+  map_cast(
+    ['model', 'run_id'],
+    [o.log_attributes['model'], o.log_attributes['session.id']]
+  )                                                                       AS tags
+FROM otel_logs AS o
+LEFT JOIN agentguard_session_agents AS s
+  ON s.session_id = o.log_attributes['session.id']
+ARRAY JOIN
+  ['llm.call', 'llm.input_tokens', 'llm.output_tokens', 'llm.total_tokens',
+   'llm.cache_read_tokens', 'llm.cache_write_tokens', 'llm.latency_ms']  AS metric_name,
+  [
+    to_float64(1),
+    to_float64_or_zero(o.log_attributes['input_tokens']),
+    to_float64_or_zero(o.log_attributes['output_tokens']),
+    to_float64_or_zero(o.log_attributes['input_tokens'])
+      + to_float64_or_zero(o.log_attributes['output_tokens']),
+    to_float64_or_zero(o.log_attributes['cache_read_tokens']),
+    to_float64_or_zero(o.log_attributes['cache_creation_tokens']),
+    to_float64_or_zero(o.log_attributes['duration_ms'])
+  ]                                                                       AS metric_value
+WHERE o.log_attributes['event.name'] = 'api_request'
+```
+
+> **OTel log attribute key facts for Claude Code:**
+> - `log_attributes['event.name']` = `'api_request'` (not `'claude_code.api_request'`)
+> - `log_attributes['session.id']` = the session UUID (NOT `resource_attributes`)
+> - `log_attributes['user.id']` = internal SHA hash — resolved to the configured hostname via the `agentguard_session_agents` JOIN
+> - `log_attributes['cache_creation_tokens']` = prompt-cache write tokens (not `cache_write_tokens`)
+
+#### `mv_cim_metrics_claudecode_tools`
+
+```sql
+CREATE MATERIALIZED VIEW mv_cim_metrics_claudecode_tools
+INTO agentguard_cim_metrics AS
+SELECT
+  event_time,
+  metric_name,
+  metric_value,
+  'claudecode' AS agent_type,
+  agent_id, deployment_id, session_id,
+  map_cast(['tool_name', 'run_id'], [tool_name, run_id]) AS tags
+FROM agentguard_cim_event
+ARRAY JOIN
+  ['tool.call', 'tool.success']             AS metric_name,
+  [
+    to_float64(1),
+    if(tool_success, to_float64(1), to_float64(0))
+  ]                                         AS metric_value
+WHERE agent_type = 'claudecode' AND event_type = 'tool_complete'
+```
+
+> Claude Code does not populate `tool_duration_ms` in its CIM events (the `PostToolUse` hook payload does not include duration), so `tool.duration_ms` is not emitted for Claude Code agents.
+
+### 7.5 Mutable Stream Constraints
+
+- `agentguard_session_agents` and `agentguard_run_latency` are **simple mutable streams** (single column family, no `SETTINGS coalesced = true`). The `coalesced` setting requires multiple `FAMILY` declarations and causes a `code: 997` error on single-family streams.
+- The JOIN in `mv_cim_metrics_claudecode_otel` uses `agentguard_session_agents` as a **live mutable stream** (not `table()`). Using `table()` in a streaming MV takes a static snapshot at creation time (empty on fresh start) and would never see hook events that arrive after startup.
+
+### 7.6 Known Limitations
+
+| Limitation | Detail |
+|------------|--------|
+| Claude Code `stop_reason` in LLM metrics | OTel logs do not carry a stop reason field. The `stop_reason` tag is always empty for Claude Code metrics; `tags['stop_reason']` filtering only works for OpenClaw. |
+| Claude Code `tool.duration_ms` | Not emitted — the `PostToolUse` hook payload does not include a duration field. |
+| `run_id` for Claude Code | Claude Code has no "run" concept; `run_id` in CIM events is always equal to `session_id`. The `run_id` tag in LLM metrics is also set to `session_id`. |
+
+### 7.7 API — Metrics
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/metrics/llm` | LLM metrics: token counts, call stats, stop-reason breakdown, latency percentiles, throughput time series. Params: `agent_id`, `model`, `since`, `until` (RFC3339), `granularity` (minute\|hour\|day) |
+| GET | `/api/metrics/tools` | Tool metrics: call counts and latency per tool. Params: `agent_id`, `tool_name`, `since`, `until` |
 
 ---
 
@@ -1093,9 +1389,9 @@ The Investigate page exposes raw Timeplus query access.
 
 | Stream | Description |
 |--------|-------------|
-| `agentshield_hook_events` | Raw agent hook events |
-| `agentshield_security_events` | Security rule detections |
-| `agentshield_threats` | Deduplicated threat state |
+| `agentguard_hook_events` | Raw agent hook events |
+| `agentguard_security_events` | Security rule detections |
+| `agentguard_threats` | Deduplicated threat state |
 
 OTel streams (`otel_*`) are discovered dynamically from `system.tables`.
 
@@ -1116,11 +1412,11 @@ The dashboard aggregates data from multiple streams in parallel:
 
 | Metric | Query |
 |--------|-------|
-| Total agents | `count(distinct concat(deployment_id, agent_id))` from `agentshield_hook_events` |
-| Active threats (24h) | `count()` from `agentshield_threats` where `last_seen >= now() - 1d` |
+| Total agents | `count(distinct concat(deployment_id, agent_id))` from `agentguard_hook_events` |
+| Active threats (24h) | `count()` from `agentguard_threats` where `last_seen >= now() - 1d` |
 | Critical escalations | Count where `severity = 'critical'` from above |
 | Total cost (24h) | JOIN query on `hook_events` + `pricing` last 24 h |
-| Active rules | `count()` from `agentshield_rules` current state (enabled, not deleted) |
+| Active rules | `count()` from `agentguard_rules` current state (enabled, not deleted) |
 | Threat categories | Group active threats by rule `category`, compute percentages |
 
 | Method | Path | Description |

@@ -7,7 +7,7 @@ import LiveAgentActivity from '../components/LiveAgentActivity'
 
 const sqlNotifyEvents = `
 SELECT detected_at, rule_id, rule_name, severity, agent_id, deployment_id, session_id, hook_name, message
-FROM agentshield_notify_events
+FROM agentguard_notify_events
 SETTINGS seek_to='-24h'`
 
 const severityCard = {

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/timeplus/agentshield/internal/models"
+	"github.com/timeplus/agentguard/internal/models"
 )
 
 // hookKind maps a hook name to a span kind for waterfall colouring.

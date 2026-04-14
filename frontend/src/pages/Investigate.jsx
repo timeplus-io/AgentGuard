@@ -9,7 +9,7 @@ import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
 
 const defaultQuery = `SELECT hook_name, event_time, agent_id, tool_name, model, hook_decision
-FROM agentshield_hook_events
+FROM agentguard_hook_events
 LIMIT 50`
 
 export default function Investigate() {

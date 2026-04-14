@@ -197,7 +197,7 @@ Skip this step if the input already exists (e.g. from the OpenClaw OTEL setup â€
 Claude Code uses **OTLP/HTTP (Protobuf)** on port **4318**.
 
 ```sql
-CREATE INPUT agentshield_otel_input
+CREATE INPUT agentguard_otel_input
 SETTINGS
   type                                          = 'otel',
   protocol                                      = 'http',
@@ -208,7 +208,7 @@ SETTINGS
   metrics_gauge_target_stream                   = 'otel_metrics_gauge',
   metrics_sum_target_stream                     = 'otel_metrics_sum',
   metrics_histogram_target_stream               = 'otel_metrics_histogram'
-COMMENT 'AgentShield agent telemetry via OTLP/HTTP (Claude Code + OpenClaw)';
+COMMENT 'AgentGuard agent telemetry via OTLP/HTTP (Claude Code + OpenClaw)';
 ```
 
 > If you previously created `openclaw_otel_input` on port 4318, it already accepts Claude Code data â€” no new input is needed.

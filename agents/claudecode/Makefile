@@ -1,13 +1,13 @@
 PWD := $(shell pwd)
-PLUGIN_DIR := $(PWD)/agentshield-plugin
+PLUGIN_DIR := $(PWD)/agentguard-plugin
 SETTINGS_FILE := $(HOME)/.claude/settings.json
-AGENTSHIELD_AGENT_ID ?= $(shell hostname)
-AGENTSHIELD_DEPLOYMENT_ID ?= local
-AGENTSHIELD_DEPLOYMENT_NAME ?= Local Dev
-AGENTSHIELD_TIMEPLUS_URL ?= http://localhost:3218
-AGENTSHIELD_STREAM ?= agentshield_hook_events
-AGENTSHIELD_USERNAME ?= proton
-AGENTSHIELD_PASSWORD ?= timeplus@t+
+AGENTGUARD_AGENT_ID ?= $(shell hostname)
+AGENTGUARD_DEPLOYMENT_ID ?= local
+AGENTGUARD_DEPLOYMENT_NAME ?= Local Dev
+AGENTGUARD_TIMEPLUS_URL ?= http://localhost:3218
+AGENTGUARD_STREAM ?= agentguard_hook_events
+AGENTGUARD_USERNAME ?= proton
+AGENTGUARD_PASSWORD ?= timeplus@t+
 
 # OTEL configuration — shares Timeplus OTEL HTTP input on port 4318 with OpenClaw
 OTEL_ENDPOINT ?= http://localhost:4318
@@ -69,7 +69,7 @@ for event in hook_events:
 
 with open(settings_path, "w") as f:
     json.dump(data, f, indent=2)
-print("AgentShield hooks configured in", settings_path)
+print("AgentGuard hooks configured in", settings_path)
 endef
 export CONFIGURE_SCRIPT
 
@@ -105,7 +105,7 @@ for event in hook_events:
 
 with open(settings_path, "w") as f:
     json.dump(data, f, indent=2)
-print("AgentShield hooks removed from", settings_path)
+print("AgentGuard hooks removed from", settings_path)
 endef
 export UNCONFIGURE_SCRIPT
 
@@ -137,7 +137,7 @@ data.setdefault("env", {}).update(otel_env)
 
 with open(settings_path, "w") as f:
     json.dump(data, f, indent=2)
-print("AgentShield OTEL configured in", settings_path)
+print("AgentGuard OTEL configured in", settings_path)
 endef
 export CONFIGURE_OTEL_SCRIPT
 
@@ -173,7 +173,7 @@ if not env:
 
 with open(settings_path, "w") as f:
     json.dump(data, f, indent=2)
-print("AgentShield OTEL removed from", settings_path)
+print("AgentGuard OTEL removed from", settings_path)
 endef
 export UNCONFIGURE_OTEL_SCRIPT
 
@@ -195,11 +195,11 @@ build:
 install: build configure configure-otel
 
 start: configure configure-otel
-	AGENTSHIELD_AGENT_ID="$(AGENTSHIELD_AGENT_ID)" \
-	AGENTSHIELD_DEPLOYMENT_ID="$(AGENTSHIELD_DEPLOYMENT_ID)" \
-	AGENTSHIELD_DEPLOYMENT_NAME="$(AGENTSHIELD_DEPLOYMENT_NAME)" \
-	AGENTSHIELD_TIMEPLUS_URL="$(AGENTSHIELD_TIMEPLUS_URL)" \
-	AGENTSHIELD_STREAM="$(AGENTSHIELD_STREAM)" \
-	AGENTSHIELD_USERNAME="$(AGENTSHIELD_USERNAME)" \
-	AGENTSHIELD_PASSWORD="$(AGENTSHIELD_PASSWORD)" \
+	AGENTGUARD_AGENT_ID="$(AGENTGUARD_AGENT_ID)" \
+	AGENTGUARD_DEPLOYMENT_ID="$(AGENTGUARD_DEPLOYMENT_ID)" \
+	AGENTGUARD_DEPLOYMENT_NAME="$(AGENTGUARD_DEPLOYMENT_NAME)" \
+	AGENTGUARD_TIMEPLUS_URL="$(AGENTGUARD_TIMEPLUS_URL)" \
+	AGENTGUARD_STREAM="$(AGENTGUARD_STREAM)" \
+	AGENTGUARD_USERNAME="$(AGENTGUARD_USERNAME)" \
+	AGENTGUARD_PASSWORD="$(AGENTGUARD_PASSWORD)" \
 	claude
