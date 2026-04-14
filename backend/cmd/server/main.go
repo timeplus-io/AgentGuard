@@ -43,6 +43,7 @@ func newRootCmd() *cobra.Command {
 	flags.String("timeplus-password", "", "Proton/Timeplus password")
 	flags.Int("timeplus-native-port", 8463, "Proton/Timeplus native TCP port")
 	flags.String("catalog-dir", "", "catalog directory for rule overrides and custom rules (default: ./catalog)")
+	flags.String("agentguard-url", "", "URL Proton uses to call back AgentGuard (default: http://localhost:8080)")
 
 	_ = viper.BindPFlag("server.port", flags.Lookup("port"))
 	_ = viper.BindPFlag("catalog.dir", flags.Lookup("catalog-dir"))
@@ -51,6 +52,7 @@ func newRootCmd() *cobra.Command {
 	_ = viper.BindPFlag("timeplus.user", flags.Lookup("timeplus-user"))
 	_ = viper.BindPFlag("timeplus.password", flags.Lookup("timeplus-password"))
 	_ = viper.BindPFlag("timeplus.native-port", flags.Lookup("timeplus-native-port"))
+	_ = viper.BindPFlag("agentguard.url", flags.Lookup("agentguard-url"))
 
 	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if cfgFile, _ := flags.GetString("config"); cfgFile != "" {
@@ -83,7 +85,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Proton endpoint: %s:%d (native: %d)\n", cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort)
 	fmt.Printf("Catalog directory: %s (%d entries)\n", cfg.CatalogDir, len(mgr.All()))
 
-	if err := timeplus.Init(&cfg.Timeplus, mgr.All()); err != nil {
+	fmt.Printf("AgentGuard webhook URL: %s\n", cfg.AgentGuardURL)
+	if err := timeplus.Init(cfg, mgr.All()); err != nil {
 		fmt.Printf("warning: timeplus init failed: %v\n", err)
 		// Non-fatal — server continues without OTel resources pre-provisioned.
 	}

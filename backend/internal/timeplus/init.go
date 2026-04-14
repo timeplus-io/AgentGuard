@@ -21,8 +21,8 @@ func bt(s string) string { return btReplacer.Replace(s) }
 
 // Init waits until Timeplus is reachable, then ensures all streams, MVs, and
 // seed data are in place. catalogEntries are used to seed rules on first startup.
-func Init(cfg *config.TimeplusConfig, catalogEntries []catalog.Entry) error {
-	conn, err := waitForTimeplus(cfg)
+func Init(cfg *config.Config, catalogEntries []catalog.Entry) error {
+	conn, err := waitForTimeplus(&cfg.Timeplus)
 	if err != nil {
 		return fmt.Errorf("timeplus init: %w", err)
 	}
@@ -72,7 +72,7 @@ func Init(cfg *config.TimeplusConfig, catalogEntries []catalog.Entry) error {
 	if err := dropLegacyMVs(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning dropping legacy MVs: %v", err)
 	}
-	if err := createNotifyUDF(ctx, conn); err != nil {
+	if err := createNotifyUDF(ctx, conn, cfg.AgentGuardURL); err != nil {
 		log.Printf("timeplus init: warning creating UDF: %v", err)
 	}
 	if err := createNotifyFilterMV(ctx, conn); err != nil {
@@ -81,7 +81,7 @@ func Init(cfg *config.TimeplusConfig, catalogEntries []catalog.Entry) error {
 	if err := createNotifierAlert(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning creating alert: %v", err)
 	}
-	if err := startupSyncMVs(cfg, ctx, conn); err != nil {
+	if err := startupSyncMVs(&cfg.Timeplus, ctx, conn); err != nil {
 		log.Printf("timeplus init: warning syncing MVs: %v", err)
 	}
 	return nil
@@ -326,11 +326,12 @@ func dropLegacyMVs(ctx context.Context, conn proton.Conn) error {
 	return nil
 }
 
-func createNotifyUDF(ctx context.Context, conn proton.Conn) error {
-	if err := conn.Exec(ctx, ddlNotifyUDF); err != nil {
+func createNotifyUDF(ctx context.Context, conn proton.Conn, agentGuardURL string) error {
+	ddl := fmt.Sprintf(ddlNotifyUDFTemplate, agentGuardURL+"/api/alerts/webhook")
+	if err := conn.Exec(ctx, ddl); err != nil {
 		return fmt.Errorf("create UDF: %w", err)
 	}
-	log.Printf("timeplus: UDF notify_agentguard_udf created/updated")
+	log.Printf("timeplus: UDF notify_agentguard_udf created/updated (webhook: %s)", agentGuardURL)
 	return nil
 }
 
@@ -1073,7 +1074,9 @@ func seedPricingData(ctx context.Context, conn proton.Conn) error {
 	return nil
 }
 
-const ddlNotifyUDF = `CREATE OR REPLACE FUNCTION notify_agentguard_udf(
+// ddlNotifyUDFTemplate is a format string; %s is replaced with the full
+// webhook URL (e.g. "http://agentguard:8080/api/alerts/webhook").
+const ddlNotifyUDFTemplate = `CREATE OR REPLACE FUNCTION notify_agentguard_udf(
   rule_id string, rule_name string, severity string,
   agent_id string, deployment_id string, session_id string,
   hook_name string, tool_name string, message string, detected_at string
@@ -1084,7 +1087,7 @@ def notify_agentguard_udf(rule_ids, rule_names, severities,
                             hook_names, tool_names, messages, detected_ats):
     for i in range(len(rule_ids)):
         try:
-            requests.post("http://agentguard:8080/api/alerts/webhook", json={
+            requests.post("%s", json={
                 "rule_id": rule_ids[i],
                 "rule_name": rule_names[i],
                 "severity": severities[i],
