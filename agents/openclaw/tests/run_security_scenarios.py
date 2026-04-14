@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-AgentShield Security Rule Test Runner
+AgentGuard Security Rule Test Runner
 
 Sends text-only prompts to OpenClaw that are designed to trigger each of the four
-built-in security rule MVs, then verifies detections appear in agentshield_security_events.
+built-in security rule MVs, then verifies detections appear in agentguard_security_events.
 
 Usage:
     python3 tests/run_security_scenarios.py [--scenario N] [--model MODEL]
@@ -13,7 +13,7 @@ Usage:
 
 Prerequisites:
     - OpenClaw running at http://localhost:18789
-    - AgentShield backend running with all four rule packs enabled
+    - AgentGuard backend running with all four rule packs enabled
     - Timeplus running at http://localhost:3218
 """
 
@@ -56,7 +56,7 @@ def _load_proton_config() -> tuple[str, str, str]:
     config_path = Path(__file__).parent.parent / ".openclaw" / "openclaw.json"
     with config_path.open() as f:
         data = json.load(f)
-    plugin_cfg = data["plugins"]["entries"]["agentshield"]["config"]
+    plugin_cfg = data["plugins"]["entries"]["agentguard"]["config"]
     url = plugin_cfg.get("timeplusUrl", "http://localhost:3218")
     url = url.replace("host.docker.internal", "localhost")
     user = plugin_cfg.get("username", "proton")
@@ -67,7 +67,7 @@ def _load_proton_config() -> tuple[str, str, str]:
 OPENCLAW_TOKEN = _load_openclaw_token()
 TIMEPLUS_URL, TIMEPLUS_USER, TIMEPLUS_PASSWORD = _load_proton_config()
 
-FLUSH_WAIT_S = 5        # seconds to wait for agentshield batch flush
+FLUSH_WAIT_S = 5        # seconds to wait for agentguard batch flush
 REPLY_TIMEOUT_S = 120   # seconds to wait for OpenClaw reply
 
 # ---------------------------------------------------------------------------
@@ -166,7 +166,7 @@ def print_table(rows: list[dict], cols: list[str] | None = None, limit: int = 10
 
 def scenario_7(model: str | None):
     section("Scenario 7 — Prompt Injection Shield (rp-001)")
-    user_id = "agentshield-security-s7"
+    user_id = "agentguard-security-s7"
     t_start = now_iso()
 
     # The attack keywords are embedded in the user message, which becomes part
@@ -189,7 +189,7 @@ def scenario_7(model: str | None):
     # Verify the llm_input hook event contains the trigger pattern
     hook_rows = tpq(f"""
         SELECT hook_name, event_time, agent_id
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE hook_name = 'llm_input'
           AND lower(event_data) LIKE '%ignore previous instructions%'
           AND event_time >= '{t_start}'
@@ -199,7 +199,7 @@ def scenario_7(model: str | None):
     # Verify the MV produced a detection event
     detection_rows = tpq(f"""
         SELECT detected_at, rule_id, hook_name, message
-        FROM table(agentshield_security_events)
+        FROM table(agentguard_security_events)
         WHERE rule_id = 'rp-001'
           AND detected_at >= '{t_start}'
         ORDER BY detected_at DESC
@@ -209,7 +209,7 @@ def scenario_7(model: str | None):
         check("llm_input hook fired with injection text",
               len(hook_rows) > 0,
               f"{len(hook_rows)} matching hook events"),
-        check("rp-001 detection in agentshield_security_events",
+        check("rp-001 detection in agentguard_security_events",
               len(detection_rows) > 0,
               f"{len(detection_rows)} detections"),
     ]
@@ -225,7 +225,7 @@ def scenario_7(model: str | None):
 
 def scenario_8(model: str | None):
     section("Scenario 8 — DLP Sentinel (rp-002)")
-    user_id = "agentshield-security-s8"
+    user_id = "agentguard-security-s8"
     t_start = now_iso()
 
     # The LLM will produce output containing credential-like strings.
@@ -250,7 +250,7 @@ def scenario_8(model: str | None):
     # Verify the llm_output hook event contains credential patterns
     hook_rows = tpq(f"""
         SELECT hook_name, event_time, agent_id
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE hook_name = 'llm_output'
           AND (
                lower(event_data) LIKE '%api_key%'
@@ -263,7 +263,7 @@ def scenario_8(model: str | None):
 
     detection_rows = tpq(f"""
         SELECT detected_at, rule_id, hook_name, message
-        FROM table(agentshield_security_events)
+        FROM table(agentguard_security_events)
         WHERE rule_id = 'rp-002'
           AND detected_at >= '{t_start}'
         ORDER BY detected_at DESC
@@ -278,7 +278,7 @@ def scenario_8(model: str | None):
         check("llm_output hook fired with credential patterns",
               len(hook_rows) > 0,
               f"{len(hook_rows)} matching hook events"),
-        check("rp-002 detection in agentshield_security_events",
+        check("rp-002 detection in agentguard_security_events",
               len(detection_rows) > 0,
               f"{len(detection_rows)} detections"),
     ]
@@ -294,7 +294,7 @@ def scenario_8(model: str | None):
 
 def scenario_9(model: str | None):
     section("Scenario 9 — Privilege Guard (rp-003)")
-    user_id = "agentshield-security-s9"
+    user_id = "agentguard-security-s9"
     t_start = now_iso()
 
     # This prompt causes the agent to run a bash command referencing /etc/passwd.
@@ -313,7 +313,7 @@ def scenario_9(model: str | None):
     # Verify bash tool call with /etc/passwd reference
     hook_rows = tpq(f"""
         SELECT hook_name, tool_name, event_time, agent_id
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE hook_name = 'before_tool_call'
           AND (
                lower(tool_name) IN ('bash', 'shell', 'exec')
@@ -325,7 +325,7 @@ def scenario_9(model: str | None):
 
     detection_rows = tpq(f"""
         SELECT detected_at, rule_id, hook_name, tool_name, message
-        FROM table(agentshield_security_events)
+        FROM table(agentguard_security_events)
         WHERE rule_id = 'rp-003'
           AND detected_at >= '{t_start}'
         ORDER BY detected_at DESC
@@ -336,7 +336,7 @@ def scenario_9(model: str | None):
               len(hook_rows) > 0,
               f"{len(hook_rows)} matching hook events — tool_names: "
               + str({r.get('tool_name') for r in hook_rows})),
-        check("rp-003 detection in agentshield_security_events",
+        check("rp-003 detection in agentguard_security_events",
               len(detection_rows) > 0,
               f"{len(detection_rows)} detections"),
     ]
@@ -352,7 +352,7 @@ def scenario_9(model: str | None):
 
 def scenario_10(model: str | None):
     section("Scenario 10 — Supply Chain Watch (rp-004)")
-    user_id = "agentshield-security-s10"
+    user_id = "agentguard-security-s10"
     t_start = now_iso()
 
     # This prompt causes the agent to run `pip install httpx` via bash.
@@ -371,7 +371,7 @@ def scenario_10(model: str | None):
     # Verify pip install appeared in a tool call event
     hook_rows = tpq(f"""
         SELECT hook_name, tool_name, event_time, agent_id
-        FROM table(agentshield_hook_events)
+        FROM table(agentguard_hook_events)
         WHERE hook_name IN ('before_tool_call', 'before_install')
           AND lower(event_data) LIKE '%pip install%'
           AND event_time >= '{t_start}'
@@ -380,7 +380,7 @@ def scenario_10(model: str | None):
 
     detection_rows = tpq(f"""
         SELECT detected_at, rule_id, hook_name, message
-        FROM table(agentshield_security_events)
+        FROM table(agentguard_security_events)
         WHERE rule_id = 'rp-004'
           AND detected_at >= '{t_start}'
         ORDER BY detected_at DESC
@@ -390,7 +390,7 @@ def scenario_10(model: str | None):
         check("pip install captured in hook event_data",
               len(hook_rows) > 0,
               f"{len(hook_rows)} matching hook events"),
-        check("rp-004 detection in agentshield_security_events",
+        check("rp-004 detection in agentguard_security_events",
               len(detection_rows) > 0,
               f"{len(detection_rows)} detections"),
     ]
@@ -431,14 +431,14 @@ def preflight():
         print("\nTimeplus is not reachable. Check it is running on port 3218.")
         sys.exit(1)
 
-    # agentshield_security_events stream exists
+    # agentguard_security_events stream exists
     try:
-        rows = tpq("SELECT count() as cnt FROM table(agentshield_security_events)")
-        check("agentshield_security_events stream exists",
+        rows = tpq("SELECT count() as cnt FROM table(agentguard_security_events)")
+        check("agentguard_security_events stream exists",
               True, f"{rows[0]['cnt']} existing rows")
     except Exception as e:
-        check("agentshield_security_events stream exists", False, str(e))
-        print("\nStream missing. Start the AgentShield backend to create it.")
+        check("agentguard_security_events stream exists", False, str(e))
+        print("\nStream missing. Start the AgentGuard backend to create it.")
         sys.exit(1)
 
     # Check active rule MVs
@@ -478,7 +478,7 @@ SCENARIOS = {
 
 def main():
     parser = argparse.ArgumentParser(
-        description="AgentShield security rule test runner (scenarios 7-10)"
+        description="AgentGuard security rule test runner (scenarios 7-10)"
     )
     parser.add_argument("--scenario", type=int, choices=SCENARIOS.keys(),
                         help="Run only this scenario (default: all)")

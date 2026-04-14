@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/timeplus/agentshield/internal/models"
+	"github.com/timeplus/agentguard/internal/models"
 )
 
 // spanNameMap translates hook_name values to human-readable span names.

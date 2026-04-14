@@ -25,7 +25,7 @@ query_sql: |
     tool_name,
     concat('Potential prompt injection in ', raw_hook_name, ' from agent ', agent_id) AS message,
     raw_event_data            AS event_data
-  FROM agentshield_cim_event
+  FROM agentguard_cim_event
   WHERE event_type IN ('user_input', 'llm_request')
     AND (
          lower(user_message) LIKE '%ignore previous instructions%'

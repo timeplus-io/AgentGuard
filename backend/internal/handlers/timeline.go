@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/models"
-	"github.com/timeplus/agentshield/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/models"
+	"github.com/timeplus/agentguard/internal/timeplus"
 )
 
 // GetRunTrace handles GET /api/agents/:id/sessions/:session_id/runs/:run_id/trace.
@@ -63,7 +63,7 @@ func fetchHookEvents(cfg *config.Config, deploymentID, agentID, sessionID, runID
 	sql := fmt.Sprintf(`
 SELECT hook_name, event_time, tool_name, provider, model,
        hook_decision, block_reason, event_data, agent_type
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
   AND session_id    = '%s'

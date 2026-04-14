@@ -31,7 +31,7 @@ const redocHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <title>AgentShield API — Redoc</title>
+  <title>AgentGuard API — Redoc</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <style>
     body { margin: 0; }
@@ -43,7 +43,7 @@ const redocHTML = `<!DOCTYPE html>
 </head>
 <body>
   <div class="topbar">
-    <span class="topbar-title">AgentShield API</span>
+    <span class="topbar-title">AgentGuard API</span>
     <a class="topbar-link" href="/docs">Switch to Swagger UI</a>
   </div>
   <redoc spec-url="/docs/openapi.json" hide-download-button></redoc>
@@ -55,7 +55,7 @@ const swaggerHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <title>AgentShield API</title>
+  <title>AgentGuard API</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"/>
   <style>
@@ -89,12 +89,12 @@ const swaggerHTML = `<!DOCTYPE html>
 const openAPISpec = `{
   "openapi": "3.0.3",
   "info": {
-    "title": "AgentShield API",
+    "title": "AgentGuard API",
     "version": "1.0.0",
-    "description": "AgentShield is a real-time security monitoring and governance platform for AI coding agents (OpenClaw, Claude Code).\n\nAll data is sourced from **Timeplus Proton** streaming SQL. The server falls back gracefully when Proton is unavailable.\n\n### Agent ID format\nMany endpoints accept an \u0060:id\u0060 path parameter in the compound form \u0060{deploymentId}__{agentId}\u0060 (double underscore separator). Both parts must match \u0060^[a-zA-Z0-9._:-]+$\u0060.\n\n### Time filtering\n\u0060since\u0060 / \u0060until\u0060 query parameters accept **RFC 3339** timestamps, e.g. \u00602026-04-01T00:00:00Z\u0060.\n\n### Pagination\nList endpoints accept \u0060?page=1&limit=15\u0060 and return \u0060total\u0060 so clients can compute page count."
+    "description": "AgentGuard is a real-time security monitoring and governance platform for AI coding agents (OpenClaw, Claude Code).\n\nAll data is sourced from **Timeplus Proton** streaming SQL. The server falls back gracefully when Proton is unavailable.\n\n### Agent ID format\nMany endpoints accept an \u0060:id\u0060 path parameter in the compound form \u0060{deploymentId}__{agentId}\u0060 (double underscore separator). Both parts must match \u0060^[a-zA-Z0-9._:-]+$\u0060.\n\n### Time filtering\n\u0060since\u0060 / \u0060until\u0060 query parameters accept **RFC 3339** timestamps, e.g. \u00602026-04-01T00:00:00Z\u0060.\n\n### Pagination\nList endpoints accept \u0060?page=1&limit=15\u0060 and return \u0060total\u0060 so clients can compute page count."
   },
   "servers": [
-    { "url": "/api", "description": "AgentShield backend (same origin)" }
+    { "url": "/api", "description": "AgentGuard backend (same origin)" }
   ],
   "tags": [
     { "name": "Dashboard",   "description": "High-level summary counters shown on the main dashboard." },
@@ -103,7 +103,7 @@ const openAPISpec = `{
     { "name": "Metrics",     "description": "Aggregated LLM token usage and tool-call statistics." },
     { "name": "Threats",     "description": "Security detections emitted by active rule materialized views." },
     { "name": "Cost",        "description": "Token-based cost estimates computed from configurable per-model pricing." },
-    { "name": "Rules",       "description": "Security rule packs. Each enabled rule has a corresponding Proton materialized view that writes matches to agentshield_security_events." },
+    { "name": "Rules",       "description": "Security rule packs. Each enabled rule has a corresponding Proton materialized view that writes matches to agentguard_security_events." },
     { "name": "Catalog",     "description": "File-based rule catalog. The initial catalog ships embedded in the binary as YAML files; users can override entries or add new ones via import. Proton tracks *install state*; the catalog tracks *definitions*." },
     { "name": "Alerts",      "description": "Real-time alert delivery — webhook receiver and SSE notification stream." },
     { "name": "Investigate", "description": "Ad-hoc SQL query interface against Proton streams." },
@@ -280,7 +280,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Sessions"],
         "summary": "Get waterfall trace for a run",
-        "description": "Builds a waterfall trace from raw \u0060agentshield_hook_events\u0060 — no OTel dependency required.\n\nEach hook event becomes a **child span** whose duration is the gap to the next event. The root span covers the full run window. Span kinds:\n- \u0060run\u0060 — root span for the entire LLM turn\n- \u0060llm\u0060 — events related to model inference (\u0060llm_input\u0060, \u0060llm_output\u0060, \u0060before_model_resolve\u0060, etc.)\n- \u0060tool\u0060 — tool-call lifecycle (\u0060before_tool_call\u0060, \u0060after_tool_call\u0060, \u0060tool_result_persist\u0060)\n- \u0060lifecycle\u0060 — all other hook events\n\nSpan status is \u0060blocked\u0060 when \u0060hook_decision = block\u0060, \u0060error\u0060 when \u0060event_data.error\u0060 is set, otherwise \u0060ok\u0060.",
+        "description": "Builds a waterfall trace from raw \u0060agentguard_hook_events\u0060 — no OTel dependency required.\n\nEach hook event becomes a **child span** whose duration is the gap to the next event. The root span covers the full run window. Span kinds:\n- \u0060run\u0060 — root span for the entire LLM turn\n- \u0060llm\u0060 — events related to model inference (\u0060llm_input\u0060, \u0060llm_output\u0060, \u0060before_model_resolve\u0060, etc.)\n- \u0060tool\u0060 — tool-call lifecycle (\u0060before_tool_call\u0060, \u0060after_tool_call\u0060, \u0060tool_result_persist\u0060)\n- \u0060lifecycle\u0060 — all other hook events\n\nSpan status is \u0060blocked\u0060 when \u0060hook_decision = block\u0060, \u0060error\u0060 when \u0060event_data.error\u0060 is set, otherwise \u0060ok\u0060.",
         "operationId": "getRunTrace",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "description": "Compound agent ID.", "schema": { "type": "string" }, "example": "eng-team__claude-code" },
@@ -308,7 +308,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Agents"],
         "summary": "List hook events for an agent",
-        "description": "Returns raw \u0060agentshield_hook_events\u0060 rows for the given agent, ordered newest-first. Useful for audit trails and forensic investigation.\n\nEach event record includes the hook name, timestamp, tool name (if applicable), model, hook decision, and the raw \u0060event_data\u0060 JSON payload.",
+        "description": "Returns raw \u0060agentguard_hook_events\u0060 rows for the given agent, ordered newest-first. Useful for audit trails and forensic investigation.\n\nEach event record includes the hook name, timestamp, tool name (if applicable), model, hook decision, and the raw \u0060event_data\u0060 JSON payload.",
         "operationId": "listEvents",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "description": "Compound agent ID.", "schema": { "type": "string" }, "example": "eng-team__claude-code" },
@@ -349,7 +349,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Metrics"],
         "summary": "Get LLM token usage metrics",
-        "description": "Returns aggregated LLM token consumption broken down by model and provider. Includes total calls, input tokens, output tokens, and cache-read tokens.\n\nData is read from \u0060agentshield_hook_events\u0060 where \u0060hook_name = 'llm_output'\u0060 and token counts are stored in the \u0060event_data\u0060 JSON field.",
+        "description": "Returns aggregated LLM token consumption broken down by model and provider. Includes total calls, input tokens, output tokens, and cache-read tokens.\n\nData is read from \u0060agentguard_hook_events\u0060 where \u0060hook_name = 'llm_output'\u0060 and token counts are stored in the \u0060event_data\u0060 JSON field.",
         "operationId": "getLLMMetrics",
         "parameters": [
           { "name": "since", "in": "query", "description": "RFC 3339 lower bound.", "schema": { "type": "string", "format": "date-time" } },
@@ -376,7 +376,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Metrics"],
         "summary": "Get tool usage metrics",
-        "description": "Returns tool-call counts aggregated by tool name, including the number of calls that were blocked by a security rule.\n\nDerived from \u0060agentshield_hook_events\u0060 where \u0060hook_name = 'before_tool_call'\u0060.",
+        "description": "Returns tool-call counts aggregated by tool name, including the number of calls that were blocked by a security rule.\n\nDerived from \u0060agentguard_hook_events\u0060 where \u0060hook_name = 'before_tool_call'\u0060.",
         "operationId": "getToolMetrics",
         "parameters": [
           { "name": "since", "in": "query", "description": "RFC 3339 lower bound.", "schema": { "type": "string", "format": "date-time" } },
@@ -401,7 +401,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Threats"],
         "summary": "List security threats",
-        "description": "Returns detections written to \u0060agentshield_security_events\u0060 by active rule materialized views, ordered newest-first.\n\nEach detection record includes the triggering rule, severity, affected agent, session context, and the raw hook event data that caused the match.",
+        "description": "Returns detections written to \u0060agentguard_security_events\u0060 by active rule materialized views, ordered newest-first.\n\nEach detection record includes the triggering rule, severity, affected agent, session context, and the raw hook event data that caused the match.",
         "operationId": "listThreats",
         "parameters": [
           { "name": "severity", "in": "query", "description": "Filter by severity level.", "schema": { "type": "string", "enum": ["critical", "warning", "info"] } },
@@ -440,7 +440,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Cost"],
         "summary": "Get cost governance summary",
-        "description": "Returns token-based cost estimates computed by joining \u0060agentshield_hook_events\u0060 token counts with the \u0060agentshield_pricing\u0060 table.\n\nIncludes a daily spend time-series and a breakdown by model. Costs are in USD. Pricing data is seeded with public list prices and can be updated via the \u0060/cost/pricing\u0060 endpoints.",
+        "description": "Returns token-based cost estimates computed by joining \u0060agentguard_hook_events\u0060 token counts with the \u0060agentguard_pricing\u0060 table.\n\nIncludes a daily spend time-series and a breakdown by model. Costs are in USD. Pricing data is seeded with public list prices and can be updated via the \u0060/cost/pricing\u0060 endpoints.",
         "operationId": "getCost",
         "parameters": [
           { "name": "since", "in": "query", "description": "RFC 3339 lower bound for the aggregation window.", "schema": { "type": "string", "format": "date-time" } },
@@ -468,7 +468,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Cost"],
         "summary": "List model pricing entries",
-        "description": "Returns all entries in the \u0060agentshield_pricing\u0060 mutable stream. Each entry defines the cost per million tokens (input, output, cache-read) for a provider/model combination.\n\nDefault entries are seeded at startup for Anthropic and OpenAI models.",
+        "description": "Returns all entries in the \u0060agentguard_pricing\u0060 mutable stream. Each entry defines the cost per million tokens (input, output, cache-read) for a provider/model combination.\n\nDefault entries are seeded at startup for Anthropic and OpenAI models.",
         "operationId": "listPricing",
         "responses": {
           "200": { "description": "Pricing table", "content": { "application/json": { "schema": {
@@ -504,7 +504,7 @@ const openAPISpec = `{
       "delete": {
         "tags": ["Cost"],
         "summary": "Delete a model pricing entry",
-        "description": "Removes the pricing record for the given provider/model pair from \u0060agentshield_pricing\u0060.",
+        "description": "Removes the pricing record for the given provider/model pair from \u0060agentguard_pricing\u0060.",
         "operationId": "deletePricing",
         "parameters": [
           { "name": "provider", "in": "path", "required": true, "description": "Provider name, e.g. \u0060anthropic\u0060 or \u0060openai\u0060.", "schema": { "type": "string" }, "example": "anthropic" },
@@ -521,7 +521,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Rules"],
         "summary": "List installed rules",
-        "description": "Returns all non-deleted rules from the \u0060agentshield_rules\u0060 append-only stream. Current state is computed via \u0060arg_max(field, updated_at) GROUP BY rule_id\u0060.",
+        "description": "Returns all non-deleted rules from the \u0060agentguard_rules\u0060 append-only stream. Current state is computed via \u0060arg_max(field, updated_at) GROUP BY rule_id\u0060.",
         "operationId": "listRules",
         "responses": {
           "200": { "description": "Installed rules", "content": { "application/json": { "schema": {
@@ -546,7 +546,7 @@ const openAPISpec = `{
       "post": {
         "tags": ["Rules"],
         "summary": "Create a custom rule",
-        "description": "Creates a new custom rule with a user-supplied SQL query and saves it to the local catalog directory.\n\nAn optional \u0060id\u0060 can be specified (letters, digits, hyphens, underscores; max 64 chars); if omitted a \u0060custom-\u0060 prefixed ID is auto-generated. The ID must be unique across the catalog.\n\nThe \u0060query_sql\u0060 must be a valid Proton \u0060SELECT\u0060 that queries \u0060agentshield_hook_events\u0060 and outputs columns matching \u0060agentshield_security_events\u0060: \u0060detected_at\u0060, \u0060rule_id\u0060, \u0060rule_name\u0060, \u0060severity\u0060, \u0060agent_id\u0060, \u0060deployment_id\u0060, \u0060session_id\u0060, \u0060run_id\u0060, \u0060hook_name\u0060, \u0060tool_name\u0060, \u0060message\u0060, \u0060event_data\u0060.",
+        "description": "Creates a new custom rule with a user-supplied SQL query and saves it to the local catalog directory.\n\nAn optional \u0060id\u0060 can be specified (letters, digits, hyphens, underscores; max 64 chars); if omitted a \u0060custom-\u0060 prefixed ID is auto-generated. The ID must be unique across the catalog.\n\nThe \u0060query_sql\u0060 must be a valid Proton \u0060SELECT\u0060 that queries \u0060agentguard_hook_events\u0060 and outputs columns matching \u0060agentguard_security_events\u0060: \u0060detected_at\u0060, \u0060rule_id\u0060, \u0060rule_name\u0060, \u0060severity\u0060, \u0060agent_id\u0060, \u0060deployment_id\u0060, \u0060session_id\u0060, \u0060run_id\u0060, \u0060hook_name\u0060, \u0060tool_name\u0060, \u0060message\u0060, \u0060event_data\u0060.",
         "operationId": "createRule",
         "requestBody": {
           "required": true,
@@ -554,7 +554,7 @@ const openAPISpec = `{
             "example": {
               "name": "Exfil Watch",
               "description": "Alerts when an agent reads and then immediately uploads a file.",
-              "query_sql": "SELECT event_time AS detected_at, 'custom-exfil' AS rule_id, 'Exfil Watch' AS rule_name, 'critical' AS severity, agent_id, deployment_id, session_id, run_id, hook_name, tool_name, concat('Possible exfil by ', agent_id) AS message, event_data FROM agentshield_hook_events WHERE hook_name = 'before_tool_call' AND lower(event_data) LIKE '%upload%'",
+              "query_sql": "SELECT event_time AS detected_at, 'custom-exfil' AS rule_id, 'Exfil Watch' AS rule_name, 'critical' AS severity, agent_id, deployment_id, session_id, run_id, hook_name, tool_name, concat('Possible exfil by ', agent_id) AS message, event_data FROM agentguard_hook_events WHERE hook_name = 'before_tool_call' AND lower(event_data) LIKE '%upload%'",
               "severity": "critical",
               "category": "dlp",
               "fp_rate": "low",
@@ -573,7 +573,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Catalog"],
         "summary": "List rule catalog",
-        "description": "Returns all rule definitions from the file-based catalog (embedded initial rules merged with any local overrides), each annotated with install state from \u0060agentshield_rules\u0060.\n\nRules installed in Proton but absent from the catalog are included with \u0060tags: [\"orphaned\"]\u0060.\n\nUse this endpoint to power an install/uninstall UI — show the catalog, highlight installed entries, and call \u0060/rules/{id}/install\u0060 or \u0060DELETE /rules/{id}\u0060 accordingly. When \u0060upgradeable\u0060 is true the catalog has a newer version than what is installed — call \u0060/rules/{id}/upgrade\u0060 to update.",
+        "description": "Returns all rule definitions from the file-based catalog (embedded initial rules merged with any local overrides), each annotated with install state from \u0060agentguard_rules\u0060.\n\nRules installed in Proton but absent from the catalog are included with \u0060tags: [\"orphaned\"]\u0060.\n\nUse this endpoint to power an install/uninstall UI — show the catalog, highlight installed entries, and call \u0060/rules/{id}/install\u0060 or \u0060DELETE /rules/{id}\u0060 accordingly. When \u0060upgradeable\u0060 is true the catalog has a newer version than what is installed — call \u0060/rules/{id}/upgrade\u0060 to update.",
         "operationId": "getRulesCatalog",
         "responses": {
           "200": { "description": "Rule catalog with installed status", "content": { "application/json": { "schema": {
@@ -625,13 +625,13 @@ const openAPISpec = `{
       "get": {
         "tags": ["Catalog"],
         "summary": "Export all catalog rules as a zip archive",
-        "description": "Streams a zip archive containing every rule in the merged catalog as a YAML file (named \u0060{id}.yaml\u0060 per rule).\n\nThe export includes both the embedded initial rules and any local overrides or custom rules saved in the catalog directory. Use this to back up the catalog or share it with another AgentShield instance.",
+        "description": "Streams a zip archive containing every rule in the merged catalog as a YAML file (named \u0060{id}.yaml\u0060 per rule).\n\nThe export includes both the embedded initial rules and any local overrides or custom rules saved in the catalog directory. Use this to back up the catalog or share it with another AgentGuard instance.",
         "operationId": "exportCatalog",
         "responses": {
           "200": {
             "description": "Zip archive download.",
             "headers": {
-              "Content-Disposition": { "schema": { "type": "string" }, "description": "attachment; filename=\"agentshield-catalog.zip\"" }
+              "Content-Disposition": { "schema": { "type": "string" }, "description": "attachment; filename=\"agentguard-catalog.zip\"" }
             },
             "content": { "application/zip": { "schema": { "type": "string", "format": "binary" } } }
           },
@@ -669,7 +669,7 @@ const openAPISpec = `{
       "post": {
         "tags": ["Rules"],
         "summary": "Reconcile MV state",
-        "description": "Re-reads all rules from \u0060agentshield_rules\u0060 and reconciles each MV: creates missing MVs for enabled rules, resumes paused MVs, and pauses MVs for disabled rules. Equivalent to what happens at server startup, but callable at runtime without a restart.",
+        "description": "Re-reads all rules from \u0060agentguard_rules\u0060 and reconciles each MV: creates missing MVs for enabled rules, resumes paused MVs, and pauses MVs for disabled rules. Equivalent to what happens at server startup, but callable at runtime without a restart.",
         "operationId": "syncMVs",
         "responses": {
           "200": { "description": "Sync complete.", "content": { "application/json": { "example": { "synced": 4, "created": 0, "resumed": 1, "paused": 0 } } } }
@@ -681,7 +681,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Rules"],
         "summary": "Get rule by ID",
-        "description": "Returns the current state of a single rule. The current state is resolved from the append-only \u0060agentshield_rules\u0060 stream via \u0060arg_max(updated_at) GROUP BY rule_id\u0060.",
+        "description": "Returns the current state of a single rule. The current state is resolved from the append-only \u0060agentguard_rules\u0060 stream via \u0060arg_max(updated_at) GROUP BY rule_id\u0060.",
         "operationId": "getRule",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "description": "Rule ID, e.g. \u0060rp-001\u0060 or \u0060custom-a1b2c3\u0060.", "schema": { "type": "string" }, "example": "rp-001" }
@@ -694,7 +694,7 @@ const openAPISpec = `{
       "delete": {
         "tags": ["Rules"],
         "summary": "Uninstall a rule",
-        "description": "Soft-deletes a rule by appending a \u0060deleted=true\u0060 record to \u0060agentshield_rules\u0060, then drops the corresponding materialized view.\n\nThe rule remains in the stream history and will appear in the catalog as a reinstallable entry (for custom rules) or as \u0060installed: false\u0060 (for builtin rules).",
+        "description": "Soft-deletes a rule by appending a \u0060deleted=true\u0060 record to \u0060agentguard_rules\u0060, then drops the corresponding materialized view.\n\nThe rule remains in the stream history and will appear in the catalog as a reinstallable entry (for custom rules) or as \u0060installed: false\u0060 (for builtin rules).",
         "operationId": "uninstallRule",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "description": "Rule ID.", "schema": { "type": "string" }, "example": "rp-001" }
@@ -755,8 +755,8 @@ const openAPISpec = `{
           "content": { "application/json": { "schema": {
             "type": "object",
             "required": ["query_sql"],
-            "properties": { "query_sql": { "type": "string", "description": "New SELECT statement targeting agentshield_hook_events." } }
-          }, "example": { "query_sql": "SELECT event_time AS detected_at, 'rp-003' AS rule_id, 'Privilege Guard' AS rule_name, 'warning' AS severity, agent_id, deployment_id, session_id, run_id, hook_name, tool_name, concat('Sensitive tool: ', tool_name) AS message, event_data FROM agentshield_hook_events WHERE hook_name = 'before_tool_call' AND lower(tool_name) IN ('bash','shell','computer')" }
+            "properties": { "query_sql": { "type": "string", "description": "New SELECT statement targeting agentguard_hook_events." } }
+          }, "example": { "query_sql": "SELECT event_time AS detected_at, 'rp-003' AS rule_id, 'Privilege Guard' AS rule_name, 'warning' AS severity, agent_id, deployment_id, session_id, run_id, hook_name, tool_name, concat('Sensitive tool: ', tool_name) AS message, event_data FROM agentguard_hook_events WHERE hook_name = 'before_tool_call' AND lower(tool_name) IN ('bash','shell','computer')" }
           }}
         },
         "responses": {
@@ -770,7 +770,7 @@ const openAPISpec = `{
       "post": {
         "tags": ["Alerts"],
         "summary": "Receive a rule-triggered alert",
-        "description": "Webhook endpoint called by the Proton \u0060notify_agentshield_udf\u0060 Python UDF. The UDF is invoked by the \u0060agentshield_notifier\u0060 Proton alert when new rows appear in \u0060agentshield_security_events\u0060.\n\nReceived alerts are fanned out to all connected SSE clients on \u0060/notifications/stream\u0060. You can also POST to this endpoint manually for testing.",
+        "description": "Webhook endpoint called by the Proton \u0060notify_agentguard_udf\u0060 Python UDF. The UDF is invoked by the \u0060agentguard_notifier\u0060 Proton alert when new rows appear in \u0060agentguard_security_events\u0060.\n\nReceived alerts are fanned out to all connected SSE clients on \u0060/notifications/stream\u0060. You can also POST to this endpoint manually for testing.",
         "operationId": "alertWebhook",
         "requestBody": {
           "required": true,
@@ -812,13 +812,13 @@ const openAPISpec = `{
       "get": {
         "tags": ["Investigate"],
         "summary": "List queryable tables",
-        "description": "Returns the names of Proton streams and views available for ad-hoc queries via \u0060/investigate/query\u0060.\n\nIncludes the core AgentShield streams (\u0060agentshield_hook_events\u0060, \u0060agentshield_security_events\u0060, \u0060agentshield_rules\u0060) as well as OTel streams (\u0060otel_traces\u0060, \u0060otel_logs\u0060, \u0060otel_metrics_*\u0060).",
+        "description": "Returns the names of Proton streams and views available for ad-hoc queries via \u0060/investigate/query\u0060.\n\nIncludes the core AgentGuard streams (\u0060agentguard_hook_events\u0060, \u0060agentguard_security_events\u0060, \u0060agentguard_rules\u0060) as well as OTel streams (\u0060otel_traces\u0060, \u0060otel_logs\u0060, \u0060otel_metrics_*\u0060).",
         "operationId": "listTables",
         "responses": {
           "200": { "description": "Available table names", "content": { "application/json": { "schema": {
             "type": "object",
             "properties": { "tables": { "type": "array", "items": { "type": "string" } } }
-          }, "example": { "tables": ["agentshield_hook_events", "agentshield_security_events", "agentshield_rules", "agentshield_pricing", "otel_traces", "otel_logs"] } }}}
+          }, "example": { "tables": ["agentguard_hook_events", "agentguard_security_events", "agentguard_rules", "agentguard_pricing", "otel_traces", "otel_logs"] } }}}
         }
       }
     },
@@ -835,7 +835,7 @@ const openAPISpec = `{
             "type": "object",
             "required": ["sql"],
             "properties": { "sql": { "type": "string", "description": "Any valid Proton SQL. Omit \u0060table()\u0060 wrapper for live streaming; use \u0060table()\u0060 for historical batch queries." } }
-          }, "example": { "sql": "SELECT hook_name, event_time, agent_id FROM agentshield_hook_events WHERE deployment_id = 'eng-team' LIMIT 100" }
+          }, "example": { "sql": "SELECT hook_name, event_time, agent_id FROM agentguard_hook_events WHERE deployment_id = 'eng-team' LIMIT 100" }
           }}
         },
         "responses": {
@@ -855,7 +855,7 @@ const openAPISpec = `{
       "post": {
         "tags": ["Onboarding"],
         "summary": "Generate an agent configuration snippet",
-        "description": "Generates a configuration snippet for connecting an AI agent to AgentShield. Used by the onboarding wizard.",
+        "description": "Generates a configuration snippet for connecting an AI agent to AgentGuard. Used by the onboarding wizard.",
         "operationId": "generateConfig",
         "requestBody": {
           "required": true,
@@ -870,7 +870,7 @@ const openAPISpec = `{
           }}
         },
         "responses": {
-          "200": { "description": "Generated config object.", "content": { "application/json": { "example": { "config": { "timeplusUrl": "http://localhost:3218", "stream": "agentshield_hook_events" } } } } }
+          "200": { "description": "Generated config object.", "content": { "application/json": { "example": { "config": { "timeplusUrl": "http://localhost:3218", "stream": "agentguard_hook_events" } } } } }
         }
       }
     }
@@ -884,7 +884,7 @@ const openAPISpec = `{
         "properties": {
           "total_agents":  { "type": "integer", "description": "Number of distinct (deployment_id, agent_id) pairs seen in hook events." },
           "total_events":  { "type": "integer", "description": "Total hook events ingested across all agents." },
-          "total_threats": { "type": "integer", "description": "Total detections written to agentshield_security_events." },
+          "total_threats": { "type": "integer", "description": "Total detections written to agentguard_security_events." },
           "active_rules":  { "type": "integer", "description": "Number of rules currently marked enabled=true." }
         }
       },
@@ -979,7 +979,7 @@ const openAPISpec = `{
       },
       "HookEvent": {
         "type": "object",
-        "description": "A raw hook event from agentshield_hook_events.",
+        "description": "A raw hook event from agentguard_hook_events.",
         "properties": {
           "hook_name":     { "type": "string", "description": "OpenClaw lifecycle hook name, e.g. before_tool_call, llm_output, session_end." },
           "event_time":    { "type": "string", "format": "date-time" },
@@ -1129,7 +1129,7 @@ const openAPISpec = `{
           "required_telemetry":  { "type": "string",  "description": "Optional telemetry prerequisite note." },
           "author":              { "type": "string",  "description": "Rule author, e.g. Timeplus.", "example": "Timeplus" },
           "tags":                { "type": "array", "items": { "type": "string" }, "description": "Labels for filtering. Orphaned rules (installed but absent from catalog) carry the 'orphaned' tag.", "example": ["security", "prompt-injection"] },
-          "installed":           { "type": "boolean", "description": "True when this rule exists in agentshield_rules and is not deleted." },
+          "installed":           { "type": "boolean", "description": "True when this rule exists in agentguard_rules and is not deleted." },
           "enabled":             { "type": "boolean", "description": "True when the rule is installed and its MV is active." },
           "installed_version":   { "type": "string",  "description": "Version string of the installed rule (omitted when not installed).", "example": "1.0.0" },
           "upgradeable":         { "type": "boolean", "description": "True when the catalog version is newer than the installed version — call /rules/{id}/upgrade to update." }
@@ -1143,7 +1143,7 @@ const openAPISpec = `{
           "id":           { "type": "string",  "description": "Optional user-specified rule ID (letters, digits, hyphens, underscores; max 64 chars). Must be unique across the catalog. Auto-generated with a custom- prefix when omitted." },
           "name":         { "type": "string",  "description": "Display name for the rule." },
           "description":  { "type": "string" },
-          "query_sql":    { "type": "string",  "description": "Proton SELECT targeting agentshield_hook_events. Must output all agentshield_security_events columns." },
+          "query_sql":    { "type": "string",  "description": "Proton SELECT targeting agentguard_hook_events. Must output all agentguard_security_events columns." },
           "severity":     { "type": "string",  "enum": ["critical", "warning", "info"] },
           "category":     { "type": "string",  "description": "Logical category for grouping, e.g. dlp, privilege." },
           "fp_rate":      { "type": "string",  "description": "Expected false-positive rate.", "enum": ["low", "medium", "high"] },

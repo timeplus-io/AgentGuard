@@ -13,11 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/timeplus/agentshield/internal/catalog"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/handlers"
-	"github.com/timeplus/agentshield/internal/timeplus"
-	"github.com/timeplus/agentshield/internal/web"
+	"github.com/timeplus/agentguard/internal/catalog"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/handlers"
+	"github.com/timeplus/agentguard/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/web"
 )
 
 func main() {
@@ -29,8 +29,8 @@ func main() {
 
 func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "agentshield",
-		Short: "AgentShield — AI agent security monitoring platform",
+		Use:   "agentguard",
+		Short: "AgentGuard — AI agent security monitoring platform",
 		RunE:  runServer,
 	}
 
@@ -79,7 +79,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading catalog: %w", err)
 	}
 
-	fmt.Printf("AgentShield starting on :%d\n", cfg.Server.Port)
+	fmt.Printf("AgentGuard starting on :%d\n", cfg.Server.Port)
 	fmt.Printf("Proton endpoint: %s:%d (native: %d)\n", cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort)
 	fmt.Printf("Catalog directory: %s (%d entries)\n", cfg.CatalogDir, len(mgr.All()))
 

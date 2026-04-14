@@ -5,16 +5,16 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/models"
-	tp "github.com/timeplus/agentshield/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/models"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
 func GetDashboard(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Total distinct agents ever seen (exclude rows with empty agent_id).
 		agentRows, err := tp.Query(&cfg.Timeplus,
-			`SELECT count(distinct agent_id) AS total FROM table(agentshield_hook_events) WHERE agent_id != ''`)
+			`SELECT count(distinct agent_id) AS total FROM table(agentguard_hook_events) WHERE agent_id != ''`)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
@@ -26,13 +26,13 @@ func GetDashboard(cfg *config.Config) gin.HandlerFunc {
 
 		// Active threats in the last 24 h.
 		threatRows, err := tp.Query(&cfg.Timeplus,
-			`SELECT count() AS total FROM table(agentshield_security_events) WHERE detected_at >= now() - interval 1 day`)
+			`SELECT count() AS total FROM table(agentguard_security_events) WHERE detected_at >= now() - interval 1 day`)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
 		criticalRows, err := tp.Query(&cfg.Timeplus,
-			`SELECT count() AS critical FROM table(agentshield_security_events) WHERE detected_at >= now() - interval 1 day AND severity = 'critical'`)
+			`SELECT count() AS critical FROM table(agentguard_security_events) WHERE detected_at >= now() - interval 1 day AND severity = 'critical'`)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
@@ -56,8 +56,8 @@ SELECT
     + sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
       * any(p.cache_read_cost_per_million)
   ) / 1000000.0 AS cost
-FROM table(agentshield_hook_events) AS e
-LEFT JOIN table(agentshield_pricing) AS p
+FROM table(agentguard_hook_events) AS e
+LEFT JOIN table(agentguard_pricing) AS p
   ON e.provider = p.provider AND e.model = p.model
 WHERE e.hook_name = 'llm_output'
   AND e.event_time >= now() - interval 1 day
@@ -76,7 +76,7 @@ GROUP BY e.provider, e.model`)
 SELECT count() AS total
 FROM (
   SELECT rule_id, arg_max(enabled, updated_at) AS active
-  FROM table(agentshield_rules)
+  FROM table(agentguard_rules)
   GROUP BY rule_id
   HAVING active = true
 )`)
@@ -92,7 +92,7 @@ FROM (
 		// Threat categories — count by rule_name in last 24 h, compute percentages.
 		catRows, err := tp.Query(&cfg.Timeplus, `
 SELECT rule_name, count() AS cnt
-FROM table(agentshield_security_events)
+FROM table(agentguard_security_events)
 WHERE detected_at >= now() - interval 1 day
 GROUP BY rule_name
 ORDER BY cnt DESC`)

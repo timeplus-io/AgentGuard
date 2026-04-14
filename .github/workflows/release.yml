@@ -31,7 +31,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/agentshield
+          images: ghcr.io/${{ github.repository_owner }}/agentguard
           tags: |
             type=sha,prefix=,format=short
             type=raw,value=latest,enable={{is_default_branch}}
@@ -73,16 +73,16 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
-            name: agentshield-linux-amd64
+            name: agentguard-linux-amd64
           - goos: linux
             goarch: arm64
-            name: agentshield-linux-arm64
+            name: agentguard-linux-arm64
           - goos: darwin
             goarch: amd64
-            name: agentshield-darwin-amd64
+            name: agentguard-darwin-amd64
           - goos: darwin
             goarch: arm64
-            name: agentshield-darwin-arm64
+            name: agentguard-darwin-arm64
     steps:
       - uses: actions/checkout@v4
 
@@ -143,16 +143,16 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
-            name: agentshield-linux-amd64
+            name: agentguard-linux-amd64
           - goos: linux
             goarch: arm64
-            name: agentshield-linux-arm64
+            name: agentguard-linux-arm64
           - goos: darwin
             goarch: amd64
-            name: agentshield-darwin-amd64
+            name: agentguard-darwin-amd64
           - goos: darwin
             goarch: arm64
-            name: agentshield-darwin-arm64
+            name: agentguard-darwin-arm64
     steps:
       - uses: actions/checkout@v4
 

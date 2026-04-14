@@ -28,7 +28,7 @@ run:
 		-p 18789:18789 \
 		-v "$(PWD)/.openclaw":/home/node/.openclaw \
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
-		-v "$(PWD)/agentshield-plugin":/home/node/.openclaw/agentshield-plugin \
+		-v "$(PWD)/agentguard-plugin":/home/node/.openclaw/agentguard-plugin \
 		-e HOME=/home/node \
 		-e LITELLM_API_KEY=$(LITELLM_API_KEY) \
 		--restart unless-stopped \
@@ -63,20 +63,20 @@ data["diagnostics"] = {
 # 3. Enable the diagnostics-otel plugin
 data.setdefault("plugins", {}).setdefault("entries", {})["diagnostics-otel"] = {"enabled": True}
 
-# 4. Register the agentshield plugin load path
+# 4. Register the agentguard plugin load path
 data["plugins"].setdefault("load", {}).setdefault("paths", [])
-if "/home/node/.openclaw/agentshield-plugin" not in data["plugins"]["load"]["paths"]:
-    data["plugins"]["load"]["paths"].append("/home/node/.openclaw/agentshield-plugin")
+if "/home/node/.openclaw/agentguard-plugin" not in data["plugins"]["load"]["paths"]:
+    data["plugins"]["load"]["paths"].append("/home/node/.openclaw/agentguard-plugin")
 
 # 5. Enable the OpenAI-compatible HTTP endpoint (needed for automated testing)
 data.setdefault("gateway", {}).setdefault("http", {}).setdefault("endpoints", {})["chatCompletions"] = {"enabled": True}
 
-# 6. Enable the agentshield plugin with Timeplus config
-data["plugins"]["entries"]["agentshield"] = {
+# 6. Enable the agentguard plugin with Timeplus config
+data["plugins"]["entries"]["agentguard"] = {
     "enabled": True,
     "config": {
         "timeplusUrl": "http://host.docker.internal:3218",
-        "stream": "agentshield_hook_events",
+        "stream": "agentguard_hook_events",
         "flushMs": 2000,
         "batchSize": 50,
         "username": "proton",
@@ -132,7 +132,7 @@ start:
 		-p 18789:18789 \
 		-v "$(PWD)/.openclaw":/home/node/.openclaw \
 		-v "$(PWD)/.openclaw/workspace":/home/node/.openclaw/workspace \
-		-v "$(PWD)/agentshield-plugin":/home/node/.openclaw/agentshield-plugin \
+		-v "$(PWD)/agentguard-plugin":/home/node/.openclaw/agentguard-plugin \
 		-e HOME=/home/node \
 		-e LITELLM_API_KEY=$(LITELLM_API_KEY) \
 		--restart unless-stopped \
@@ -168,10 +168,10 @@ add-agents:
 	@docker exec openclaw node dist/index.js agents list
 
 install-plugin:
-	cd agentshield-plugin && npm install
+	cd agentguard-plugin && npm install
 
 build-plugin: install-plugin
-	cd agentshield-plugin && npm run build
+	cd agentguard-plugin && npm run build
 
 deploy-plugin: build-plugin start
 

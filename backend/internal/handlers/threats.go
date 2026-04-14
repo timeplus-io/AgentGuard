@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/models"
-	tp "github.com/timeplus/agentshield/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/models"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
 // threatKey uniquely identifies a deduplicated threat.
@@ -48,19 +48,19 @@ func parseProtonTime(s string) (time.Time, error) {
 const sqlListThreats = `
 SELECT agent_id, deployment_id, session_id, rule_id,
        rule_name, severity, last_seen, status, status_updated_at
-FROM table(agentshield_threats)`
+FROM table(agentguard_threats)`
 
 const sqlThreatStats = `
 SELECT agent_id, deployment_id, session_id, rule_id,
        count()          AS event_count,
        min(detected_at) AS first_seen
-FROM table(agentshield_security_events)
+FROM table(agentguard_security_events)
 GROUP BY agent_id, deployment_id, session_id, rule_id`
 
 const sqlThreatEvents = `
 SELECT agent_id, deployment_id, session_id, rule_id,
        detected_at, run_id, hook_name, tool_name, message, event_data
-FROM table(agentshield_security_events)
+FROM table(agentguard_security_events)
 ORDER BY detected_at DESC`
 
 // buildThreatsList runs three Proton snapshot queries concurrently, merges the results,
@@ -204,12 +204,12 @@ func buildThreatsList(cfg *config.Config) ([]models.Threat, error) {
 		})
 	}
 
-	// Fire-and-forget: upsert re-opened threats back to agentshield_threats.
+	// Fire-and-forget: upsert re-opened threats back to agentguard_threats.
 	if len(toReopen) > 0 {
 		go func(keys []threatKey) {
 			for _, k := range keys {
 				sql := fmt.Sprintf(
-					`INSERT INTO agentshield_threats (agent_id, deployment_id, session_id, rule_id, status, status_updated_at) VALUES ('%s', '%s', '%s', '%s', 'open', now64(3))`,
+					`INSERT INTO agentguard_threats (agent_id, deployment_id, session_id, rule_id, status, status_updated_at) VALUES ('%s', '%s', '%s', '%s', 'open', now64(3))`,
 					escapeSQL(k.agentID), escapeSQL(k.deploymentID),
 					escapeSQL(k.sessionID), escapeSQL(k.ruleID),
 				)
@@ -329,7 +329,7 @@ func upsertThreatStatus(cfg *config.Config, body ThreatStatusBody, status string
 		return fmt.Errorf("invalid status %q", status)
 	}
 	sql := fmt.Sprintf(
-		`INSERT INTO agentshield_threats (agent_id, deployment_id, session_id, rule_id, status, status_updated_at) VALUES ('%s', '%s', '%s', '%s', '%s', now64(3))`,
+		`INSERT INTO agentguard_threats (agent_id, deployment_id, session_id, rule_id, status, status_updated_at) VALUES ('%s', '%s', '%s', '%s', '%s', now64(3))`,
 		escapeSQL(body.AgentID),
 		escapeSQL(body.DeploymentID),
 		escapeSQL(body.SessionID),

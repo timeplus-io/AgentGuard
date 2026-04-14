@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/catalog"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/models"
-	tp "github.com/timeplus/agentshield/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/catalog"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/models"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
 const sqlDeletedRules = `
@@ -25,7 +25,7 @@ SELECT
   arg_max(category,           updated_at) AS category,
   arg_max(fp_rate,            updated_at) AS fp_rate,
   arg_max(hook_sources,       updated_at) AS hook_sources
-FROM table(agentshield_rules)
+FROM table(agentguard_rules)
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = true`
 
@@ -42,7 +42,7 @@ SELECT
   arg_max(required_telemetry, updated_at) AS required_telemetry,
   arg_max(fp_rate,            updated_at) AS fp_rate,
   arg_max(hook_sources,       updated_at) AS hook_sources
-FROM table(agentshield_rules)
+FROM table(agentguard_rules)
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = false`
 
@@ -107,7 +107,7 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		countRows, err := tp.Query(&cfg.Timeplus, fmt.Sprintf(`
 			SELECT count() AS cnt
-			FROM table(agentshield_security_events)
+			FROM table(agentguard_security_events)
 			WHERE rule_id = '%s'
 			  AND detected_at >= now() - interval 24 hour
 		`, escapeSQL(id)))
@@ -120,7 +120,7 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		recentRows, err := tp.Query(&cfg.Timeplus, fmt.Sprintf(`
 			SELECT rule_id, rule_name, severity, agent_id, hook_name, message, detected_at
-			FROM table(agentshield_security_events)
+			FROM table(agentguard_security_events)
 			WHERE rule_id = '%s'
 			ORDER BY detected_at DESC
 			LIMIT 50
@@ -159,7 +159,7 @@ func ToggleRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		sql := fmt.Sprintf(`
-INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
+INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
 SELECT
   rule_id,
   arg_max(name,               updated_at) AS name,
@@ -174,7 +174,7 @@ SELECT
   arg_max(fp_rate,            updated_at) AS fp_rate,
   arg_max(hook_sources,       updated_at) AS hook_sources,
   now64(3)                                AS updated_at
-FROM table(agentshield_rules)
+FROM table(agentguard_rules)
 WHERE rule_id = '%s'
 GROUP BY rule_id`, id)
 
@@ -258,7 +258,7 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		escapedSQL := strings.ReplaceAll(targetSQL, "'", "''")
-		insertSQL := fmt.Sprintf(`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES
+		insertSQL := fmt.Sprintf(`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES
 ('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s',now64(3))`,
 			id,
 			strings.ReplaceAll(current.Name, "'", "''"),
@@ -309,7 +309,7 @@ func UninstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		sql := fmt.Sprintf(`
-INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
+INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
 SELECT
   rule_id,
   arg_max(name,               updated_at) AS name,
@@ -324,7 +324,7 @@ SELECT
   arg_max(fp_rate,            updated_at) AS fp_rate,
   arg_max(hook_sources,       updated_at) AS hook_sources,
   now64(3)                                AS updated_at
-FROM table(agentshield_rules)
+FROM table(agentguard_rules)
 WHERE rule_id = '%s'
 GROUP BY rule_id`, escapeSQL(id))
 
@@ -434,7 +434,7 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		escapedSQL := strings.ReplaceAll(entry.QuerySQL, "'", "''")
 		insertSQL := fmt.Sprintf(
-			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s',now64(3))`,
+			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s',now64(3))`,
 			id,
 			strings.ReplaceAll(entry.Name, "'", "''"),
 			entry.Version,
@@ -647,7 +647,7 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		escapedSQL := strings.ReplaceAll(finalSQL, "'", "''")
 		insertSQL := fmt.Sprintf(
-			`INSERT INTO agentshield_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
+			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
 			ruleID,
 			escapedName,
 			strings.ReplaceAll(body.Description, "'", "''"),
@@ -720,7 +720,7 @@ func queryCurrentRulePacks(cfg *config.TimeplusConfig, mgr *catalog.Manager) ([]
 func queryDetectionCounts(cfg *config.TimeplusConfig) (map[string]int, error) {
 	rows, err := tp.Query(cfg, `
 		SELECT rule_id, count() AS cnt
-		FROM table(agentshield_security_events)
+		FROM table(agentguard_security_events)
 		WHERE detected_at >= now() - interval 24 hour
 		GROUP BY rule_id
 	`)
@@ -741,7 +741,7 @@ func queryDetectionCounts(cfg *config.TimeplusConfig) (map[string]int, error) {
 func queryRecentDetections(cfg *config.TimeplusConfig) []models.SecurityEvent {
 	rows, err := tp.Query(cfg, `
 		SELECT rule_id, rule_name, severity, agent_id, hook_name, message, detected_at
-		FROM table(agentshield_security_events)
+		FROM table(agentguard_security_events)
 		ORDER BY detected_at DESC
 		LIMIT 10
 	`)

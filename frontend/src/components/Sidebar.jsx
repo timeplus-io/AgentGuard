@@ -29,7 +29,7 @@ export default function Sidebar() {
         </div>
         {!collapsed && (
           <div>
-            <h1 className="text-base font-bold text-[#ffb0cf] leading-none">AgentShield</h1>
+            <h1 className="text-base font-bold text-[#ffb0cf] leading-none">AgentGuard</h1>
             <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">Global Health: Secure</p>
           </div>
         )}

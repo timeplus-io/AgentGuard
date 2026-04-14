@@ -1,12 +1,12 @@
-# AgentShield
+# AgentGuard
 
-[![CI](https://github.com/timeplus-io/agentshield/actions/workflows/ci.yml/badge.svg)](https://github.com/timeplus-io/agentshield/actions/workflows/ci.yml)
-[![Release](https://github.com/timeplus-io/agentshield/actions/workflows/release.yml/badge.svg)](https://github.com/timeplus-io/agentshield/actions/workflows/release.yml)
-[![Latest Release](https://img.shields.io/github/v/release/timeplus-io/agentshield)](https://github.com/timeplus-io/agentshield/releases/latest)
-[![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/timeplus-io/agentshield/pkgs/container/agentshield)
+[![CI](https://github.com/timeplus-io/agentguard/actions/workflows/ci.yml/badge.svg)](https://github.com/timeplus-io/agentguard/actions/workflows/ci.yml)
+[![Release](https://github.com/timeplus-io/agentguard/actions/workflows/release.yml/badge.svg)](https://github.com/timeplus-io/agentguard/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/timeplus-io/agentguard)](https://github.com/timeplus-io/agentguard/releases/latest)
+[![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/timeplus-io/agentguard/pkgs/container/agentguard)
 [![Go Version](https://img.shields.io/badge/go-1.23-00ADD8?logo=go)](https://golang.org)
 
-Real-time security monitoring and governance platform for AI coding agents. AgentShield ingests telemetry from **OpenClaw** agents (Claude Code support coming soon), detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), enforces cost budgets, and surfaces everything through a streaming security dashboard.
+Real-time security monitoring and governance platform for AI coding agents. AgentGuard ingests telemetry from **OpenClaw** agents (Claude Code support coming soon), detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), enforces cost budgets, and surfaces everything through a streaming security dashboard.
 
 Built on [Timeplus](https://timeplus.com) — a streaming SQL engine for real-time data.
 
@@ -16,7 +16,7 @@ Built on [Timeplus](https://timeplus.com) — a streaming SQL engine for real-ti
 
 ### Docker Compose (recommended)
 
-Starts AgentShield + Timeplus together. AgentShield waits for Timeplus to be healthy before starting.
+Starts AgentGuard + Timeplus together. AgentGuard waits for Timeplus to be healthy before starting.
 
 ```bash
 docker compose up --build
@@ -37,7 +37,7 @@ Pull the latest image from GitHub Container Registry and run it against an exist
 docker run -p 8080:8080 \
   -e TIMEPLUS_HOST=timeplus.example.com \
   -e TIMEPLUS_USER=default \
-  ghcr.io/timeplus-io/agentshield:latest
+  ghcr.io/timeplus-io/agentguard:latest
 ```
 
 Pin to a specific release:
@@ -45,7 +45,7 @@ Pin to a specific release:
 ```bash
 docker run -p 8080:8080 \
   -e TIMEPLUS_HOST=timeplus.example.com \
-  ghcr.io/timeplus-io/agentshield:v0.1.0
+  ghcr.io/timeplus-io/agentguard:v0.1.0
 ```
 
 ### Docker (build from source)
@@ -53,11 +53,11 @@ docker run -p 8080:8080 \
 Builds a single image with the frontend compiled in. Requires a separately running Timeplus instance.
 
 ```bash
-docker build -t agentshield .
+docker build -t agentguard .
 docker run -p 8080:8080 \
   -e TIMEPLUS_HOST=timeplus.example.com \
   -e TIMEPLUS_USER=default \
-  agentshield
+  agentguard
 ```
 
 ### Local Development
@@ -85,7 +85,7 @@ Open [http://localhost:5173](http://localhost:5173) — it redirects to `/dashbo
 
 ## Configuration
 
-AgentShield is configured via **config file**, **environment variables**, or **CLI flags** (highest precedence wins).
+AgentGuard is configured via **config file**, **environment variables**, or **CLI flags** (highest precedence wins).
 
 ### Config file
 
@@ -152,11 +152,11 @@ Flags:
 Use the **Onboarding** wizard (`/onboarding`) to connect your first OpenClaw agent. The wizard walks through:
 
 1. **Select agent** — OpenClaw (Claude Code integration coming soon)
-2. **Install plugin** — `npm install @timeplus/agentshield-openclaw-plugin`, configurable deployment ID / name / Timeplus URL
+2. **Install plugin** — `npm install @timeplus/agentguard-openclaw-plugin`, configurable deployment ID / name / Timeplus URL
 3. **OTel config** — optional OpenTelemetry diagnostics export to Timeplus (skippable)
 4. **Activate rules** — select which security rules to enable; rules are disabled by default and must be explicitly activated
 
-See [`agents/openclaw/README.md`](agents/openclaw/README.md) for the full OpenClaw + AgentShield setup guide.
+See [`agents/openclaw/README.md`](agents/openclaw/README.md) for the full OpenClaw + AgentGuard setup guide.
 
 ---
 

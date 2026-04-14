@@ -3,7 +3,7 @@ package handlers
 import (
 	"testing"
 
-	"github.com/timeplus/agentshield/internal/models"
+	"github.com/timeplus/agentguard/internal/models"
 )
 
 // makeRow is a test helper that builds a minimal hook event row.

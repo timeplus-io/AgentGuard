@@ -1,4 +1,4 @@
-# OpenClaw AgentShield Test Scenarios
+# OpenClaw AgentGuard Test Scenarios
 
 Validates that hook events, OTel traces, and OTel metrics are correctly collected in Timeplus after various OpenClaw activity patterns.
 
@@ -7,7 +7,7 @@ Validates that hook events, OTel traces, and OTel metrics are correctly collecte
 ## Prerequisites
 
 - OpenClaw running via `make start` (port 18789)
-- AgentShield backend running (stream `agentshield_hook_events` exists)
+- AgentGuard backend running (stream `agentguard_hook_events` exists)
 - Timeplus running at `http://localhost:3218` (user `proton`, password `timeplus@t+`)
 - At least one model available (e.g. `qwen3:8b` or `kimi-k2.5:cloud` via Ollama)
 - Dashboard accessible: run `make url` to get the token URL
@@ -32,7 +32,7 @@ tpq "SELECT timestamp, service_name, name, duration_ns FROM table(otel_traces) W
 ### Helper: query hook events
 
 ```bash
-tpq "SELECT hook_name, event_time, session_id, agent_id, tool_name, provider, model FROM table(agentshield_hook_events) ORDER BY event_time DESC LIMIT 30"
+tpq "SELECT hook_name, event_time, session_id, agent_id, tool_name, provider, model FROM table(agentguard_hook_events) ORDER BY event_time DESC LIMIT 30"
 ```
 
 ---
@@ -58,7 +58,7 @@ tpq "SELECT hook_name, event_time, session_id, agent_id, tool_name, provider, mo
 **Verify hook events:**
 ```sql
 SELECT hook_name, event_time, session_id, agent_id, provider, model
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE event_time > now() - interval 2 minute
 ORDER BY event_time ASC
 ```
@@ -99,7 +99,7 @@ Expected: gateway process metrics (memory, event loop, etc.) are present.
 1. Start a new chat session (or `/reset` to clear context).
 2. Send:
    ```
-   Create a file called hello.txt in my workspace with the text "Hello from AgentShield test". Then read it back and confirm its contents.
+   Create a file called hello.txt in my workspace with the text "Hello from AgentGuard test". Then read it back and confirm its contents.
    ```
 3. Wait for completion (expect 2–3 tool calls: write, then read).
 4. Send a follow-up:
@@ -111,7 +111,7 @@ Expected: gateway process metrics (memory, event loop, etc.) are present.
 **Verify tool hooks fired:**
 ```sql
 SELECT hook_name, tool_name, event_time, session_id
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name IN ('before_tool_call', 'after_tool_call', 'tool_result_persist')
   AND event_time > now() - interval 5 minute
 ORDER BY event_time ASC
@@ -122,7 +122,7 @@ Expected: `before_tool_call` / `after_tool_call` pairs for each tool invocation 
 **Verify event_data contains tool parameters:**
 ```sql
 SELECT hook_name, tool_name, event_data
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name = 'before_tool_call'
   AND event_time > now() - interval 5 minute
 ```
@@ -132,7 +132,7 @@ Expected: `event_data` JSON blob contains the tool call parameters (file path, c
 **Verify multi-turn session continuity:**
 ```sql
 SELECT hook_name, count() as cnt
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE event_time > now() - interval 5 minute
 GROUP BY hook_name
 ORDER BY cnt DESC
@@ -163,7 +163,7 @@ OpenClaw spawns sub-agents via the `sessions_spawn` internal tool when prompted 
 **Verify subagent hooks:**
 ```sql
 SELECT hook_name, event_time, session_id, session_key, event_data
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name IN ('subagent_spawning', 'subagent_delivery_target', 'subagent_spawned', 'subagent_ended')
   AND event_time > now() - interval 5 minute
 ORDER BY event_time ASC
@@ -177,7 +177,7 @@ SELECT
   hook_name,
   json_extract_string(event_data, '$._ctx.childSessionKey') AS child_session,
   json_extract_string(event_data, '$._ctx.requesterSessionKey') AS parent_session
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name = 'subagent_spawning'
   AND event_time > now() - interval 5 minute
 ```
@@ -187,7 +187,7 @@ Expected: `child_session` contains `agent:main:subagent:<uuid>`, `parent_session
 **Verify both sessions have their own hook events:**
 ```sql
 SELECT session_key, hook_name, count() as cnt
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE event_time > now() - interval 5 minute
 GROUP BY session_key, hook_name
 ORDER BY session_key, hook_name
@@ -208,7 +208,7 @@ Expected: two distinct `session_key` values — one for the orchestrator, one fo
    docker exec openclaw node dist/index.js cron add \
      --at "2m" \
      --session isolated \
-     --label "agentshield-test-cron" \
+     --label "agentguard-test-cron" \
      "List the files in the current directory and count them. Reply with only the count."
    ```
 2. Wait 2 minutes (or slightly longer). The job fires in its own isolated session (`cron:<jobId>`).
@@ -217,7 +217,7 @@ Expected: two distinct `session_key` values — one for the orchestrator, one fo
 **Verify isolated cron session appeared:**
 ```sql
 SELECT hook_name, session_key, event_time, agent_id
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE session_key LIKE 'cron:%'
 ORDER BY event_time ASC
 ```
@@ -231,7 +231,7 @@ SELECT
   count() AS event_count,
   min(event_time) AS first_event,
   max(event_time) AS last_event
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE event_time > now() - interval 10 minute
 GROUP BY session_type
 ```
@@ -307,7 +307,7 @@ Context compaction fires automatically when the session token count approaches t
 **Verify compaction hooks:**
 ```sql
 SELECT hook_name, event_time, session_id
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name IN ('before_compaction', 'after_compaction')
   AND event_time > now() - interval 20 minute
 ORDER BY event_time ASC
@@ -318,7 +318,7 @@ Expected: `before_compaction` followed by `after_compaction` pair.
 **Verify tool call volume:**
 ```sql
 SELECT tool_name, count() AS call_count
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name = 'before_tool_call'
   AND event_time > now() - interval 20 minute
 GROUP BY tool_name
@@ -330,7 +330,7 @@ Expected: tool calls across multiple tool names (file writes, reads, bash execut
 **Verify full turn count:**
 ```sql
 SELECT count() AS llm_turns
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name = 'llm_input'
   AND event_time > now() - interval 20 minute
 ```
@@ -340,9 +340,9 @@ Expected: at least 6 turns (5 conversation turns + 1 post-compaction turn).
 **Verify post-compaction turn still has full hook sequence:**
 ```sql
 SELECT hook_name, event_time
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE event_time > (
-  SELECT max(event_time) FROM table(agentshield_hook_events)
+  SELECT max(event_time) FROM table(agentguard_hook_events)
   WHERE hook_name = 'after_compaction'
     AND event_time > now() - interval 20 minute
 )
@@ -375,7 +375,7 @@ SELECT
   hook_name,
   count() AS cnt,
   count(DISTINCT json_extract_string(event_data, '$._ctx.childSessionKey')) AS unique_children
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name IN ('subagent_spawning', 'subagent_spawned', 'subagent_ended')
   AND event_time > now() - interval 15 minute
 GROUP BY hook_name
@@ -386,7 +386,7 @@ Expected: `cnt = 3` and `unique_children = 3` for each subagent hook type.
 **Verify each child session has its own LLM turn:**
 ```sql
 SELECT session_key, count() AS turns
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name = 'llm_input'
   AND event_time > now() - interval 15 minute
 GROUP BY session_key
@@ -398,7 +398,7 @@ Expected: at least 4 rows — 1 orchestrator session + 3 child sessions.
 **Verify tool calls inside sub-agents:**
 ```sql
 SELECT session_key, tool_name, count() AS cnt
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name = 'before_tool_call'
   AND event_time > now() - interval 15 minute
 GROUP BY session_key, tool_name
@@ -417,7 +417,7 @@ Run these after completing all scenarios to get a holistic view.
 
 ```sql
 SELECT hook_name, count() AS total_events
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 GROUP BY hook_name
 ORDER BY total_events DESC
 ```
@@ -428,7 +428,7 @@ Expected: at least 20 distinct hook types covered.
 
 ```sql
 SELECT session_key, count() AS events, min(event_time) AS first, max(event_time) AS last
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 GROUP BY session_key
 ORDER BY first ASC
 ```
@@ -463,7 +463,7 @@ ORDER BY minute ASC
 
 ```sql
 SELECT model, provider, count() AS turns
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE hook_name = 'llm_input'
 GROUP BY model, provider
 ORDER BY turns DESC
@@ -474,7 +474,7 @@ ORDER BY turns DESC
 ## Notes
 
 - **Flush delay**: All hook events are batched. Wait at least 3 seconds (configured `flushMs: 2000`) after activity before querying.
-- **No events?** Check `docker logs openclaw 2>&1 | grep agentshield` — look for the `[agentshield] active` line and absence of `Failed to flush` errors.
+- **No events?** Check `docker logs openclaw 2>&1 | grep agentguard` — look for the `[agentguard] active` line and absence of `Failed to flush` errors.
 - **Cron job timing**: The `--at "2m"` syntax is relative to gateway time inside the container. If the system clock differs, adjust accordingly.
 - **Model availability**: All test prompts are model-agnostic. If a model returns an error, OpenClaw will still fire the hook sequence up to the failure point — `llm_output` may be absent if the LLM call fails.
 - **Context compaction** (Scenario 5): If the model's context window is large (e.g. kimi-k2.5 at 262k), compaction may not trigger automatically. Use `/compact` explicitly as described.

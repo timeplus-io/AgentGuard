@@ -5,20 +5,20 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/models"
-	tp "github.com/timeplus/agentshield/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/models"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
 // priorityStreams are always shown first and in this order.
 var priorityStreams = []string{
-	"agentshield_hook_events",
-	"agentshield_security_events",
-	"agentshield_rules",
+	"agentguard_hook_events",
+	"agentguard_security_events",
+	"agentguard_rules",
 }
 
 // ListTables queries Proton for the real schema of each stream.
-// Priority AgentShield streams come first, followed by any otel_* streams found in system.tables.
+// Priority AgentGuard streams come first, followed by any otel_* streams found in system.tables.
 func ListTables(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Discover otel_* streams dynamically.

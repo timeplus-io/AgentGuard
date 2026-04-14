@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/models"
-	"github.com/timeplus/agentshield/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/models"
+	"github.com/timeplus/agentguard/internal/timeplus"
 )
 
 // uuidRe validates strict UUID-format params before SQL interpolation.
@@ -112,7 +112,7 @@ SELECT
     min(event_time)                                      AS first_seen,
     max(event_time)                                      AS last_seen,
     count_if(hook_name = 'session_end')                  AS ended_event_count
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
   AND session_id    != ''%s
@@ -180,7 +180,7 @@ SELECT
     any(model)                              AS model,
     count_if(hook_name = 'before_tool_call') AS tool_count,
     count_if(hook_decision = 'block')        AS block_count
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
   AND session_id    = '%s'
@@ -204,7 +204,7 @@ ORDER BY start_time ASC`,
 SELECT
     count_if(hook_name = 'session_end')      AS has_ended,
     count_if(hook_name = 'before_tool_call') AS total_tool_calls
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
   AND session_id    = '%s'`,

@@ -5,6 +5,10 @@ spec/
 .openclaw/
 agents/openclaw/tests/__pycache__
 agents/litellm/config/*.json
+agents/openclaw/.openclaw/
+agents/openclaw/agentguard-plugin/dist
+agents/claudecode/agentguard-plugin/dist
+.claude/
 
 # Frontend
 frontend/node_modules/

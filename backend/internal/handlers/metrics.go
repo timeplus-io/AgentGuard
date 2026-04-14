@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/timeplus/agentshield/internal/config"
-	"github.com/timeplus/agentshield/internal/models"
-	"github.com/timeplus/agentshield/internal/timeplus"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/models"
+	"github.com/timeplus/agentguard/internal/timeplus"
 )
 
 // metricNameRe validates model names in query params.
@@ -124,7 +124,7 @@ SELECT
     to_int64(sum_if(metric_value, metric_name = 'llm.total_tokens'))       AS total_tokens,
     to_int64(sum_if(metric_value, metric_name = 'llm.cache_read_tokens'))  AS cache_read_tokens,
     to_int64(sum_if(metric_value, metric_name = 'llm.cache_write_tokens')) AS cache_write_tokens
-FROM table(agentshield_cim_metrics)
+FROM table(agentguard_cim_metrics)
 WHERE %s`, strings.Join(q1Where, "\n  AND "))
 
 		rows1, err := timeplus.Query(&cfg.Timeplus, q1)
@@ -151,7 +151,7 @@ WHERE %s`, strings.Join(q1Where, "\n  AND "))
 SELECT
     tags['stop_reason']         AS stop_reason,
     to_int64(sum(metric_value)) AS cnt
-FROM table(agentshield_cim_metrics)
+FROM table(agentguard_cim_metrics)
 WHERE %s
 GROUP BY stop_reason`, strings.Join(q2Where, "\n  AND "))
 
@@ -194,7 +194,7 @@ SELECT
     min(metric_value)            AS min_ms,
     max(metric_value)            AS max_ms,
     count()                      AS sample_count
-FROM table(agentshield_cim_metrics)
+FROM table(agentguard_cim_metrics)
 WHERE %s`, strings.Join(q3Where, "\n  AND "))
 
 		rows3, err := timeplus.Query(&cfg.Timeplus, q3)
@@ -227,7 +227,7 @@ SELECT
     to_int64(sum_if(metric_value, metric_name = 'llm.input_tokens'))          AS input_tokens,
     to_int64(sum_if(metric_value, metric_name = 'llm.output_tokens'))         AS output_tokens,
     to_int64(sum_if(metric_value, metric_name = 'llm.total_tokens'))          AS total_tokens
-FROM table(agentshield_cim_metrics)
+FROM table(agentguard_cim_metrics)
 WHERE %s
 GROUP BY bucket
 ORDER BY bucket ASC`, bfn, strings.Join(q4Where, "\n  AND "))
@@ -306,7 +306,7 @@ SELECT
     to_int64(sum_if(metric_value, metric_name = 'tool.success'))               AS success_calls,
     (to_int64(sum_if(metric_value, metric_name = 'tool.call'))
       - to_int64(sum_if(metric_value, metric_name = 'tool.success')))          AS failed_calls
-FROM table(agentshield_cim_metrics)
+FROM table(agentguard_cim_metrics)
 WHERE %s
 GROUP BY tool_name
 ORDER BY total_calls DESC`, strings.Join(q1Where, "\n  AND "))
@@ -346,7 +346,7 @@ SELECT
     min(metric_value)            AS min_ms,
     max(metric_value)            AS max_ms,
     count()                      AS sample_count
-FROM table(agentshield_cim_metrics)
+FROM table(agentguard_cim_metrics)
 WHERE %s
 GROUP BY tool_name`, strings.Join(q2Where, "\n  AND "))
 

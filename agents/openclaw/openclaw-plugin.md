@@ -1,4 +1,4 @@
-# AgentShield OpenClaw Plugin
+# AgentGuard OpenClaw Plugin
 
 Real-time security event collection for OpenClaw AI agents via the OpenClaw plugin hook system.
 
@@ -6,7 +6,7 @@ Real-time security event collection for OpenClaw AI agents via the OpenClaw plug
 
 ## Overview
 
-The AgentShield OpenClaw plugin is a TypeScript npm package (`@agentshield/openclaw-plugin`) that intercepts all 29 OpenClaw lifecycle hook points and streams each event to a Timeplus stream (`agentshield_hook_events`) via the Proton Ingest REST API. This gives the AgentShield backend a real-time feed of every security-relevant action taken by any AI agent running through the OpenClaw gateway.
+The AgentGuard OpenClaw plugin is a TypeScript npm package (`@agentguard/openclaw-plugin`) that intercepts all 29 OpenClaw lifecycle hook points and streams each event to a Timeplus stream (`agentguard_hook_events`) via the Proton Ingest REST API. This gives the AgentGuard backend a real-time feed of every security-relevant action taken by any AI agent running through the OpenClaw gateway.
 
 **Phase 1 (current):** observe-only — every hook captures and forwards data; no blocking or mutation.
 
@@ -17,8 +17,8 @@ The AgentShield OpenClaw plugin is a TypeScript npm package (`@agentshield/openc
 ## Repository Layout
 
 ```
-agents/openclaw/agentshield-plugin/
-├── package.json           # name: "@agentshield/openclaw-plugin", type: "module"
+agents/openclaw/agentguard-plugin/
+├── package.json           # name: "@agentguard/openclaw-plugin", type: "module"
 ├── tsconfig.json          # ESNext, moduleResolution: bundler
 ├── vitest.config.ts       # test runner config
 ├── src/
@@ -40,7 +40,7 @@ Config is resolved by merging two sources, with **environment variables taking p
 | Field | Default |
 |---|---|
 | `timeplusUrl` | `http://localhost:3218` |
-| `stream` | `agentshield_hook_events` |
+| `stream` | `agentguard_hook_events` |
 | `flushMs` | `2000` |
 | `batchSize` | `50` |
 | `username` | `default` |
@@ -54,12 +54,12 @@ All fields are optional. The plugin works out of the box with zero configuration
 {
   "plugins": {
     "entries": {
-      "agentshield": {
+      "agentguard": {
         "enabled": true,
-        "path": "/home/node/.openclaw/agentshield-plugin/dist/index.js",
+        "path": "/home/node/.openclaw/agentguard-plugin/dist/index.js",
         "config": {
           "timeplusUrl": "http://host.docker.internal:3218",
-          "stream": "agentshield_hook_events",
+          "stream": "agentguard_hook_events",
           "flushMs": 2000,
           "batchSize": 50
         }
@@ -73,21 +73,21 @@ All fields are optional. The plugin works out of the box with zero configuration
 
 | Env var | Field |
 |---|---|
-| `AGENTSHIELD_TIMEPLUS_URL` | `timeplusUrl` |
-| `AGENTSHIELD_STREAM` | `stream` |
-| `AGENTSHIELD_FLUSH_MS` | `flushMs` |
-| `AGENTSHIELD_BATCH_SIZE` | `batchSize` |
-| `AGENTSHIELD_USERNAME` | `username` |
-| `AGENTSHIELD_PASSWORD` | `password` |
+| `AGENTGUARD_TIMEPLUS_URL` | `timeplusUrl` |
+| `AGENTGUARD_STREAM` | `stream` |
+| `AGENTGUARD_FLUSH_MS` | `flushMs` |
+| `AGENTGUARD_BATCH_SIZE` | `batchSize` |
+| `AGENTGUARD_USERNAME` | `username` |
+| `AGENTGUARD_PASSWORD` | `password` |
 
 ---
 
 ## Timeplus Stream Schema
 
-The stream is pre-created by the AgentShield backend (`timeplus.Init()`) on startup — the plugin assumes it exists. Common fields are top-level typed columns; hook-specific payload is stored as a JSON blob in `event_data`.
+The stream is pre-created by the AgentGuard backend (`timeplus.Init()`) on startup — the plugin assumes it exists. Common fields are top-level typed columns; hook-specific payload is stored as a JSON blob in `event_data`.
 
 ```sql
-CREATE STREAM agentshield_hook_events
+CREATE STREAM agentguard_hook_events
 (
   hook_name     low_cardinality(string),  -- e.g. 'before_tool_call'
   event_time    datetime64(3),            -- wall-clock, millisecond precision
@@ -208,7 +208,7 @@ All capture `event_data` as a JSON blob. Subagent hooks additionally capture `ch
 ### Prerequisites
 
 - OpenClaw running via `agents/openclaw/Makefile`
-- AgentShield backend running (creates the Timeplus stream on startup)
+- AgentGuard backend running (creates the Timeplus stream on startup)
 - Timeplus Proton accessible at `http://host.docker.internal:3218`
 
 ### Start OpenClaw with the plugin
@@ -221,19 +221,19 @@ make start
 The Makefile mounts the plugin directory into the container:
 
 ```
--v "$(PWD)/agentshield-plugin":/home/node/.openclaw/agentshield-plugin
+-v "$(PWD)/agentguard-plugin":/home/node/.openclaw/agentguard-plugin
 ```
 
 ### Verify the plugin loaded
 
 ```bash
-docker logs openclaw 2>&1 | grep agentshield
+docker logs openclaw 2>&1 | grep agentguard
 ```
 
 Expected:
 
 ```
-[agentshield] active — streaming to http://host.docker.internal:3218/proton/v1/ingest/streams/agentshield_hook_events (flush every 2000ms, batch size 50)
+[agentguard] active — streaming to http://host.docker.internal:3218/proton/v1/ingest/streams/agentguard_hook_events (flush every 2000ms, batch size 50)
 ```
 
 ### Query events in Timeplus
@@ -242,7 +242,7 @@ After sending a message in OpenClaw, wait ~2s for the batch to flush, then query
 
 ```sql
 SELECT hook_name, event_time, session_id, agent_id, tool_name
-FROM table(agentshield_hook_events)
+FROM table(agentguard_hook_events)
 ORDER BY event_time DESC
 LIMIT 20
 ```
@@ -252,7 +252,7 @@ Or via the HTTP API:
 ```bash
 curl -s -X POST "http://localhost:3218/proton/v1/sql" \
   -H "Content-Type: application/json" \
-  -d '{"sql": "SELECT hook_name, event_time, session_id, agent_id FROM table(agentshield_hook_events) ORDER BY event_time DESC LIMIT 20"}'
+  -d '{"sql": "SELECT hook_name, event_time, session_id, agent_id FROM table(agentguard_hook_events) ORDER BY event_time DESC LIMIT 20"}'
 ```
 
 ### Rebuild after source changes
@@ -260,7 +260,7 @@ curl -s -X POST "http://localhost:3218/proton/v1/sql" \
 The compiled `dist/` is committed alongside `src/`. After editing source files, rebuild before restarting OpenClaw:
 
 ```bash
-cd agents/openclaw/agentshield-plugin
+cd agents/openclaw/agentguard-plugin
 npm run build
 cd ..
 make start
@@ -273,7 +273,7 @@ make start
 ### Run tests
 
 ```bash
-cd agents/openclaw/agentshield-plugin
+cd agents/openclaw/agentguard-plugin
 npm test
 ```
 
@@ -293,10 +293,10 @@ npm run build   # outputs to dist/
 
 ## Backend Integration
 
-`backend/internal/timeplus/init.go` — `Init()` calls `createAgentShieldStreams()` after the OTel streams are created. The DDL uses `IF NOT EXISTS` semantics via the `execIfNotExists` helper, so restarts are idempotent.
+`backend/internal/timeplus/init.go` — `Init()` calls `createAgentGuardStreams()` after the OTel streams are created. The DDL uses `IF NOT EXISTS` semantics via the `execIfNotExists` helper, so restarts are idempotent.
 
-The stream name (`agentshield_hook_events`) is the same string in three places — keep them in sync if renaming:
+The stream name (`agentguard_hook_events`) is the same string in three places — keep them in sync if renaming:
 
-1. Backend DDL constant `ddlAgentShieldHookEvents` in `init.go`
+1. Backend DDL constant `ddlAgentGuardHookEvents` in `init.go`
 2. Plugin default config `DEFAULTS.stream` in `config.ts`
 3. `openclaw.json` plugin config `stream` field

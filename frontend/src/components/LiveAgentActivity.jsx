@@ -3,7 +3,7 @@ import { api } from '../api/client'
 
 const sqlActivity = (range) => `
 SELECT hook_name, event_time, agent_id, tool_name, model, hook_decision
-FROM agentshield_hook_events
+FROM agentguard_hook_events
 WHERE hook_name IN ('llm_input', 'llm_output', 'before_tool_call', 'after_tool_call')
 SETTINGS seek_to='${range}'`
 

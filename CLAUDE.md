@@ -4,9 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-AgentShield is a real-time security monitoring and governance platform for AI coding agents (OpenClaw and Claude Code). It consists of a React SPA frontend and a Go/Gin backend. The backend connects to Timeplus Proton (a streaming SQL engine) for rules and security event data, and falls back to in-memory mock data for cost, threats, and metrics.
+AgentGuard is a real-time security monitoring and governance platform for AI coding agents (OpenClaw and Claude Code). It consists of a React SPA frontend and a Go/Gin backend. The backend connects to Timeplus Proton (a streaming SQL engine) for rules and security event data, and falls back to in-memory mock data for cost, threats, and metrics.
 
 ## Development Commands
+
+### Quickstart (both servers)
+```bash
+make dev                         # Start backend :8080 + frontend :5173 in parallel
+```
+
+Or with Docker Compose (includes Timeplus Proton):
+```bash
+docker compose up --build        # AgentGuard + Timeplus at http://localhost:8080
+```
 
 ### Backend (Go/Gin)
 ```bash
@@ -14,6 +24,8 @@ cd backend
 CGO_ENABLED=0 go build -o server cmd/server/main.go && ./server   # Start server on :8080
 CGO_ENABLED=0 go build ./...     # Compile check
 go mod tidy                      # Sync dependencies
+CGO_ENABLED=0 go test ./...      # Run all backend tests
+CGO_ENABLED=0 go test ./internal/handlers/... -run TestTimeline  # Run a single test
 ```
 
 > **macOS 26+ (Apple Silicon):** `go run` and regular `go build` trigger a dyld `missing LC_UUID load command` abort. Always use `CGO_ENABLED=0` to produce a fully static binary.
@@ -29,11 +41,30 @@ cd frontend
 npm run dev                      # Start dev server on :5173 (proxies /api → :8080)
 npm run build                    # Production build to dist/
 npm run preview                  # Preview the production build
+npm run lint                     # ESLint
 ```
 
 Both must run simultaneously for the app to work. The frontend Vite dev server proxies all `/api/*` requests to `http://localhost:8080`.
 
 The Go binary also serves the compiled frontend as embedded static assets (`internal/web/`), so a single `./server` binary can serve both API and UI in production.
+
+### Agent Plugins (TypeScript/Node)
+Each agent plugin lives in `agents/<agent>/agentguard-plugin/` and has its own build:
+```bash
+cd agents/claudecode/agentguard-plugin && npm install && npm run build
+cd agents/openclaw/agentguard-plugin  && npm install && npm run build
+# Install/configure hooks into ~/.claude/settings.json (claudecode):
+cd agents/claudecode && make install
+# Run plugin unit tests:
+cd agents/claudecode/agentguard-plugin && npm test
+cd agents/openclaw/agentguard-plugin  && npm test
+```
+
+### Production build
+```bash
+make build    # frontend-build → web-sync → backend-build (single binary with embedded UI)
+make lint     # golangci-lint (backend) + ESLint (frontend)
+```
 
 ## Architecture
 
@@ -48,7 +79,7 @@ Four-layer structure:
 - **`internal/handlers/`** — One file per resource. Handlers that need Proton receive `cfg *config.Config` via a closure.
 - **`internal/timeplus/`** — Proton integration layer:
   - `client.go` — `Query()` and `ExecHTTP()` for SELECT and DDL/DML against the Proton HTTP interface.
-  - `init.go` — Startup: creates OTel streams, `agentshield_rules` stream, and `agentshield_security_events` stream if they don't exist; syncs MV state with installed rules.
+  - `init.go` — Startup: creates OTel streams, `agentguard_rules` stream, and `agentguard_security_events` stream if they don't exist; syncs MV state with installed rules.
   - `rules.go` — MV management (`CreateRuleMV`, `PauseRuleMV`, `ResumeRuleMV`, `DropRuleMV`, `MVName`) and builtin rule `Catalog()`.
 - **`internal/web/`** — `embed.go` (embed frontend dist) / `noembed.go` (serve from disk) build-tag variants.
 
@@ -70,7 +101,7 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | GET | `/api/metrics/tools` | `GetToolMetrics` | |
 | GET | `/api/threats` | `ListThreats` | Supports `?severity=` and `?category=` filters |
 | GET | `/api/cost` | `GetCost` | Computed from mock daily spend |
-| GET | `/api/rules` | `ListRules` | Reads from Proton `agentshield_rules` stream |
+| GET | `/api/rules` | `ListRules` | Reads from Proton `agentguard_rules` stream |
 | GET | `/api/rules/catalog` | `ListCatalog` | Builtin catalog with installed status |
 | GET | `/api/rules/mv-status` | `MVStatus` | Health of Proton materialized views |
 | POST | `/api/rules/sync` | `SyncMVs` | Reconcile MV state without restart |
@@ -139,12 +170,37 @@ All Tailwind color tokens matching the design system are configured in `frontend
 
 When implementing or modifying a page, the corresponding `code.html` is the source of truth for layout and styling decisions.
 
+### Agent Plugins (`agents/`)
+
+Three subdirectories, one per telemetry source:
+
+- **`agents/claudecode/`** — TypeScript Claude Code hook plugin. Configured via `make install` which injects hooks into `~/.claude/settings.json` for events: `SessionStart`, `PreToolUse`, `PostToolUse`, etc. Writes raw events to the `agentguard_hook_events` Proton stream. Also configures OTel env vars (`CLAUDE_CODE_ENABLE_TELEMETRY`, `OTEL_EXPORTER_OTLP_ENDPOINT`) so Claude Code emits metrics/logs to Timeplus.
+- **`agents/openclaw/`** — TypeScript OpenClaw hook plugin. Similar structure; `make install-plugin` installs it. Includes integration test scenarios in `tests/`.
+- **`agents/litellm/`** — LiteLLM proxy config (`config/litellm_config.yaml`) for routing LLM calls through a proxy that also emits telemetry.
+
 ## Timeplus Proton Integration
 
-Rules and security events are persisted in Proton streams:
-- `agentshield_rules` — append-only log of rule mutations; current state queried via `arg_max(... updated_at)` GROUP BY.
-- `agentshield_security_events` — security detections written by rule materialized views.
+### Raw → CIM Pipeline
 
-Each enabled rule has a corresponding materialized view named `mv_rule_<id>` (e.g. `mv_rule_rp_001`). The MV queries `hook_events` and writes matches to `agentshield_security_events`. Toggle/install/uninstall operations create, pause, resume, or drop these MVs atomically alongside the rule state mutation.
+AgentGuard uses a **Common Information Model (CIM)** to normalize heterogeneous agent events into a single schema before querying. See `docs/cim.md` for the full spec.
+
+| Stream | Purpose |
+|--------|---------|
+| `agentguard_hook_events` | Raw hook payloads from agent plugins |
+| `agentguard_otel_logs` / `agentguard_otel_metrics` | Raw OTel data from Claude Code |
+| `agentguard_cim_event` | Normalized lifecycle events (session, LLM call, tool call) |
+| `agentguard_cim_metrics` | Pre-computed scalar metrics per call (tokens, cost, latency) |
+| `agentguard_rules` | Rule mutation log; current state via `arg_max(…updated_at) GROUP BY` |
+| `agentguard_security_events` | Rule-triggered detections written by MVs |
+
+Materialized views normalize raw streams into `agentguard_cim_event` and `agentguard_cim_metrics`. Backend metric handlers (`GetLLMMetrics`, `GetToolMetrics`) query `agentguard_cim_metrics` directly.
+
+### Rules and MVs
+
+Each enabled rule has a corresponding materialized view named `mv_rule_<id>` (e.g. `mv_rule_rp_001`). The MV queries `hook_events` and writes matches to `agentguard_security_events`. Toggle/install/uninstall operations create, pause, resume, or drop these MVs atomically alongside the rule state mutation.
 
 On startup, `timeplus.Init()` creates missing streams and syncs MV state. This is non-fatal — the server starts even if Proton is unavailable.
+
+### Timeline handlers
+
+`internal/handlers/timeline*.go` provides the agent session timeline. It has three variants selected at runtime: `timeline.go` (CIM-based), `timeline_openclaw.go` (OpenClaw-specific fallback), `timeline_fallback.go` (mock). Each has a corresponding `*_test.go`.

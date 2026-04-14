@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/timeplus/agentshield/internal/config"
+	"github.com/timeplus/agentguard/internal/config"
 )
 
 var protonHTTPClient = &http.Client{Timeout: 15 * time.Second}

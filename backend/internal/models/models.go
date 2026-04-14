@@ -286,7 +286,7 @@ type CostResponse struct {
 	AgentModelCosts []AgentModelCost `json:"agent_model_costs"`
 }
 
-// PricingEntry is one row in the agentshield_pricing mutable stream.
+// PricingEntry is one row in the agentguard_pricing mutable stream.
 type PricingEntry struct {
 	Provider                string  `json:"provider"`
 	Model                   string  `json:"model"`
