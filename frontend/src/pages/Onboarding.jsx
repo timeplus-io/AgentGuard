@@ -21,10 +21,10 @@ const agentTypes = [
   {
     id: 'claude-code',
     name: 'Claude Code',
-    desc: "Anthropic's Claude Code CLI. Native AgentGuard integration coming soon.",
+    desc: "Anthropic's Claude Code CLI. Monitor tool use, LLM calls, cost, and security events in real time.",
     icon: 'code',
-    badge: 'Coming Soon',
-    disabled: true,
+    badge: 'Supported',
+    disabled: false,
   },
 ]
 
@@ -63,10 +63,15 @@ export default function Onboarding() {
   const [selectedAgent, setSelectedAgent] = useState('openclaw')
 
   // Step 1 config
+  const [agentId, setAgentId] = useState('')
   const [deploymentId, setDeploymentId] = useState('my-team')
   const [deploymentName, setDeploymentName] = useState('My Team')
   const [timeplusUrl, setTimeplusUrl] = useState('http://localhost:3218')
   const [configTab, setConfigTab] = useState('env')
+
+  useEffect(() => {
+    setConfigTab(selectedAgent === 'claude-code' ? 'json' : 'env')
+  }, [selectedAgent])
 
   // Step 2 OTel config — derived from timeplusUrl host, port 4318; user can override
   const [otelEndpointOverride, setOtelEndpointOverride] = useState(null)
@@ -145,6 +150,50 @@ export default function Onboarding() {
       entries: {
         'diagnostics-otel': { enabled: true },
       },
+    },
+  }, null, 2)
+
+  // ── Claude Code computed snippets ──────────────────────────────────────────
+  const hookEntry = { matcher: '*', hooks: [{ type: 'command', command: 'agentguard-hook', async: true }] }
+  const ccSettingsJsonCode = JSON.stringify({
+    hooks: {
+      SessionStart:       [hookEntry],
+      SessionEnd:         [hookEntry],
+      UserPromptSubmit:   [hookEntry],
+      PreToolUse:         [hookEntry],
+      PostToolUse:        [hookEntry],
+      PostToolUseFailure: [hookEntry],
+      SubagentStart:      [hookEntry],
+      SubagentStop:       [hookEntry],
+      Stop:               [hookEntry],
+      PermissionDenied:   [hookEntry],
+    },
+    env: {
+      AGENTGUARD_AGENT_ID:        agentId || '<your-hostname>',
+      AGENTGUARD_DEPLOYMENT_ID:   deploymentId,
+      AGENTGUARD_DEPLOYMENT_NAME: deploymentName,
+      AGENTGUARD_TIMEPLUS_URL:    timeplusUrl,
+    },
+  }, null, 2)
+
+  const ccEnvCode =
+    `export AGENTGUARD_AGENT_ID="${agentId || '<your-hostname>'}"\n` +
+    `export AGENTGUARD_DEPLOYMENT_ID="${deploymentId}"\n` +
+    `export AGENTGUARD_DEPLOYMENT_NAME="${deploymentName}"\n` +
+    `export AGENTGUARD_TIMEPLUS_URL="${timeplusUrl}"`
+
+  const ccOtelSettingsCode = JSON.stringify({
+    env: {
+      CLAUDE_CODE_ENABLE_TELEMETRY:        '1',
+      CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: '1',
+      OTEL_METRICS_EXPORTER:               'otlp',
+      OTEL_LOGS_EXPORTER:                  'otlp',
+      OTEL_TRACES_EXPORTER:                'otlp',
+      OTEL_EXPORTER_OTLP_PROTOCOL:         'http/protobuf',
+      OTEL_EXPORTER_OTLP_ENDPOINT:         otelEndpoint,
+      OTEL_METRIC_EXPORT_INTERVAL:         '10000',
+      OTEL_LOGS_EXPORT_INTERVAL:           '5000',
+      OTEL_LOG_TOOL_DETAILS:               '1',
     },
   }, null, 2)
 
@@ -298,7 +347,7 @@ export default function Onboarding() {
               )}
 
               {/* Step 1: Install Plugin */}
-              {step === 1 && (
+              {step === 1 && selectedAgent === 'openclaw' && (
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
@@ -349,8 +398,64 @@ export default function Onboarding() {
                 </>
               )}
 
+              {step === 1 && selectedAgent === 'claude-code' && (
+                <>
+                  <div>
+                    <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
+                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Install the AgentGuard hook plugin globally, then add the generated config to your <code className="text-zinc-300">~/.claude/settings.json</code>.</p>
+                  </div>
+
+                  <CodeBlock label="1. Install via npm" code="npm install -g @timeplus/agentguard-claudecode-plugin" />
+
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">2. Configuration</p>
+                    <div className="grid grid-cols-1 gap-3">
+                      {[
+                        { label: 'Agent ID *', val: agentId, set: setAgentId, ph: 'your-hostname' },
+                        { label: 'Deployment ID', val: deploymentId, set: setDeploymentId, ph: 'local' },
+                        { label: 'Deployment Name', val: deploymentName, set: setDeploymentName, ph: 'Local Dev' },
+                        { label: 'Timeplus URL', val: timeplusUrl, set: setTimeplusUrl, ph: 'http://localhost:3218' },
+                      ].map(({ label, val, set, ph }) => (
+                        <div key={label} className="flex items-center gap-4">
+                          <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">{label}</label>
+                          <input
+                            value={val}
+                            onChange={e => set(e.target.value)}
+                            placeholder={ph}
+                            className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 leading-relaxed">* Agent ID identifies this Claude Code instance — use your hostname or machine name.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">3. Add to ~/.claude/settings.json</p>
+                    <div className="flex gap-2 mb-2">
+                      {[{ id: 'json', label: 'settings.json' }, { id: 'env', label: 'Shell env' }].map(tab => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setConfigTab(tab.id)}
+                          className={`px-3 py-1 text-[10px] font-semibold rounded-full transition-colors ${configTab === tab.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                    <CodeBlock
+                      label={configTab === 'json' ? '~/.claude/settings.json — merge this block' : 'Shell profile (.zshrc / .bashrc)'}
+                      code={configTab === 'json' ? ccSettingsJsonCode : ccEnvCode}
+                    />
+                    {configTab === 'json' && (
+                      <p className="text-[10px] text-zinc-500 leading-relaxed">Merge with your existing <code className="text-zinc-400">~/.claude/settings.json</code> — do not replace the whole file.</p>
+                    )}
+                  </div>
+                </>
+              )}
+
               {/* Step 2: OTel Config */}
-              {step === 2 && (
+              {step === 2 && selectedAgent === 'openclaw' && (
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">
@@ -379,6 +484,38 @@ export default function Onboarding() {
                   </div>
 
                   <CodeBlock label="openclaw.json — diagnostics section" code={otelConfigCode} />
+                </>
+              )}
+
+              {step === 2 && selectedAgent === 'claude-code' && (
+                <>
+                  <div>
+                    <h2 className="text-xl font-semibold text-white tracking-tight">
+                      OpenTelemetry Config
+                      <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#37333f] text-zinc-500 align-middle">Optional</span>
+                    </h2>
+                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                      Enable Claude Code's built-in OTel telemetry to export LLM metrics and logs to Timeplus. This unlocks token usage, cost, and latency data. You can skip this step — hook events will still be captured.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Timeplus OTLP Endpoint</p>
+                    <div className="flex items-center gap-4">
+                      <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Endpoint URL</label>
+                      <input
+                        value={otelEndpoint}
+                        onChange={e => setOtelEndpoint(e.target.value)}
+                        placeholder="http://localhost:4318"
+                        className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <CodeBlock label="~/.claude/settings.json — merge this env block" code={ccOtelSettingsCode} />
+                  <p className="text-[10px] text-zinc-500 leading-relaxed">
+                    Merge the <code className="text-zinc-400">env</code> keys into your existing <code className="text-zinc-400">~/.claude/settings.json</code>. The <code className="text-zinc-400">http/protobuf</code> protocol is required — do not use gRPC.
+                  </p>
                 </>
               )}
 
