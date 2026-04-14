@@ -36,7 +36,6 @@ Once Timeplus is running, the following ports must be reachable by AgentGuard an
 
 | Port | Service | Purpose |
 |---|---|---|
-| `8080` | AgentGuard | Web UI and REST API |
 | `3218` | Timeplus | HTTP query API — used by AgentGuard |
 | `8463` | Timeplus | Native TCP protocol — used by AgentGuard |
 | `4317` | Timeplus | OTLP gRPC — agent OTel telemetry |
@@ -66,20 +65,10 @@ AgentGuard connects to Timeplus using dedicated credentials. Skip this section i
 2. Log in with the default admin credentials (set during first-run setup).
 3. Navigate to **Settings → Users → Add User**.
 4. Create a user — for example:
-   - **Username:** `proton`
-   - **Password:** `timeplus@t+`
+   - **Username:** `User`
+   - **Password:** `Password`
    - **Role:** Admin (AgentGuard needs DDL permissions to create streams and views on startup)
 5. Click **Save**.
-
-### Via SQL (alternative)
-
-```bash
-curl -s -X POST http://localhost:3218/proton/v1/query \
-  -H 'Content-Type: application/json' \
-  -d '{"query": "CREATE USER proton IDENTIFIED WITH plaintext_password BY '"'"'timeplus@t+'"'"'"}'
-```
-
-> **Note:** The password `timeplus@t+` is the example used in `docker-compose.yaml`. Use a strong password in any non-local deployment and pass it to AgentGuard via `TIMEPLUS_PASSWORD`.
 
 ---
 
@@ -116,26 +105,70 @@ AgentGuard creates all required Timeplus streams and materialized views on first
 
 ### Option C — Docker Compose (recommended for new installs)
 
-This starts Timeplus and AgentGuard together with the correct networking:
+This starts Timeplus and AgentGuard together with the correct networking. Save the following as `docker-compose.yaml` and run it:
+
+```yaml
+services:
+  timeplus:
+    image: timeplus/timeplus-enterprise:3.2.1
+    platform: linux/amd64
+    container_name: timeplus
+    ports:
+      - "3218:3218"   # HTTP query API (used by AgentGuard)
+      - "8123:8123"   # HTTP query API normal
+      - "8463:8463"   # Native TCP protocol
+      - "4317:4317"   # OTLP gRPC (agent OTel telemetry)
+      - "4318:4318"   # OTLP HTTP (agent OTel telemetry)
+      - "8000:8000"   # Timeplus Enterprise web console
+    volumes:
+      - timeplus-data:/timeplus/data/
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/3218' 2>/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+  agentguard:
+    image: ghcr.io/timeplus-io/agentguard:latest
+    container_name: agentguard
+    ports:
+      - "8080:8080"
+    environment:
+      TIMEPLUS_HOST: timeplus
+      TIMEPLUS_PORT: 3218
+      TIMEPLUS_NATIVE_PORT: 8463
+      TIMEPLUS_USER: "proton"
+      TIMEPLUS_PASSWORD: "timeplus@t+"
+      SERVER_PORT: 8080
+      # Proton calls this URL for alert webhooks; use the Docker service name.
+      AGENTGUARD_URL: "http://agentguard:8080"
+    depends_on:
+      timeplus:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  timeplus-data:
+```
 
 ```bash
-git clone https://github.com/timeplus-io/AgentGuard.git
-cd AgentGuard
-docker compose up --build
+docker compose up -d
 ```
 
 Open [http://localhost:8080](http://localhost:8080).
 
-The `docker-compose.yaml` pre-configures:
-- Timeplus credentials (`proton` / `timeplus@t+`)
-- `AGENTGUARD_URL=http://agentguard:8080` so Proton can call back AgentGuard for alert webhooks
+- AgentGuard waits for Timeplus to pass its health check before starting.
+- `AGENTGUARD_URL=http://agentguard:8080` ensures Proton can call back AgentGuard for alert webhooks using the Docker service name.
+- Change `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD` if you created a different user in step 3.
 
 To stop and remove volumes:
 ```bash
 docker compose down -v
 ```
 
-### Option C — Docker image (standalone)
+### Option B — Docker image (standalone)
 
 ```bash
 docker run -d \
