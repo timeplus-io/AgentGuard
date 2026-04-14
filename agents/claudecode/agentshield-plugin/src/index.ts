@@ -2,7 +2,7 @@
 import { resolveConfig } from "./config.js";
 import { send } from "./timeplus-client.js";
 import { normalize, normalizeContextEvent } from "./normalize.js";
-import { readTranscript } from "./transcript.js";
+import { readTranscript, readTranscriptUsage } from "./transcript.js";
 
 // Only these two hooks produce a companion context event carrying the transcript.
 // UserPromptSubmit → prompt_context (context before the new turn begins)
@@ -31,12 +31,23 @@ async function main(): Promise<void> {
   }
 
   const config = resolveConfig();
+  const hookEventName = typeof input["hook_event_name"] === "string" ? input["hook_event_name"] : "";
+
+  // For the Stop hook, accumulate per-call token usage from the transcript and
+  // attach it as _llm_usage in event_data. The mv_cim_metrics_claudecode_cim
+  // MV extracts this to produce LLM metrics without requiring OTel.
+  if (hookEventName === "Stop") {
+    const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;
+    if (transcriptPath) {
+      input = { ...input, _llm_usage: readTranscriptUsage(transcriptPath) };
+    }
+  }
+
   const event = normalize(input, config);
   await send(event, config);
 
   // For the two transcript-bearing hooks, read the transcript file and send a
   // separate context event. All other hooks send no transcript data.
-  const hookEventName = typeof input["hook_event_name"] === "string" ? input["hook_event_name"] : "";
   const contextHookName = CONTEXT_HOOKS[hookEventName];
   if (contextHookName) {
     const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;

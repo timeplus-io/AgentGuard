@@ -127,6 +127,12 @@ import { readFileSync } from "fs";
 import { homedir } from "os";
 var MAX_MESSAGES = parseInt(process.env.AGENTSHIELD_TRANSCRIPT_MESSAGES ?? "50", 10);
 var MAX_CONTENT_CHARS = parseInt(process.env.AGENTSHIELD_TRANSCRIPT_CONTENT_CHARS ?? "10000", 10);
+function toNum(v) {
+  return typeof v === "number" ? v : 0;
+}
+function resolvePath(p) {
+  return p.startsWith("~/") ? p.replace("~", homedir()) : p;
+}
 function truncateContent(content) {
   if (typeof content === "string") {
     return content.length > MAX_CONTENT_CHARS ? content.slice(0, MAX_CONTENT_CHARS) + `...[truncated ${content.length - MAX_CONTENT_CHARS} chars]` : content;
@@ -148,7 +154,7 @@ function truncateContent(content) {
 }
 function readTranscript(transcriptPath) {
   try {
-    const resolvedPath = transcriptPath.startsWith("~/") ? transcriptPath.replace("~", homedir()) : transcriptPath;
+    const resolvedPath = resolvePath(transcriptPath);
     const raw = readFileSync(resolvedPath, "utf8");
     const messages = [];
     for (const line of raw.split("\n")) {
@@ -170,6 +176,46 @@ function readTranscript(transcriptPath) {
   } catch {
     return [];
   }
+}
+function readTranscriptUsage(transcriptPath) {
+  const result = {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    total_tokens: 0,
+    duration_ms: 0,
+    model: "",
+    llm_calls: 0
+  };
+  try {
+    const raw = readFileSync(resolvePath(transcriptPath), "utf8");
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const entry = JSON.parse(trimmed);
+        const msg = entry["message"];
+        if (!msg || msg["role"] !== "assistant") continue;
+        result.llm_calls++;
+        result.duration_ms += toNum(entry["durationMs"]);
+        const usage = msg["usage"];
+        if (usage) {
+          result.input_tokens += toNum(usage["input_tokens"]);
+          result.output_tokens += toNum(usage["output_tokens"]);
+          result.cache_creation_input_tokens += toNum(usage["cache_creation_input_tokens"]);
+          result.cache_read_input_tokens += toNum(usage["cache_read_input_tokens"]);
+        }
+        if (!result.model && typeof msg["model"] === "string" && msg["model"]) {
+          result.model = msg["model"];
+        }
+      } catch {
+      }
+    }
+    result.total_tokens = result.input_tokens + result.output_tokens;
+  } catch {
+  }
+  return result;
 }
 
 // src/index.ts
@@ -195,9 +241,15 @@ async function main() {
     return;
   }
   const config = resolveConfig();
+  const hookEventName = typeof input["hook_event_name"] === "string" ? input["hook_event_name"] : "";
+  if (hookEventName === "Stop") {
+    const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;
+    if (transcriptPath) {
+      input = { ...input, _llm_usage: readTranscriptUsage(transcriptPath) };
+    }
+  }
   const event = normalize(input, config);
   await send(event, config);
-  const hookEventName = typeof input["hook_event_name"] === "string" ? input["hook_event_name"] : "";
   const contextHookName = CONTEXT_HOOKS[hookEventName];
   if (contextHookName) {
     const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;

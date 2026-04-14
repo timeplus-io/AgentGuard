@@ -38,10 +38,10 @@ func Init(cfg *config.TimeplusConfig, catalogEntries []catalog.Entry) error {
 		return fmt.Errorf("timeplus init: creating CIM MVs: %w", err)
 	}
 	if err := createCIMMetricsStream(ctx, conn); err != nil {
-		return fmt.Errorf("timeplus init: creating CIM metrics stream: %w", err)
+		log.Printf("timeplus init: warning creating CIM metrics stream: %v", err)
 	}
 	if err := createCIMMetricsMVs(ctx, conn); err != nil {
-		return fmt.Errorf("timeplus init: creating CIM metrics MVs: %w", err)
+		log.Printf("timeplus init: warning creating CIM metrics MVs: %v", err)
 	}
 	if err := createSecurityStreams(ctx, conn); err != nil {
 		return fmt.Errorf("timeplus init: creating security streams: %w", err)
@@ -183,13 +183,30 @@ func createCIMStream(ctx context.Context, conn proton.Conn) error {
 }
 
 func createCIMMVs(ctx context.Context, conn proton.Conn) error {
-	if err := execIfNotExists(ctx, conn, "view", "mv_cim_claudecode", ddlCIMClaudeCodeMV); err != nil {
-		return err
+	// Drop and recreate CIM MVs on every startup so DDL changes (e.g. field
+	// extraction fixes) take effect without manual intervention. The gap between
+	// DROP and CREATE during startup is harmless — no agent traffic is flowing.
+	for _, name := range []string{"mv_cim_claudecode", "mv_cim_openclaw"} {
+		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", name)); err != nil {
+			log.Printf("timeplus: warning dropping %s for recreation: %v", name, err)
+		}
 	}
-	return execIfNotExists(ctx, conn, "view", "mv_cim_openclaw", ddlCIMOpenClawMV)
+	if err := conn.Exec(ctx, ddlCIMClaudeCodeMV); err != nil {
+		return fmt.Errorf("creating view %q: %w", "mv_cim_claudecode", err)
+	}
+	if err := conn.Exec(ctx, ddlCIMOpenClawMV); err != nil {
+		return fmt.Errorf("creating view %q: %w", "mv_cim_openclaw", err)
+	}
+	return nil
 }
 
 func createCIMMetricsStream(ctx context.Context, conn proton.Conn) error {
+	if err := execIfNotExists(ctx, conn, "stream", "agentshield_session_agents", ddlSessionAgentsStream); err != nil {
+		return err
+	}
+	if err := execIfNotExists(ctx, conn, "stream", "agentshield_run_latency", ddlRunLatencyStream); err != nil {
+		return err
+	}
 	return execIfNotExists(ctx, conn, "stream", "agentshield_cim_metrics", ddlCIMMetrics)
 }
 
@@ -198,15 +215,27 @@ func createCIMMetricsMVs(ctx context.Context, conn proton.Conn) error {
 		name string
 		ddl  string
 	}{
+		// Lookup feeders must come first — the metrics MVs JOIN against these
+		// mutable streams, so the streams must be populated before the joins run.
+		{"mv_session_agents", ddlSessionAgentsMV},
+		{"mv_run_latency", ddlRunLatencyMV},
 		{"mv_cim_metrics_openclaw_llm", ddlCIMMetricsOpenClawLlmMV},
 		{"mv_cim_metrics_openclaw_tools", ddlCIMMetricsOpenClawToolsMV},
 		{"mv_cim_metrics_claudecode_otel", ddlCIMMetricsClaudeCodeOtelMV},
 		{"mv_cim_metrics_claudecode_tools", ddlCIMMetricsClaudeCodeToolsMV},
 	}
+	// Drop and recreate all CIM metrics MVs on every startup so DDL fixes take
+	// effect without manual intervention. The startup gap is harmless.
 	for _, mv := range mvs {
-		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl); err != nil {
-			return err
+		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", mv.name)); err != nil {
+			log.Printf("timeplus: warning dropping %s for recreation: %v", mv.name, err)
 		}
+	}
+	for _, mv := range mvs {
+		if err := conn.Exec(ctx, mv.ddl); err != nil {
+			return fmt.Errorf("creating view %q: %w", mv.name, err)
+		}
+		log.Printf("timeplus: view %q created", mv.name)
 	}
 	return nil
 }
@@ -703,7 +732,9 @@ SELECT
   json_query(event_data, '$.result')                                       AS tool_result,
   json_value(event_data, '$.error') = ''                                   AS tool_success,
   json_extract_int(event_data, 'durationMs')                               AS tool_duration_ms,
-  json_value(event_data, '$.content')                                      AS user_message,
+  if(hook_name = 'llm_input',
+     json_value(event_data, '$.prompt'),
+     json_value(event_data, '$.content'))                                  AS user_message,
   json_value(event_data, '$.assistantTexts[0]')                            AS assistant_message,
   hook_decision,
   block_reason,
@@ -717,6 +748,56 @@ WHERE agent_type = 'openclaw'
     'llm_input', 'llm_output',
     'before_tool_call', 'after_tool_call'
   )`
+
+// ddlSessionAgentsStream is a mutable stream keyed by session_id that maps each
+// Claude Code session to its agent_id and deployment_id (set by the plugin via
+// environment variables). It is used as a live lookup in the OTel metrics MV so
+// that LLM metrics get the same agent_id as all other hook-based events.
+const ddlSessionAgentsStream = `
+CREATE MUTABLE STREAM IF NOT EXISTS agentshield_session_agents
+(
+  session_id    string,
+  agent_id      string,
+  deployment_id string,
+  first_seen    datetime64(3)
+) PRIMARY KEY (session_id)`
+
+// ddlSessionAgentsMV feeds agentshield_session_agents from hook events for all
+// agent types. Because agentshield_session_agents is a mutable stream
+// (primary-key dedup on session_id), duplicate inserts are harmless — the stream
+// always holds the latest agent_id/deployment_id seen for each session.
+const ddlSessionAgentsMV = `
+CREATE MATERIALIZED VIEW mv_session_agents
+INTO agentshield_session_agents AS
+SELECT
+  session_id,
+  agent_id,
+  deployment_id,
+  event_time AS first_seen
+FROM agentshield_hook_events`
+
+// ddlRunLatencyStream is a mutable stream keyed by run_id that captures LLM
+// call latency from OpenClaw's agent_end hook events (which carry durationMs).
+// It is joined in mv_cim_metrics_openclaw_llm to populate llm.latency_ms.
+const ddlRunLatencyStream = `
+CREATE MUTABLE STREAM IF NOT EXISTS agentshield_run_latency
+(
+  run_id     string,
+  latency_ms float64
+) PRIMARY KEY (run_id)`
+
+// ddlRunLatencyMV feeds agentshield_run_latency from agent_end hook events.
+// agent_end fires ~2ms before llm_output for the same run_id, so the entry is
+// available in the mutable stream by the time the metrics MV processes the
+// corresponding llm_response CIM event.
+const ddlRunLatencyMV = `
+CREATE MATERIALIZED VIEW mv_run_latency
+INTO agentshield_run_latency AS
+SELECT
+  run_id,
+  to_float64_or_zero(json_extract_string(event_data, 'durationMs')) AS latency_ms
+FROM agentshield_hook_events
+WHERE hook_name = 'agent_end'`
 
 const ddlCIMMetrics = `
 CREATE STREAM agentshield_cim_metrics
@@ -735,33 +816,33 @@ const ddlCIMMetricsOpenClawLlmMV = `
 CREATE MATERIALIZED VIEW mv_cim_metrics_openclaw_llm
 INTO agentshield_cim_metrics AS
 SELECT
-  event_time,
+  e.event_time,
   metric_name,
   metric_value,
-  'openclaw'  AS agent_type,
-  agent_id,
-  deployment_id,
-  session_id,
-  map(
-    'model',       model,
-    'provider',    provider,
-    'stop_reason', json_value(raw_event_data, '$.lastAssistant.stopReason'),
-    'run_id',      run_id
-  ) AS tags
-FROM agentshield_cim_event
+  'openclaw'                                                              AS agent_type,
+  e.agent_id,
+  e.deployment_id,
+  e.session_id,
+  map_cast(
+    ['model', 'stop_reason', 'run_id'],
+    [e.model, json_value(e.raw_event_data, '$.lastAssistant.stopReason'), e.run_id]
+  )                                                                       AS tags
+FROM agentshield_cim_event AS e
+LEFT JOIN agentshield_run_latency AS r ON r.run_id = e.run_id
 ARRAY JOIN
   ['llm.call', 'llm.input_tokens', 'llm.output_tokens', 'llm.total_tokens',
-   'llm.cache_read_tokens', 'llm.cache_write_tokens']                           AS metric_name,
+   'llm.cache_read_tokens', 'llm.cache_write_tokens', 'llm.latency_ms']  AS metric_name,
   [
     to_float64(1),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'input')),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'output')),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'totalTokens')),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'cacheRead')),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'cacheWrite'))
-  ]                                                                              AS metric_value
-WHERE agent_type = 'openclaw'
-  AND event_type = 'llm_response'`
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'input')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'output')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'totalTokens')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'cacheRead')),
+    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'cacheWrite')),
+    r.latency_ms
+  ]                                                                       AS metric_value
+WHERE e.agent_type = 'openclaw'
+  AND e.event_type = 'llm_response'`
 
 const ddlCIMMetricsOpenClawToolsMV = `
 CREATE MATERIALIZED VIEW mv_cim_metrics_openclaw_tools
@@ -770,22 +851,19 @@ SELECT
   event_time,
   metric_name,
   metric_value,
-  'openclaw' AS agent_type,
+  'openclaw'                                                   AS agent_type,
   agent_id,
   deployment_id,
   session_id,
-  map(
-    'tool_name', tool_name,
-    'run_id',    run_id
-  ) AS tags
+  map_cast(['tool_name', 'run_id'], [tool_name, run_id])      AS tags
 FROM agentshield_cim_event
 ARRAY JOIN
-  ['tool.call', 'tool.success', 'tool.duration_ms']  AS metric_name,
+  ['tool.call', 'tool.success', 'tool.duration_ms']           AS metric_name,
   [
     to_float64(1),
     if(tool_success, to_float64(1), to_float64(0)),
     to_float64(tool_duration_ms)
-  ]                                                   AS metric_value
+  ]                                                            AS metric_value
 WHERE agent_type = 'openclaw'
   AND event_type = 'tool_complete'`
 
@@ -793,30 +871,34 @@ const ddlCIMMetricsClaudeCodeOtelMV = `
 CREATE MATERIALIZED VIEW mv_cim_metrics_claudecode_otel
 INTO agentshield_cim_metrics AS
 SELECT
-  _tp_time                             AS event_time,
+  o._tp_time                                                              AS event_time,
   metric_name,
   metric_value,
-  'claudecode'                         AS agent_type,
-  resource_attributes['agent.id']      AS agent_id,
-  resource_attributes['deployment.id'] AS deployment_id,
-  resource_attributes['session.id']    AS session_id,
-  map(
-    'model',  log_attributes['model'],
-    'run_id', resource_attributes['session.id']
-  )                                    AS tags
-FROM otel_logs
+  'claudecode'                                                            AS agent_type,
+  if(s.agent_id != '', s.agent_id, o.log_attributes['user.id'])          AS agent_id,
+  s.deployment_id                                                         AS deployment_id,
+  o.log_attributes['session.id']                                         AS session_id,
+  map_cast(
+    ['model', 'run_id'],
+    [o.log_attributes['model'], o.log_attributes['session.id']]
+  )                                                                       AS tags
+FROM otel_logs AS o
+LEFT JOIN agentshield_session_agents AS s
+  ON s.session_id = o.log_attributes['session.id']
 ARRAY JOIN
-  ['llm.call', 'llm.input_tokens', 'llm.output_tokens',
-   'llm.total_tokens', 'llm.latency_ms']                              AS metric_name,
+  ['llm.call', 'llm.input_tokens', 'llm.output_tokens', 'llm.total_tokens',
+   'llm.cache_read_tokens', 'llm.cache_write_tokens', 'llm.latency_ms']  AS metric_name,
   [
     to_float64(1),
-    to_float64_or_zero(log_attributes['input_tokens']),
-    to_float64_or_zero(log_attributes['output_tokens']),
-    to_float64_or_zero(log_attributes['input_tokens'])
-      + to_float64_or_zero(log_attributes['output_tokens']),
-    to_float64_or_zero(log_attributes['duration_ms'])
-  ]                                                                   AS metric_value
-WHERE log_attributes['event.name'] = 'claude_code.api_request'`
+    to_float64_or_zero(o.log_attributes['input_tokens']),
+    to_float64_or_zero(o.log_attributes['output_tokens']),
+    to_float64_or_zero(o.log_attributes['input_tokens'])
+      + to_float64_or_zero(o.log_attributes['output_tokens']),
+    to_float64_or_zero(o.log_attributes['cache_read_tokens']),
+    to_float64_or_zero(o.log_attributes['cache_creation_tokens']),
+    to_float64_or_zero(o.log_attributes['duration_ms'])
+  ]                                                                       AS metric_value
+WHERE o.log_attributes['event.name'] = 'api_request'`
 
 const ddlCIMMetricsClaudeCodeToolsMV = `
 CREATE MATERIALIZED VIEW mv_cim_metrics_claudecode_tools
@@ -829,10 +911,7 @@ SELECT
   agent_id,
   deployment_id,
   session_id,
-  map(
-    'tool_name', tool_name,
-    'run_id',    run_id
-  ) AS tags
+  map_cast(['tool_name', 'run_id'], [tool_name, run_id]) AS tags
 FROM agentshield_cim_event
 ARRAY JOIN
   ['tool.call', 'tool.success']             AS metric_name,
@@ -842,6 +921,7 @@ ARRAY JOIN
   ]                                         AS metric_value
 WHERE agent_type = 'claudecode'
   AND event_type = 'tool_complete'`
+
 
 const ddlPricingStream = `
 CREATE MUTABLE STREAM IF NOT EXISTS agentshield_pricing
