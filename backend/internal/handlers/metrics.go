@@ -322,10 +322,14 @@ ORDER BY total_calls DESC`, strings.Join(q1Where, "\n  AND "))
 		toolOrder := make([]string, 0, len(rows1))
 		for _, r := range rows1 {
 			tn := parseStr(r["tool_name"])
+			failed := parseInt(r["failed_calls"])
+			if failed < 0 {
+				failed = 0
+			}
 			countByTool[tn] = countRow{
 				total:   parseInt(r["total_calls"]),
 				success: parseInt(r["success_calls"]),
-				failed:  parseInt(r["failed_calls"]),
+				failed:  failed,
 			}
 			toolOrder = append(toolOrder, tn)
 		}
