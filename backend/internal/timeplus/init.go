@@ -381,7 +381,7 @@ func startupSyncMVs(cfg *config.TimeplusConfig, ctx context.Context, conn proton
 		exists, _ := streamExists(ctx, conn, mvName)
 		if r.enabled {
 			if !exists {
-				ddl := fmt.Sprintf("CREATE MATERIALIZED VIEW IF NOT EXISTS %s INTO agentshield_security_events AS %s", mvName, r.querySQL)
+				ddl := fmt.Sprintf("CREATE MATERIALIZED VIEW IF NOT EXISTS %s INTO agentguard_security_events AS %s", mvName, r.querySQL)
 				if err := conn.Exec(ctx, ddl); err != nil {
 					log.Printf("timeplus: startup create MV %s: %v", mvName, err)
 				} else {
