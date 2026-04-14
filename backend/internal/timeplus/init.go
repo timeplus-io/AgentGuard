@@ -886,33 +886,44 @@ const ddlCIMMetricsOpenClawLlmMV = `
 CREATE MATERIALIZED VIEW mv_cim_metrics_openclaw_llm
 INTO agentguard_cim_metrics AS
 SELECT
-  e.event_time,
+  event_time,
   metric_name,
   metric_value,
   'openclaw'                                                              AS agent_type,
-  e.agent_id,
-  e.deployment_id,
-  e.session_id,
+  agent_id,
+  deployment_id,
+  session_id,
   map_cast(
     ['model', 'stop_reason', 'run_id'],
-    [e.model, json_value(e.raw_event_data, '$.lastAssistant.stopReason'), e.run_id]
+    [model, json_value(raw_event_data, '$.lastAssistant.stopReason'), run_id]
   )                                                                       AS tags
-FROM agentguard_cim_event AS e
-LEFT JOIN agentguard_run_latency AS r ON r.run_id = e.run_id
+FROM (
+  SELECT
+    e.event_time,
+    e.agent_id,
+    e.deployment_id,
+    e.session_id,
+    e.run_id,
+    e.model,
+    e.raw_event_data,
+    if(r.latency_ms > 0, r.latency_ms, to_float64(0))                    AS latency_ms
+  FROM agentguard_cim_event AS e
+  LEFT JOIN agentguard_run_latency AS r ON r.run_id = e.run_id
+  WHERE e.agent_type = 'openclaw'
+    AND e.event_type = 'llm_response'
+)
 ARRAY JOIN
   ['llm.call', 'llm.input_tokens', 'llm.output_tokens', 'llm.total_tokens',
    'llm.cache_read_tokens', 'llm.cache_write_tokens', 'llm.latency_ms']  AS metric_name,
   [
     to_float64(1),
-    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'input')),
-    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'output')),
-    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'totalTokens')),
-    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'cacheRead')),
-    to_float64_or_zero(json_extract_string(e.raw_event_data, 'lastAssistant', 'usage', 'cacheWrite')),
-    r.latency_ms
-  ]                                                                       AS metric_value
-WHERE e.agent_type = 'openclaw'
-  AND e.event_type = 'llm_response'`
+    to_float64_or_zero(json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'input')),
+    to_float64_or_zero(json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'output')),
+    to_float64_or_zero(json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'totalTokens')),
+    to_float64_or_zero(json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'cacheRead')),
+    to_float64_or_zero(json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'cacheWrite')),
+    latency_ms
+  ]                                                                       AS metric_value`
 
 const ddlCIMMetricsOpenClawToolsMV = `
 CREATE MATERIALIZED VIEW mv_cim_metrics_openclaw_tools
