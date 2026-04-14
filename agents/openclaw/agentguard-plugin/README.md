@@ -104,7 +104,9 @@ make build-plugin
 
 ## Configuration
 
-Configuration is read from two sources in priority order: **environment variables** override **`openclaw.json` plugin config**.
+### Plugin config (OpenClaw → Timeplus)
+
+These settings control how the plugin sends events to Timeplus. They are read from two sources in priority order: **environment variables** override **`openclaw.json` plugin config**.
 
 | `openclaw.json` key | Environment variable       | Default                    | Description                             |
 |---------------------|----------------------------|----------------------------|-----------------------------------------|
@@ -118,6 +120,26 @@ Configuration is read from two sources in priority order: **environment variable
 | `deploymentName`    | *(config-only)*            | `Default`                  | Human-readable deployment name          |
 
 `deploymentId` and `deploymentName` are set at installation time in `openclaw.json` and cannot be overridden by env var — they identify which OpenClaw deployment the events come from.
+
+### AgentGuard server URL (Proton → AgentGuard)
+
+Security rule alerts flow in the opposite direction: Proton (Timeplus) calls back to the AgentGuard server via a Python UDF when a rule fires. AgentGuard must be told its own externally-reachable URL so the UDF is created with the correct address.
+
+Set `AGENTGUARD_URL` on the **AgentGuard server** (not the plugin):
+
+| Environment variable | CLI flag            | Default                   | When to change                                     |
+|----------------------|---------------------|---------------------------|----------------------------------------------------|
+| `AGENTGUARD_URL`     | `--agentguard-url`  | `http://localhost:8080`   | Any deployment where Proton cannot reach localhost |
+
+Common values:
+
+| Deployment                     | `AGENTGUARD_URL`               |
+|--------------------------------|--------------------------------|
+| Local dev (everything on host) | `http://localhost:8080` *(default — no action needed)* |
+| Docker Compose (`docker-compose.yaml`) | `http://agentguard:8080` *(pre-configured)* |
+| Remote / cloud server          | `http://<host-or-ip>:8080`     |
+
+> **Docker note:** `docker-compose.yaml` already sets `AGENTGUARD_URL=http://agentguard:8080` so Proton (running in the `timeplus` container) can reach AgentGuard (running in the `agentguard` container) by Docker service name. No manual change is needed for the standard Compose setup.
 
 ## Installation
 
