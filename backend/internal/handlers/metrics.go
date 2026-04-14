@@ -293,24 +293,23 @@ func GetToolMetrics(cfg *config.Config) gin.HandlerFunc {
 		// ── Build WHERE ───────────────────────────────────────────────────────
 		base := addAgentFilter(nil, agentID, "")
 		if toolName != "" {
-			base = append(base, fmt.Sprintf("tool_name = '%s'", toolName))
+			base = append(base, fmt.Sprintf("tags['tool_name'] = '%s'", toolName))
 		}
 		base = addTimeFilters(base, since, until, "")
 
-		countWhere := append([]string{"hook_name = 'tool_result_persist'"}, base...)
-		latWhere := append([]string{"hook_name = 'after_tool_call'"}, base...)
-
 		// ── Q1: count + success/fail per tool_name ────────────────────────────
+		q1Where := append([]string{"metric_name IN ('tool.call', 'tool.success')"}, base...)
 		q1 := fmt.Sprintf(`
 SELECT
-    tool_name,
-    count()                                                                    AS total_calls,
-    count_if(json_extract_string(event_data, 'message', 'isError') = 'false') AS success_calls,
-    count_if(json_extract_string(event_data, 'message', 'isError') = 'true')  AS failed_calls
-FROM table(agentshield_hook_events)
+    tags['tool_name']                                                           AS tool_name,
+    to_int64(sum_if(metric_value, metric_name = 'tool.call'))                  AS total_calls,
+    to_int64(sum_if(metric_value, metric_name = 'tool.success'))               AS success_calls,
+    (to_int64(sum_if(metric_value, metric_name = 'tool.call'))
+      - to_int64(sum_if(metric_value, metric_name = 'tool.success')))          AS failed_calls
+FROM table(agentshield_cim_metrics)
 WHERE %s
 GROUP BY tool_name
-ORDER BY total_calls DESC`, strings.Join(countWhere, "\n  AND "))
+ORDER BY total_calls DESC`, strings.Join(q1Where, "\n  AND "))
 
 		rows1, err := timeplus.Query(&cfg.Timeplus, q1)
 		if err != nil {
@@ -332,19 +331,20 @@ ORDER BY total_calls DESC`, strings.Join(countWhere, "\n  AND "))
 		}
 
 		// ── Q2: latency per tool_name ─────────────────────────────────────────
+		q2Where := append([]string{"metric_name = 'tool.duration_ms'", "metric_value > 0"}, base...)
 		q2 := fmt.Sprintf(`
 SELECT
-    tool_name,
-    quantile(0.5)(to_int64_or_zero(json_extract_string(event_data, 'durationMs')))  AS p50_ms,
-    quantile(0.95)(to_int64_or_zero(json_extract_string(event_data, 'durationMs'))) AS p95_ms,
-    quantile(0.99)(to_int64_or_zero(json_extract_string(event_data, 'durationMs'))) AS p99_ms,
-    avg(to_int64_or_zero(json_extract_string(event_data, 'durationMs')))            AS avg_ms,
-    min(to_int64_or_zero(json_extract_string(event_data, 'durationMs')))            AS min_ms,
-    max(to_int64_or_zero(json_extract_string(event_data, 'durationMs')))            AS max_ms,
-    count()                                                                  AS sample_count
-FROM table(agentshield_hook_events)
+    tags['tool_name']            AS tool_name,
+    quantile(0.5)(metric_value)  AS p50_ms,
+    quantile(0.95)(metric_value) AS p95_ms,
+    quantile(0.99)(metric_value) AS p99_ms,
+    avg(metric_value)            AS avg_ms,
+    min(metric_value)            AS min_ms,
+    max(metric_value)            AS max_ms,
+    count()                      AS sample_count
+FROM table(agentshield_cim_metrics)
 WHERE %s
-GROUP BY tool_name`, strings.Join(latWhere, "\n  AND "))
+GROUP BY tool_name`, strings.Join(q2Where, "\n  AND "))
 
 		rows2, err := timeplus.Query(&cfg.Timeplus, q2)
 		if err != nil {
