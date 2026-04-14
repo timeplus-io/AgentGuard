@@ -251,7 +251,7 @@ export AGENTGUARD_PASSWORD="timeplus@t+"
 
 > **Docker (OpenClaw in container, Timeplus on host):** Use `http://host.docker.internal:3218` instead of `localhost`.
 
-### 5c. Optional — OTel diagnostics
+### 5c. OTel diagnostics
 
 To export LLM traces, metrics, and logs from OpenClaw to Timeplus, add the `diagnostics-otel` section to `openclaw.json`:
 
@@ -350,9 +350,9 @@ Merge the following into `~/.claude/settings.json`. If the file does not exist, 
 
 > **Merge, do not replace.** If you already have a `settings.json`, add only the `hooks` key. Existing keys are unaffected.
 
-### 6d. Optional — OTel telemetry
+### 6d. OTel telemetry
 
-To capture LLM token usage, cost, and latency from Claude Code, add the following `env` block to `~/.claude/settings.json` (merge with any existing `env` keys):
+Add the following `env` block to `~/.claude/settings.json` (merge with any existing `env` keys) to capture LLM token usage, cost, and latency from Claude Code:
 
 ```json
 {
@@ -372,8 +372,6 @@ To capture LLM token usage, cost, and latency from Claude Code, add the followin
 ```
 
 > **Protocol note:** Claude Code requires `http/protobuf`. Do not use `grpc`.
-
-Hook events work without OTel. Skipping this step only omits LLM token/cost/latency metrics.
 
 ---
 
