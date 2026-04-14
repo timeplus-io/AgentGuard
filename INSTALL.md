@@ -27,9 +27,12 @@ This guide walks through a complete AgentGuard setup from scratch:
 
 ## 2. Install and run Timeplus
 
-AgentGuard requires [Timeplus Enterprise](https://timeplus.com) **3.2.1 or later** as its streaming SQL backend. It runs on Linux or macOS as either a native binary or a Docker container.
+AgentGuard requires [Timeplus Enterprise](https://timeplus.com) **3.2.1 or later**. Follow the official installation guide for your preferred deployment method:
 
-### Ports reference
+- **Binary (Linux / macOS):** [docs.timeplus.com/bare-metal-install](https://docs.timeplus.com/bare-metal-install)
+- **Docker / Docker Compose:** same page, Docker Install section
+
+Once Timeplus is running, the following ports must be reachable by AgentGuard and the agent plugins:
 
 | Port | Service | Purpose |
 |---|---|---|
@@ -40,75 +43,7 @@ AgentGuard requires [Timeplus Enterprise](https://timeplus.com) **3.2.1 or later
 | `4318` | Timeplus | OTLP HTTP — agent OTel telemetry |
 | `8000` | Timeplus | Web console |
 
-### Option A — Binary (Linux / macOS)
-
-The quickest way to install on Linux or macOS is the official install script:
-
-```bash
-curl https://install.timeplus.com | sh
-```
-
-This downloads the latest release for your OS and CPU architecture, extracts it, and starts Timeplus Enterprise. On first launch, open [http://localhost:8000](http://localhost:8000) and create an admin account to start the 30-day free trial.
-
-To install a specific version (3.2.1 minimum required):
-
-```bash
-curl https://install.timeplus.com/3.2 | sh
-```
-
-**Manual download** — if you prefer to download the tarball directly:
-
-| Platform | URL |
-|---|---|
-| Linux x86-64 | https://install.timeplus.com (auto-detects) |
-| Linux ARM64 | https://install.timeplus.com (auto-detects) |
-| macOS Intel | https://install.timeplus.com (auto-detects) |
-| macOS Apple Silicon | https://install.timeplus.com (auto-detects) |
-
-Extract and start:
-
-```bash
-tar xfv timeplus_enterprise-*.tar.gz
-cd timeplus_enterprise-*/bin
-./timeplus start
-```
-
-**Stop:**
-
-```bash
-./timeplus stop
-```
-
-**Processes started by `timeplus start`:**
-
-| Process | Ports | Purpose |
-|---|---|---|
-| `timeplusd` | 8463 (TCP), 3218 (HTTP) | Core SQL engine |
-| `timeplus_appserver` | 8000 (HTTP) | Application server + web UI |
-| `timeplus_connector` | — | Extra sources and sinks |
-
-**Upgrade:** run `timeplus stop`, replace the binaries with the new version, then `timeplus start`.
-
-**Uninstall:** `timeplus stop` then delete the folder. No external dependencies.
-
-### Option B — Docker
-
-```bash
-docker run -d \
-  --name timeplus \
-  -p 3218:3218 \
-  -p 8463:8463 \
-  -p 4317:4317 \
-  -p 4318:4318 \
-  -p 8000:8000 \
-  -v timeplus-data:/timeplus/data \
-  --restart unless-stopped \
-  timeplus/timeplus-enterprise:3.2.1
-```
-
-On first start, open [http://localhost:8000](http://localhost:8000) and create an admin account.
-
-Wait for Timeplus to be ready before proceeding (takes ~30 s on first start):
+Wait for Timeplus to be ready before continuing:
 
 ```bash
 until curl -sf http://localhost:3218/ping > /dev/null 2>&1; do
@@ -117,9 +52,7 @@ done
 echo "Timeplus is ready"
 ```
 
-### Option C — Docker Compose (Timeplus + AgentGuard together)
-
-If you want to run both services in one step, skip to [section 4C](#option-c--docker-compose-recommended-for-new-installs) — Docker Compose handles Timeplus, user creation, and AgentGuard startup automatically.
+> **Docker Compose shortcut:** to run Timeplus and AgentGuard together in one step, skip to [section 4C](#option-c--docker-compose-recommended-for-new-installs).
 
 ---
 
