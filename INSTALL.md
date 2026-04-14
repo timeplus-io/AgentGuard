@@ -186,20 +186,6 @@ Replace `<timeplus-host>` with the hostname or IP where Timeplus is running (use
 
 Replace `<agentguard-host>` with the address Timeplus will use to call back AgentGuard for alert webhooks — see [Alert UDF webhook](#alert-udf-webhook) below.
 
-### Option D — Build from source
-
-```bash
-git clone https://github.com/timeplus-io/AgentGuard.git
-cd AgentGuard
-make build    # builds frontend → embeds into backend → single binary
-./backend/server \
-  --timeplus-host localhost \
-  --timeplus-user proton \
-  --timeplus-password "timeplus@t+"
-```
-
-> **macOS 26+ (Apple Silicon):** The Makefile already passes `CGO_ENABLED=0`. If running `go build` directly, always include `CGO_ENABLED=0` to avoid a dyld abort.
-
 ### Alert UDF webhook
 
 AgentGuard creates a Timeplus Python UDF (`notify_agentguard_udf`) at startup. When a security rule fires, Timeplus calls this UDF, which HTTP-POSTs the alert back to AgentGuard at:
