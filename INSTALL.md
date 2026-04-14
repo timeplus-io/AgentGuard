@@ -29,15 +29,16 @@ This guide walks through a complete AgentGuard setup from scratch:
 
 AgentGuard requires [Timeplus Enterprise](https://timeplus.com) **3.2.1 or later** as its streaming SQL backend. It runs on Linux or macOS as either a native binary or a Docker container.
 
-### Ports used by AgentGuard
+### Ports reference
 
-| Port | Purpose |
-|---|---|
-| `3218` | HTTP query API — used by AgentGuard |
-| `8463` | Native TCP protocol — used by AgentGuard |
-| `4317` | OTLP gRPC — agent OTel telemetry |
-| `4318` | OTLP HTTP — agent OTel telemetry |
-| `8000` | Timeplus web console |
+| Port | Service | Purpose |
+|---|---|---|
+| `8080` | AgentGuard | Web UI and REST API |
+| `3218` | Timeplus | HTTP query API — used by AgentGuard |
+| `8463` | Timeplus | Native TCP protocol — used by AgentGuard |
+| `4317` | Timeplus | OTLP gRPC — agent OTel telemetry |
+| `4318` | Timeplus | OTLP HTTP — agent OTel telemetry |
+| `8000` | Timeplus | Web console |
 
 ### Option A — Binary (Linux / macOS)
 
