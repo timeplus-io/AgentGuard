@@ -196,7 +196,7 @@ export default function RulePacks() {
                 onClick={confirmDoToggle}
                 className={`px-4 py-2 text-xs font-semibold rounded-sm transition-colors ${
                   confirmToggle.newVal
-                    ? 'bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023]'
+                    ? 'bg-primary-button text-primary-button-text'
                     : 'bg-zinc-700 text-white hover:bg-zinc-600'
                 }`}
               >
@@ -224,7 +224,7 @@ export default function RulePacks() {
               </button>
               <button
                 onClick={confirmDoInstall}
-                className="px-4 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] transition-colors"
+                className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors"
               >
                 Install
               </button>
@@ -266,7 +266,7 @@ export default function RulePacks() {
                 </button>
                 <button
                   onClick={() => navigate('/rules/new')}
-                  className="px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-xs font-semibold rounded-sm hover:scale-[0.98] transition-all"
+                  className="px-4 py-2 bg-primary-button text-primary-button-text text-xs font-semibold rounded-sm hover:scale-[0.98] transition-all"
                 >
                   New Custom Rule
                 </button>
@@ -369,7 +369,7 @@ export default function RulePacks() {
                     <button
                       onClick={() => setConfirmInstall(entry)}
                       disabled={installing === entry.id}
-                      className="mt-auto w-full px-3 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] disabled:opacity-50 transition-opacity"
+                      className="mt-auto w-full px-3 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text disabled:opacity-50 transition-opacity"
                     >
                       {installing === entry.id ? 'Installing…' : 'Install'}
                     </button>

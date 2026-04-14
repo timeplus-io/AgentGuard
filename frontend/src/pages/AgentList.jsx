@@ -58,7 +58,7 @@ export default function AgentList() {
                 <span className="material-symbols-outlined text-xs">filter_list</span>
                 Filters
               </button>
-              <Link to="/onboarding" className="px-4 py-2 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-xs font-semibold rounded-sm flex items-center gap-2 hover:scale-[0.98] transition-transform">
+              <Link to="/onboarding" className="px-4 py-2 bg-primary-button text-primary-button-text text-xs font-semibold rounded-sm flex items-center gap-2 hover:scale-[0.98] transition-transform">
                 <span className="material-symbols-outlined text-xs">cable</span>
                 Connect Agents
               </Link>

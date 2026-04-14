@@ -160,7 +160,7 @@ export default function Investigate() {
                       className={`px-5 py-1.5 font-semibold text-[10px] rounded-sm flex items-center gap-2 uppercase tracking-widest transition-all ${
                         streaming
                           ? 'bg-[#93000a] text-[#ffdad6] hover:opacity-90'
-                          : 'bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-[0.98] shadow-[0_2px_12px_rgba(213,63,140,0.2)]'
+                          : 'bg-primary-button text-primary-button-text hover:scale-[0.98] shadow-[0_2px_12px_rgba(213,63,140,0.2)]'
                       }`}
                     >
                       <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>

@@ -353,7 +353,7 @@ export default function CostGovernance() {
                         <button
                           onClick={handleSave}
                           disabled={saving || !form.provider || !form.model}
-                          className="px-2 py-1 bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] text-[10px] font-semibold rounded disabled:opacity-40"
+                          className="px-2 py-1 bg-primary-button text-primary-button-text text-[10px] font-semibold rounded disabled:opacity-40"
                         >
                           {saving ? '...' : 'Save'}
                         </button>

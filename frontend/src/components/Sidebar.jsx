@@ -24,8 +24,8 @@ export default function Sidebar() {
     <aside className={`h-screen fixed left-0 top-0 bg-[#211e29] flex flex-col py-8 gap-2 z-40 transition-all duration-200 ${collapsed ? 'w-16 px-2' : 'w-64 px-4'}`}>
       {/* Logo */}
       <div className={`mb-10 flex items-center ${collapsed ? 'justify-center' : 'px-2 gap-3'}`}>
-        <div className="w-8 h-8 rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-[#3d0023] text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
+        <div className="w-8 h-8 rounded-sm bg-primary-button flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-primary-button-text text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
         </div>
         {!collapsed && (
           <div>

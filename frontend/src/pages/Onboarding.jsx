@@ -180,7 +180,7 @@ export default function Onboarding() {
           <p className="text-zinc-400 text-sm leading-relaxed">Your agent is now protected by AgentGuard. Head to the dashboard to monitor activity.</p>
           <button
             onClick={() => navigate('/dashboard')}
-            className="bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] px-8 py-2.5 rounded-sm text-xs font-semibold text-[#3d0023] hover:scale-[1.02] transition-transform"
+            className="bg-primary-button px-8 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] transition-transform"
           >
             Go to Dashboard
           </button>
@@ -461,7 +461,7 @@ export default function Onboarding() {
                 {step < 3 ? (
                   <button
                     onClick={handleNext}
-                    className="bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] px-6 py-2.5 rounded-sm text-xs font-semibold text-[#3d0023] hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
+                    className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
                   >
                     Next
                     <span className="material-symbols-outlined text-xs">arrow_forward</span>
@@ -470,7 +470,7 @@ export default function Onboarding() {
                   <button
                     onClick={handleActivate}
                     disabled={activating}
-                    className="bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] px-6 py-2.5 rounded-sm text-xs font-semibold text-[#3d0023] hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-70"
+                    className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-70"
                   >
                     {activating
                       ? <><span className="material-symbols-outlined animate-spin text-xs">refresh</span> Activating...</>
