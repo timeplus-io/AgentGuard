@@ -32,6 +32,8 @@ services:
       TIMEPLUS_USER: "proton"
       TIMEPLUS_PASSWORD: "timeplus@t+"
       SERVER_PORT: 8080
+      # Proton calls this URL for alert webhooks; use the Docker service name.
+      AGENTGUARD_URL: "http://agentguard:8080"
     depends_on:
       timeplus:
         condition: service_healthy
