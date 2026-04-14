@@ -4,12 +4,20 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	proton "github.com/timeplus-io/proton-go-driver/v2"
 	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
 )
+
+// bt replaces « » placeholders with SQL backticks so raw-string DDL literals
+// can quote identifiers that contain dots (e.g. `events.timestamp`,
+// `exemplars.value`). Go raw strings can't contain backticks directly.
+var btReplacer = strings.NewReplacer("«", "`", "»", "`")
+
+func bt(s string) string { return btReplacer.Replace(s) }
 
 // Init waits until Timeplus is reachable, then ensures all streams, MVs, and
 // seed data are in place. catalogEntries are used to seed rules on first startup.
@@ -161,6 +169,8 @@ func createOTelStreams(ctx context.Context, conn proton.Conn) error {
 		{"otel_metrics_gauge", ddlOTelMetricsGauge},
 		{"otel_metrics_sum", ddlOTelMetricsSum},
 		{"otel_metrics_histogram", ddlOTelMetricsHistogram},
+		{"otel_metrics_exponential_histogram", ddlOTelMetricsExponentialHistogram},
+		{"otel_metrics_summary", ddlOTelMetricsSummary},
 	}
 	for _, s := range streams {
 		if err := execIfNotExists(ctx, conn, "stream", s.name, s.ddl); err != nil {
@@ -371,7 +381,7 @@ func startupSyncMVs(cfg *config.TimeplusConfig, ctx context.Context, conn proton
 		exists, _ := streamExists(ctx, conn, mvName)
 		if r.enabled {
 			if !exists {
-				ddl := fmt.Sprintf("CREATE MATERIALIZED VIEW %s INTO agentguard_security_events AS %s", mvName, r.querySQL)
+				ddl := fmt.Sprintf("CREATE MATERIALIZED VIEW IF NOT EXISTS %s INTO agentshield_security_events AS %s", mvName, r.querySQL)
 				if err := conn.Exec(ctx, ddl); err != nil {
 					log.Printf("timeplus: startup create MV %s: %v", mvName, err)
 				} else {
@@ -394,39 +404,39 @@ func startupSyncMVs(cfg *config.TimeplusConfig, ctx context.Context, conn proton
 
 // ── DDL statements ────────────────────────────────────────────────────────────
 
-const ddlOTelTraces = `
+var ddlOTelTraces = bt(`
 CREATE STREAM otel_traces
 (
-  trace_id            string                                      CODEC(ZSTD(1)),
-  span_id             string                                      CODEC(ZSTD(1)),
-  parent_span_id      string                                      CODEC(ZSTD(1)),
-  trace_state         string                                      CODEC(ZSTD(1)),
-  span_name           low_cardinality(string)                     CODEC(ZSTD(1)),
-  span_kind           low_cardinality(string)                     CODEC(ZSTD(1)),
-  service_name        low_cardinality(string)                     CODEC(ZSTD(1)),
-  resource_attributes map(low_cardinality(string), string)        CODEC(ZSTD(1)),
-  scope_name          string                                      CODEC(ZSTD(1)),
-  scope_version       string                                      CODEC(ZSTD(1)),
-  span_attributes     map(low_cardinality(string), string)        CODEC(ZSTD(1)),
-  duration            uint64                                      CODEC(ZSTD(1)),
-  start_time_ns       uint64                                      CODEC(ZSTD(1)),
-  end_time_ns         uint64                                      CODEC(ZSTD(1)),
-  status_code         low_cardinality(string)                     CODEC(ZSTD(1)),
-  status_message      string                                      CODEC(ZSTD(1)),
-  events_timestamp    array(datetime64(9))                        CODEC(ZSTD(1)),
-  events_name         array(low_cardinality(string))              CODEC(ZSTD(1)),
-  events_attributes   array(map(low_cardinality(string), string)) CODEC(ZSTD(1)),
-  links_trace_id      array(string)                               CODEC(ZSTD(1)),
-  links_span_id       array(string)                               CODEC(ZSTD(1)),
-  links_trace_state   array(string)                               CODEC(ZSTD(1)),
-  links_attributes    array(map(low_cardinality(string), string)) CODEC(ZSTD(1)),
-  INDEX idx_trace_id       trace_id                       TYPE bloom_filter(0.001) GRANULARITY 1,
-  INDEX idx_res_attr_key   map_keys(resource_attributes)  TYPE bloom_filter(0.01)  GRANULARITY 1,
-  INDEX idx_res_attr_val   map_values(resource_attributes) TYPE bloom_filter(0.01) GRANULARITY 1,
-  INDEX idx_span_attr_key  map_keys(span_attributes)      TYPE bloom_filter(0.01)  GRANULARITY 1,
-  INDEX idx_span_attr_val  map_values(span_attributes)    TYPE bloom_filter(0.01)  GRANULARITY 1,
-  INDEX idx_duration       duration                       TYPE minmax              GRANULARITY 1
-)`
+  trace_id             string                                      CODEC(ZSTD(1)),
+  span_id              string                                      CODEC(ZSTD(1)),
+  parent_span_id       string                                      CODEC(ZSTD(1)),
+  trace_state          string                                      CODEC(ZSTD(1)),
+  span_name            low_cardinality(string)                     CODEC(ZSTD(1)),
+  span_kind            low_cardinality(string)                     CODEC(ZSTD(1)),
+  service_name         low_cardinality(string)                     CODEC(ZSTD(1)),
+  resource_attributes  map(low_cardinality(string), string)        CODEC(ZSTD(1)),
+  scope_name           string                                      CODEC(ZSTD(1)),
+  scope_version        string                                      CODEC(ZSTD(1)),
+  span_attributes      map(low_cardinality(string), string)        CODEC(ZSTD(1)),
+  duration             uint64                                      CODEC(ZSTD(1)),
+  start_time_ns        uint64                                      CODEC(ZSTD(1)),
+  end_time_ns          uint64                                      CODEC(ZSTD(1)),
+  status_code          low_cardinality(string)                     CODEC(ZSTD(1)),
+  status_message       string                                      CODEC(ZSTD(1)),
+  «events.timestamp»   array(datetime64(9))                        CODEC(ZSTD(1)),
+  «events.name»        array(low_cardinality(string))              CODEC(ZSTD(1)),
+  «events.attributes»  array(map(low_cardinality(string), string)) CODEC(ZSTD(1)),
+  «links.trace_id»     array(string)                               CODEC(ZSTD(1)),
+  «links.span_id»      array(string)                               CODEC(ZSTD(1)),
+  «links.trace_state»  array(string)                               CODEC(ZSTD(1)),
+  «links.attributes»   array(map(low_cardinality(string), string)) CODEC(ZSTD(1)),
+  INDEX idx_trace_id       trace_id                        TYPE bloom_filter(0.001) GRANULARITY 1,
+  INDEX idx_res_attr_key   map_keys(resource_attributes)   TYPE bloom_filter(0.01)  GRANULARITY 1,
+  INDEX idx_res_attr_val   map_values(resource_attributes) TYPE bloom_filter(0.01)  GRANULARITY 1,
+  INDEX idx_span_attr_key  map_keys(span_attributes)       TYPE bloom_filter(0.01)  GRANULARITY 1,
+  INDEX idx_span_attr_val  map_values(span_attributes)     TYPE bloom_filter(0.01)  GRANULARITY 1,
+  INDEX idx_duration       duration                        TYPE minmax              GRANULARITY 1
+)`)
 
 const ddlOTelLogs = `
 CREATE STREAM otel_logs
@@ -453,91 +463,151 @@ CREATE STREAM otel_logs
   INDEX idx_body          body                          TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 1
 )`
 
-const ddlOTelMetricsGauge = `
+var ddlOTelMetricsGauge = bt(`
 CREATE STREAM otel_metrics_gauge
 (
-  resource_attributes          map(low_cardinality(string), string)          CODEC(ZSTD(1)),
-  resource_schema_url          string                                        CODEC(ZSTD(1)),
-  scope_name                   string                                        CODEC(ZSTD(1)),
-  scope_version                string                                        CODEC(ZSTD(1)),
-  scope_attributes             map(low_cardinality(string), string)          CODEC(ZSTD(1)),
-  scope_dropped_attr_count     uint32                                        CODEC(ZSTD(1)),
-  scope_schema_url             string                                        CODEC(ZSTD(1)),
-  service_name                 low_cardinality(string)                       CODEC(ZSTD(1)),
-  metric_name                  string                                        CODEC(ZSTD(1)),
-  metric_description           string                                        CODEC(ZSTD(1)),
-  metric_unit                  string                                        CODEC(ZSTD(1)),
-  attributes                   map(low_cardinality(string), string)          CODEC(ZSTD(1)),
-  start_time_unix              datetime64(9)                                 CODEC(Delta(8), ZSTD(1)),
-  time_unix                    datetime64(9)                                 CODEC(Delta(8), ZSTD(1)),
-  value                        float64                                       CODEC(ZSTD(1)),
-  flags                        uint32                                        CODEC(ZSTD(1)),
-  exemplars_filtered_attributes array(map(low_cardinality(string), string))  CODEC(ZSTD(1)),
-  exemplars_time_unix          array(datetime64(9))                          CODEC(ZSTD(1)),
-  exemplars_value              array(float64)                                CODEC(ZSTD(1)),
-  exemplars_span_id            array(string)                                 CODEC(ZSTD(1)),
-  exemplars_trace_id           array(string)                                 CODEC(ZSTD(1))
-)`
+  resource_attributes             map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  resource_schema_url             string                                       CODEC(ZSTD(1)),
+  scope_name                      string                                       CODEC(ZSTD(1)),
+  scope_version                   string                                       CODEC(ZSTD(1)),
+  scope_attributes                map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  scope_dropped_attr_count        uint32                                       CODEC(ZSTD(1)),
+  scope_schema_url                string                                       CODEC(ZSTD(1)),
+  service_name                    low_cardinality(string)                      CODEC(ZSTD(1)),
+  metric_name                     string                                       CODEC(ZSTD(1)),
+  metric_description              string                                       CODEC(ZSTD(1)),
+  metric_unit                     string                                       CODEC(ZSTD(1)),
+  attributes                      map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  start_time_unix                 datetime64(9)                                CODEC(Delta(8), ZSTD(1)),
+  time_unix                       datetime64(9)                                CODEC(Delta(8), ZSTD(1)),
+  value                           float64                                      CODEC(ZSTD(1)),
+  flags                           uint32                                       CODEC(ZSTD(1)),
+  «exemplars.filtered_attributes» array(map(low_cardinality(string), string))  CODEC(ZSTD(1)),
+  «exemplars.time_unix»           array(datetime64(9))                         CODEC(ZSTD(1)),
+  «exemplars.value»               array(float64)                               CODEC(ZSTD(1)),
+  «exemplars.span_id»             array(string)                                CODEC(ZSTD(1)),
+  «exemplars.trace_id»            array(string)                                CODEC(ZSTD(1))
+)`)
 
-const ddlOTelMetricsSum = `
+var ddlOTelMetricsSum = bt(`
 CREATE STREAM otel_metrics_sum
 (
-  resource_attributes          map(low_cardinality(string), string)          CODEC(ZSTD(1)),
-  resource_schema_url          string                                        CODEC(ZSTD(1)),
-  scope_name                   string                                        CODEC(ZSTD(1)),
-  scope_version                string                                        CODEC(ZSTD(1)),
-  scope_attributes             map(low_cardinality(string), string)          CODEC(ZSTD(1)),
-  scope_dropped_attr_count     uint32                                        CODEC(ZSTD(1)),
-  scope_schema_url             string                                        CODEC(ZSTD(1)),
-  service_name                 low_cardinality(string)                       CODEC(ZSTD(1)),
-  metric_name                  string                                        CODEC(ZSTD(1)),
-  metric_description           string                                        CODEC(ZSTD(1)),
-  metric_unit                  string                                        CODEC(ZSTD(1)),
-  attributes                   map(low_cardinality(string), string)          CODEC(ZSTD(1)),
-  start_time_unix              datetime64(9)                                 CODEC(Delta(8), ZSTD(1)),
-  time_unix                    datetime64(9)                                 CODEC(Delta(8), ZSTD(1)),
-  value                        float64                                       CODEC(ZSTD(1)),
-  flags                        uint32                                        CODEC(ZSTD(1)),
-  exemplars_filtered_attributes array(map(low_cardinality(string), string))  CODEC(ZSTD(1)),
-  exemplars_time_unix          array(datetime64(9))                          CODEC(ZSTD(1)),
-  exemplars_value              array(float64)                                CODEC(ZSTD(1)),
-  exemplars_span_id            array(string)                                 CODEC(ZSTD(1)),
-  exemplars_trace_id           array(string)                                 CODEC(ZSTD(1)),
-  aggregation_temporality      int32                                         CODEC(ZSTD(1)),
-  is_monotonic                 bool                                          CODEC(Delta(1), ZSTD(1))
-)`
+  resource_attributes             map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  resource_schema_url             string                                       CODEC(ZSTD(1)),
+  scope_name                      string                                       CODEC(ZSTD(1)),
+  scope_version                   string                                       CODEC(ZSTD(1)),
+  scope_attributes                map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  scope_dropped_attr_count        uint32                                       CODEC(ZSTD(1)),
+  scope_schema_url                string                                       CODEC(ZSTD(1)),
+  service_name                    low_cardinality(string)                      CODEC(ZSTD(1)),
+  metric_name                     string                                       CODEC(ZSTD(1)),
+  metric_description              string                                       CODEC(ZSTD(1)),
+  metric_unit                     string                                       CODEC(ZSTD(1)),
+  attributes                      map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  start_time_unix                 datetime64(9)                                CODEC(Delta(8), ZSTD(1)),
+  time_unix                       datetime64(9)                                CODEC(Delta(8), ZSTD(1)),
+  value                           float64                                      CODEC(ZSTD(1)),
+  flags                           uint32                                       CODEC(ZSTD(1)),
+  «exemplars.filtered_attributes» array(map(low_cardinality(string), string))  CODEC(ZSTD(1)),
+  «exemplars.time_unix»           array(datetime64(9))                         CODEC(ZSTD(1)),
+  «exemplars.value»               array(float64)                               CODEC(ZSTD(1)),
+  «exemplars.span_id»             array(string)                                CODEC(ZSTD(1)),
+  «exemplars.trace_id»            array(string)                                CODEC(ZSTD(1)),
+  aggregation_temporality         int32                                        CODEC(ZSTD(1)),
+  is_monotonic                    bool                                         CODEC(Delta(1), ZSTD(1))
+)`)
 
-const ddlOTelMetricsHistogram = `
+var ddlOTelMetricsHistogram = bt(`
 CREATE STREAM otel_metrics_histogram
 (
-  resource_attributes          map(low_cardinality(string), string)          CODEC(ZSTD(1)),
-  resource_schema_url          string                                        CODEC(ZSTD(1)),
-  scope_name                   string                                        CODEC(ZSTD(1)),
-  scope_version                string                                        CODEC(ZSTD(1)),
-  scope_attributes             map(low_cardinality(string), string)          CODEC(ZSTD(1)),
-  scope_dropped_attr_count     uint32                                        CODEC(ZSTD(1)),
-  scope_schema_url             string                                        CODEC(ZSTD(1)),
-  service_name                 low_cardinality(string)                       CODEC(ZSTD(1)),
-  metric_name                  string                                        CODEC(ZSTD(1)),
-  metric_description           string                                        CODEC(ZSTD(1)),
-  metric_unit                  string                                        CODEC(ZSTD(1)),
-  attributes                   map(low_cardinality(string), string)          CODEC(ZSTD(1)),
-  start_time_unix              datetime64(9)                                 CODEC(Delta(8), ZSTD(1)),
-  time_unix                    datetime64(9)                                 CODEC(Delta(8), ZSTD(1)),
-  count                        uint64                                        CODEC(Delta(8), ZSTD(1)),
-  sum                          float64                                       CODEC(ZSTD(1)),
-  bucket_counts                array(uint64)                                 CODEC(ZSTD(1)),
-  explicit_bounds              array(float64)                                CODEC(ZSTD(1)),
-  min                          float64                                       CODEC(ZSTD(1)),
-  max                          float64                                       CODEC(ZSTD(1)),
-  flags                        uint32                                        CODEC(ZSTD(1)),
-  exemplars_filtered_attributes array(map(low_cardinality(string), string))  CODEC(ZSTD(1)),
-  exemplars_time_unix          array(datetime64(9))                          CODEC(ZSTD(1)),
-  exemplars_value              array(float64)                                CODEC(ZSTD(1)),
-  exemplars_span_id            array(string)                                 CODEC(ZSTD(1)),
-  exemplars_trace_id           array(string)                                 CODEC(ZSTD(1)),
-  aggregation_temporality      int32                                         CODEC(ZSTD(1))
-)`
+  resource_attributes             map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  resource_schema_url             string                                       CODEC(ZSTD(1)),
+  scope_name                      string                                       CODEC(ZSTD(1)),
+  scope_version                   string                                       CODEC(ZSTD(1)),
+  scope_attributes                map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  scope_dropped_attr_count        uint32                                       CODEC(ZSTD(1)),
+  scope_schema_url                string                                       CODEC(ZSTD(1)),
+  service_name                    low_cardinality(string)                      CODEC(ZSTD(1)),
+  metric_name                     string                                       CODEC(ZSTD(1)),
+  metric_description              string                                       CODEC(ZSTD(1)),
+  metric_unit                     string                                       CODEC(ZSTD(1)),
+  attributes                      map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  start_time_unix                 datetime64(9)                                CODEC(Delta(8), ZSTD(1)),
+  time_unix                       datetime64(9)                                CODEC(Delta(8), ZSTD(1)),
+  count                           uint64                                       CODEC(Delta(8), ZSTD(1)),
+  sum                             float64                                      CODEC(ZSTD(1)),
+  bucket_counts                   array(uint64)                                CODEC(ZSTD(1)),
+  explicit_bounds                 array(float64)                               CODEC(ZSTD(1)),
+  min                             float64                                      CODEC(ZSTD(1)),
+  max                             float64                                      CODEC(ZSTD(1)),
+  flags                           uint32                                       CODEC(ZSTD(1)),
+  «exemplars.filtered_attributes» array(map(low_cardinality(string), string))  CODEC(ZSTD(1)),
+  «exemplars.time_unix»           array(datetime64(9))                         CODEC(ZSTD(1)),
+  «exemplars.value»               array(float64)                               CODEC(ZSTD(1)),
+  «exemplars.span_id»             array(string)                                CODEC(ZSTD(1)),
+  «exemplars.trace_id»            array(string)                                CODEC(ZSTD(1)),
+  aggregation_temporality         int32                                        CODEC(ZSTD(1))
+)`)
+
+var ddlOTelMetricsExponentialHistogram = bt(`
+CREATE STREAM otel_metrics_exponential_histogram
+(
+  resource_attributes             map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  resource_schema_url             string                                       CODEC(ZSTD(1)),
+  scope_name                      string                                       CODEC(ZSTD(1)),
+  scope_version                   string                                       CODEC(ZSTD(1)),
+  scope_attributes                map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  scope_dropped_attr_count        uint32                                       CODEC(ZSTD(1)),
+  scope_schema_url                string                                       CODEC(ZSTD(1)),
+  service_name                    low_cardinality(string)                      CODEC(ZSTD(1)),
+  metric_name                     string                                       CODEC(ZSTD(1)),
+  metric_description              string                                       CODEC(ZSTD(1)),
+  metric_unit                     string                                       CODEC(ZSTD(1)),
+  attributes                      map(low_cardinality(string), string)         CODEC(ZSTD(1)),
+  start_time_unix                 datetime64(9)                                CODEC(Delta(8), ZSTD(1)),
+  time_unix                       datetime64(9)                                CODEC(Delta(8), ZSTD(1)),
+  count                           uint64                                       CODEC(Delta(8), ZSTD(1)),
+  sum                             float64                                      CODEC(ZSTD(1)),
+  scale                           int32                                        CODEC(ZSTD(1)),
+  zero_count                      uint64                                       CODEC(ZSTD(1)),
+  positive_offset                 int32                                        CODEC(ZSTD(1)),
+  positive_bucket_counts          array(uint64)                                CODEC(ZSTD(1)),
+  negative_offset                 int32                                        CODEC(ZSTD(1)),
+  negative_bucket_counts          array(uint64)                                CODEC(ZSTD(1)),
+  min                             float64                                      CODEC(ZSTD(1)),
+  max                             float64                                      CODEC(ZSTD(1)),
+  flags                           uint32                                       CODEC(ZSTD(1)),
+  «exemplars.filtered_attributes» array(map(low_cardinality(string), string))  CODEC(ZSTD(1)),
+  «exemplars.time_unix»           array(datetime64(9))                         CODEC(ZSTD(1)),
+  «exemplars.value»               array(float64)                               CODEC(ZSTD(1)),
+  «exemplars.span_id»             array(string)                                CODEC(ZSTD(1)),
+  «exemplars.trace_id»            array(string)                                CODEC(ZSTD(1)),
+  aggregation_temporality         int32                                        CODEC(ZSTD(1))
+)`)
+
+var ddlOTelMetricsSummary = bt(`
+CREATE STREAM otel_metrics_summary
+(
+  resource_attributes          map(low_cardinality(string), string)  CODEC(ZSTD(1)),
+  resource_schema_url          string                                CODEC(ZSTD(1)),
+  scope_name                   string                                CODEC(ZSTD(1)),
+  scope_version                string                                CODEC(ZSTD(1)),
+  scope_attributes             map(low_cardinality(string), string)  CODEC(ZSTD(1)),
+  scope_dropped_attr_count     uint32                                CODEC(ZSTD(1)),
+  scope_schema_url             string                                CODEC(ZSTD(1)),
+  service_name                 low_cardinality(string)               CODEC(ZSTD(1)),
+  metric_name                  string                                CODEC(ZSTD(1)),
+  metric_description           string                                CODEC(ZSTD(1)),
+  metric_unit                  string                                CODEC(ZSTD(1)),
+  attributes                   map(low_cardinality(string), string)  CODEC(ZSTD(1)),
+  start_time_unix              datetime64(9)                         CODEC(Delta(8), ZSTD(1)),
+  time_unix                    datetime64(9)                         CODEC(Delta(8), ZSTD(1)),
+  count                        uint64                                CODEC(Delta(8), ZSTD(1)),
+  sum                          float64                               CODEC(ZSTD(1)),
+  «value_at_quantiles.quantile» array(float64)                       CODEC(ZSTD(1)),
+  «value_at_quantiles.value»    array(float64)                       CODEC(ZSTD(1)),
+  flags                        uint32                                CODEC(ZSTD(1))
+)`)
 
 const ddlAgentGuardHookEvents = `
 CREATE STREAM agentguard_hook_events
@@ -1034,11 +1104,13 @@ SETTINGS
   protocol                        = 'http',
   tcp_port                        = 4318,
   listen_host                     = '0.0.0.0',
-  traces_target_stream            = 'otel_traces',
-  logs_target_stream              = 'otel_logs',
-  metrics_gauge_target_stream     = 'otel_metrics_gauge',
-  metrics_sum_target_stream       = 'otel_metrics_sum',
-  metrics_histogram_target_stream = 'otel_metrics_histogram'
+  traces_target_stream                        = 'otel_traces',
+  logs_target_stream                          = 'otel_logs',
+  metrics_gauge_target_stream                 = 'otel_metrics_gauge',
+  metrics_sum_target_stream                   = 'otel_metrics_sum',
+  metrics_histogram_target_stream             = 'otel_metrics_histogram',
+  metrics_exponential_histogram_target_stream = 'otel_metrics_exponential_histogram',
+  metrics_summary_target_stream               = 'otel_metrics_summary'
 COMMENT 'OpenClaw agent telemetry via OTLP/HTTP'`
 
 const ddlThreatsStream = `
