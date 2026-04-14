@@ -6,7 +6,7 @@
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/timeplus-io/agentguard/pkgs/container/agentguard)
 [![Go Version](https://img.shields.io/badge/go-1.23-00ADD8?logo=go)](https://golang.org)
 
-Real-time security monitoring and governance platform for AI coding agents. AgentGuard ingests telemetry from **OpenClaw** agents (Claude Code support coming soon), detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), enforces cost budgets, and surfaces everything through a streaming security dashboard.
+Real-time security monitoring and governance platform for AI coding agents. AgentGuard ingests telemetry from **OpenClaw** and **Claude Code** agents, detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), enforces cost budgets, and surfaces everything through a streaming security dashboard.
 
 Built on [Timeplus](https://timeplus.com) — a streaming SQL engine for real-time data.
 
@@ -95,6 +95,9 @@ Copy `config.yaml` to the working directory (or pass `--config <path>`):
 server:
   port: 8080
 
+agentguard:
+  url: "http://localhost:8080"   # URL Proton uses to call back AgentGuard for alerts
+
 timeplus:
   host: localhost
   port: 3218
@@ -108,10 +111,11 @@ timeplus:
 | Variable | Default | Description |
 |---|---|---|
 | `SERVER_PORT` | `8080` | HTTP port the server listens on |
+| `AGENTGUARD_URL` | `http://localhost:8080` | URL Proton uses to call back AgentGuard for alert webhooks — set to the externally-reachable address (e.g. `http://agentguard:8080` in Docker) |
 | `TIMEPLUS_HOST` | `localhost` | Timeplus hostname |
 | `TIMEPLUS_PORT` | `3218` | HTTP query port |
 | `TIMEPLUS_NATIVE_PORT` | `8463` | native TCP port (used for streaming inserts) |
-| `TIMEPLUS_USER` | `default` |  username |
+| `TIMEPLUS_USER` | `default` | username |
 | `TIMEPLUS_PASSWORD` | _(empty)_ | password |
 
 ### CLI flags
@@ -122,6 +126,7 @@ timeplus:
 Flags:
   --config string                config file path
   --port int                     server port (default 8080)
+  --agentguard-url string        URL Proton uses to call back AgentGuard for alert webhooks (default "http://localhost:8080")
   --timeplus-host string         Timeplus host (default "localhost")
   --timeplus-port int            Timeplus HTTP port (default 3218)
   --timeplus-native-port int     Timeplus native TCP port (default 8463)
@@ -142,21 +147,23 @@ Flags:
 | Cost Governance | `/cost` | Daily spend trends, per-model token breakdown, configurable pricing table |
 | Rule Packs | `/rules` | Install, enable/disable, and upgrade detection rules; real-time MV health status |
 | Investigate | `/investigate` | Ad-hoc streaming SQL console backed by Timeplus |
-| Onboarding | `/onboarding` | 4-step wizard to connect an OpenClaw agent (Claude Code coming soon) |
+| Onboarding | `/onboarding` | 4-step wizard to connect an OpenClaw or Claude Code agent |
 | Settings | `/settings` | Application configuration |
 
 ---
 
 ## Connecting an Agent
 
-Use the **Onboarding** wizard (`/onboarding`) to connect your first OpenClaw agent. The wizard walks through:
+Use the **Onboarding** wizard (`/onboarding`) to connect your first agent. The wizard walks through:
 
-1. **Select agent** — OpenClaw (Claude Code integration coming soon)
-2. **Install plugin** — `npm install @timeplus/agentguard-openclaw-plugin`, configurable deployment ID / name / Timeplus URL
-3. **OTel config** — optional OpenTelemetry diagnostics export to Timeplus (skippable)
+1. **Select agent** — OpenClaw or Claude Code
+2. **Install plugin** — agent-specific install command and configuration (deployment ID, name, Timeplus URL, and for Claude Code an agent ID)
+3. **OTel config** — optional OpenTelemetry export to Timeplus for LLM token / cost / latency metrics (skippable; hook events still work without it)
 4. **Activate rules** — select which security rules to enable; rules are disabled by default and must be explicitly activated
 
-See [`agents/openclaw/README.md`](agents/openclaw/README.md) for the full OpenClaw + AgentGuard setup guide.
+Agent-specific setup guides:
+- [`agents/openclaw/README.md`](agents/openclaw/README.md) — OpenClaw + AgentGuard full setup
+- [`agents/claudecode/agentguard-plugin/README.md`](agents/claudecode/agentguard-plugin/README.md) — Claude Code hook plugin
 
 ---
 
