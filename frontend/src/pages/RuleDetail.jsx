@@ -151,7 +151,7 @@ export default function RuleDetail() {
                 onClick={confirmToggle}
                 className={`px-4 py-2 text-xs font-semibold rounded-sm transition-colors ${
                   !rule.enabled
-                    ? 'bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023]'
+                    ? 'bg-primary-button text-primary-button-text'
                     : 'bg-zinc-700 text-white hover:bg-zinc-600'
                 }`}
               >
@@ -199,7 +199,7 @@ export default function RuleDetail() {
                 className={`px-4 py-2 text-xs font-semibold rounded-sm transition-colors disabled:opacity-50 ${
                   rule.enabled
                     ? 'bg-zinc-700 text-white hover:bg-zinc-600'
-                    : 'bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023]'
+                    : 'bg-primary-button text-primary-button-text'
                 }`}
               >
                 {rule.enabled ? 'Disable' : 'Enable'}

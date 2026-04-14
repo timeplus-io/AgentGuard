@@ -21,6 +21,8 @@ export default {
         'on-surface-variant': '#ddbfc8',
         'primary-container': '#f256a3',
         'primary': '#ffb0cf',
+        'primary-button': '#D53F8C',
+        'primary-button-text': '#FFFFFF',
         'tertiary': '#ffb2b8',
         'surface': '#15121d',
         'surface-dim': '#15121d',
