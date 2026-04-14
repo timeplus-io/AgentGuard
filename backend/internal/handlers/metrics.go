@@ -109,31 +109,23 @@ func GetLLMMetrics(cfg *config.Config) gin.HandlerFunc {
 		// ── Shared dimension filters ──────────────────────────────────────────
 		base := addAgentFilter(nil, agentID, "")
 		if model != "" {
-			base = append(base, fmt.Sprintf("model = '%s'", model))
+			base = append(base, fmt.Sprintf("tags['model'] = '%s'", model))
 		}
 		base = addTimeFilters(base, since, until, "")
 
-		combinedHooks := "hook_name IN ('llm_input', 'llm_output')"
-		if len(base) > 0 {
-			combinedHooks += "\n  AND " + strings.Join(base, "\n  AND ")
-		}
-
-		llmOutWhere := append([]string{"hook_name = 'llm_output'"}, base...)
-
-		// ── Q1: tokens + success/fail in one pass ─────────────────────────────
-		// sum(if(..., expr, 0)) is safe: json_extract on llm_input rows returns
-		// "" → to_int64("") = 0 anyway, but explicit 0 guard is clearer.
+		// ── Q1: token counts and total call count ─────────────────────────────
+		llmNames := "'llm.call','llm.input_tokens','llm.output_tokens','llm.total_tokens','llm.cache_read_tokens','llm.cache_write_tokens'"
+		q1Where := append([]string{fmt.Sprintf("metric_name IN (%s)", llmNames)}, base...)
 		q1 := fmt.Sprintf(`
 SELECT
-    count_if(hook_name = 'llm_input')                                                                           AS total_calls,
-    count_if(hook_name = 'llm_output')                                                                          AS success_calls,
-    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'input')),        0)) AS input_tokens,
-    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'output')),       0)) AS output_tokens,
-    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'totalTokens')), 0)) AS total_tokens,
-    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'cacheRead')),  0)) AS cache_read_tokens,
-    sum(if(hook_name = 'llm_output', to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'cacheWrite')), 0)) AS cache_write_tokens
-FROM table(agentshield_hook_events)
-WHERE %s`, combinedHooks)
+    to_int64(sum_if(metric_value, metric_name = 'llm.call'))               AS total_calls,
+    to_int64(sum_if(metric_value, metric_name = 'llm.input_tokens'))       AS input_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.output_tokens'))      AS output_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.total_tokens'))       AS total_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.cache_read_tokens'))  AS cache_read_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.cache_write_tokens')) AS cache_write_tokens
+FROM table(agentshield_cim_metrics)
+WHERE %s`, strings.Join(q1Where, "\n  AND "))
 
 		rows1, err := timeplus.Query(&cfg.Timeplus, q1)
 		if err != nil {
@@ -141,12 +133,11 @@ WHERE %s`, combinedHooks)
 			return
 		}
 
-		var totalCalls, successCalls int
+		var totalCalls int
 		var inputTokens, outputTokens, totalTokens, cacheRead, cacheWrite int64
 		if len(rows1) > 0 {
 			r := rows1[0]
 			totalCalls = parseInt(r["total_calls"])
-			successCalls = parseInt(r["success_calls"])
 			inputTokens = parseInt64(r["input_tokens"])
 			outputTokens = parseInt64(r["output_tokens"])
 			totalTokens = parseInt64(r["total_tokens"])
@@ -154,6 +145,34 @@ WHERE %s`, combinedHooks)
 			cacheWrite = parseInt64(r["cache_write_tokens"])
 		}
 
+		// ── Q2: stop reason breakdown + successCalls ──────────────────────────
+		q2Where := append([]string{"metric_name = 'llm.call'"}, base...)
+		q2 := fmt.Sprintf(`
+SELECT
+    tags['stop_reason']         AS stop_reason,
+    to_int64(sum(metric_value)) AS cnt
+FROM table(agentshield_cim_metrics)
+WHERE %s
+GROUP BY stop_reason`, strings.Join(q2Where, "\n  AND "))
+
+		rows2, err := timeplus.Query(&cfg.Timeplus, q2)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
+			return
+		}
+		stopReasons := make(map[string]int, len(rows2))
+		var successCalls int
+		for _, r := range rows2 {
+			sr := parseStr(r["stop_reason"])
+			if sr == "" {
+				sr = "unknown"
+			}
+			cnt := parseInt(r["cnt"])
+			stopReasons[sr] = cnt
+			if sr != "error" {
+				successCalls += cnt
+			}
+		}
 		failedCalls := totalCalls - successCalls
 		if failedCalls < 0 {
 			failedCalls = 0
@@ -164,52 +183,19 @@ WHERE %s`, combinedHooks)
 			successRate = &r
 		}
 
-		// ── Q2: stop reason breakdown ─────────────────────────────────────────
-		q2 := fmt.Sprintf(`
-SELECT
-    json_extract_string(event_data, 'lastAssistant', 'stopReason') AS stop_reason,
-    count()                                                         AS cnt
-FROM table(agentshield_hook_events)
-WHERE %s
-GROUP BY stop_reason`, strings.Join(llmOutWhere, "\n  AND "))
-
-		rows2, err := timeplus.Query(&cfg.Timeplus, q2)
-		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
-			return
-		}
-		stopReasons := make(map[string]int, len(rows2))
-		for _, r := range rows2 {
-			sr := parseStr(r["stop_reason"])
-			if sr == "" {
-				sr = "unknown"
-			}
-			stopReasons[sr] = parseInt(r["cnt"])
-		}
-
-		// ── Q3: LLM latency via self-join on run_id ───────────────────────────
-		innerWhere := []string{"i.hook_name = 'llm_input'", "o.hook_name = 'llm_output'"}
-		innerWhere = addAgentFilter(innerWhere, agentID, "i.")
-		if model != "" {
-			innerWhere = append(innerWhere, fmt.Sprintf("i.model = '%s'", model))
-		}
-		innerWhere = addTimeFilters(innerWhere, since, until, "i.")
-
+		// ── Q3: LLM latency ───────────────────────────────────────────────────
+		q3Where := append([]string{"metric_name = 'llm.latency_ms'", "metric_value > 0"}, base...)
 		q3 := fmt.Sprintf(`
 SELECT
-    quantile(0.5)(llm_latency_ms)  AS p50_ms,
-    quantile(0.95)(llm_latency_ms) AS p95_ms,
-    quantile(0.99)(llm_latency_ms) AS p99_ms,
-    avg(llm_latency_ms)            AS avg_ms,
-    min(llm_latency_ms)            AS min_ms,
-    max(llm_latency_ms)            AS max_ms,
-    count()                        AS sample_count
-FROM (
-    SELECT date_diff('millisecond', i.event_time, o.event_time) AS llm_latency_ms
-    FROM table(agentshield_hook_events) AS i
-    JOIN table(agentshield_hook_events) AS o ON i.run_id = o.run_id
-    WHERE %s
-)`, strings.Join(innerWhere, "\n      AND "))
+    quantile(0.5)(metric_value)  AS p50_ms,
+    quantile(0.95)(metric_value) AS p95_ms,
+    quantile(0.99)(metric_value) AS p99_ms,
+    avg(metric_value)            AS avg_ms,
+    min(metric_value)            AS min_ms,
+    max(metric_value)            AS max_ms,
+    count()                      AS sample_count
+FROM table(agentshield_cim_metrics)
+WHERE %s`, strings.Join(q3Where, "\n  AND "))
 
 		rows3, err := timeplus.Query(&cfg.Timeplus, q3)
 		if err != nil {
@@ -232,17 +218,19 @@ FROM (
 
 		// ── Q4: throughput time series ────────────────────────────────────────
 		bfn := bucketFn(granularity)
+		tsNames := "'llm.call','llm.input_tokens','llm.output_tokens','llm.total_tokens'"
+		q4Where := append([]string{fmt.Sprintf("metric_name IN (%s)", tsNames)}, base...)
 		q4 := fmt.Sprintf(`
 SELECT
-    %s(event_time)                                                                    AS bucket,
-    count()                                                                           AS llm_calls,
-    sum(to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'input')))        AS input_tokens,
-    sum(to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'output')))       AS output_tokens,
-    sum(to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'totalTokens'))) AS total_tokens
-FROM table(agentshield_hook_events)
+    %s(event_time)                                                             AS bucket,
+    to_int64(sum_if(metric_value, metric_name = 'llm.call'))                  AS llm_calls,
+    to_int64(sum_if(metric_value, metric_name = 'llm.input_tokens'))          AS input_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.output_tokens'))         AS output_tokens,
+    to_int64(sum_if(metric_value, metric_name = 'llm.total_tokens'))          AS total_tokens
+FROM table(agentshield_cim_metrics)
 WHERE %s
 GROUP BY bucket
-ORDER BY bucket ASC`, bfn, strings.Join(llmOutWhere, "\n  AND "))
+ORDER BY bucket ASC`, bfn, strings.Join(q4Where, "\n  AND "))
 
 		rows4, err := timeplus.Query(&cfg.Timeplus, q4)
 		if err != nil {
