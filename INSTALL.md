@@ -17,6 +17,7 @@ This guide walks through a complete AgentGuard setup from scratch:
 | Requirement | Minimum version | Notes |
 |---|---|---|
 | Docker | 24+ | Optional — only needed for Docker-based Timeplus or AgentGuard |
+| Timeplus Enterprise | **3.2.1+** | Required — earlier versions are not supported |
 | Node.js | 18+ | Required for agent plugins |
 | Go | 1.23+ | Only if building AgentGuard from source |
 | Claude Code CLI | any | Only for Claude Code integration |
@@ -26,7 +27,7 @@ This guide walks through a complete AgentGuard setup from scratch:
 
 ## 2. Install and run Timeplus
 
-AgentGuard requires [Timeplus Enterprise](https://timeplus.com) as its streaming SQL backend. It runs on Linux or macOS as either a native binary or a Docker container.
+AgentGuard requires [Timeplus Enterprise](https://timeplus.com) **3.2.1 or later** as its streaming SQL backend. It runs on Linux or macOS as either a native binary or a Docker container.
 
 ### Ports used by AgentGuard
 
@@ -48,10 +49,10 @@ curl https://install.timeplus.com | sh
 
 This downloads the latest release for your OS and CPU architecture, extracts it, and starts Timeplus Enterprise. On first launch, open [http://localhost:8000](http://localhost:8000) and create an admin account to start the 30-day free trial.
 
-To install a specific version:
+To install a specific version (3.2.1 minimum required):
 
 ```bash
-curl https://install.timeplus.com/2.8 | sh
+curl https://install.timeplus.com/3.2 | sh
 ```
 
 **Manual download** — if you prefer to download the tarball directly:
