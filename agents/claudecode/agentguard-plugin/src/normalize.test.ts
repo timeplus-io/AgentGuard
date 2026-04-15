@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalize, normalizeContextEvent } from "./normalize.js";
+import { normalize, normalizeContextEvent, inferProvider } from "./normalize.js";
 
 const BASE_CONFIG = {
   timeplusUrl: "http://localhost:3218",
@@ -138,8 +138,30 @@ describe("normalize", () => {
     expect(e.session_key).toBe("");
   });
 
-  it("defaults provider to empty string always", () => {
+  it("infers provider from model on SessionStart", () => {
+    const direct = normalize({ hook_event_name: "SessionStart", session_id: "s1", model: "claude-sonnet-4-6" }, BASE_CONFIG);
+    expect(direct.provider).toBe("anthropic");
+
+    const vertex = normalize({ hook_event_name: "SessionStart", session_id: "s1", model: "claude-sonnet-4-6@20251001" }, BASE_CONFIG);
+    expect(vertex.provider).toBe("vertex");
+
+    const bedrock = normalize({ hook_event_name: "SessionStart", session_id: "s1", model: "anthropic.claude-3-5-sonnet-20241022-v2:0" }, BASE_CONFIG);
+    expect(bedrock.provider).toBe("bedrock");
+  });
+
+  it("infers provider from _llm_usage.model on Stop events", () => {
+    const vertex = normalize({
+      hook_event_name: "Stop",
+      session_id: "s1",
+      _llm_usage: { model: "claude-opus-4-6@20251001", llm_calls: 1 },
+    }, BASE_CONFIG);
+    expect(vertex.model).toBe("claude-opus-4-6@20251001");
+    expect(vertex.provider).toBe("vertex");
+  });
+
+  it("sets provider to empty string when model is unknown (non-LLM events)", () => {
     const e = normalize({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG);
+    expect(e.model).toBe("");
     expect(e.provider).toBe("");
   });
 
@@ -220,5 +242,30 @@ describe("normalizeContextEvent", () => {
       BASE_CONFIG, "llm_context", transcript,
     );
     expect(e.hook_decision).toBe("observe");
+  });
+});
+
+describe("inferProvider", () => {
+  it("returns 'anthropic' for a plain Claude model name", () => {
+    expect(inferProvider("claude-sonnet-4-6")).toBe("anthropic");
+    expect(inferProvider("claude-opus-4-5")).toBe("anthropic");
+    expect(inferProvider("claude-3-5-sonnet-20241022")).toBe("anthropic");
+  });
+
+  it("returns 'vertex' for Vertex AI model IDs (contain '@')", () => {
+    expect(inferProvider("claude-sonnet-4-6@20251001")).toBe("vertex");
+    expect(inferProvider("claude-opus-4-6@20251001")).toBe("vertex");
+    expect(inferProvider("claude-3-5-sonnet-v2@20241022")).toBe("vertex");
+  });
+
+  it("returns 'bedrock' for AWS Bedrock model IDs", () => {
+    expect(inferProvider("anthropic.claude-3-5-sonnet-20241022-v2:0")).toBe("bedrock");
+    expect(inferProvider("us.anthropic.claude-3-5-sonnet-20241022-v2:0")).toBe("bedrock");
+    expect(inferProvider("eu.anthropic.claude-3-opus-20240229-v1:0")).toBe("bedrock");
+    expect(inferProvider("ap.anthropic.claude-3-haiku-20240307-v1:0")).toBe("bedrock");
+  });
+
+  it("returns 'anthropic' for an empty string (callers must guard with model ? inferProvider(model) : '')", () => {
+    expect(inferProvider("")).toBe("anthropic");
   });
 });

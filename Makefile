@@ -2,7 +2,8 @@
         backend-build backend-run backend-clean backend-fmt backend-lint \
         frontend-install frontend-dev frontend-build frontend-preview frontend-lint \
         lint \
-        docker-build docker-run docker-stop docker-push docker-release
+        docker-build docker-run docker-stop docker-push docker-release \
+        compose-up compose-down compose-restart
 
 BINARY      := backend/server
 DOCKER_REPO := timeplus
@@ -111,6 +112,21 @@ docker-release:
 	docker build -t $(DOCKER_REPO)/$(IMAGE):$(TAG) -t $(DOCKER_REPO)/$(IMAGE):latest .
 	docker push $(DOCKER_REPO)/$(IMAGE):$(TAG)
 	docker push $(DOCKER_REPO)/$(IMAGE):latest
+
+# ── Docker Compose ───────────────────────────────────────────────────────────
+
+## compose-up: start the full stack with Docker Compose
+compose-up:
+	docker compose up --build
+
+## compose-down: stop the full stack
+compose-down:
+	docker compose down
+
+## compose-restart: stop stack, drop Timeplus data volume, and restart fresh
+compose-restart:
+	docker compose down -v --remove-orphans
+	docker compose up --build
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

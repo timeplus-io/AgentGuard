@@ -125,6 +125,19 @@ function SessionSummary({ sessionDetail }) {
           )}
         </div>
 
+        {/* Model / Provider */}
+        {(sessionDetail.model || sessionDetail.provider) && (
+          <div className="flex items-center gap-3 px-3 py-2 bg-[#0f0c17] rounded-sm">
+            <span className="material-symbols-outlined text-[13px] text-zinc-500">smart_toy</span>
+            {sessionDetail.provider && (
+              <span className="text-[10px] text-zinc-500 font-mono">{sessionDetail.provider}</span>
+            )}
+            {sessionDetail.model && (
+              <span className="text-xs font-mono text-[#ffb0cf]">{sessionDetail.model}</span>
+            )}
+          </div>
+        )}
+
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
@@ -815,7 +828,7 @@ export default function AgentDetail() {
   const volumeMetrics = [
     { label: 'Active Threats',  value: activeThreats ?? '—', icon: 'security', accent: activeThreats > 0 },
     { label: 'Total Sessions',  value: agent ? agent.session_count   : '—', icon: 'layers' },
-    { label: 'Total Events',     value: agent ? agent.event_count     : '—', icon: 'sync_alt' },
+    { label: 'Total Events',    value: agent ? agent.event_count     : '—', icon: 'sync_alt' },
     { label: 'Total Tool Calls',value: agent ? agent.tool_call_count : '—', icon: 'handyman' },
   ]
 
@@ -977,6 +990,9 @@ export default function AgentDetail() {
                             </div>
                           </div>
                           <p className="text-[10px] text-zinc-600 break-all mt-0.5">{session.session_key || session.session_id}</p>
+                          {session.model && (
+                            <p className="text-[9px] font-mono text-[#ffb0cf]/70 mt-0.5">{session.model}</p>
+                          )}
                           <p className="text-[9px] text-zinc-700 font-mono mt-0.5">{fmtTime(session.last_seen)}</p>
                         </div>
                       </button>
