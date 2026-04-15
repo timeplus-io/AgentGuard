@@ -7,9 +7,6 @@ set -eu
 # ── Constants ─────────────────────────────────────────────────────────────────
 S3_BASE="https://agentguard.s3.us-west-1.amazonaws.com"
 INSTALL_DIR="/usr/local/bin"
-CONFIG_DIR="${HOME}/.agentguard"
-# shellcheck disable=SC2034  # used in forthcoming install/config steps
-CONFIG_FILE="${CONFIG_DIR}/config.yaml"
 AGENTGUARD_VERSION="latest"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
