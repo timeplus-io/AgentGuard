@@ -107,6 +107,8 @@ func ListSessions(cfg *config.Config) gin.HandlerFunc {
 SELECT
     session_id,
     any_if(session_key, session_key != '')               AS session_key,
+    any_if(model,    model    != '')                     AS model,
+    any_if(provider, provider != '')                     AS provider,
     count_distinct(if(run_id != '', run_id, null))       AS run_count,
     count()                                              AS event_count,
     min(event_time)                                      AS first_seen,
@@ -141,6 +143,8 @@ ORDER BY last_seen DESC`,
 				SessionKey:  key,
 				SessionType: sessionType(key),
 				Status:      status,
+				Model:       parseStr(row["model"]),
+				Provider:    parseStr(row["provider"]),
 				RunCount:    parseInt(row["run_count"]),
 				EventCount:  parseInt(row["event_count"]),
 				FirstSeen:   parseTime(row["first_seen"]),
@@ -203,7 +207,9 @@ ORDER BY start_time ASC`,
 		statsSQL := fmt.Sprintf(`
 SELECT
     count_if(hook_name = 'session_end')      AS has_ended,
-    count_if(hook_name = 'before_tool_call') AS total_tool_calls
+    count_if(hook_name = 'before_tool_call') AS total_tool_calls,
+    any_if(model,    model    != '')         AS model,
+    any_if(provider, provider != '')         AS provider
 FROM table(agentguard_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
@@ -218,11 +224,15 @@ WHERE deployment_id = '%s'
 
 		status := "active"
 		totalToolCalls := 0
+		sessionModel := ""
+		sessionProvider := ""
 		if len(statsRows) > 0 {
 			if parseBool(statsRows[0]["has_ended"]) {
 				status = "ended"
 			}
 			totalToolCalls = parseInt(statsRows[0]["total_tool_calls"])
+			sessionModel = parseStr(statsRows[0]["model"])
+			sessionProvider = parseStr(statsRows[0]["provider"])
 		}
 
 		sessionKey := parseStr(runsRows[0]["session_key"])
@@ -245,6 +255,8 @@ WHERE deployment_id = '%s'
 			SessionKey:     sessionKey,
 			SessionType:    sessionType(sessionKey),
 			Status:         status,
+			Model:          sessionModel,
+			Provider:       sessionProvider,
 			TotalToolCalls: totalToolCalls,
 			Runs:           runs,
 		})

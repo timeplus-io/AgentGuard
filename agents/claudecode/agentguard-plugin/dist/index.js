@@ -67,6 +67,12 @@ async function send(event, config) {
 }
 
 // src/normalize.ts
+function inferProvider(model) {
+  if (!model) return "anthropic";
+  if (model.includes("@")) return "vertex";
+  if (/^(us\.|eu\.|ap\.)?anthropic\./.test(model)) return "bedrock";
+  return "anthropic";
+}
 var HOOK_NAME_MAP = {
   SessionStart: "session_start",
   SessionEnd: "session_end",
@@ -83,7 +89,8 @@ function normalize(input, config) {
   const hookEventName = input.hook_event_name ?? "";
   const hookName = HOOK_NAME_MAP[hookEventName] ?? hookEventName.toLowerCase();
   const isToolEvent = hookEventName === "PreToolUse" || hookEventName === "PostToolUse" || hookEventName === "PostToolUseFailure";
-  const model = hookEventName === "SessionStart" ? typeof input.model === "string" ? input.model : "" : "";
+  const llmUsage = input._llm_usage ?? {};
+  const model = hookEventName === "SessionStart" ? typeof input.model === "string" ? input.model : "" : hookEventName === "Stop" ? typeof llmUsage.model === "string" ? llmUsage.model : "" : "";
   return {
     hook_name: hookName,
     event_time: (/* @__PURE__ */ new Date()).toISOString(),
@@ -94,7 +101,7 @@ function normalize(input, config) {
     deployment_name: config.deploymentName,
     session_key: "",
     tool_name: isToolEvent && typeof input.tool_name === "string" ? input.tool_name : "",
-    provider: "",
+    provider: model ? inferProvider(model) : "",
     model,
     hook_decision: "observe",
     block_reason: "",

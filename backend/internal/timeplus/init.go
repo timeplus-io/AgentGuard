@@ -69,9 +69,6 @@ func Init(cfg *config.Config, catalogEntries []catalog.Entry) error {
 	if err := seedCatalogRules(ctx, conn, catalogEntries); err != nil {
 		log.Printf("timeplus init: warning seeding rules: %v", err)
 	}
-	if err := dropLegacyMVs(ctx, conn); err != nil {
-		log.Printf("timeplus init: warning dropping legacy MVs: %v", err)
-	}
 	if err := createNotifyUDF(ctx, conn, cfg.AgentGuardURL); err != nil {
 		log.Printf("timeplus init: warning creating UDF: %v", err)
 	}
@@ -193,19 +190,17 @@ func createCIMStream(ctx context.Context, conn proton.Conn) error {
 }
 
 func createCIMMVs(ctx context.Context, conn proton.Conn) error {
-	// Drop and recreate CIM MVs on every startup so DDL changes (e.g. field
-	// extraction fixes) take effect without manual intervention. The gap between
-	// DROP and CREATE during startup is harmless — no agent traffic is flowing.
-	for _, name := range []string{"mv_cim_claudecode", "mv_cim_openclaw"} {
-		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", name)); err != nil {
-			log.Printf("timeplus: warning dropping %s for recreation: %v", name, err)
+	mvs := []struct {
+		name string
+		ddl  string
+	}{
+		{"mv_cim_claudecode", ddlCIMClaudeCodeMV},
+		{"mv_cim_openclaw", ddlCIMOpenClawMV},
+	}
+	for _, mv := range mvs {
+		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl); err != nil {
+			return err
 		}
-	}
-	if err := conn.Exec(ctx, ddlCIMClaudeCodeMV); err != nil {
-		return fmt.Errorf("creating view %q: %w", "mv_cim_claudecode", err)
-	}
-	if err := conn.Exec(ctx, ddlCIMOpenClawMV); err != nil {
-		return fmt.Errorf("creating view %q: %w", "mv_cim_openclaw", err)
 	}
 	return nil
 }
@@ -234,18 +229,10 @@ func createCIMMetricsMVs(ctx context.Context, conn proton.Conn) error {
 		{"mv_cim_metrics_claudecode_otel", ddlCIMMetricsClaudeCodeOtelMV},
 		{"mv_cim_metrics_claudecode_tools", ddlCIMMetricsClaudeCodeToolsMV},
 	}
-	// Drop and recreate all CIM metrics MVs on every startup so DDL fixes take
-	// effect without manual intervention. The startup gap is harmless.
 	for _, mv := range mvs {
-		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", mv.name)); err != nil {
-			log.Printf("timeplus: warning dropping %s for recreation: %v", mv.name, err)
+		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl); err != nil {
+			return err
 		}
-	}
-	for _, mv := range mvs {
-		if err := conn.Exec(ctx, mv.ddl); err != nil {
-			return fmt.Errorf("creating view %q: %w", mv.name, err)
-		}
-		log.Printf("timeplus: view %q created", mv.name)
 	}
 	return nil
 }
@@ -305,27 +292,6 @@ func seedCatalogRules(ctx context.Context, conn proton.Conn, entries []catalog.E
 	return nil
 }
 
-func dropLegacyMVs(ctx context.Context, conn proton.Conn) error {
-	legacy := []string{
-		"mv_security_prompt_injection",
-		"mv_security_dlp",
-		"mv_security_privilege_guard",
-		"mv_security_supply_chain",
-	}
-	for _, name := range legacy {
-		exists, err := streamExists(ctx, conn, name)
-		if err != nil || !exists {
-			continue
-		}
-		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", name)); err != nil {
-			log.Printf("timeplus: warning dropping legacy MV %s: %v", name, err)
-		} else {
-			log.Printf("timeplus: dropped legacy MV %s", name)
-		}
-	}
-	return nil
-}
-
 func createNotifyUDF(ctx context.Context, conn proton.Conn, agentGuardURL string) error {
 	ddl := fmt.Sprintf(ddlNotifyUDFTemplate, agentGuardURL+"/api/alerts/webhook")
 	if err := conn.Exec(ctx, ddl); err != nil {
@@ -336,14 +302,16 @@ func createNotifyUDF(ctx context.Context, conn proton.Conn, agentGuardURL string
 }
 
 func createNotifierAlert(ctx context.Context, conn proton.Conn) error {
-	// Drop first so the DDL always reflects the current definition on restart.
-	// Ignore the error — it just means the alert didn't exist yet.
-	_ = conn.Exec(ctx, `DROP ALERT IF EXISTS agentguard_notifier`)
-	if err := conn.Exec(ctx, ddlNotifierAlert); err != nil {
-		return fmt.Errorf("create alert: %w", err)
+	err := conn.Exec(ctx, ddlNotifierAlert)
+	if err == nil {
+		log.Printf("timeplus: alert agentguard_notifier created")
+		return nil
 	}
-	log.Printf("timeplus: alert agentguard_notifier created")
-	return nil
+	if strings.Contains(err.Error(), "already exists") {
+		log.Printf("timeplus: alert agentguard_notifier already exists, skipping")
+		return nil
+	}
+	return fmt.Errorf("create alert: %w", err)
 }
 
 const sqlStartupRules = `
@@ -749,7 +717,13 @@ SELECT
   deployment_id,
   session_id,
   run_id,
-  ''                                                               AS provider,
+  if(provider != '', provider,
+     multi_if(
+       position(if(model != '', model, json_value(event_data, '$.model')), '@') > 0, 'vertex',
+       match(if(model != '', model, json_value(event_data, '$.model')), '^(us\\.|eu\\.|ap\\.)?anthropic\\.'), 'bedrock',
+       if(model != '', model, json_value(event_data, '$.model')) != '', 'anthropic',
+       ''
+     ))                                                            AS provider,
   if(model != '', model, json_value(event_data, '$.model'))       AS model,
   if(tool_name != '', tool_name,
      json_value(event_data, '$.tool_name'))                       AS tool_name,
@@ -895,8 +869,8 @@ SELECT
   deployment_id,
   session_id,
   map_cast(
-    ['model', 'stop_reason', 'run_id'],
-    [model, json_value(raw_event_data, '$.lastAssistant.stopReason'), run_id]
+    ['model', 'provider', 'stop_reason', 'run_id'],
+    [model, provider, json_value(raw_event_data, '$.lastAssistant.stopReason'), run_id]
   )                                                                       AS tags
 FROM (
   SELECT
@@ -906,6 +880,7 @@ FROM (
     e.session_id,
     e.run_id,
     e.model,
+    e.provider,
     e.raw_event_data,
     if(r.latency_ms > 0, r.latency_ms, to_float64(0))                    AS latency_ms
   FROM agentguard_cim_event AS e
@@ -937,7 +912,7 @@ SELECT
   agent_id,
   deployment_id,
   session_id,
-  map_cast(['tool_name', 'run_id'], [tool_name, run_id])      AS tags
+  map_cast(['tool_name', 'model', 'provider', 'run_id'], [tool_name, model, provider, run_id]) AS tags
 FROM agentguard_cim_event
 ARRAY JOIN
   ['tool.call', 'tool.success', 'tool.duration_ms']           AS metric_name,
@@ -961,8 +936,16 @@ SELECT
   s.deployment_id                                                         AS deployment_id,
   o.log_attributes['session.id']                                         AS session_id,
   map_cast(
-    ['model', 'run_id'],
-    [o.log_attributes['model'], o.log_attributes['session.id']]
+    ['model', 'provider', 'run_id'],
+    [
+      o.log_attributes['model'],
+      multi_if(
+        position(o.log_attributes['model'], '@') > 0, 'vertex',
+        match(o.log_attributes['model'], '^(us\\.|eu\\.|ap\\.)?anthropic\\.'), 'bedrock',
+        'anthropic'
+      ),
+      o.log_attributes['session.id']
+    ]
   )                                                                       AS tags
 FROM otel_logs AS o
 LEFT JOIN agentguard_session_agents AS s
@@ -993,7 +976,7 @@ SELECT
   agent_id,
   deployment_id,
   session_id,
-  map_cast(['tool_name', 'run_id'], [tool_name, run_id]) AS tags
+  map_cast(['tool_name', 'model', 'provider', 'run_id'], [tool_name, model, provider, run_id]) AS tags
 FROM agentguard_cim_event
 ARRAY JOIN
   ['tool.call', 'tool.success']             AS metric_name,

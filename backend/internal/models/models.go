@@ -174,6 +174,8 @@ type Session struct {
 	SessionKey  string    `json:"session_key"`
 	SessionType string    `json:"session_type"`
 	Status      string    `json:"status"` // "active" | "ended"
+	Model       string    `json:"model"`
+	Provider    string    `json:"provider"`
 	RunCount    int       `json:"run_count"`
 	EventCount  int       `json:"event_count"`
 	FirstSeen   time.Time `json:"first_seen"`
@@ -196,7 +198,9 @@ type SessionDetail struct {
 	SessionID      string `json:"session_id"`
 	SessionKey     string `json:"session_key"`
 	SessionType    string `json:"session_type"`
-	Status         string `json:"status"`           // "active" | "ended"
+	Status         string `json:"status"` // "active" | "ended"
+	Model          string `json:"model"`
+	Provider       string `json:"provider"`
 	TotalToolCalls int    `json:"total_tool_calls"`
 	Runs           []Run  `json:"runs"`
 }
