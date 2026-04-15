@@ -6,7 +6,6 @@ set -eu
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 S3_BASE="https://agentguard.s3.us-west-1.amazonaws.com"
-# shellcheck disable=SC2034  # used in forthcoming install/config steps
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="${HOME}/.agentguard"
 # shellcheck disable=SC2034  # used in forthcoming install/config steps
@@ -75,12 +74,51 @@ detect_platform() {
   DOWNLOAD_URL="${S3_BASE}/agentguard/${AGENTGUARD_VERSION}/${BINARY_NAME}"
 }
 
+# ── Download ──────────────────────────────────────────────────────────────────
+download_binary() {
+  TMP_FILE=$(mktemp)
+  info "Downloading AgentGuard ${AGENTGUARD_VERSION} (${OS}/${ARCH})..."
+
+  if command -v curl > /dev/null 2>&1; then
+    curl -fsSL "$DOWNLOAD_URL" -o "$TMP_FILE" \
+      || { rm -f "$TMP_FILE"; error "Download failed. Verify that version '${AGENTGUARD_VERSION}' exists: ${DOWNLOAD_URL}"; }
+  elif command -v wget > /dev/null 2>&1; then
+    wget -qO "$TMP_FILE" "$DOWNLOAD_URL" \
+      || { rm -f "$TMP_FILE"; error "Download failed. Verify that version '${AGENTGUARD_VERSION}' exists: ${DOWNLOAD_URL}"; }
+  else
+    error "Neither curl nor wget found. Please install one and retry."
+  fi
+
+  chmod +x "$TMP_FILE"
+}
+
+# ── Install ───────────────────────────────────────────────────────────────────
+install_binary() {
+  if [ -w "$INSTALL_DIR" ]; then
+    mv "$TMP_FILE" "${INSTALL_DIR}/agentguard"
+  else
+    info "Writing to ${INSTALL_DIR} requires sudo..."
+    sudo mv "$TMP_FILE" "${INSTALL_DIR}/agentguard" \
+      || { rm -f "$TMP_FILE"; error "Failed to install to ${INSTALL_DIR}. Check sudo permissions."; }
+  fi
+  info "Installed: ${INSTALL_DIR}/agentguard"
+}
+
+# ── Verify ────────────────────────────────────────────────────────────────────
+verify_binary() {
+  if ! "${INSTALL_DIR}/agentguard" --help > /dev/null 2>&1; then
+    rm -f "${INSTALL_DIR}/agentguard"
+    error "Installed binary failed to run. The download may be corrupt or incompatible with this OS/arch."
+  fi
+  info "Binary verified."
+}
+
 main() {
   parse_args "$@"
   detect_platform
-  info "Platform: ${OS}/${ARCH}"
-  info "Version:  ${AGENTGUARD_VERSION}"
-  info "URL:      ${DOWNLOAD_URL}"
+  download_binary
+  install_binary
+  verify_binary
 }
 
 main "$@"
