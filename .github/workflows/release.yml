@@ -154,6 +154,8 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all binaries
         uses: actions/download-artifact@v4
         with:
@@ -184,6 +186,12 @@ jobs:
             aws s3 cp "$binary" "s3://${{ secrets.AWS_S3_BUCKET }}/agentguard/latest/${name}"
             echo "Uploaded ${name} → versioned + latest"
           done
+
+      - name: Upload install script to S3
+        run: |
+          set -euo pipefail
+          aws s3 cp install/install.sh "s3://${{ secrets.AWS_S3_BUCKET }}/install.sh"
+          echo "Uploaded install.sh → s3://${{ secrets.AWS_S3_BUCKET }}/install.sh"
 
   publish-binaries-main:
     name: Build artifact ${{ matrix.name }}
