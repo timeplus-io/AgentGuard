@@ -74,34 +74,37 @@ AgentGuard connects to Timeplus using dedicated credentials. Skip this section i
 
 ## 4. Install and run AgentGuard
 
-### Option A — Pre-built binary
+### Option A — Shell script installer (recommended)
 
-Download the latest binary for your platform from the [Releases page](https://github.com/timeplus-io/agentguard/releases/latest):
-
-| Platform | Binary |
-|---|---|
-| macOS (Apple Silicon) | `agentguard-darwin-arm64` |
-| macOS (Intel) | `agentguard-darwin-amd64` |
-| Linux (x86-64) | `agentguard-linux-amd64` |
-| Linux (ARM64) | `agentguard-linux-arm64` |
+The installer downloads the correct binary for your platform from S3, installs it to `/usr/local/bin`, and guides you through Timeplus Enterprise connection configuration interactively.
 
 ```bash
-# Example: macOS Apple Silicon
-curl -L -o agentguard \
-  https://github.com/timeplus-io/agentguard/releases/latest/download/agentguard-darwin-arm64
-chmod +x agentguard
+# Install latest
+curl -fsSL https://agentguard.s3.us-west-1.amazonaws.com/install.sh | sh
 
-# Run, pointing at your Timeplus instance
-./agentguard \
-  --timeplus-host localhost \
-  --timeplus-user proton \
-  --timeplus-password "timeplus@t+" \
-  --agentguard-url http://localhost:8080
+# Install a specific version
+curl -fsSL https://agentguard.s3.us-west-1.amazonaws.com/install.sh | sh -s -- --version v1.2.3
 ```
+
+Supported platforms: macOS (Apple Silicon / Intel), Linux (x86-64 / ARM64).
+
+The script will:
+1. Download the correct binary and install it to `/usr/local/bin/agentguard`
+2. Prompt for your Timeplus Enterprise connection settings and write `~/.agentguard/config.yaml`
+3. Optionally set up AgentGuard as a background service (launchd on macOS, systemd on Linux)
+
+After installation, start AgentGuard manually with:
+```bash
+agentguard
+```
+
+Or use the service that was configured during installation.
 
 Open [http://localhost:8080](http://localhost:8080).
 
 AgentGuard creates all required Timeplus streams and materialized views on first startup. This is non-fatal — the server starts even if Timeplus is temporarily unavailable.
+
+> **Non-interactive install:** If you pipe the script through `sh` without a terminal (e.g. in CI), configuration prompts are skipped. Edit `~/.agentguard/config.yaml` manually afterwards.
 
 ### Option C — Docker Compose (recommended for new installs)
 
@@ -131,7 +134,7 @@ services:
       start_period: 30s
 
   agentguard:
-    image: ghcr.io/timeplus-io/agentguard:latest
+    image: timeplus/agentguard:latest
     container_name: agentguard
     ports:
       - "8080:8080"
@@ -142,7 +145,7 @@ services:
       TIMEPLUS_USER: "proton"
       TIMEPLUS_PASSWORD: "timeplus@t+"
       SERVER_PORT: 8080
-      # Proton calls this URL for alert webhooks; use the Docker service name.
+      # Timeplus calls this URL for alert webhooks; use the Docker service name.
       AGENTGUARD_URL: "http://agentguard:8080"
     depends_on:
       timeplus:
@@ -160,7 +163,7 @@ docker compose up -d
 Open [http://localhost:8080](http://localhost:8080).
 
 - AgentGuard waits for Timeplus to pass its health check before starting.
-- `AGENTGUARD_URL=http://agentguard:8080` ensures Proton can call back AgentGuard for alert webhooks using the Docker service name.
+- `AGENTGUARD_URL=http://agentguard:8080` ensures Timeplus Enterprise can call back AgentGuard for alert webhooks using the Docker service name.
 - Change `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD` if you created a different user in step 3.
 
 To stop and remove volumes:
@@ -179,7 +182,7 @@ docker run -d \
   -e TIMEPLUS_PASSWORD="timeplus@t+" \
   -e AGENTGUARD_URL=http://<agentguard-host>:8080 \
   --restart unless-stopped \
-  ghcr.io/timeplus-io/agentguard:latest
+  timeplus/agentguard:latest
 ```
 
 Replace `<timeplus-host>` with the hostname or IP where Timeplus is running (use `host.docker.internal` on macOS/Windows when Timeplus runs on the host machine).
