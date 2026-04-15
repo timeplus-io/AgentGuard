@@ -8,6 +8,8 @@ set -eu
 S3_BASE="https://agentguard.s3.us-west-1.amazonaws.com"
 INSTALL_DIR="/usr/local/bin"
 AGENTGUARD_VERSION="latest"
+CONFIG_DIR="${HOME}/.agentguard"
+CONFIG_FILE="${CONFIG_DIR}/config.yaml"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 info()  { printf '\033[0;32m[agentguard]\033[0m %s\n' "$*"; }
@@ -110,12 +112,91 @@ verify_binary() {
   info "Binary verified."
 }
 
+# ── Configure Timeplus Enterprise ─────────────────────────────────────────────
+configure_timeplus() {
+  if ! is_interactive; then
+    warn "Non-interactive mode — skipping configuration."
+    warn "Edit ${CONFIG_FILE} to configure your Timeplus Enterprise connection."
+    return
+  fi
+
+  if [ -f "$CONFIG_FILE" ]; then
+    printf 'Config already exists at %s. Overwrite? [y/N]: ' "$CONFIG_FILE"
+    read -r _overwrite
+    case "$_overwrite" in
+      y|Y) ;;
+      *) info "Keeping existing config."; return ;;
+    esac
+  fi
+
+  printf '\n'
+  info "Configure Timeplus Enterprise connection"
+  printf '\n'
+
+  printf 'Timeplus host\n'
+  printf '  The hostname or IP where Timeplus Enterprise is running.\n'
+  printf '  AgentGuard streams all agent events into Timeplus Enterprise\n'
+  printf '  and queries it for metrics, rules, and security events.\n'
+  TP_HOST=$(prompt '  Host' 'localhost')
+
+  printf '\nTimeplus HTTP port\n'
+  printf '  HTTP API port. Used for SELECT queries and DDL\n'
+  printf '  (creating streams and materialized views).\n'
+  TP_PORT=$(prompt '  Port' '3218')
+
+  printf '\nTimeplus native TCP port\n'
+  printf '  Native binary protocol port. Used for high-throughput\n'
+  printf '  event ingestion from agent plugins.\n'
+  TP_NATIVE_PORT=$(prompt '  Native port' '8463')
+
+  printf '\nTimeplus user\n'
+  printf '  Username for authenticating with Timeplus Enterprise.\n'
+  printf '  Use the default unless your instance has custom access control.\n'
+  TP_USER=$(prompt '  User' 'default')
+
+  printf '\nTimeplus password\n'
+  printf '  Leave empty if your Timeplus Enterprise instance has no password set.\n'
+  prompt_secret '  Password'
+  TP_PASSWORD="$_prompt_secret_val"
+
+  printf '\nAgentGuard server port\n'
+  printf '  Port AgentGuard listens on. Change if 8080 is already in use.\n'
+  AG_PORT=$(prompt '  Port' '8080')
+
+  printf '\nAgentGuard base URL\n'
+  printf '  URL Timeplus Enterprise uses to call back AgentGuard when a\n'
+  printf '  security rule fires. Must be reachable from Timeplus Enterprise.\n'
+  printf '  Change if AgentGuard and Timeplus run on different hosts.\n'
+  AG_URL=$(prompt '  URL' 'http://localhost:8080')
+
+  mkdir -p "$CONFIG_DIR" 2>/dev/null \
+    || { warn "Could not create ${CONFIG_DIR}. Skipping config write."; return; }
+
+  cat > "$CONFIG_FILE" << YAML
+server:
+  port: ${AG_PORT}
+
+agentguard:
+  url: ${AG_URL}
+
+timeplus:
+  host: ${TP_HOST}
+  port: ${TP_PORT}
+  native-port: ${TP_NATIVE_PORT}
+  user: ${TP_USER}
+  password: ${TP_PASSWORD}
+YAML
+
+  info "Configuration written to ${CONFIG_FILE}"
+}
+
 main() {
   parse_args "$@"
   detect_platform
   download_binary
   install_binary
   verify_binary
+  configure_timeplus
 }
 
 main "$@"
