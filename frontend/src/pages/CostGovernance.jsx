@@ -34,6 +34,7 @@ const EMPTY_FORM = { provider: '', model: '', input_cost_per_million: '', output
 export default function CostGovernance() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [pricing, setPricing] = useState([])
   const [showAddForm, setShowAddForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -45,14 +46,14 @@ export default function CostGovernance() {
   useEffect(() => {
     api.getCost()
       .then(setData)
-      .catch(() => {})
+      .catch(err => setLoadError(err?.message || 'Failed to load cost data'))
       .finally(() => setLoading(false))
   }, [])
 
   const fetchPricing = () => {
     api.listPricing()
       .then(res => setPricing(res.pricing ?? []))
-      .catch(() => {})
+      .catch(err => setLoadError(prev => prev || (err?.message || 'Failed to load pricing')))
   }
 
   useEffect(() => { fetchPricing() }, [])
@@ -132,6 +133,12 @@ export default function CostGovernance() {
 
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
+          {loadError && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs">
+              <span className="material-symbols-outlined text-base shrink-0">error</span>
+              <span>{loadError}</span>
+            </div>
+          )}
           <PageHeader
             title="Cost Governance"
             subtitle="Monitor token spend, enforce budget policies, and detect cost anomalies across all agents."

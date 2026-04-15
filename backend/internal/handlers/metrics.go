@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -129,6 +130,7 @@ WHERE %s`, strings.Join(q1Where, "\n  AND "))
 
 		rows1, err := timeplus.Query(&cfg.Timeplus, q1)
 		if err != nil {
+			log.Printf("[metrics] GetLLMMetrics token query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -157,6 +159,7 @@ GROUP BY stop_reason`, strings.Join(q2Where, "\n  AND "))
 
 		rows2, err := timeplus.Query(&cfg.Timeplus, q2)
 		if err != nil {
+			log.Printf("[metrics] GetLLMMetrics stop-reason query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -199,6 +202,7 @@ WHERE %s`, strings.Join(q3Where, "\n  AND "))
 
 		rows3, err := timeplus.Query(&cfg.Timeplus, q3)
 		if err != nil {
+			log.Printf("[metrics] GetLLMMetrics latency query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -234,6 +238,7 @@ ORDER BY bucket ASC`, bfn, strings.Join(q4Where, "\n  AND "))
 
 		rows4, err := timeplus.Query(&cfg.Timeplus, q4)
 		if err != nil {
+			log.Printf("[metrics] GetLLMMetrics throughput query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -313,6 +318,7 @@ ORDER BY total_calls DESC`, strings.Join(q1Where, "\n  AND "))
 
 		rows1, err := timeplus.Query(&cfg.Timeplus, q1)
 		if err != nil {
+			log.Printf("[metrics] GetToolMetrics count query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -352,6 +358,7 @@ GROUP BY tool_name`, strings.Join(q2Where, "\n  AND "))
 
 		rows2, err := timeplus.Query(&cfg.Timeplus, q2)
 		if err != nil {
+			log.Printf("[metrics] GetToolMetrics latency query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}

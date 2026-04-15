@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -251,6 +252,7 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 
 		threats, err := buildThreatsList(cfg)
 		if err != nil {
+			log.Printf("[threats] ListThreats query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -300,6 +302,7 @@ func GetThreat(cfg *config.Config) gin.HandlerFunc {
 
 		threats, err := buildThreatsList(cfg)
 		if err != nil {
+			log.Printf("[threats] GetThreat query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -354,6 +357,7 @@ func AcknowledgeThreat(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 		if err := upsertThreatStatus(cfg, body, "acknowledged"); err != nil {
+			log.Printf("[threats] AcknowledgeThreat upsert failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "upsert failed"})
 			return
 		}
@@ -376,6 +380,7 @@ func ClearThreat(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 		if err := upsertThreatStatus(cfg, body, "cleared"); err != nil {
+			log.Printf("[threats] ClearThreat upsert failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "upsert failed"})
 			return
 		}

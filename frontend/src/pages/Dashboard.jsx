@@ -99,6 +99,12 @@ export default function Dashboard() {
           />
 
           {/* KPI Bento Grid */}
+          {error && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs mb-2">
+              <span className="material-symbols-outlined text-base shrink-0">error</span>
+              <span>{typeof error === 'string' ? error : error?.message || 'Failed to load dashboard data'}</span>
+            </div>
+          )}
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {[1,2,3,4].map(i => (

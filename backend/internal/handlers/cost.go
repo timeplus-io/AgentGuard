@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -28,6 +29,7 @@ func GetCost(cfg *config.Config) gin.HandlerFunc {
 		// All-time per-agent costs (for cost cards and AvgTokenCost KPI).
 		allCosts, err := queryCostByAgent(&cfg.Timeplus, "")
 		if err != nil {
+			log.Printf("[cost] GetCost all-time cost query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -35,6 +37,7 @@ func GetCost(cfg *config.Config) gin.HandlerFunc {
 		// Month-to-date per-agent costs (for MonthToDate + Forecasted KPIs).
 		mtdCosts, err := queryCostByAgent(&cfg.Timeplus, monthStart)
 		if err != nil {
+			log.Printf("[cost] GetCost month-to-date cost query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -42,6 +45,7 @@ func GetCost(cfg *config.Config) gin.HandlerFunc {
 		// Daily spend trend, last 30 days.
 		daily, err := queryCostDailyTrend(&cfg.Timeplus)
 		if err != nil {
+			log.Printf("[cost] GetCost daily trend query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -49,6 +53,7 @@ func GetCost(cfg *config.Config) gin.HandlerFunc {
 		// Token-type cost breakdown (input / output / cache-read).
 		breakdown, err := queryCostTokenBreakdown(&cfg.Timeplus)
 		if err != nil {
+			log.Printf("[cost] GetCost token breakdown query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -108,6 +113,7 @@ func ListPricing(cfg *config.Config) gin.HandlerFunc {
 			FROM table(agentguard_pricing)
 			ORDER BY provider ASC, model ASC`)
 		if err != nil {
+			log.Printf("[cost] ListPricing query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -152,6 +158,7 @@ func UpsertPricing(cfg *config.Config) gin.HandlerFunc {
 			body.CacheReadCostPerMillion,
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
+			log.Printf("[cost] UpsertPricing failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "upsert failed"})
 			return
 		}
@@ -179,6 +186,7 @@ func DeletePricing(cfg *config.Config) gin.HandlerFunc {
 			escapeSQL(model),
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
+			log.Printf("[cost] DeletePricing failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
 			return
 		}

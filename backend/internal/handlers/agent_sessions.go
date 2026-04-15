@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -127,6 +128,7 @@ ORDER BY last_seen DESC`,
 
 		rows, err := timeplus.Query(&cfg.Timeplus, sql)
 		if err != nil {
+			log.Printf("[sessions] ListSessions query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -195,6 +197,7 @@ ORDER BY start_time ASC`,
 
 		runsRows, err := timeplus.Query(&cfg.Timeplus, runsSQL)
 		if err != nil {
+			log.Printf("[sessions] GetSession runs query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}

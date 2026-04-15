@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,7 @@ func GetDashboard(cfg *config.Config) gin.HandlerFunc {
 		agentRows, err := tp.Query(&cfg.Timeplus,
 			`SELECT count(distinct agent_id) AS total FROM table(agentguard_hook_events) WHERE agent_id != ''`)
 		if err != nil {
+			log.Printf("[dashboard] agent count query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -28,12 +30,14 @@ func GetDashboard(cfg *config.Config) gin.HandlerFunc {
 		threatRows, err := tp.Query(&cfg.Timeplus,
 			`SELECT count() AS total FROM table(agentguard_security_events) WHERE detected_at >= now() - interval 1 day`)
 		if err != nil {
+			log.Printf("[dashboard] threat count query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
 		criticalRows, err := tp.Query(&cfg.Timeplus,
 			`SELECT count() AS critical FROM table(agentguard_security_events) WHERE detected_at >= now() - interval 1 day AND severity = 'critical'`)
 		if err != nil {
+			log.Printf("[dashboard] critical threat count query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -63,6 +67,7 @@ WHERE e.hook_name = 'llm_output'
   AND e.event_time >= now() - interval 1 day
 GROUP BY e.provider, e.model`)
 		if err != nil {
+			log.Printf("[dashboard] cost query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -81,6 +86,7 @@ FROM (
   HAVING active = true
 )`)
 		if err != nil {
+			log.Printf("[dashboard] active rules query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -97,6 +103,7 @@ WHERE detected_at >= now() - interval 1 day
 GROUP BY rule_name
 ORDER BY cnt DESC`)
 		if err != nil {
+			log.Printf("[dashboard] threat categories query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}

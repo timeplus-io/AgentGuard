@@ -133,8 +133,8 @@ export default function RulePacks() {
         loadRules(),
         api.getRulesCatalog().then(data => setCatalog(data.catalog || [])),
       ])
-    } catch {
-      // silently ignore — user can retry
+    } catch (err) {
+      setLoadError(err?.message || 'Install failed — please try again')
     } finally {
       setInstalling(null)
     }
