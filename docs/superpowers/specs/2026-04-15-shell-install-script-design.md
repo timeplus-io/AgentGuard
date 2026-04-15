@@ -65,14 +65,32 @@ https://agentguard.s3.us-west-1.amazonaws.com/agentguard/<version>/agentguard-<o
 
 ### 7. Configure Timeplus connection
 - If non-interactive (piped stdin), skip and print a note that the user should edit `~/.agentguard/config.yaml` manually
-- Otherwise prompt for each field, showing default in brackets — pressing Enter accepts the default:
-  - **Timeplus host** (default: `localhost`)
-  - **Timeplus HTTP port** (default: `3218`)
-  - **Timeplus native TCP port** (default: `8463`)
-  - **Timeplus user** (default: `default`)
-  - **Timeplus password** (default: empty, input hidden with `stty -echo`)
-  - **AgentGuard server port** (default: `8080`)
-  - **AgentGuard base URL** — used by Proton alert callbacks (default: `http://localhost:8080`)
+- Otherwise prompt for each field in order of importance. Each prompt shows the field name, a one-line explanation of why it is needed, and the default value in brackets. Pressing Enter accepts the default.
+
+  **Timeplus connection (required for AgentGuard to function):**
+
+  1. **Timeplus host** `[localhost]`  
+     _The hostname or IP where Timeplus Proton is running. AgentGuard streams all agent events into Proton and queries it for metrics, rules, and security events._
+
+  2. **Timeplus HTTP port** `[3218]`  
+     _Proton's HTTP API port. Used for SELECT queries and DDL (creating streams and materialized views)._
+
+  3. **Timeplus native TCP port** `[8463]`  
+     _Proton's native binary protocol port. Used for high-throughput event ingestion from agent plugins._
+
+  4. **Timeplus user** `[default]`  
+     _Username for authenticating with Proton. Use the default unless your Proton instance has custom access control enabled._
+
+  5. **Timeplus password** `[]` _(hidden)_  
+     _Password for the Timeplus user. Leave empty if Proton has no password set (the default for local installs)._
+
+  **AgentGuard server:**
+
+  6. **AgentGuard server port** `[8080]`  
+     _Port AgentGuard listens on. Change this if 8080 is already in use on your machine._
+
+  7. **AgentGuard base URL** `[http://localhost:8080]`  
+     _The URL Proton uses to call back AgentGuard when a security rule fires. Must be reachable from Proton — change this if AgentGuard and Proton run on different hosts (e.g. `http://agentguard:8080` in Docker)._
 - Create `~/.agentguard/` directory if it does not exist (`mkdir -p`)
 - Write `~/.agentguard/config.yaml` with all fields:
 
