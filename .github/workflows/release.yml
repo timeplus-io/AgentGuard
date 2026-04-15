@@ -64,6 +64,10 @@ jobs:
           TAG="${{ github.ref_name }}"
           OWNER="${{ github.repository_owner }}"
           CURRENT=$(gh release view "$TAG" --json body -q .body)
+          if echo "$CURRENT" | grep -q "## Docker Image"; then
+            echo "Docker Image section already present, skipping"
+            exit 0
+          fi
           printf '%s\n\n## Docker Image\n\n```bash\ndocker pull ghcr.io/%s/agentguard:%s\n```\n' \
             "$CURRENT" "$OWNER" "$TAG" > /tmp/notes.md
           gh release edit "$TAG" --notes-file /tmp/notes.md
