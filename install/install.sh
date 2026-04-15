@@ -190,6 +190,111 @@ YAML
   info "Configuration written to ${CONFIG_FILE}"
 }
 
+# ── Service setup — macOS ─────────────────────────────────────────────────────
+install_service_macos() {
+  PLIST_DIR="${HOME}/Library/LaunchAgents"
+  PLIST_PATH="${PLIST_DIR}/com.timeplus.agentguard.plist"
+  mkdir -p "$PLIST_DIR"
+  cat > "$PLIST_PATH" << XML
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.timeplus.agentguard</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${INSTALL_DIR}/agentguard</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/agentguard.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/agentguard.log</string>
+</dict>
+</plist>
+XML
+  launchctl load "$PLIST_PATH"
+  SERVICE_INSTALLED=1
+  info "launchd service installed and started."
+}
+
+# ── Service setup — Linux ─────────────────────────────────────────────────────
+install_service_linux() {
+  UNIT_PATH="/etc/systemd/system/agentguard.service"
+  sudo tee "$UNIT_PATH" > /dev/null << UNIT
+[Unit]
+Description=AgentGuard security monitoring
+After=network.target
+
+[Service]
+ExecStart=${INSTALL_DIR}/agentguard
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  sudo systemctl enable --now agentguard
+  SERVICE_INSTALLED=1
+  info "systemd service installed and started."
+}
+
+# ── Service setup — dispatcher ────────────────────────────────────────────────
+setup_service() {
+  SERVICE_INSTALLED=0
+
+  if ! is_interactive; then
+    return
+  fi
+
+  printf '\nInstall AgentGuard as a background service? [y/N]: '
+  read -r _svc
+  case "$_svc" in
+    y|Y) ;;
+    *) return ;;
+  esac
+
+  case "$OS" in
+    darwin) install_service_macos ;;
+    linux)  install_service_linux ;;
+  esac
+}
+
+# ── Success summary ───────────────────────────────────────────────────────────
+print_summary() {
+  printf '\n'
+  info "AgentGuard installed successfully!"
+  printf '\n'
+  printf '  Binary:  %s/agentguard\n' "$INSTALL_DIR"
+  printf '  Config:  %s\n' "$CONFIG_FILE"
+  printf '\n'
+
+  if [ "${SERVICE_INSTALLED:-0}" = "1" ]; then
+    case "$OS" in
+      darwin)
+        printf '  Service: launchd (com.timeplus.agentguard)\n'
+        printf '  Logs:    tail -f /tmp/agentguard.log\n'
+        printf '  Stop:    launchctl unload ~/Library/LaunchAgents/com.timeplus.agentguard.plist\n'
+        printf '  Start:   launchctl load ~/Library/LaunchAgents/com.timeplus.agentguard.plist\n'
+        ;;
+      linux)
+        printf '  Service: systemd (agentguard)\n'
+        printf '  Status:  sudo systemctl status agentguard\n'
+        printf '  Logs:    sudo journalctl -u agentguard -f\n'
+        printf '  Stop:    sudo systemctl stop agentguard\n'
+        printf '  Start:   sudo systemctl start agentguard\n'
+        ;;
+    esac
+  else
+    printf '  Start:   agentguard\n'
+  fi
+  printf '\n'
+}
+
 main() {
   parse_args "$@"
   detect_platform
@@ -197,6 +302,8 @@ main() {
   install_binary
   verify_binary
   configure_timeplus
+  setup_service
+  print_summary
 }
 
 main "$@"
