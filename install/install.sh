@@ -2,14 +2,14 @@
 # AgentGuard installer
 # Usage: curl -fsSL https://agentguard.s3.us-west-1.amazonaws.com/install.sh | sh
 #        curl -fsSL https://agentguard.s3.us-west-1.amazonaws.com/install.sh | sh -s -- --version v1.2.3
-set -e
+set -eu
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 S3_BASE="https://agentguard.s3.us-west-1.amazonaws.com"
-# shellcheck disable=SC2034
+# shellcheck disable=SC2034  # used in forthcoming install/config steps
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="${HOME}/.agentguard"
-# shellcheck disable=SC2034
+# shellcheck disable=SC2034  # used in forthcoming install/config steps
 CONFIG_FILE="${CONFIG_DIR}/config.yaml"
 AGENTGUARD_VERSION="latest"
 
@@ -29,13 +29,12 @@ prompt() {
 }
 
 prompt_secret() {
-  # $1 = label — hides input, returns value
+  # $1 = label — hides input; result stored in _prompt_secret_val (not stdout, to keep stty in parent shell)
   printf '%s []: ' "$1"
   stty -echo 2>/dev/null || true
-  read -r _val
+  read -r _prompt_secret_val
   stty echo 2>/dev/null || true
   printf '\n'
-  printf '%s' "$_val"
 }
 
 # ── Arg parsing ───────────────────────────────────────────────────────────────
