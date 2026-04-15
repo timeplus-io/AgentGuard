@@ -27,6 +27,7 @@ function formatTs(ts) {
 export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters = true }) {
   const [threats, setThreats] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [severityFilter, setSeverityFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
   const navigate = useNavigate()
@@ -36,9 +37,9 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
     async function fetchThreats() {
       try {
         const data = await api.getThreats()
-        if (!cancelled) setThreats(data.threats || [])
-      } catch {
-        // silently ignore, keep stale data
+        if (!cancelled) { setThreats(data.threats || []); setLoadError(null) }
+      } catch (err) {
+        if (!cancelled) setLoadError(err?.message || 'Failed to load threats')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -167,6 +168,15 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                 <tr>
                   <td colSpan={colSpan} className="px-6 py-12 text-center text-zinc-500 text-xs">
                     Loading threats…
+                  </td>
+                </tr>
+              ) : loadError ? (
+                <tr>
+                  <td colSpan={colSpan} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="material-symbols-outlined text-[#ffb4ab] text-3xl">error</span>
+                      <p className="text-xs text-[#ffb4ab]">{loadError}</p>
+                    </div>
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (

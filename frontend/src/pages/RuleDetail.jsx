@@ -25,6 +25,7 @@ export default function RuleDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [rule, setRule] = useState(null)
+  const [loadError, setLoadError] = useState(null)
   const [detections24h, setDetections24h] = useState(0)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
@@ -38,7 +39,7 @@ export default function RuleDetail() {
         setRule(data)
         setDetections24h(data.detections_24h || 0)
       })
-      .catch(() => {})
+      .catch(err => setLoadError(err?.message || 'Failed to load rule'))
       .finally(() => setLoading(false))
   }, [id])
 
@@ -114,7 +115,14 @@ export default function RuleDetail() {
       <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
         <Sidebar /><TopNav />
         <main className="pl-sidebar pt-16 pb-8 min-h-screen flex items-center justify-center">
-          <p className="text-zinc-500">Rule not found.</p>
+          {loadError ? (
+            <div className="flex flex-col items-center gap-3">
+              <span className="material-symbols-outlined text-[#ffb4ab] text-4xl">error</span>
+              <p className="text-sm text-[#ffb4ab]">{loadError}</p>
+            </div>
+          ) : (
+            <p className="text-zinc-500">Rule not found.</p>
+          )}
         </main>
       </div>
     )

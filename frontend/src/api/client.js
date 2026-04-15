@@ -4,7 +4,11 @@ const BASE = '/api'
 
 async function get(path) {
   const res = await fetch(`${BASE}${path}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    try { const j = await res.json(); if (j?.error) msg = j.error } catch { /* use status */ }
+    throw new Error(msg)
+  }
   return res.json()
 }
 

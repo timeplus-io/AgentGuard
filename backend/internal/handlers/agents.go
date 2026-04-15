@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -55,21 +56,19 @@ func ListAgents(cfg *config.Config) gin.HandlerFunc {
 		}
 
 		sql := fmt.Sprintf(`
-SELECT agent_id, deployment_id, deployment_name, last_seen, event_count,
-       llm_call_count, total_tokens,
+SELECT agent_id, deployment_id, deployment_name, agent_type, last_seen, event_count,
+       llm_call_count,
        coalesce(session_count, 0)        AS session_count,
        coalesce(run_count, 0)            AS run_count,
        coalesce(tool_call_count, 0)      AS tool_call_count,
        coalesce(active_session_count, 0) AS active_session_count
 FROM (
     SELECT agent_id, deployment_id,
-           any(deployment_name)                                                  AS deployment_name,
-           max(event_time)                                                       AS last_seen,
-           count()                                                               AS event_count,
-           count_if(hook_name = 'llm_output')                                   AS llm_call_count,
-           sum(if(hook_name = 'llm_output',
-                  to_int64_or_zero(json_extract_string(event_data, 'lastAssistant', 'usage', 'totalTokens')),
-                  0))                                                            AS total_tokens
+           any(deployment_name)                AS deployment_name,
+           any(agent_type)                     AS agent_type,
+           max(event_time)                     AS last_seen,
+           count()                             AS event_count,
+           count_if(hook_name = 'llm_output') AS llm_call_count
     FROM table(agentguard_hook_events)
     WHERE agent_id != ''
     GROUP BY agent_id, deployment_id
@@ -79,13 +78,32 @@ ORDER BY last_seen DESC`, filteredSessionCountSQL)
 
 		rows, err := timeplus.Query(&cfg.Timeplus, sql)
 		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
+			log.Printf("[agents] ListAgents query failed: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable: " + err.Error()})
 			return
+		}
+
+		// Fetch total tokens per agent from agentguard_cim_metrics separately
+		// to avoid multiple table() calls in a single query.
+		tokenSQL := `
+SELECT agent_id, deployment_id,
+       to_int64(sum_if(metric_value, metric_name = 'llm.total_tokens')) AS total_tokens
+FROM table(agentguard_cim_metrics)
+WHERE metric_name = 'llm.total_tokens'
+GROUP BY agent_id, deployment_id`
+		tokenRows, _ := timeplus.Query(&cfg.Timeplus, tokenSQL) // non-fatal: tokens may not exist yet
+		tokenMap := make(map[string]int64, len(tokenRows))
+		for _, r := range tokenRows {
+			key := parseStr(r["deployment_id"]) + "__" + parseStr(r["agent_id"])
+			tokenMap[key] = parseInt64(r["total_tokens"])
 		}
 
 		agents := make([]models.Agent, 0, len(rows))
 		for _, row := range rows {
-			agents = append(agents, rowToAgent(row))
+			a := rowToAgent(row)
+			key := a.DeploymentID + "__" + a.AgentID
+			a.TotalTokens = tokenMap[key]
+			agents = append(agents, a)
 		}
 
 		total := len(agents)
@@ -139,6 +157,7 @@ func GetAgent(cfg *config.Config) gin.HandlerFunc {
 		identitySQL := fmt.Sprintf(`
 SELECT agent_id, deployment_id,
        any(deployment_name) AS deployment_name,
+       any(agent_type)      AS agent_type,
        max(event_time)      AS last_seen
 FROM table(agentguard_hook_events)
 WHERE deployment_id = '%s'
@@ -148,6 +167,7 @@ LIMIT 1`, deploymentID, agentID)
 
 		irows, err := timeplus.Query(&cfg.Timeplus, identitySQL)
 		if err != nil {
+			log.Printf("[agents] GetAgent identity query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -194,6 +214,7 @@ LIMIT 1`, deploymentID, agentID, timeWhere, deploymentID, agentID, timeWhere)
 
 		crows, err := timeplus.Query(&cfg.Timeplus, countsSQL)
 		if err != nil {
+			log.Printf("[agents] GetAgent counts query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -202,6 +223,7 @@ LIMIT 1`, deploymentID, agentID, timeWhere, deploymentID, agentID, timeWhere)
 			AgentID:        parseStr(irows[0]["agent_id"]),
 			DeploymentID:   parseStr(irows[0]["deployment_id"]),
 			DeploymentName: parseStr(irows[0]["deployment_name"]),
+			AgentType:      parseStr(irows[0]["agent_type"]),
 			Status:         "idle",
 			LastSeen:       parseTime(irows[0]["last_seen"]),
 		}
@@ -228,6 +250,7 @@ func rowToAgent(row map[string]any) models.Agent {
 		AgentID:        parseStr(row["agent_id"]),
 		DeploymentID:   parseStr(row["deployment_id"]),
 		DeploymentName: parseStr(row["deployment_name"]),
+		AgentType:      parseStr(row["agent_type"]),
 		Status:         status,
 		LastSeen:       parseTime(row["last_seen"]),
 		EventCount:     parseInt(row["event_count"]),

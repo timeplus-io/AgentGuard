@@ -100,7 +100,8 @@ type Agent struct {
 	AgentID        string    `json:"agent_id"`
 	DeploymentID   string    `json:"deployment_id"`
 	DeploymentName string    `json:"deployment_name"`
-	Status         string    `json:"status"` // "active" | "idle"
+	AgentType      string    `json:"agent_type"` // "claudecode" | "openclaw" | ""
+	Status         string    `json:"status"`     // "active" | "idle"
 	LastSeen       time.Time `json:"last_seen"`
 	EventCount     int       `json:"event_count"`
 	SessionCount   int       `json:"session_count"`

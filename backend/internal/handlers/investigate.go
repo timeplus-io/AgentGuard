@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,7 @@ func ListTables(cfg *config.Config) gin.HandlerFunc {
 		otelRows, err := tp.Query(&cfg.Timeplus,
 			`SELECT name FROM system.tables WHERE name LIKE 'otel_%' ORDER BY name`)
 		if err != nil {
+			log.Printf("[investigate] ListTables otel discovery failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -41,6 +43,7 @@ func ListTables(cfg *config.Config) gin.HandlerFunc {
 				escapeSQL(name),
 			))
 			if err != nil {
+				log.Printf("[investigate] ListTables column query for %q failed: %v", name, err)
 				c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 				return
 			}

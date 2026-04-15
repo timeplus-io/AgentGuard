@@ -27,7 +27,7 @@ export default function Investigate() {
   const fetchTables = () => {
     api.listTables()
       .then(data => { if (data.tables) setAvailTables(data.tables) })
-      .catch(() => {})
+      .catch(err => setError(err?.message || 'Failed to load table schema'))
   }
 
   useEffect(() => { fetchTables() }, [])

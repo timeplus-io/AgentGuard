@@ -697,7 +697,9 @@ export default function AgentDetail() {
   const selectedRun = searchParams.get('run_id')
 
   const [agent, setAgent] = useState(null)
+  const [agentError, setAgentError] = useState(null)
   const [sessions, setSessions] = useState([])
+  const [sessionsError, setSessionsError] = useState(null)
   const [sessionDetail, setSessionDetail] = useState(null)
   const [events, setEvents] = useState([])
   const [eventsTruncated, setEventsTruncated] = useState(false)
@@ -720,12 +722,13 @@ export default function AgentDetail() {
 
   useEffect(() => {
     setLoadingAgent(true)
+    setAgentError(null)
     const params = {}
     const since = presetToISO(timePreset)
     if (since) params.since = since
     api.getAgent(id, params)
-      .then(setAgent)
-      .catch(() => {})
+      .then(data => { setAgent(data); setAgentError(null) })
+      .catch(err => setAgentError(err?.message || 'Failed to load agent'))
       .finally(() => setLoadingAgent(false))
   }, [id, timePreset, refreshTick])
 
@@ -757,12 +760,13 @@ export default function AgentDetail() {
 
   useEffect(() => {
     setLoadingSessions(true)
+    setSessionsError(null)
     const params = {}
     const since = presetToISO(timePreset)
     if (since) params.since = since
     api.listSessions(id, params)
-      .then(setSessions)
-      .catch(() => setSessions([]))
+      .then(data => { setSessions(data); setSessionsError(null) })
+      .catch(err => { setSessions([]); setSessionsError(err?.message || 'Failed to load sessions') })
       .finally(() => setLoadingSessions(false))
   }, [id, timePreset, refreshTick])
 
@@ -867,6 +871,7 @@ export default function AgentDetail() {
 
   const agentName = agent?.agent_id ?? id
   const deploymentName = agent?.deployment_name ?? ''
+  const agentType = agent?.agent_type ?? ''
 
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
@@ -879,6 +884,12 @@ export default function AgentDetail() {
           <Link to="/agents" className="text-zinc-400 hover:text-[#ffb0cf] transition-colors">
             <span className="material-symbols-outlined">arrow_back</span>
           </Link>
+          {agentType === 'claudecode' && (
+            <img src="/static/icons/claude-seeklogo.svg" alt="Claude Code" title="Claude Code" className="h-5 w-5 shrink-0" />
+          )}
+          {agentType === 'openclaw' && (
+            <img src="/static/icons/openclaw-dark.svg" alt="OpenClaw" title="OpenClaw" className="h-5 w-5 shrink-0" />
+          )}
           <span className="font-medium tracking-tight text-lg text-[#e7dff0]">{agentName}</span>
           {deploymentName && (
             <span className="bg-[#2c2834] text-zinc-400 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-tighter">
@@ -912,6 +923,13 @@ export default function AgentDetail() {
       </header>
 
       <main className="pl-sidebar pt-16 h-screen overflow-hidden flex flex-col">
+        {/* Agent load error */}
+        {agentError && (
+          <div className="flex items-center gap-3 mx-6 mt-4 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs shrink-0">
+            <span className="material-symbols-outlined text-base shrink-0">error</span>
+            <span>{agentError}</span>
+          </div>
+        )}
         {/* Volume metric cards */}
         <section className="grid grid-cols-4 gap-4 p-6 pb-3 shrink-0">
           {volumeMetrics.map((m) => (
@@ -951,6 +969,11 @@ export default function AgentDetail() {
               {loadingSessions ? (
                 <div className="flex items-center justify-center py-8">
                   <span className="material-symbols-outlined animate-spin text-zinc-600">refresh</span>
+                </div>
+              ) : sessionsError ? (
+                <div className="px-4 py-4 flex flex-col gap-1">
+                  <span className="material-symbols-outlined text-[#ffb4ab] text-base">error</span>
+                  <p className="text-[10px] text-[#ffb4ab]">{sessionsError}</p>
                 </div>
               ) : sessions.length === 0 ? (
                 <p className="text-[11px] text-zinc-600 px-4 py-4">No sessions found</p>

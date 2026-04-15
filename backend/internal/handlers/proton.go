@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -92,9 +93,8 @@ func ProtonQueryHandler(cfg *config.Config) gin.HandlerFunc {
 			}
 		}
 		if err := scanner.Err(); err != nil {
-			// scanner hit an error (e.g. line too long, connection reset)
 			// headers already sent so we can't change status, but we can log
-			_ = err // replace with actual logging if a logger is available
+			log.Printf("[proton] ProtonQueryHandler stream scan error: %v", err)
 		}
 	}
 }

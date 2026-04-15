@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -93,6 +94,7 @@ WHERE %s`, whereClause)
 
 		countRows, err := timeplus.Query(&cfg.Timeplus, countSQL)
 		if err != nil {
+			log.Printf("[events] ListEvents count query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -132,6 +134,7 @@ LIMIT %d OFFSET %d`,
 
 		rows, err := timeplus.Query(&cfg.Timeplus, pageSQL)
 		if err != nil {
+			log.Printf("[events] ListEvents page query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}

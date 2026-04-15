@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -54,7 +55,7 @@ func ExportCatalog(mgr *catalog.Manager) gin.HandlerFunc {
 
 		if err := mgr.ExportZip(c.Writer); err != nil {
 			// Headers already sent — log only, cannot send a JSON error.
-			_ = err
+			log.Printf("[catalog] ExportCatalog zip write failed: %v", err)
 		}
 	}
 }

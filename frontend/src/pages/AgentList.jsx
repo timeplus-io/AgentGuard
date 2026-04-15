@@ -20,13 +20,39 @@ function timeAgo(iso) {
   return `${Math.floor(ms / 86400000)}d ago`
 }
 
+function AgentTypeLogo({ agentType }) {
+  if (agentType === 'claudecode') {
+    return (
+      <img
+        src="/static/icons/claude-seeklogo.svg"
+        alt="Claude Code"
+        title="Claude Code"
+        className="h-4 w-4 shrink-0"
+      />
+    )
+  }
+  if (agentType === 'openclaw') {
+    return (
+      <img
+        src="/static/icons/openclaw-dark.svg"
+        alt="OpenClaw"
+        title="OpenClaw"
+        className="h-4 w-4 shrink-0"
+      />
+    )
+  }
+  return null
+}
+
 export default function AgentList() {
   const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
 
   useEffect(() => {
+    setError(null)
     api.listAgents(page, 15)
       .then(data => {
         if (data.agents) {
@@ -34,7 +60,7 @@ export default function AgentList() {
           setTotal(data.total || 0)
         }
       })
-      .catch(() => { })
+      .catch(err => setError(err?.message || 'Failed to load agents'))
       .finally(() => setLoading(false))
   }, [page])
 
@@ -87,6 +113,15 @@ export default function AgentList() {
                       <span className="material-symbols-outlined animate-spin text-[#ffb0cf]">refresh</span>
                     </td>
                   </tr>
+                ) : error ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="material-symbols-outlined text-[#ffb4ab] text-3xl">error</span>
+                        <p className="text-xs text-[#ffb4ab]">{error}</p>
+                      </div>
+                    </td>
+                  </tr>
                 ) : agents.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center text-zinc-500 text-xs">
@@ -98,8 +133,11 @@ export default function AgentList() {
                   return (
                     <tr key={compositeId} className="group hover:bg-[#2c2834] transition-colors">
                       <td className="px-6 py-5">
-                        <Link to={`/agents/${compositeId}`} className="text-xs font-medium text-[#e7dff0] font-mono hover:text-[#ffb0cf] transition-colors">{agent.agent_id}</Link>
-                        <div className="text-[10px] text-zinc-500">{agent.deployment_name}</div>
+                        <div className="flex items-center gap-2">
+                          <AgentTypeLogo agentType={agent.agent_type} />
+                          <Link to={`/agents/${compositeId}`} className="text-xs font-medium text-[#e7dff0] font-mono hover:text-[#ffb0cf] transition-colors">{agent.agent_id}</Link>
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-0.5">{agent.deployment_name}</div>
                       </td>
                       <td className="px-6 py-5">
                         <div className="text-xs font-mono text-[#e7dff0]">{agent.deployment_id}</div>
