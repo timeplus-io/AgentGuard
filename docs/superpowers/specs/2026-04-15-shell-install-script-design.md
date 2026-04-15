@@ -70,19 +70,19 @@ https://agentguard.s3.us-west-1.amazonaws.com/agentguard/<version>/agentguard-<o
   **Timeplus connection (required for AgentGuard to function):**
 
   1. **Timeplus host** `[localhost]`  
-     _The hostname or IP where Timeplus Proton is running. AgentGuard streams all agent events into Proton and queries it for metrics, rules, and security events._
+     _The hostname or IP where Timeplus Enterprise is running. AgentGuard streams all agent events into Timeplus Enterprise and queries it for metrics, rules, and security events._
 
   2. **Timeplus HTTP port** `[3218]`  
-     _Proton's HTTP API port. Used for SELECT queries and DDL (creating streams and materialized views)._
+     _Timeplus Enterprise HTTP API port. Used for SELECT queries and DDL (creating streams and materialized views)._
 
   3. **Timeplus native TCP port** `[8463]`  
-     _Proton's native binary protocol port. Used for high-throughput event ingestion from agent plugins._
+     _Timeplus Enterprise native binary protocol port. Used for high-throughput event ingestion from agent plugins._
 
   4. **Timeplus user** `[default]`  
-     _Username for authenticating with Proton. Use the default unless your Proton instance has custom access control enabled._
+     _Username for authenticating with Timeplus Enterprise. Use the default unless your instance has custom access control enabled._
 
   5. **Timeplus password** `[]` _(hidden)_  
-     _Password for the Timeplus user. Leave empty if Proton has no password set (the default for local installs)._
+     _Password for the Timeplus user. Leave empty if your Timeplus Enterprise instance has no password set._
 
   **AgentGuard server:**
 
@@ -90,7 +90,7 @@ https://agentguard.s3.us-west-1.amazonaws.com/agentguard/<version>/agentguard-<o
      _Port AgentGuard listens on. Change this if 8080 is already in use on your machine._
 
   7. **AgentGuard base URL** `[http://localhost:8080]`  
-     _The URL Proton uses to call back AgentGuard when a security rule fires. Must be reachable from Proton — change this if AgentGuard and Proton run on different hosts (e.g. `http://agentguard:8080` in Docker)._
+     _The URL Timeplus Enterprise uses to call back AgentGuard when a security rule fires. Must be reachable from Timeplus Enterprise — change this if they run on different hosts (e.g. `http://agentguard:8080` in Docker)._
 - Create `~/.agentguard/` directory if it does not exist (`mkdir -p`)
 - Write `~/.agentguard/config.yaml` with all fields:
 
