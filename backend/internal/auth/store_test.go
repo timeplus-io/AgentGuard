@@ -3,6 +3,7 @@ package auth_test
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/timeplus/agentguard/internal/auth"
 )
@@ -46,6 +47,16 @@ func TestSessionStore_GetMissing(t *testing.T) {
 	_, ok := store.Get("nonexistent-id")
 	if ok {
 		t.Error("expected false for missing session")
+	}
+}
+
+func TestSessionStore_MaxAgeIsReasonable(t *testing.T) {
+	// Sanity-check that the session max age constant is set to a reasonable value.
+	if auth.SessionMaxAge < time.Hour {
+		t.Error("session max age should be at least 1 hour")
+	}
+	if auth.SessionMaxAge > 7*24*time.Hour {
+		t.Error("session max age should not exceed 7 days")
 	}
 }
 

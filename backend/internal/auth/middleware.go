@@ -12,7 +12,7 @@ import (
 func AuthRequired(store *SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cookie, err := c.Cookie("agentguard_session")
-		if err != nil || cookie == "" {
+		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
 			return
 		}
@@ -31,12 +31,16 @@ func AuthRequired(store *SessionStore) gin.HandlerFunc {
 // the current request's session context. Call this at the top of every
 // handler closure that queries Timeplus.
 func RequestCfg(c *gin.Context, cfg *config.Config) *config.Config {
-	copy := *cfg
+	out := *cfg
 	if user, exists := c.Get("timeplus_user"); exists {
-		copy.Timeplus.User = user.(string)
+		if s, ok := user.(string); ok {
+			out.Timeplus.User = s
+		}
 	}
 	if pass, exists := c.Get("timeplus_password"); exists {
-		copy.Timeplus.Password = pass.(string)
+		if s, ok := pass.(string); ok {
+			out.Timeplus.Password = s
+		}
 	}
-	return &copy
+	return &out
 }

@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -62,6 +63,36 @@ func TestAuthRequired_ValidSession_InjectsCredentials(t *testing.T) {
 
 	if w.Code != 200 {
 		t.Errorf("want 200, got %d", w.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["user"] != "alice" {
+		t.Errorf("injected user: want alice, got %s", body["user"])
+	}
+	if body["pass"] != "s3cret" {
+		t.Errorf("injected pass: want s3cret, got %s", body["pass"])
+	}
+}
+
+func TestRequestCfg_AbsentKeys_PreservesBaseCredentials(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	// No keys set in context
+
+	base := &config.Config{
+		Timeplus: config.TimeplusConfig{Host: "myhost", Port: 3218},
+	}
+	got := auth.RequestCfg(c, base)
+
+	if got.Timeplus.User != "" {
+		t.Errorf("want empty user, got %s", got.Timeplus.User)
+	}
+	if got.Timeplus.Password != "" {
+		t.Errorf("want empty password, got %s", got.Timeplus.Password)
+	}
+	if got.Timeplus.Host != "myhost" {
+		t.Error("host should be preserved")
 	}
 }
 

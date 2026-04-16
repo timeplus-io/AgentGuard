@@ -17,6 +17,10 @@ type Session struct {
 	Created  time.Time
 }
 
+// SessionMaxAge is how long a session remains valid after creation.
+// On expiry the user must re-login; this is acceptable for an ops tool.
+const SessionMaxAge = 8 * time.Hour
+
 // SessionStore is a concurrency-safe in-memory session map.
 // Sessions are lost on server restart; users re-login (acceptable for an ops tool).
 type SessionStore struct {
@@ -44,11 +48,16 @@ func (s *SessionStore) Create(user, password string) *Session {
 }
 
 // Get looks up a session by ID. Returns a value copy and true if found.
+// Sessions older than SessionMaxAge are treated as expired and deleted.
 func (s *SessionStore) Get(id string) (Session, bool) {
 	s.mu.RLock()
 	sess, ok := s.sessions[id]
 	s.mu.RUnlock()
 	if !ok {
+		return Session{}, false
+	}
+	if time.Since(sess.Created) > SessionMaxAge {
+		s.Delete(id)
 		return Session{}, false
 	}
 	return *sess, true
