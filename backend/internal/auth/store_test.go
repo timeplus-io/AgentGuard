@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/timeplus/agentguard/internal/auth"
@@ -25,7 +26,7 @@ func TestSessionStore_CreateAndGet(t *testing.T) {
 		t.Errorf("got user: want alice, got %s", got.User)
 	}
 	if got.Password != "s3cret" {
-		t.Errorf("got password: want s3cret, got %s", got.Password)
+		t.Error("got wrong password")
 	}
 }
 
@@ -46,4 +47,19 @@ func TestSessionStore_GetMissing(t *testing.T) {
 	if ok {
 		t.Error("expected false for missing session")
 	}
+}
+
+func TestSessionStore_Concurrent(t *testing.T) {
+	store := auth.NewSessionStore()
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sess := store.Create("user", "pw")
+			store.Get(sess.ID)
+			store.Delete(sess.ID)
+		}()
+	}
+	wg.Wait()
 }

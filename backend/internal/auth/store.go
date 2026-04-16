@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -42,12 +43,15 @@ func (s *SessionStore) Create(user, password string) *Session {
 	return sess
 }
 
-// Get looks up a session by ID. Returns (session, true) if found.
-func (s *SessionStore) Get(id string) (*Session, bool) {
+// Get looks up a session by ID. Returns a value copy and true if found.
+func (s *SessionStore) Get(id string) (Session, bool) {
 	s.mu.RLock()
 	sess, ok := s.sessions[id]
 	s.mu.RUnlock()
-	return sess, ok
+	if !ok {
+		return Session{}, false
+	}
+	return *sess, true
 }
 
 // Delete removes a session by ID. No-op if the session doesn't exist.
@@ -59,6 +63,8 @@ func (s *SessionStore) Delete(id string) {
 
 func randomID() string {
 	b := make([]byte, 24)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("auth: crypto/rand.Read failed: %v", err))
+	}
 	return hex.EncodeToString(b)
 }
