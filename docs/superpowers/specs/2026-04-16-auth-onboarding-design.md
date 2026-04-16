@@ -157,15 +157,15 @@ Username pre-filled from `localStorage`. On success, redirect to `/dashboard` (o
 
 ### Frontend: TopNav with User Context
 
+Navigation stays in the left `<Sidebar>` (unchanged). The `<TopNav>` (fixed top bar) gains a username indicator and logout control on the right:
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ ◈ AgentGuard    Dashboard  Agents  Threats  …   ● default ▾ │
+│  [breadcrumb / page title]              ● default  [Logout]  │
 └──────────────────────────────────────────────────────────────┘
-                                                   └─ dropdown:
-                                                        Logout
 ```
 
-`TopNav` reads username from a new `AuthContext` (provided by `AuthGuard`).
+`TopNav` reads username from a new `AuthContext` (provided by `AuthGuard`). The logout button POSTs to `/api/auth/logout` and redirects to `/login`.
 
 ---
 
