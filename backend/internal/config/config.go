@@ -5,9 +5,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/spf13/viper"
 )
+
+// Mu protects live config mutations that happen after startup.
+// Provision acquires a write lock when mutating cfg fields;
+// AuthStatus acquires a read lock when reading cfg.SetupComplete.
+var Mu sync.RWMutex
 
 type TimeplusConfig struct {
 	Host       string

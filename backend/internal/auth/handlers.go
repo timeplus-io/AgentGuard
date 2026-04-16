@@ -12,8 +12,12 @@ import (
 // This is the first call the frontend makes on load.
 func AuthStatus(cfg *config.Config, store *SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		config.Mu.RLock()
+		setupComplete := cfg.SetupComplete
+		config.Mu.RUnlock()
+
 		status := gin.H{
-			"setup_complete": cfg.SetupComplete,
+			"setup_complete": setupComplete,
 			"logged_in":      false,
 			"username":       "",
 		}

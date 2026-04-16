@@ -65,18 +65,27 @@ func Provision(cfg *config.Config, mgr *catalog.Manager, store *auth.SessionStor
 			return
 		}
 
-		// SSE headers must be set before the first write.
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Connection", "keep-alive")
-		c.Header("X-Accel-Buffering", "no") // disable nginx buffering
+		config.Mu.RLock()
+		alreadySetUp := cfg.SetupComplete
+		config.Mu.RUnlock()
+		if alreadySetUp {
+			c.JSON(http.StatusConflict, gin.H{"error": "already set up"})
+			return
+		}
 
+		// Check SSE support first, before writing any headers.
 		w := c.Writer
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming not supported"})
 			return
 		}
+
+		// SSE headers must be set before the first write.
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("X-Accel-Buffering", "no") // disable nginx buffering
 
 		sendEvent := func(status, msg string) {
 			data, _ := json.Marshal(provisionEvent{Status: status, Msg: msg})
@@ -115,11 +124,13 @@ func Provision(cfg *config.Config, mgr *catalog.Manager, store *auth.SessionStor
 		}
 
 		// Update the live cfg pointer so /api/auth/status immediately reflects setup_complete=true.
+		config.Mu.Lock()
 		cfg.Timeplus.Host = body.Host
 		cfg.Timeplus.Port = body.Port
 		cfg.Timeplus.NativePort = body.NativePort
 		cfg.AgentGuardURL = agentGuardURL
 		cfg.SetupComplete = true
+		config.Mu.Unlock()
 
 		// Session is created by the frontend calling /api/auth/login after receiving "done".
 		sendEvent("done", "Setup complete")
