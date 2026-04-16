@@ -26,14 +26,18 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # These env vars pre-populate the setup wizard connection fields.
+      # Credentials are never stored here — they are entered in the setup wizard.
       TIMEPLUS_HOST: timeplus
       TIMEPLUS_PORT: 3218
-      TIMEPLUS_NATIVE_PORT: 8463
-      TIMEPLUS_USER: "proton"
-      TIMEPLUS_PASSWORD: "timeplus@t+"
       SERVER_PORT: 8080
-      # Proton calls this URL for alert webhooks; use the Docker service name.
+      # Timeplus calls this URL for alert webhooks; use the Docker service name.
       AGENTGUARD_URL: "http://agentguard:8080"
+    volumes:
+      # Persists config.yaml written by the setup wizard across container restarts.
+      # On first run, Docker initialises this volume from the image.
+      # When upgrading the image, run `docker compose down -v` to reset (re-setup required).
+      - agentguard-data:/app
     depends_on:
       timeplus:
         condition: service_healthy
@@ -41,3 +45,4 @@ services:
 
 volumes:
   timeplus-data:
+  agentguard-data:
