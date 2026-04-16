@@ -91,7 +91,7 @@ const openAPISpec = `{
   "info": {
     "title": "AgentGuard API",
     "version": "1.0.0",
-    "description": "AgentGuard is a real-time security monitoring and governance platform for AI coding agents (OpenClaw, Claude Code).\n\nAll data is sourced from **Timeplus Proton** streaming SQL. The server falls back gracefully when Proton is unavailable.\n\n### Agent ID format\nMany endpoints accept an \u0060:id\u0060 path parameter in the compound form \u0060{deploymentId}__{agentId}\u0060 (double underscore separator). Both parts must match \u0060^[a-zA-Z0-9._:-]+$\u0060.\n\n### Time filtering\n\u0060since\u0060 / \u0060until\u0060 query parameters accept **RFC 3339** timestamps, e.g. \u00602026-04-01T00:00:00Z\u0060.\n\n### Pagination\nList endpoints accept \u0060?page=1&limit=15\u0060 and return \u0060total\u0060 so clients can compute page count."
+    "description": "AgentGuard is a real-time security monitoring and governance platform for AI coding agents (OpenClaw, Claude Code).\n\nAll data is sourced from **Timeplus Enterprise** streaming SQL. The server falls back gracefully when Timeplus is unavailable.\n\n### Authentication\nMost endpoints require an active session. Call \u0060POST /auth/login\u0060 with Timeplus credentials to receive an \u0060agentguard_session\u0060 httpOnly cookie. Include \u0060credentials: 'include'\u0060 on all fetch calls. The exceptions are \u0060/auth/*\u0060, \u0060/setup/*\u0060, and \u0060/alerts/webhook\u0060, which are unauthenticated.\n\nOn first launch the setup wizard must run before login is possible. Call \u0060GET /auth/status\u0060 to check \u0060setup_complete\u0060 and \u0060logged_in\u0060.\n\n### Agent ID format\nMany endpoints accept an \u0060:id\u0060 path parameter in the compound form \u0060{deploymentId}__{agentId}\u0060 (double underscore separator). Both parts must match \u0060^[a-zA-Z0-9._:-]+$\u0060.\n\n### Time filtering\n\u0060since\u0060 / \u0060until\u0060 query parameters accept **RFC 3339** timestamps, e.g. \u00602026-04-01T00:00:00Z\u0060.\n\n### Pagination\nList endpoints accept \u0060?page=1&limit=15\u0060 and return \u0060total\u0060 so clients can compute page count."
   },
   "servers": [
     { "url": "/api", "description": "AgentGuard backend (same origin)" }
@@ -107,7 +107,13 @@ const openAPISpec = `{
     { "name": "Catalog",     "description": "File-based rule catalog. The initial catalog ships embedded in the binary as YAML files; users can override entries or add new ones via import. Proton tracks *install state*; the catalog tracks *definitions*." },
     { "name": "Alerts",      "description": "Real-time alert delivery — webhook receiver and SSE notification stream." },
     { "name": "Investigate", "description": "Ad-hoc SQL query interface against Proton streams." },
-    { "name": "Proton",      "description": "Streaming proxy — send arbitrary SQL to Proton and receive NDJSON rows." }
+    { "name": "Proton",      "description": "Streaming proxy — send arbitrary SQL to Timeplus and receive NDJSON rows." },
+    { "name": "Onboarding",  "description": "Agent onboarding wizard — generates configuration snippets for connecting agents." },
+    { "name": "Auth",        "description": "Session authentication — login, logout, and status check. These endpoints are **unauthenticated** (no session cookie required)." },
+    { "name": "Setup",       "description": "First-time setup wizard — connection test and resource provisioning. These endpoints are **unauthenticated** and are only used before setup is complete." }
+  ],
+  "security": [
+    { "cookieAuth": [] }
   ],
   "paths": {
 
@@ -873,6 +879,123 @@ const openAPISpec = `{
           "200": { "description": "Generated config object.", "content": { "application/json": { "example": { "config": { "timeplusUrl": "http://localhost:3218", "stream": "agentguard_hook_events" } } } } }
         }
       }
+    },
+
+    "/auth/status": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get authentication and setup status",
+        "description": "Returns whether the server has been provisioned (setup wizard completed) and whether the current request carries a valid session.\n\nThis is the first call the frontend makes on load. If \u0060setup_complete\u0060 is false, show the setup wizard. If \u0060logged_in\u0060 is false, show the login page. Otherwise proceed to the dashboard.",
+        "operationId": "authStatus",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Current auth state",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthStatus" },
+              "example": { "setup_complete": true, "logged_in": true, "username": "default" }
+            }}
+          }
+        }
+      }
+    },
+
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Log in with Timeplus credentials",
+        "description": "Validates the supplied credentials against Timeplus by running a lightweight test query. On success, creates a server-side session (8-hour expiry) and sets an \u0060agentguard_session\u0060 httpOnly cookie.\n\nCredentials are never written to disk — they live only in the in-memory session store for the duration of the session.",
+        "operationId": "authLogin",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" },
+            "example": { "username": "default", "password": "" }
+          }}
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful. Sets \u0060agentguard_session\u0060 httpOnly cookie.",
+            "headers": {
+              "Set-Cookie": { "schema": { "type": "string" }, "description": "agentguard_session=<token>; HttpOnly; SameSite=Strict; Path=/" }
+            },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginResponse" },
+              "example": { "username": "default" }
+            }}
+          },
+          "400": { "description": "Missing username or password field." },
+          "401": { "description": "Credentials rejected by Timeplus." },
+          "503": { "description": "Timeplus unreachable during credential validation." }
+        }
+      }
+    },
+
+    "/auth/logout": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Log out",
+        "description": "Destroys the current server-side session and clears the \u0060agentguard_session\u0060 cookie by setting \u0060Max-Age=-1\u0060. Safe to call even if no session exists.",
+        "operationId": "authLogout",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Session destroyed.",
+            "content": { "application/json": { "example": { "ok": true } } }
+          }
+        }
+      }
+    },
+
+    "/setup/test-connection": {
+      "post": {
+        "tags": ["Setup"],
+        "summary": "Test a Timeplus connection",
+        "description": "Attempts to connect to Timeplus at the supplied host/port with the given credentials by executing a lightweight \u0060SELECT 1\u0060 query. Used by the setup wizard to validate connection parameters before provisioning.\n\nThis endpoint is unauthenticated — it can be called before setup is complete.",
+        "operationId": "testConnection",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TestConnectionRequest" },
+            "example": { "host": "localhost", "port": 3218, "username": "default", "password": "" }
+          }}
+        },
+        "responses": {
+          "200": {
+            "description": "Connection test result (always HTTP 200; check \u0060ok\u0060 field).",
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "properties": {
+                "ok":    { "type": "boolean", "description": "True when Timeplus accepted the connection and credentials." },
+                "error": { "type": "string",  "description": "Human-readable error message when ok=false." }
+              }
+            }, "example": { "ok": true } }}
+          }
+        }
+      }
+    },
+
+    "/setup/provision": {
+      "post": {
+        "tags": ["Setup"],
+        "summary": "Provision all AgentGuard resources (SSE)",
+        "description": "Runs the full provisioning sequence: creates Timeplus streams, materialized views, UDFs, alert rules, and seeds pricing data. Progress is streamed as **Server-Sent Events** so the frontend can display a live log.\n\nEach SSE event is a JSON object \u0060{status, msg}\u0060 where \u0060status\u0060 is one of:\n- \u0060running\u0060 — step in progress\n- \u0060ok\u0060 — step completed successfully\n- \u0060error\u0060 — step failed (provisioning continues for subsequent steps)\n- \u0060done\u0060 — all steps finished; call \u0060POST /auth/login\u0060 next to start an authenticated session\n\nThis endpoint is unauthenticated. On success it writes \u0060config.yaml\u0060 with \u0060setup_complete: true\u0060 and the connection details (no credentials).",
+        "operationId": "provision",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProvisionRequest" },
+            "example": { "host": "localhost", "port": 3218, "native_port": 8463, "username": "default", "password": "", "agentguard_url": "http://localhost:8080" }
+          }}
+        },
+        "responses": {
+          "200": {
+            "description": "SSE stream of provisioning progress events.",
+            "content": { "text/event-stream": { "schema": { "type": "string" },
+              "example": "data: {\"status\":\"running\",\"msg\":\"Creating stream agentguard_hook_events\"}\n\ndata: {\"status\":\"ok\",\"msg\":\"Stream agentguard_hook_events ready\"}\n\ndata: {\"status\":\"done\",\"msg\":\"Provisioning complete\"}\n\n"
+            }}
+          },
+          "400": { "description": "Missing required fields in request body." }
+        }
+      }
     }
   },
 
@@ -1162,16 +1285,81 @@ const openAPISpec = `{
       },
       "Alert": {
         "type": "object",
-        "description": "Alert payload posted by the Proton UDF and pushed to SSE clients.",
+        "description": "Alert payload posted by the Timeplus UDF and pushed to SSE clients.",
         "properties": {
           "rule_id":     { "type": "string" },
           "rule_name":   { "type": "string" },
           "severity":    { "type": "string",  "enum": ["critical", "warning", "info"] },
           "agent_id":    { "type": "string" },
           "message":     { "type": "string" },
-          "detected_at": { "type": "string",  "description": "Detection timestamp (string, as sent by Proton UDF)." }
+          "detected_at": { "type": "string",  "description": "Detection timestamp (string, as sent by Timeplus UDF)." }
         }
       },
+      "AuthStatus": {
+        "type": "object",
+        "description": "Server setup and session state returned by GET /auth/status.",
+        "properties": {
+          "setup_complete": { "type": "boolean", "description": "True when the setup wizard has been completed and config.yaml contains setup_complete=true." },
+          "logged_in":      { "type": "boolean", "description": "True when the request carries a valid agentguard_session cookie." },
+          "username":       { "type": "string",  "description": "Timeplus username of the active session. Empty when logged_in=false." }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "Credentials for POST /auth/login.",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "description": "Timeplus username.", "example": "default" },
+          "password": { "type": "string", "description": "Timeplus password. May be an empty string for password-less deployments.", "example": "" }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "description": "Response body for a successful POST /auth/login.",
+        "properties": {
+          "username": { "type": "string", "description": "Timeplus username of the newly created session.", "example": "default" }
+        }
+      },
+      "TestConnectionRequest": {
+        "type": "object",
+        "description": "Connection parameters for POST /setup/test-connection.",
+        "required": ["host", "port", "username"],
+        "properties": {
+          "host":     { "type": "string",  "description": "Timeplus hostname or IP.", "example": "localhost" },
+          "port":     { "type": "integer", "description": "Timeplus HTTP API port.", "example": 3218 },
+          "username": { "type": "string",  "description": "Timeplus username.", "example": "default" },
+          "password": { "type": "string",  "description": "Timeplus password.", "example": "" }
+        }
+      },
+      "ProvisionRequest": {
+        "type": "object",
+        "description": "Full connection details for POST /setup/provision.",
+        "required": ["host", "port", "native_port", "username"],
+        "properties": {
+          "host":           { "type": "string",  "description": "Timeplus hostname or IP.", "example": "localhost" },
+          "port":           { "type": "integer", "description": "Timeplus HTTP API port.", "example": 3218 },
+          "native_port":    { "type": "integer", "description": "Timeplus native TCP port.", "example": 8463 },
+          "username":       { "type": "string",  "description": "Timeplus username.", "example": "default" },
+          "password":       { "type": "string",  "description": "Timeplus password.", "example": "" },
+          "agentguard_url": { "type": "string",  "description": "URL where AgentGuard is reachable from Timeplus's network — used for alert webhook callbacks.", "example": "http://localhost:8080" }
+        }
+      },
+      "ProvisionEvent": {
+        "type": "object",
+        "description": "A single SSE event from POST /setup/provision.",
+        "properties": {
+          "status": { "type": "string", "enum": ["running", "ok", "error", "done"], "description": "running=step in progress, ok=step succeeded, error=step failed (provisioning continues), done=all steps complete." },
+          "msg":    { "type": "string", "description": "Human-readable message describing the provisioning step." }
+        }
+      }
+    },
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "agentguard_session",
+        "description": "Session cookie set by POST /auth/login. Include credentials: 'include' on all fetch calls. 8-hour expiry; credentials are stored only in the server's in-memory session store — never on disk."
+      }
     }
   }
 }`
