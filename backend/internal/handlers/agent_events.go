@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
 	"github.com/timeplus/agentguard/internal/timeplus"
@@ -18,6 +19,7 @@ import (
 // Query params: session_id, run_id, since (RFC3339), until (RFC3339), page, limit
 func ListEvents(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		deploymentID, agentID, ok := splitAgentID(c.Param("id"))
 		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format"})

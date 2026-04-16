@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
@@ -13,6 +14,7 @@ import (
 
 func GetDashboard(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		// Total distinct agents ever seen (exclude rows with empty agent_id).
 		agentRows, err := tp.Query(&cfg.Timeplus,
 			`SELECT count(distinct agent_id) AS total FROM table(agentguard_hook_events) WHERE agent_id != ''`)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
@@ -48,6 +49,7 @@ HAVING arg_max(deleted, updated_at) = false`
 
 func ListRules(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
@@ -88,6 +90,7 @@ func ListRules(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		id := c.Param("id")
 
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
@@ -141,6 +144,7 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 func ToggleRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		id := c.Param("id")
 
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
@@ -217,6 +221,7 @@ GROUP BY rule_id`, id)
 
 func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		id := c.Param("id")
 
 		catalogEntry, inCatalog := mgr.Lookup(id)
@@ -296,6 +301,7 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 func UninstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		id := c.Param("id")
 
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
@@ -352,6 +358,7 @@ GROUP BY rule_id`, escapeSQL(id))
 // ListCatalog returns all catalog entries with their install status from Proton.
 func ListCatalog(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		installed, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("catalog query failed: %v", err)})
@@ -433,6 +440,7 @@ func ListCatalog(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 // InstallRule installs a rule from the catalog into Proton and creates its MV.
 func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		id := c.Param("id")
 
 		entry, ok := mgr.Lookup(id)
@@ -467,6 +475,7 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 // MVStatus returns the existence and enabled state of every rule's MV.
 func MVStatus(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
@@ -514,6 +523,7 @@ func MVStatus(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 // SyncMVs reconciles Proton MVs with current rule states without a server restart.
 func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
@@ -598,6 +608,7 @@ func AlertWebhook(cfg *config.Config) gin.HandlerFunc {
 // inserts it into Proton, and creates its MV.
 func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		var body struct {
 			ID          string `json:"id"`
 			Name        string `json:"name"`

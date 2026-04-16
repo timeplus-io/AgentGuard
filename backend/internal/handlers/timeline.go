@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
 	"github.com/timeplus/agentguard/internal/timeplus"
@@ -15,6 +16,7 @@ import (
 // appropriate timeline analyzer (OpenClaw hierarchical or flat gap-fill fallback).
 func GetRunTrace(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		deploymentID, agentID, ok := splitAgentID(c.Param("id"))
 		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format"})

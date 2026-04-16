@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
 )
 
@@ -20,6 +21,7 @@ type protonQueryRequest struct {
 // configured Proton/Timeplus server and streams NDJSON rows back to the client.
 func ProtonQueryHandler(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		var req protonQueryRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

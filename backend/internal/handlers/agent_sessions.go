@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
 	"github.com/timeplus/agentguard/internal/timeplus"
@@ -86,6 +87,7 @@ func splitAgentID(compoundID string) (deploymentID, agentID string, ok bool) {
 // Query params: since (RFC3339), until (RFC3339)
 func ListSessions(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		deploymentID, agentID, ok := splitAgentID(c.Param("id"))
 		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format, expected deploymentId__agentId"})
@@ -161,6 +163,7 @@ ORDER BY last_seen DESC`,
 // GetSession handles GET /api/agents/:id/sessions/:session_id
 func GetSession(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		deploymentID, agentID, ok := splitAgentID(c.Param("id"))
 		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format"})

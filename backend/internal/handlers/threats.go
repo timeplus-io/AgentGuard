@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
@@ -235,6 +236,7 @@ func buildThreatsList(cfg *config.Config) ([]models.Threat, error) {
 // Query params: ?severity=, ?status=, ?agent_id=, ?page=, ?limit=
 func ListThreats(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		severityFilter := c.Query("severity")
 		statusFilter := c.Query("status")
 		agentIDFilter := c.Query("agent_id")
@@ -298,6 +300,7 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 // Returns the single threat whose ThreatID matches the :id path param.
 func GetThreat(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		id := c.Param("id")
 
 		threats, err := buildThreatsList(cfg)
@@ -346,6 +349,7 @@ func upsertThreatStatus(cfg *config.Config, body ThreatStatusBody, status string
 // Upserts cf_status with status='acknowledged'. :id is the computed threat_id and must match the body.
 func AcknowledgeThreat(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		routeID := c.Param("id")
 		var body ThreatStatusBody
 		if err := c.ShouldBindJSON(&body); err != nil {
@@ -369,6 +373,7 @@ func AcknowledgeThreat(cfg *config.Config) gin.HandlerFunc {
 // Upserts cf_status with status='cleared'. :id is the computed threat_id and must match the body.
 func ClearThreat(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		routeID := c.Param("id")
 		var body ThreatStatusBody
 		if err := c.ShouldBindJSON(&body); err != nil {

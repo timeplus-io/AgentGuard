@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
 	"github.com/timeplus/agentguard/internal/timeplus"
@@ -40,6 +41,7 @@ GROUP BY agent_id, deployment_id`
 
 func ListAgents(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		pageStr := c.DefaultQuery("page", "1")
 		limitStr := c.DefaultQuery("limit", "15")
 
@@ -135,6 +137,7 @@ GROUP BY agent_id, deployment_id`
 // Query params: since (RFC3339), until (RFC3339) — filter all counts to the time window.
 func GetAgent(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		deploymentID, agentID, ok := splitAgentID(c.Param("id"))
 		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent id format, expected deploymentId__agentId"})
