@@ -29,7 +29,21 @@ type SessionStore struct {
 }
 
 func NewSessionStore() *SessionStore {
-	return &SessionStore{sessions: make(map[string]*Session)}
+	s := &SessionStore{sessions: make(map[string]*Session)}
+	go s.reapExpired()
+	return s
+}
+
+func (s *SessionStore) reapExpired() {
+	for range time.Tick(15 * time.Minute) {
+		s.mu.Lock()
+		for id, sess := range s.sessions {
+			if time.Since(sess.Created) > SessionMaxAge {
+				delete(s.sessions, id)
+			}
+		}
+		s.mu.Unlock()
+	}
 }
 
 // Create generates a new session for the given user and adds it to the store.

@@ -54,7 +54,15 @@ func Login(cfg *config.Config, store *SessionStore) gin.HandlerFunc {
 
 		sess := store.Create(body.Username, body.Password)
 		// httpOnly=true keeps the cookie out of JavaScript; SameSite=Strict prevents CSRF.
-		c.SetCookie("agentguard_session", sess.ID, 0, "/", "", false, true)
+		http.SetCookie(c.Writer, &http.Cookie{
+			Name:     "agentguard_session",
+			Value:    sess.ID,
+			MaxAge:   int(SessionMaxAge.Seconds()),
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+		})
 		c.JSON(http.StatusOK, gin.H{"username": body.Username})
 	}
 }
@@ -66,7 +74,15 @@ func Logout(store *SessionStore) gin.HandlerFunc {
 			store.Delete(cookie)
 		}
 		// MaxAge=-1 instructs the browser to delete the cookie immediately.
-		c.SetCookie("agentguard_session", "", -1, "/", "", false, true)
+		http.SetCookie(c.Writer, &http.Cookie{
+			Name:     "agentguard_session",
+			Value:    "",
+			MaxAge:   -1,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+		})
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	}
 }
