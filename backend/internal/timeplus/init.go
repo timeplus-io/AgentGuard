@@ -118,7 +118,7 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 		log.Printf("timeplus init: warning creating alert: %v", err)
 	}
 	emit("running", "$ Syncing rule materialized views…")
-	if err := startupSyncMVs(&timeplusCfg, ctx, conn); err != nil {
+	if err := startupSyncMVs(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning syncing MVs: %v", err)
 	}
 	emit("ok", "  ✓ All resources provisioned")
@@ -260,7 +260,7 @@ func createSecurityStreams(ctx context.Context, conn proton.Conn, emit func(stri
 }
 
 func createNotifyFilterMV(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
-	return execIfNotExists(ctx, conn, "stream", "mv_notify_filter", ddlNotifyFilterMV, emit)
+	return execIfNotExists(ctx, conn, "view", "mv_notify_filter", ddlNotifyFilterMV, emit)
 }
 
 // ── Catalog rule seeding ──────────────────────────────────────────────────────
@@ -286,6 +286,7 @@ func seedCatalogRules(ctx context.Context, conn proton.Conn, entries []catalog.E
 	if err != nil {
 		return fmt.Errorf("seed prepare: %w", err)
 	}
+	defer func() { _ = batch.Abort() }()
 
 	now := time.Now()
 	for _, e := range entries {
@@ -335,7 +336,7 @@ FROM table(agentguard_rules)
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = false`
 
-func startupSyncMVs(cfg *config.TimeplusConfig, ctx context.Context, conn proton.Conn) error {
+func startupSyncMVs(ctx context.Context, conn proton.Conn) error {
 	rows, err := conn.Query(ctx, sqlStartupRules)
 	if err != nil {
 		return fmt.Errorf("startup sync query: %w", err)
@@ -355,6 +356,9 @@ func startupSyncMVs(cfg *config.TimeplusConfig, ctx context.Context, conn proton
 			continue
 		}
 		rules = append(rules, r)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("startup sync rows: %w", err)
 	}
 
 	for _, r := range rules {
@@ -1055,6 +1059,7 @@ func seedPricingData(ctx context.Context, conn proton.Conn) error {
 	if err != nil {
 		return fmt.Errorf("pricing seed prepare: %w", err)
 	}
+	defer func() { _ = batch.Abort() }()
 
 	now := time.Now()
 	for _, p := range pricingSeedData {
