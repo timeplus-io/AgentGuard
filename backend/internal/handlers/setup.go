@@ -89,7 +89,7 @@ func Provision(cfg *config.Config, mgr *catalog.Manager, store *auth.SessionStor
 
 		sendEvent := func(status, msg string) {
 			data, _ := json.Marshal(provisionEvent{Status: status, Msg: msg})
-			fmt.Fprintf(w, "data: %s\n\n", data)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 			flusher.Flush()
 		}
 
