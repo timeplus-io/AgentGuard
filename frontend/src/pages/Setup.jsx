@@ -125,7 +125,7 @@ export default function Setup() {
                         <input
                           type={type}
                           value={val}
-                          onChange={e => set(e.target.value)}
+                          onChange={e => { set(e.target.value); setTestResult(null) }}
                           placeholder={ph}
                           className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
                         />
