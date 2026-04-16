@@ -6,7 +6,7 @@ export default function TopNav({ title }) {
 
   const handleLogout = async () => {
     await api.authLogout().catch(() => {})
-    setAuth(prev => ({ ...prev, loggedIn: false, username: '' }))
+    setAuth(prev => ({ ...prev, loading: false, loggedIn: false, username: '' }))
   }
 
   const initials = auth.username

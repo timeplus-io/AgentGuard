@@ -26,31 +26,30 @@ function AuthGuard({ children }) {
   }
   if (!auth.setupComplete) return <Setup />
   if (!auth.loggedIn) return <Login />
-  return children
+  // NotificationsProvider opens an SSE stream that requires auth — only mount when logged in.
+  return <NotificationsProvider>{children}</NotificationsProvider>
 }
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <NotificationsProvider>
-          <AuthGuard>
-            <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/agents" element={<AgentList />} />
-              <Route path="/agents/:id" element={<AgentDetail />} />
-              <Route path="/threats" element={<Threats />} />
-              <Route path="/threats/:id" element={<ThreatDetail />} />
-              <Route path="/cost" element={<CostGovernance />} />
-              <Route path="/rules" element={<RulePacks />} />
-              <Route path="/rules/new" element={<RuleCreate />} />
-              <Route path="/rules/:id" element={<RuleDetail />} />
-              <Route path="/investigate" element={<Investigate />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-            </Routes>
-          </AuthGuard>
-        </NotificationsProvider>
+        <AuthGuard>
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/agents" element={<AgentList />} />
+            <Route path="/agents/:id" element={<AgentDetail />} />
+            <Route path="/threats" element={<Threats />} />
+            <Route path="/threats/:id" element={<ThreatDetail />} />
+            <Route path="/cost" element={<CostGovernance />} />
+            <Route path="/rules" element={<RulePacks />} />
+            <Route path="/rules/new" element={<RuleCreate />} />
+            <Route path="/rules/:id" element={<RuleDetail />} />
+            <Route path="/investigate" element={<Investigate />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+          </Routes>
+        </AuthGuard>
       </AuthProvider>
     </BrowserRouter>
   )
