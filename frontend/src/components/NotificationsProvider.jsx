@@ -80,7 +80,7 @@ export function NotificationsProvider({ children }) {
   }, [dismiss])
 
   useEffect(() => {
-    const es = new EventSource('/api/notifications/stream')
+    const es = new EventSource('/api/notifications/stream', { withCredentials: true })
 
     es.addEventListener('alert', (e) => {
       try {

@@ -120,7 +120,14 @@ export const api = {
       method: 'POST',
       body: fd,
       credentials: 'include',
-    }).then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() })
+    }).then(async res => {
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`
+        try { const j = await res.json(); if (j?.error) msg = j.error } catch { /* use status */ }
+        throw new Error(msg)
+      }
+      return res.json()
+    })
   },
   exportCatalogUrl: () => `${BASE}/rules/catalog/export`,
   getRule: (id) => get(`/rules/${id}`),
