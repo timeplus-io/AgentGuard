@@ -40,4 +40,10 @@ func TestSave_RoundTrip(t *testing.T) {
 	if loaded.Server.Port != 9090 {
 		t.Errorf("port: want 9090, got %d", loaded.Server.Port)
 	}
+	if loaded.Timeplus.NativePort != 8463 {
+		t.Errorf("native_port: want 8463, got %d", loaded.Timeplus.NativePort)
+	}
+	if loaded.AgentGuardURL != "http://example.com:8080" {
+		t.Errorf("agentguard_url: want http://example.com:8080, got %s", loaded.AgentGuardURL)
+	}
 }

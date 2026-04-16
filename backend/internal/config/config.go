@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -38,7 +40,7 @@ type Config struct {
 //
 // Credentials (TIMEPLUS_USER, TIMEPLUS_PASSWORD) are intentionally not loaded.
 func Load() (*Config, error) {
-	return load(viper.New(), true)
+	return load(viper.GetViper(), true)
 }
 
 // LoadFrom reads configuration from a specific file path. Used in tests.
@@ -64,7 +66,9 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
 		v.AddConfigPath(".")
-		v.AddConfigPath("$HOME/.agentguard")
+		if home, err := os.UserHomeDir(); err == nil {
+			v.AddConfigPath(filepath.Join(home, ".agentguard"))
+		}
 
 		if err := v.ReadInConfig(); err != nil {
 			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
