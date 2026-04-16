@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-AgentGuard is a real-time security monitoring and governance platform for AI coding agents (OpenClaw and Claude Code). It consists of a React SPA frontend and a Go/Gin backend. The backend connects to Timeplus Proton (a streaming SQL engine) for rules and security event data, and falls back to in-memory mock data for cost, threats, and metrics.
+AgentGuard is a real-time security monitoring and governance platform for AI coding agents (OpenClaw and Claude Code). It consists of a React SPA frontend and a Go/Gin backend. The backend connects to Timeplus Enterprise (a streaming SQL engine) for all data — agents, sessions, events, metrics, costs, threats, and rules. There is no mock data layer; every endpoint queries Timeplus directly.
 
 ## Development Commands
 
@@ -75,8 +75,7 @@ Four-layer structure:
 - **`cmd/server/main.go`** — Entry point. Uses Cobra CLI + Viper for config. Sets up Gin router, CORS (allows localhost:5173 and :3000), registers all routes under `/api`, and serves the embedded SPA via `NoRoute`.
 - **`internal/config/config.go`** — Config loading: defaults → `config.yaml` → env vars (`TIMEPLUS_HOST`, `TIMEPLUS_PORT`, `TIMEPLUS_USER`, `TIMEPLUS_PASSWORD`, `SERVER_PORT`) → CLI flags.
 - **`internal/models/models.go`** — All shared Go structs.
-- **`internal/mock/data.go`** — In-memory mock data for cost, threats, metrics, and agents. Some handlers still use this.
-- **`internal/handlers/`** — One file per resource. Handlers that need Proton receive `cfg *config.Config` via a closure.
+- **`internal/handlers/`** — One file per resource. All handlers receive `cfg *config.Config` via a closure and query Timeplus Enterprise directly. There is no mock data layer.
 - **`internal/timeplus/`** — Proton integration layer:
   - `client.go` — `Query()` and `ExecHTTP()` for SELECT and DDL/DML against the Proton HTTP interface.
   - `init.go` — Startup: creates OTel streams, `agentguard_rules` stream, and `agentguard_security_events` stream if they don't exist; syncs MV state with installed rules.
@@ -96,15 +95,25 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | GET | `/api/agents/:id` | `GetAgent` | |
 | GET | `/api/agents/:id/sessions` | `ListSessions` | |
 | GET | `/api/agents/:id/sessions/:session_id` | `GetSession` | |
+| GET | `/api/agents/:id/sessions/:session_id/runs/:run_id/trace` | `GetRunTrace` | Waterfall trace for a single run |
 | GET | `/api/agents/:id/events` | `ListEvents` | |
 | GET | `/api/metrics/llm` | `GetLLMMetrics` | |
 | GET | `/api/metrics/tools` | `GetToolMetrics` | |
-| GET | `/api/threats` | `ListThreats` | Supports `?severity=` and `?category=` filters |
-| GET | `/api/cost` | `GetCost` | Computed from mock daily spend |
-| GET | `/api/rules` | `ListRules` | Reads from Proton `agentguard_rules` stream |
+| GET | `/api/threats` | `ListThreats` | Supports `?severity=`, `?status=`, `?agent_id=` filters |
+| GET | `/api/threats/:id` | `GetThreat` | |
+| POST | `/api/threats/:id/acknowledge` | `AcknowledgeThreat` | Upserts status to agentguard_threats |
+| POST | `/api/threats/:id/clear` | `ClearThreat` | Upserts status to agentguard_threats |
+| GET | `/api/cost` | `GetCost` | Computed from agentguard_hook_events + agentguard_pricing |
+| GET | `/api/cost/pricing` | `ListPricing` | Reads from agentguard_pricing stream |
+| POST | `/api/cost/pricing` | `UpsertPricing` | Inserts into agentguard_pricing |
+| DELETE | `/api/cost/pricing/:provider/:model` | `DeletePricing` | Deletes from agentguard_pricing |
+| GET | `/api/rules` | `ListRules` | Reads from `agentguard_rules` stream |
 | GET | `/api/rules/catalog` | `ListCatalog` | Builtin catalog with installed status |
-| GET | `/api/rules/mv-status` | `MVStatus` | Health of Proton materialized views |
+| POST | `/api/rules/catalog/import` | `ImportCatalog` | Import rules from JSON |
+| GET | `/api/rules/catalog/export` | `ExportCatalog` | Export catalog as JSON |
+| GET | `/api/rules/mv-status` | `MVStatus` | Health of Timeplus materialized views |
 | POST | `/api/rules/sync` | `SyncMVs` | Reconcile MV state without restart |
+| POST | `/api/rules` | `CreateRule` | Create a custom rule |
 | GET | `/api/rules/:id` | `GetRule` | |
 | POST | `/api/rules/:id/install` | `InstallRule` | Install from builtin catalog |
 | POST | `/api/rules/:id/toggle` | `ToggleRule` | Flips `enabled`; pauses/resumes MV |
@@ -112,12 +121,9 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | DELETE | `/api/rules/:id` | `UninstallRule` | Soft-delete + drops MV |
 | POST | `/api/alerts/webhook` | `AlertWebhook` | Receives rule-triggered alerts |
 | GET | `/api/notifications/stream` | `NotificationsSSEHandler` | SSE stream of live alerts |
-| GET | `/api/investigate/tables` | `ListTables` | |
-| POST | `/api/investigate/query` | `RunQuery` | Mock query execution |
-| GET | `/api/settings` | `GetSettings` | |
-| PUT | `/api/settings` | `UpdateSettings` | |
+| GET | `/api/investigate/tables` | `ListTables` | Discovers streams from system.tables |
 | POST | `/api/onboarding/generate` | `GenerateConfig` | |
-| POST | `/api/proton/query` | `ProtonQueryHandler` | Streaming proxy to Proton (NDJSON) |
+| POST | `/api/proton/query` | `ProtonQueryHandler` | Streaming proxy to Timeplus (NDJSON) |
 
 ### Frontend (`frontend/src/`)
 
@@ -203,4 +209,4 @@ On startup, `timeplus.Init()` creates missing streams and syncs MV state. This i
 
 ### Timeline handlers
 
-`internal/handlers/timeline*.go` provides the agent session timeline. It has three variants selected at runtime: `timeline.go` (CIM-based), `timeline_openclaw.go` (OpenClaw-specific fallback), `timeline_fallback.go` (mock). Each has a corresponding `*_test.go`.
+`internal/handlers/timeline*.go` provides the agent session timeline. It has three variants selected at runtime: `timeline.go` (CIM-based), `timeline_openclaw.go` (OpenClaw-specific span builder), `timeline_fallback.go` (gap-fill waterfall for unknown agent types). Each has a corresponding `*_test.go`.
