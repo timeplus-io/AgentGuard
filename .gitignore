@@ -9,6 +9,7 @@ agents/openclaw/.openclaw/
 agents/openclaw/agentguard-plugin/dist
 agents/claudecode/agentguard-plugin/dist
 .claude/
+agents/paperclip/.paperclip/
 
 # Frontend
 frontend/node_modules/
