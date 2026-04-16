@@ -33,7 +33,7 @@ start:
 
 ## Stop any running Paperclip process
 stop:
-	@pkill -f "paperclipai run" 2>/dev/null && echo "Paperclip stopped." || echo "No running Paperclip process found."
+	@pkill -f "paperclipai" 2>/dev/null && echo "Paperclip stopped." || echo "No running Paperclip process found."
 
 ## Tail the Paperclip log file
 logs:
