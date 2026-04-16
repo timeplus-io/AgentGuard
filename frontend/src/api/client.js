@@ -3,7 +3,7 @@ import { ndjsonStreamParser } from '@timeplus/proton-javascript-driver'
 const BASE = '/api'
 
 async function get(path) {
-  const res = await fetch(`${BASE}${path}`)
+  const res = await fetch(`${BASE}${path}`, { credentials: 'include' })
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
     try { const j = await res.json(); if (j?.error) msg = j.error } catch { /* use status */ }
@@ -17,22 +17,61 @@ async function post(path, body) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    credentials: 'include',
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`
+    try { const j = await res.json(); if (j?.error) msg = j.error } catch { /* use status */ }
+    throw new Error(msg)
+  }
   return res.json()
 }
 
-async function put(path, body) {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+async function del(path) {
+  const res = await fetch(`${BASE}${path}`, { method: 'DELETE', credentials: 'include' })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
 export const api = {
+  // ── Auth ────────────────────────────────────────────────────────────────────
+  authStatus: () => get('/auth/status'),
+  authLogin: (username, password) => post('/auth/login', { username, password }),
+  authLogout: () => post('/auth/logout', {}),
+
+  // ── Setup ───────────────────────────────────────────────────────────────────
+  setupTestConnection: (host, port, username, password) =>
+    post('/setup/test-connection', { host, port, username, password }),
+
+  // setupProvision returns an async generator consuming the SSE stream.
+  // Usage: for await (const event of api.setupProvision(body)) { ... }
+  async *setupProvision(body) {
+    const res = await fetch(`${BASE}/setup/provision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: 'include',
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n\n')
+      buffer = parts.pop() // keep incomplete chunk
+      for (const part of parts) {
+        const line = part.trim()
+        if (line.startsWith('data: ')) {
+          try { yield JSON.parse(line.slice(6)) } catch { /* skip malformed */ }
+        }
+      }
+    }
+  },
+
+  // ── Existing endpoints ────────────────────────────────────────────────────
   getDashboard: () => get('/dashboard'),
   listAgents: (page = 1, limit = 15) => get(`/agents?page=${page}&limit=${limit}`),
   getAgent: (id, params = {}) => {
@@ -71,16 +110,17 @@ export const api = {
   },
   listPricing: () => get('/cost/pricing'),
   upsertPricing: (entry) => post('/cost/pricing', entry),
-  deletePricing: (provider, model) =>
-    fetch(`${BASE}/cost/pricing/${encodeURIComponent(provider)}/${encodeURIComponent(model)}`, { method: 'DELETE' })
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() }),
+  deletePricing: (provider, model) => del(`/cost/pricing/${encodeURIComponent(provider)}/${encodeURIComponent(model)}`),
   listRules: () => get('/rules'),
   getRulesCatalog: () => get('/rules/catalog'),
   importCatalog: (file, force = false) => {
     const fd = new FormData()
     fd.append('file', file)
-    return fetch(`${BASE}/rules/catalog/import${force ? '?force=true' : ''}`, { method: 'POST', body: fd })
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() })
+    return fetch(`${BASE}/rules/catalog/import${force ? '?force=true' : ''}`, {
+      method: 'POST',
+      body: fd,
+      credentials: 'include',
+    }).then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() })
   },
   exportCatalogUrl: () => `${BASE}/rules/catalog/export`,
   getRule: (id) => get(`/rules/${id}`),
@@ -88,21 +128,17 @@ export const api = {
   upgradeRule: (id, querySql) => post(`/rules/${id}/upgrade`, { query_sql: querySql }),
   createRule: (body) => post('/rules', body),
   installRule: (id) => post(`/rules/${id}/install`, {}),
-  uninstallRule: (id) =>
-    fetch(`${BASE}/rules/${id}`, { method: 'DELETE' })
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json() }),
+  uninstallRule: (id) => del(`/rules/${id}`),
   listTables: () => get('/investigate/tables'),
   generateConfig: (data) => post('/onboarding/generate', data),
 
-  // Streams rows from Proton/Timeplus via the backend proxy.
-  // Connection config lives server-side (config.yaml / env vars).
-  // Pass an AbortSignal via options.signal to cancel the stream.
   async *protonQuery(sql, { signal } = {}) {
     const res = await fetch(`${BASE}/proton/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sql }),
       signal,
+      credentials: 'include',
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
