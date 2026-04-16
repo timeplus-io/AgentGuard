@@ -58,13 +58,16 @@ func Login(cfg *config.Config, store *SessionStore) gin.HandlerFunc {
 
 		sess := store.Create(body.Username, body.Password)
 		// httpOnly=true keeps the cookie out of JavaScript; SameSite=Strict prevents CSRF.
+		// Secure is set only when the connection is TLS or behind an HTTPS proxy so that
+		// plain-HTTP development (localhost:8080) still works.
+		isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 		http.SetCookie(c.Writer, &http.Cookie{
 			Name:     "agentguard_session",
 			Value:    sess.ID,
 			MaxAge:   int(SessionMaxAge.Seconds()),
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   isSecure,
 			SameSite: http.SameSiteStrictMode,
 		})
 		c.JSON(http.StatusOK, gin.H{"username": body.Username})
@@ -78,13 +81,14 @@ func Logout(store *SessionStore) gin.HandlerFunc {
 			store.Delete(cookie)
 		}
 		// MaxAge=-1 instructs the browser to delete the cookie immediately.
+		isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 		http.SetCookie(c.Writer, &http.Cookie{
 			Name:     "agentguard_session",
 			Value:    "",
 			MaxAge:   -1,
 			Path:     "/",
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   isSecure,
 			SameSite: http.SameSiteStrictMode,
 		})
 		c.JSON(http.StatusOK, gin.H{"ok": true})

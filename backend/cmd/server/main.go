@@ -107,6 +107,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.POST("/auth/logout", auth.Logout(store))
 		api.POST("/setup/test-connection", handlers.TestConnection())
 		api.POST("/setup/provision", handlers.Provision(cfg, mgr, store))
+		// /alerts/webhook is called by Timeplus (server-to-server), not by the browser,
+		// so it must be reachable without a session cookie.
+		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
 
 		// All existing routes — require a valid session cookie.
 		protected := api.Group("/", auth.AuthRequired(store))
@@ -140,7 +143,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.POST("/rules/:id/toggle", handlers.ToggleRule(cfg, mgr))
 			protected.POST("/rules/:id/upgrade", handlers.UpgradeRule(cfg, mgr))
 			protected.DELETE("/rules/:id", handlers.UninstallRule(cfg, mgr))
-			protected.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
 			protected.GET("/notifications/stream", handlers.NotificationsSSEHandler())
 			protected.GET("/investigate/tables", handlers.ListTables(cfg))
 			protected.POST("/onboarding/generate", handlers.GenerateConfig)
