@@ -12,6 +12,27 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 )
 
+// connectOnce makes a single connection attempt to Timeplus. It does not retry.
+// The caller is responsible for retrying or reporting the error.
+func connectOnce(cfg *config.TimeplusConfig) (proton.Conn, error) {
+	opts := &proton.Options{
+		Addr: []string{fmt.Sprintf("%s:%d", cfg.Host, cfg.NativePort)},
+		Auth: proton.Auth{
+			Username: cfg.User,
+			Password: cfg.Password,
+		},
+	}
+	conn, err := proton.Open(opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := conn.Ping(context.Background()); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
 // bt replaces « » placeholders with SQL backticks so raw-string DDL literals
 // can quote identifiers that contain dots (e.g. `events.timestamp`,
 // `exemplars.value`). Go raw strings can't contain backticks directly.
@@ -19,48 +40,65 @@ var btReplacer = strings.NewReplacer("«", "`", "»", "`")
 
 func bt(s string) string { return btReplacer.Replace(s) }
 
-// Init waits until Timeplus is reachable, then ensures all streams, MVs, and
-// seed data are in place. catalogEntries are used to seed rules on first startup.
-func Init(cfg *config.Config, catalogEntries []catalog.Entry) error {
-	conn, err := waitForTimeplus(&cfg.Timeplus)
-	if err != nil {
-		return fmt.Errorf("timeplus init: %w", err)
+// Init ensures all Timeplus streams, materialized views, and seed data are in
+// place. It is called from the setup wizard (not at server startup), so it
+// receives explicit credentials rather than reading them from the config file.
+// emit is a progress-reporting callback; if nil, progress is logged instead.
+func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntries []catalog.Entry, emit func(status, msg string)) error {
+	if emit == nil {
+		emit = func(status, msg string) { log.Printf("[provision:%s] %s", status, msg) }
 	}
+
+	emit("running", "$ Connecting to Timeplus at "+timeplusCfg.Host+"…")
+	conn, err := connectOnce(&timeplusCfg)
+	if err != nil {
+		emit("error", "  ✗ "+err.Error())
+		return fmt.Errorf("timeplus init: connect: %w", err)
+	}
+	emit("ok", "  ✓ Connected")
 	defer conn.Close()
 
 	ctx := context.Background()
 
-	if err := createOTelStreams(ctx, conn); err != nil {
+	emit("running", "$ Creating OTel streams…")
+	if err := createOTelStreams(ctx, conn, emit); err != nil {
 		return fmt.Errorf("timeplus init: creating otel streams: %w", err)
 	}
-	if err := createOTelInput(ctx, conn); err != nil {
+	emit("running", "$ Creating OTel input…")
+	if err := createOTelInput(ctx, conn, emit); err != nil {
 		return fmt.Errorf("timeplus init: creating otel input: %w", err)
 	}
-	if err := createAgentGuardStreams(ctx, conn); err != nil {
+	emit("running", "$ Creating AgentGuard streams…")
+	if err := createAgentGuardStreams(ctx, conn, emit); err != nil {
 		return fmt.Errorf("timeplus init: creating agentguard streams: %w", err)
 	}
-	if err := createCIMStream(ctx, conn); err != nil {
+	emit("running", "$ Creating CIM stream…")
+	if err := createCIMStream(ctx, conn, emit); err != nil {
 		return fmt.Errorf("timeplus init: creating CIM stream: %w", err)
 	}
-	if err := createCIMMVs(ctx, conn); err != nil {
+	emit("running", "$ Creating CIM materialized views…")
+	if err := createCIMMVs(ctx, conn, emit); err != nil {
 		return fmt.Errorf("timeplus init: creating CIM MVs: %w", err)
 	}
-	if err := createCIMMetricsStream(ctx, conn); err != nil {
+	emit("running", "$ Creating CIM metrics streams…")
+	if err := createCIMMetricsStream(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating CIM metrics stream: %v", err)
 	}
-	if err := createCIMMetricsMVs(ctx, conn); err != nil {
+	emit("running", "$ Creating CIM metrics materialized views…")
+	if err := createCIMMetricsMVs(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating CIM metrics MVs: %v", err)
 	}
-	if err := createSecurityStreams(ctx, conn); err != nil {
+	emit("running", "$ Creating security streams…")
+	if err := createSecurityStreams(ctx, conn, emit); err != nil {
 		return fmt.Errorf("timeplus init: creating security streams: %w", err)
 	}
-	if err := createThreatsStream(ctx, conn); err != nil {
+	if err := createThreatsStream(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating threats stream: %v", err)
 	}
-	if err := createThreatsMV(ctx, conn); err != nil {
+	if err := createThreatsMV(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating threats MV: %v", err)
 	}
-	if err := createPricingStream(ctx, conn); err != nil {
+	if err := createPricingStream(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating pricing stream: %v", err)
 	}
 	if err := seedPricingData(ctx, conn); err != nil {
@@ -69,48 +107,22 @@ func Init(cfg *config.Config, catalogEntries []catalog.Entry) error {
 	if err := seedCatalogRules(ctx, conn, catalogEntries); err != nil {
 		log.Printf("timeplus init: warning seeding rules: %v", err)
 	}
-	if err := createNotifyUDF(ctx, conn, cfg.AgentGuardURL); err != nil {
+	emit("running", "$ Creating notification UDF and alert…")
+	if err := createNotifyUDF(ctx, conn, agentGuardURL); err != nil {
 		log.Printf("timeplus init: warning creating UDF: %v", err)
 	}
-	if err := createNotifyFilterMV(ctx, conn); err != nil {
+	if err := createNotifyFilterMV(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating notify filter MV: %v", err)
 	}
 	if err := createNotifierAlert(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning creating alert: %v", err)
 	}
-	if err := startupSyncMVs(&cfg.Timeplus, ctx, conn); err != nil {
+	emit("running", "$ Syncing rule materialized views…")
+	if err := startupSyncMVs(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning syncing MVs: %v", err)
 	}
+	emit("ok", "  ✓ All resources provisioned")
 	return nil
-}
-
-// waitForTimeplus pings Timeplus every 5 seconds until it responds, then
-// returns the open connection. It never gives up — the caller (main) treats
-// a failed init as non-fatal, so there is no point returning early.
-func waitForTimeplus(cfg *config.TimeplusConfig) (proton.Conn, error) {
-	opts := &proton.Options{
-		Addr: []string{fmt.Sprintf("%s:%d", cfg.Host, cfg.NativePort)},
-		Auth: proton.Auth{
-			Username: cfg.User,
-			Password: cfg.Password,
-		},
-	}
-
-	log.Printf("timeplus: waiting for %s:%d to become ready…", cfg.Host, cfg.NativePort)
-	for attempt := 1; ; attempt++ {
-		conn, err := proton.Open(opts)
-		if err == nil {
-			if pingErr := conn.Ping(context.Background()); pingErr == nil {
-				log.Printf("timeplus: connected after %d attempt(s)", attempt)
-				return conn, nil
-			} else {
-				_ = conn.Close()
-				err = pingErr
-			}
-		}
-		log.Printf("timeplus: not ready (attempt %d): %v — retrying in 5s", attempt, err)
-		time.Sleep(5 * time.Second)
-	}
 }
 
 func streamExists(ctx context.Context, conn proton.Conn, name string) (bool, error) {
@@ -133,7 +145,7 @@ func inputExists(ctx context.Context, conn proton.Conn, name string) (bool, erro
 	return count > 0, nil
 }
 
-func execIfNotExists(ctx context.Context, conn proton.Conn, kind, name, ddl string) error {
+func execIfNotExists(ctx context.Context, conn proton.Conn, kind, name, ddl string, emit func(string, string)) error {
 	var exists bool
 	var err error
 	switch kind {
@@ -146,17 +158,17 @@ func execIfNotExists(ctx context.Context, conn proton.Conn, kind, name, ddl stri
 		return fmt.Errorf("checking %s %q: %w", kind, name, err)
 	}
 	if exists {
-		log.Printf("timeplus: %s %q already exists, skipping", kind, name)
+		emit("ok", "  ✓ "+name+" (already exists)")
 		return nil
 	}
 	if err := conn.Exec(ctx, ddl); err != nil {
 		return fmt.Errorf("creating %s %q: %w", kind, name, err)
 	}
-	log.Printf("timeplus: %s %q created", kind, name)
+	emit("ok", "  ✓ "+name)
 	return nil
 }
 
-func createOTelStreams(ctx context.Context, conn proton.Conn) error {
+func createOTelStreams(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	streams := []struct {
 		name string
 		ddl  string
@@ -170,26 +182,26 @@ func createOTelStreams(ctx context.Context, conn proton.Conn) error {
 		{"otel_metrics_summary", ddlOTelMetricsSummary},
 	}
 	for _, s := range streams {
-		if err := execIfNotExists(ctx, conn, "stream", s.name, s.ddl); err != nil {
+		if err := execIfNotExists(ctx, conn, "stream", s.name, s.ddl, emit); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func createOTelInput(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "input", "openclaw_otel_input", ddlOTelInput)
+func createOTelInput(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "input", "openclaw_otel_input", ddlOTelInput, emit)
 }
 
-func createAgentGuardStreams(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "stream", "agentguard_hook_events", ddlAgentGuardHookEvents)
+func createAgentGuardStreams(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "stream", "agentguard_hook_events", ddlAgentGuardHookEvents, emit)
 }
 
-func createCIMStream(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "stream", "agentguard_cim_event", ddlCIMEvent)
+func createCIMStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "stream", "agentguard_cim_event", ddlCIMEvent, emit)
 }
 
-func createCIMMVs(ctx context.Context, conn proton.Conn) error {
+func createCIMMVs(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	mvs := []struct {
 		name string
 		ddl  string
@@ -198,24 +210,24 @@ func createCIMMVs(ctx context.Context, conn proton.Conn) error {
 		{"mv_cim_openclaw", ddlCIMOpenClawMV},
 	}
 	for _, mv := range mvs {
-		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl); err != nil {
+		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl, emit); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func createCIMMetricsStream(ctx context.Context, conn proton.Conn) error {
-	if err := execIfNotExists(ctx, conn, "stream", "agentguard_session_agents", ddlSessionAgentsStream); err != nil {
+func createCIMMetricsStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	if err := execIfNotExists(ctx, conn, "stream", "agentguard_session_agents", ddlSessionAgentsStream, emit); err != nil {
 		return err
 	}
-	if err := execIfNotExists(ctx, conn, "stream", "agentguard_run_latency", ddlRunLatencyStream); err != nil {
+	if err := execIfNotExists(ctx, conn, "stream", "agentguard_run_latency", ddlRunLatencyStream, emit); err != nil {
 		return err
 	}
-	return execIfNotExists(ctx, conn, "stream", "agentguard_cim_metrics", ddlCIMMetrics)
+	return execIfNotExists(ctx, conn, "stream", "agentguard_cim_metrics", ddlCIMMetrics, emit)
 }
 
-func createCIMMetricsMVs(ctx context.Context, conn proton.Conn) error {
+func createCIMMetricsMVs(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	mvs := []struct {
 		name string
 		ddl  string
@@ -230,25 +242,25 @@ func createCIMMetricsMVs(ctx context.Context, conn proton.Conn) error {
 		{"mv_cim_metrics_claudecode_tools", ddlCIMMetricsClaudeCodeToolsMV},
 	}
 	for _, mv := range mvs {
-		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl); err != nil {
+		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl, emit); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func createSecurityStreams(ctx context.Context, conn proton.Conn) error {
-	if err := execIfNotExists(ctx, conn, "stream", "agentguard_security_events", ddlSecurityEvents); err != nil {
+func createSecurityStreams(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	if err := execIfNotExists(ctx, conn, "stream", "agentguard_security_events", ddlSecurityEvents, emit); err != nil {
 		return err
 	}
-	if err := execIfNotExists(ctx, conn, "stream", "agentguard_notify_events", ddlNotifyEventsStream); err != nil {
+	if err := execIfNotExists(ctx, conn, "stream", "agentguard_notify_events", ddlNotifyEventsStream, emit); err != nil {
 		return err
 	}
-	return execIfNotExists(ctx, conn, "stream", "agentguard_rules", ddlRulesStream)
+	return execIfNotExists(ctx, conn, "stream", "agentguard_rules", ddlRulesStream, emit)
 }
 
-func createNotifyFilterMV(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "stream", "mv_notify_filter", ddlNotifyFilterMV)
+func createNotifyFilterMV(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "view", "mv_notify_filter", ddlNotifyFilterMV, emit)
 }
 
 // ── Catalog rule seeding ──────────────────────────────────────────────────────
@@ -274,6 +286,7 @@ func seedCatalogRules(ctx context.Context, conn proton.Conn, entries []catalog.E
 	if err != nil {
 		return fmt.Errorf("seed prepare: %w", err)
 	}
+	defer func() { _ = batch.Abort() }()
 
 	now := time.Now()
 	for _, e := range entries {
@@ -323,7 +336,7 @@ FROM table(agentguard_rules)
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = false`
 
-func startupSyncMVs(cfg *config.TimeplusConfig, ctx context.Context, conn proton.Conn) error {
+func startupSyncMVs(ctx context.Context, conn proton.Conn) error {
 	rows, err := conn.Query(ctx, sqlStartupRules)
 	if err != nil {
 		return fmt.Errorf("startup sync query: %w", err)
@@ -343,6 +356,9 @@ func startupSyncMVs(cfg *config.TimeplusConfig, ctx context.Context, conn proton
 			continue
 		}
 		rules = append(rules, r)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("startup sync rows: %w", err)
 	}
 
 	for _, r := range rules {
@@ -1016,16 +1032,16 @@ var pricingSeedData = []pricingSeed{
 	{"openai", "o3", 10.00, 40.00, 2.50},
 }
 
-func createPricingStream(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "stream", "agentguard_pricing", ddlPricingStream)
+func createPricingStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "stream", "agentguard_pricing", ddlPricingStream, emit)
 }
 
-func createThreatsStream(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "stream", "agentguard_threats", ddlThreatsStream)
+func createThreatsStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "stream", "agentguard_threats", ddlThreatsStream, emit)
 }
 
-func createThreatsMV(ctx context.Context, conn proton.Conn) error {
-	return execIfNotExists(ctx, conn, "view", "mv_threats", ddlThreatsMV)
+func createThreatsMV(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "view", "mv_threats", ddlThreatsMV, emit)
 }
 
 func seedPricingData(ctx context.Context, conn proton.Conn) error {
@@ -1043,6 +1059,7 @@ func seedPricingData(ctx context.Context, conn proton.Conn) error {
 	if err != nil {
 		return fmt.Errorf("pricing seed prepare: %w", err)
 	}
+	defer func() { _ = batch.Abort() }()
 
 	now := time.Now()
 	for _, p := range pricingSeedData {

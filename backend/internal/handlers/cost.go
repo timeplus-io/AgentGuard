@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
@@ -22,6 +23,7 @@ var pricingKeyRe = regexp.MustCompile(`^[a-zA-Z0-9._:/-]+$`)
 // Budget policies and anomalies remain as mock data (out of scope).
 func GetCost(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		now := time.Now().UTC()
 		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).
 			Format("2006-01-02 15:04:05")
@@ -107,6 +109,7 @@ func GetCost(cfg *config.Config) gin.HandlerFunc {
 // ListPricing handles GET /api/cost/pricing.
 func ListPricing(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		rows, err := tp.Query(&cfg.Timeplus, `
 			SELECT provider, model, input_cost_per_million, output_cost_per_million,
 			       cache_read_cost_per_million, updated_at
@@ -137,6 +140,7 @@ func ListPricing(cfg *config.Config) gin.HandlerFunc {
 // Inserts a row into the mutable stream; Proton upserts by PRIMARY KEY (provider, model).
 func UpsertPricing(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		var body models.PricingEntry
 		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
@@ -169,6 +173,7 @@ func UpsertPricing(cfg *config.Config) gin.HandlerFunc {
 // DeletePricing handles DELETE /api/cost/pricing/:provider/:model.
 func DeletePricing(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		provider := c.Param("provider")
 		model := c.Param("model")
 		if provider == "" || model == "" {

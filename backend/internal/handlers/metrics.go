@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
 	"github.com/timeplus/agentguard/internal/timeplus"
@@ -100,6 +101,7 @@ func parseCommonParams(c *gin.Context) (agentID, model, since, until, errMsg str
 // Query params: agent_id, model, since, until (RFC3339), granularity (minute|hour|day)
 func GetLLMMetrics(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		agentID, model, since, until, errMsg := parseCommonParams(c)
 		if errMsg != "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
@@ -284,6 +286,7 @@ ORDER BY bucket ASC`, bfn, strings.Join(q4Where, "\n  AND "))
 // Note: model is not a dimension for tool metrics.
 func GetToolMetrics(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
 		agentID, _, since, until, errMsg := parseCommonParams(c)
 		if errMsg != "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})

@@ -13,10 +13,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
-	"github.com/timeplus/agentguard/internal/timeplus"
 	"github.com/timeplus/agentguard/internal/web"
 )
 
@@ -37,20 +37,16 @@ func newRootCmd() *cobra.Command {
 	flags := cmd.Flags()
 	flags.String("config", "", "config file (default: ./config.yaml)")
 	flags.Int("port", 8080, "server port")
-	flags.String("timeplus-host", "localhost", "Proton/Timeplus host")
-	flags.Int("timeplus-port", 3218, "Proton/Timeplus HTTP port")
-	flags.String("timeplus-user", "default", "Proton/Timeplus username")
-	flags.String("timeplus-password", "", "Proton/Timeplus password")
-	flags.Int("timeplus-native-port", 8463, "Proton/Timeplus native TCP port")
-	flags.String("catalog-dir", "", "catalog directory for rule overrides and custom rules (default: ./catalog)")
-	flags.String("agentguard-url", "", "URL Proton uses to call back AgentGuard (default: http://localhost:8080)")
+	flags.String("timeplus-host", "localhost", "Timeplus host")
+	flags.Int("timeplus-port", 3218, "Timeplus HTTP port")
+	flags.Int("timeplus-native-port", 8463, "Timeplus native TCP port")
+	flags.String("catalog-dir", "", "catalog directory (default: ./catalog)")
+	flags.String("agentguard-url", "", "URL Timeplus uses to call back AgentGuard (default: http://localhost:8080)")
 
 	_ = viper.BindPFlag("server.port", flags.Lookup("port"))
 	_ = viper.BindPFlag("catalog.dir", flags.Lookup("catalog-dir"))
 	_ = viper.BindPFlag("timeplus.host", flags.Lookup("timeplus-host"))
 	_ = viper.BindPFlag("timeplus.port", flags.Lookup("timeplus-port"))
-	_ = viper.BindPFlag("timeplus.user", flags.Lookup("timeplus-user"))
-	_ = viper.BindPFlag("timeplus.password", flags.Lookup("timeplus-password"))
 	_ = viper.BindPFlag("timeplus.native-port", flags.Lookup("timeplus-native-port"))
 	_ = viper.BindPFlag("agentguard.url", flags.Lookup("agentguard-url"))
 
@@ -75,21 +71,20 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading frontend assets: %w", err)
 	}
 
-	// Initialize the rule catalog (embedded seed rules + local overrides/additions).
 	mgr, err := catalog.New(catalog.SeedFS, cfg.CatalogDir)
 	if err != nil {
 		return fmt.Errorf("loading catalog: %w", err)
 	}
 
 	fmt.Printf("AgentGuard starting on :%d\n", cfg.Server.Port)
-	fmt.Printf("Proton endpoint: %s:%d (native: %d)\n", cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort)
+	fmt.Printf("Timeplus endpoint: %s:%d (native: %d)\n", cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort)
 	fmt.Printf("Catalog directory: %s (%d entries)\n", cfg.CatalogDir, len(mgr.All()))
-
 	fmt.Printf("AgentGuard webhook URL: %s\n", cfg.AgentGuardURL)
-	if err := timeplus.Init(cfg, mgr.All()); err != nil {
-		fmt.Printf("warning: timeplus init failed: %v\n", err)
-		// Non-fatal — server continues without OTel resources pre-provisioned.
-	}
+	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
+	// Note: timeplus.Init() is no longer called at startup.
+	// All Timeplus resources are provisioned during the one-time /api/setup/provision flow.
+
+	store := auth.NewSessionStore()
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
@@ -99,46 +94,60 @@ func runServer(cmd *cobra.Command, args []string) error {
 		AllowCredentials: true,
 	}))
 
+	// API documentation routes — unauthenticated, served at root level.
 	r.GET("/docs", handlers.APIDocs())
 	r.GET("/docs/redoc", handlers.APIRedoc())
 	r.GET("/docs/openapi.json", handlers.APISpec())
 
 	api := r.Group("/api")
 	{
-		api.GET("/dashboard", handlers.GetDashboard(cfg))
-		api.GET("/agents", handlers.ListAgents(cfg))
-		api.GET("/agents/:id", handlers.GetAgent(cfg))
-		api.GET("/agents/:id/sessions", handlers.ListSessions(cfg))
-		api.GET("/agents/:id/sessions/:session_id", handlers.GetSession(cfg))
-		api.GET("/agents/:id/sessions/:session_id/runs/:run_id/trace", handlers.GetRunTrace(cfg))
-		api.GET("/agents/:id/events", handlers.ListEvents(cfg))
-		api.GET("/metrics/llm", handlers.GetLLMMetrics(cfg))
-		api.GET("/metrics/tools", handlers.GetToolMetrics(cfg))
-		api.GET("/threats", handlers.ListThreats(cfg))
-		api.GET("/threats/:id", handlers.GetThreat(cfg))
-		api.POST("/threats/:id/acknowledge", handlers.AcknowledgeThreat(cfg))
-		api.POST("/threats/:id/clear", handlers.ClearThreat(cfg))
-		api.GET("/cost", handlers.GetCost(cfg))
-		api.GET("/cost/pricing", handlers.ListPricing(cfg))
-		api.POST("/cost/pricing", handlers.UpsertPricing(cfg))
-		api.DELETE("/cost/pricing/:provider/:model", handlers.DeletePricing(cfg))
-		api.GET("/rules", handlers.ListRules(cfg, mgr))
-		api.GET("/rules/catalog", handlers.ListCatalog(cfg, mgr))
-		api.POST("/rules/catalog/import", handlers.ImportCatalog(mgr))
-		api.GET("/rules/catalog/export", handlers.ExportCatalog(mgr))
-		api.GET("/rules/mv-status", handlers.MVStatus(cfg, mgr))
-		api.POST("/rules/sync", handlers.SyncMVs(cfg, mgr))
-		api.POST("/rules", handlers.CreateRule(cfg, mgr))
-		api.GET("/rules/:id", handlers.GetRule(cfg, mgr))
-		api.POST("/rules/:id/install", handlers.InstallRule(cfg, mgr))
-		api.POST("/rules/:id/toggle", handlers.ToggleRule(cfg, mgr))
-		api.POST("/rules/:id/upgrade", handlers.UpgradeRule(cfg, mgr))
-		api.DELETE("/rules/:id", handlers.UninstallRule(cfg, mgr))
+		// Unauthenticated — must be reachable before login/setup.
+		api.GET("/auth/status", auth.AuthStatus(cfg, store))
+		api.POST("/auth/login", auth.Login(cfg, store))
+		api.POST("/auth/logout", auth.Logout(store))
+		api.POST("/setup/test-connection", handlers.TestConnection())
+		api.POST("/setup/provision", handlers.Provision(cfg, mgr, store))
+		// /alerts/webhook is called by Timeplus (server-to-server), not by the browser,
+		// so it must be reachable without a session cookie.
 		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
-		api.GET("/notifications/stream", handlers.NotificationsSSEHandler())
-		api.GET("/investigate/tables", handlers.ListTables(cfg))
-		api.POST("/onboarding/generate", handlers.GenerateConfig)
-		api.POST("/proton/query", handlers.ProtonQueryHandler(cfg))
+
+		// All existing routes — require a valid session cookie.
+		protected := api.Group("/", auth.AuthRequired(store))
+		{
+			protected.GET("/dashboard", handlers.GetDashboard(cfg))
+			protected.GET("/agents", handlers.ListAgents(cfg))
+			protected.GET("/agents/:id", handlers.GetAgent(cfg))
+			protected.GET("/agents/:id/sessions", handlers.ListSessions(cfg))
+			protected.GET("/agents/:id/sessions/:session_id", handlers.GetSession(cfg))
+			protected.GET("/agents/:id/sessions/:session_id/runs/:run_id/trace", handlers.GetRunTrace(cfg))
+			protected.GET("/agents/:id/events", handlers.ListEvents(cfg))
+			protected.GET("/metrics/llm", handlers.GetLLMMetrics(cfg))
+			protected.GET("/metrics/tools", handlers.GetToolMetrics(cfg))
+			protected.GET("/threats", handlers.ListThreats(cfg))
+			protected.GET("/threats/:id", handlers.GetThreat(cfg))
+			protected.POST("/threats/:id/acknowledge", handlers.AcknowledgeThreat(cfg))
+			protected.POST("/threats/:id/clear", handlers.ClearThreat(cfg))
+			protected.GET("/cost", handlers.GetCost(cfg))
+			protected.GET("/cost/pricing", handlers.ListPricing(cfg))
+			protected.POST("/cost/pricing", handlers.UpsertPricing(cfg))
+			protected.DELETE("/cost/pricing/:provider/:model", handlers.DeletePricing(cfg))
+			protected.GET("/rules", handlers.ListRules(cfg, mgr))
+			protected.GET("/rules/catalog", handlers.ListCatalog(cfg, mgr))
+			protected.POST("/rules/catalog/import", handlers.ImportCatalog(mgr))
+			protected.GET("/rules/catalog/export", handlers.ExportCatalog(mgr))
+			protected.GET("/rules/mv-status", handlers.MVStatus(cfg, mgr))
+			protected.POST("/rules/sync", handlers.SyncMVs(cfg, mgr))
+			protected.POST("/rules", handlers.CreateRule(cfg, mgr))
+			protected.GET("/rules/:id", handlers.GetRule(cfg, mgr))
+			protected.POST("/rules/:id/install", handlers.InstallRule(cfg, mgr))
+			protected.POST("/rules/:id/toggle", handlers.ToggleRule(cfg, mgr))
+			protected.POST("/rules/:id/upgrade", handlers.UpgradeRule(cfg, mgr))
+			protected.DELETE("/rules/:id", handlers.UninstallRule(cfg, mgr))
+			protected.GET("/notifications/stream", handlers.NotificationsSSEHandler())
+			protected.GET("/investigate/tables", handlers.ListTables(cfg))
+			protected.POST("/onboarding/generate", handlers.GenerateConfig)
+			protected.POST("/proton/query", handlers.ProtonQueryHandler(cfg))
+		}
 	}
 
 	// Serve the SPA. Read files directly from the fs.FS to avoid http.FileServer's
