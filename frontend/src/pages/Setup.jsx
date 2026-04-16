@@ -58,10 +58,10 @@ export default function Setup() {
             const data = await api.authLogin(username, password)
             localStorage.setItem('agentguard_username', data.username)
             setAuth(prev => ({ ...prev, setupComplete: true, loggedIn: true, username: data.username }))
+            setDone(true)
           } catch {
             setProvisionError('Provisioning succeeded but login failed — please reload and log in.')
           }
-          setDone(true)
         }
         if (event.status === 'error') {
           setProvisionError(event.msg)
@@ -244,7 +244,7 @@ export default function Setup() {
               {step < 2 ? (
                 <button
                   onClick={() => setStep(s => s + 1)}
-                  disabled={step === 1 && !testResult?.ok}
+                  disabled={(step === 0 && !host) || (step === 1 && !testResult?.ok)}
                   className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
                   Next

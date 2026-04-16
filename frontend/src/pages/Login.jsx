@@ -16,6 +16,7 @@ export default function Login() {
     try {
       const data = await api.authLogin(username, password)
       localStorage.setItem('agentguard_username', data.username)
+      setPassword('')
       setAuth(prev => ({ ...prev, loggedIn: true, username: data.username }))
     } catch (err) {
       setError(err.message === 'HTTP 401' ? 'Invalid credentials' : (err.message || 'Login failed'))
@@ -43,8 +44,9 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="bg-[#2c2834] rounded-sm p-8 space-y-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Username</label>
+              <label htmlFor="login-username" className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Username</label>
               <input
+                id="login-username"
                 type="text"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
@@ -56,8 +58,9 @@ export default function Login() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Password</label>
+              <label htmlFor="login-password" className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Password</label>
               <input
+                id="login-password"
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
