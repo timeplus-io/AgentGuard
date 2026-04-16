@@ -87,7 +87,7 @@ docker run -d \
   -p 8080:8080 \
   -e TIMEPLUS_HOST=<timeplus-host> \
   -e AGENTGUARD_URL=http://<agentguard-host>:8080 \
-  -v agentguard-data:/app \
+  -v agentguard-data:/app/data \
   --restart unless-stopped \
   ghcr.io/timeplus-io/agentguard:latest
 ```
@@ -96,7 +96,7 @@ Replace `<timeplus-host>` with the hostname or IP where Timeplus is running (use
 
 Replace `<agentguard-host>` with the address Timeplus will use to call back AgentGuard for alert webhooks — see [Alert UDF webhook](#alert-udf-webhook) below.
 
-The `-v agentguard-data:/app` volume persists the `config.yaml` written by the setup wizard across container restarts. Without it, setup runs again after every restart.
+The `-v agentguard-data:/app/data` volume persists the `config.yaml` written by the setup wizard across container restarts and image upgrades. Without it, setup runs again after every restart.
 
 > **Credentials** are entered in the setup wizard — not via environment variables.
 
@@ -139,8 +139,9 @@ services:
       # Timeplus calls this URL for alert webhooks; use the Docker service name.
       AGENTGUARD_URL: "http://agentguard:8080"
     volumes:
-      # Persists config.yaml written by the setup wizard across restarts.
-      - agentguard-data:/app
+      # Persists config.yaml and custom catalog rules across restarts and image upgrades.
+      # Mounted at /app/data only — the binary is never shadowed by the volume.
+      - agentguard-data:/app/data
     depends_on:
       timeplus:
         condition: service_healthy

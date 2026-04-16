@@ -22,9 +22,12 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates \
  && addgroup -S agentguard \
  && adduser -S agentguard -G agentguard \
- && mkdir -p /app/catalog \
+ && mkdir -p /app/data \
  && chown -R agentguard:agentguard /app
 COPY --chown=agentguard:agentguard --from=backend-builder /app/backend/server ./server
 USER agentguard
 EXPOSE 8080
-CMD ["./server"]
+# Store config and catalog in /app/data so the named volume only covers
+# persistent state — not the binary itself. This allows `docker compose build`
+# + `docker compose up` to pick up the new binary without clearing the volume.
+CMD ["./server", "--config", "/app/data/config.yaml", "--catalog-dir", "/app/data/catalog"]

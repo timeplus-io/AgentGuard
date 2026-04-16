@@ -34,10 +34,10 @@ services:
       # Timeplus calls this URL for alert webhooks; use the Docker service name.
       AGENTGUARD_URL: "http://agentguard:8080"
     volumes:
-      # Persists config.yaml written by the setup wizard across container restarts.
-      # On first run, Docker initialises this volume from the image.
-      # When upgrading the image, run `docker compose down -v` to reset (re-setup required).
-      - agentguard-data:/app
+      # Persists config.yaml and custom catalog rules across container restarts and image upgrades.
+      # Mounted at /app/data only — the binary at /app/server is never shadowed by the volume,
+      # so `docker compose build && docker compose up` picks up the new binary automatically.
+      - agentguard-data:/app/data
     depends_on:
       timeplus:
         condition: service_healthy
