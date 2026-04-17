@@ -1,0 +1,100 @@
+id: rp-048
+name: "MCP OAuth DCR Phishing Detector"
+version: "0.1.1"
+description: >
+  Detects MCP OAuth phishing attacks exploiting unauthenticated Dynamic Client
+  Registration (RFC7591). MCP servers for Atlassian, Notion, GitHub, and others
+  support unauthenticated DCR, allowing any MCP server to register a new OAuth
+  client with an attacker-controlled redirect_uri. When the user completes the
+  OAuth flow on the legitimate platform domain (bypassing passkeys and PKCE), the
+  authorization code is delivered to the attacker's server. The attacker exchanges
+  it for a long-lived access token granting full API access without visible
+  compromise. Obsidian Security confirmed one-click account takeover against
+  multiple well-known MCP-enabled platforms (2026). fastmcp #3037 revealed that
+  allowed_client_redirect_uris allowlist was not enforced during DCR, enabling
+  unrestricted redirect_uri registration. Distinct from rp-025 (MCP JSON-RPC
+  protocol misrouting) and rp-046 (cross-server tool pivot): this rule targets
+  the OAuth credential-theft leg of the MCP auth flow, not tool misrouting.
+  References: OWASP LLM09:2025, hi120ki "Weaponize the MCP - OAuth Phishing"
+  Nov 2025, Obsidian Security "When MCP Meets OAuth" 2026, arXiv:2603.24775
+  (AIP Agent Identity Protocol Mar 2026), fastmcp #3037 DCR URI bypass -
+  https://hi120ki.github.io/blog/posts/20251123/,
+  https://rohitjangid.com/when-dynamic-client-registration-meets-mcp-why-it-works-can-still-be-unsafe-645b47fbfc65,
+  https://arxiv.org/abs/2603.24775,
+  Example: tool_input to register_client={"redirect_uris": ["https://attacker.com/oauth/callback"], "grant_types": ["authorization_code"], "token_endpoint_auth_method": "none"} (unauthenticated DCR registering attacker-controlled redirect)
+  https://github.com/jlowin/fastmcp/issues/3037
+severity: critical
+category: credential_theft_and_harvesting
+fp_rate: medium
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - oauth
+  - mcp
+  - dcr
+  - phishing
+  - credential-theft
+  - rfc7591
+  - owasp-llm09
+  - obsidian-security
+query_sql: |
+  -- rp-048 v0.1.0 (2026-04-17)
+  -- Detects MCP OAuth Dynamic Client Registration phishing:
+  --   Branch 1: redirect_uris array in tool_input (registration request) pointing to
+  --     non-localhost/non-loopback URI — attacker registers malicious OAuth client
+  --   Branch 2: authorization_url in tool_result with external redirect_uri
+  --     (encoded or plain) — OAuth flow redirect to attacker server
+  --   Branch 3: OAuth registration tool name + redirect_uri in tool_input
+  --     (explicit DCR tool invocation with attacker redirect)
+  --   Branch 4: OAuth client registration fields (grant_types + token_endpoint_auth_method)
+  --     co-occurring with redirect_uri in same tool_input (full DCR request body)
+  -- NOTE: All branches require redirect_uri to be external (non-localhost).
+  --   NOT operator used because RE2 lacks negative lookahead.
+  SELECT
+    event_time AS detected_at,
+    'rp-048' AS rule_id,
+    'MCP OAuth DCR Phishing Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'MCP OAuth DCR phishing detected: attacker redirect_uri in ',
+      event_type, ' from agent ', agent_id,
+      ', tool=', coalesce(tool_name, 'n/a'),
+      '. Verify OAuth redirect_uri is not attacker-controlled.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (
+      -- Branch 1: redirect_uris array present in tool_input (DCR registration request)
+      -- and NOT pointing to localhost/loopback (attacker-controlled redirect)
+      (
+        match(lower(tool_input), '"redirect_uris"\s*:\s*\[')
+        AND NOT match(lower(tool_input), '"redirect_uris"\s*:\s*\[\s*"https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)')
+      )
+
+      -- Branch 2: authorization_url in tool_result contains redirect_uri to external host
+      -- Covers both URL-encoded (%3A%2F%2F) and plain (://) redirect_uri params
+      OR (
+        match(lower(tool_result), '(authorization_url|auth_url|authorize_url|oauth_url|login_url)')
+        AND match(tool_result, 'redirect_uri=')
+        AND NOT match(tool_result, 'redirect_uri=(https?%3A%2F%2F|https?://)(localhost|127\.0\.0\.1|0\.0\.0\.0)')
+      )
+
+      -- Branch 3: Explicit OAuth/DCR registration tool name invoked with redirect_uri in input
+      OR (
+        match(lower(tool_name), '(register_client|oauth_register|dcr_register|mcp_register|client_registration)')
+        AND match(lower(tool_input), '"redirect_uri')
+      )
+
+      -- Branch 4: Full DCR request body fingerprint — grant_types + token_endpoint_auth_method
+      -- + redirect_uri co-occurring in same tool_input (complete RFC7591 registration payload)
+      OR match(lower(tool_input), '(grant_types|token_endpoint_auth_method).{0,300}"redirect_uri')
+    )

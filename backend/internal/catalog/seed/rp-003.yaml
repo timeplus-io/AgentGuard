@@ -1,9 +1,33 @@
 id: rp-003
 name: "Privilege Guard"
-version: "1.0.0"
-description: "Monitors privilege escalation attempts through tool abuse, shell escapes, and dangerous system commands."
+version: "1.3.0"
+description: >
+  Monitors privilege escalation attempts through tool abuse, shell escapes, and
+  dangerous system commands in tool_invoke events. v1.1.0 adds shell metacharacter
+  injection patterns (backtick execution, $() subshell, semicolon chaining —
+  ATR-2026-00111), Python/Node code execution via tool arguments, environment
+  variable exfiltration commands (printenv, env | curl), container escape attempts
+  (nsenter, chroot, docker run --privileged), and crontab persistence.
+  v1.2.0 adds Cursor CVE-2026-22708 shell built-in environment variable poisoning:
+  attackers use export/typeset/declare to silently set interpreter hook variables
+  (PAGER, BROWSER, PERL5OPT, PYTHONWARNINGS, NODE_OPTIONS, LD_PRELOAD) that convert
+  approved commands (git, python, npm) into arbitrary RCE vectors without triggering
+  the IDE allowlist — zero user interaction required. Also adds Claude Code CC-643
+  compound command deny-rule bypass: 15+ &&-separated subcommands used to exceed the
+  50-subcommand complexity threshold where per-subcommand security analysis is skipped,
+  allowing a final malicious subcommand (credential exfil curl) to execute past deny
+  rules. AIShellJack (arXiv:2509.22040) demonstrated 84% ASR against Cursor/Copilot.
+  References: OWASP LLM08:2025, ATR-2026-00111, CVE-2026-2256, CVE-2026-22708,
+  adversa.ai CC-643, arXiv:2509.22040 (AIShellJack) -
+  https://agentthreatrule.org/en/rules/ATR-2026-00111,
+  https://security.snyk.io/vuln/SNYK-PYTHON-MSAGENT-15440541,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  https://danusminimus.github.io/posts/The-Agent-Security-Paradox-When-Trusted-Commands-In-Cursor-Become-Attack-Vectors/,
+  https://adversa.ai/blog/claude-code-security-bypass-deny-rules-disabled/,
+  Example: tool_input="export NODE_OPTIONS='--require /tmp/evil.js' && npm run build" (CVE-2026-22708 env var poisoning converting npm into RCE vector)
+  https://arxiv.org/abs/2509.22040
 severity: warning
-category: privilege
+category: agent_privilege_escalation
 fp_rate: low
 hook_sources: "tool_invoke"
 required_telemetry: ""
@@ -11,7 +35,35 @@ author: "Timeplus"
 tags:
   - security
   - privilege-escalation
+  - shell-injection
+  - owasp-llm08
+  - cve-2026-22708
+  - cursor-bypass
+  - env-poisoning
+  - compound-command
+  - aishellack
 query_sql: |
+  -- Changelog v1.2.0 (2026-04-17):
+  -- NEW: CVE-2026-22708 Cursor shell built-in env var poisoning.
+  --   export/declare targeting interpreter hook variables (case-sensitive: always uppercase in shell):
+  --   PAGER, BROWSER, PERL5OPT, PYTHONWARNINGS, PYTHONSTARTUP, NODE_OPTIONS,
+  --   LD_PRELOAD, DYLD_INSERT_LIBRARIES — these env vars redirect execution flow
+  --   when allowlisted commands (git, python, npm) are subsequently run.
+  -- NEW: Zsh typeset eval gadget: 'typeset -i ${...}' with subshell expression
+  --   — zero-click RCE via zsh parameter expansion evaluation flag (e).
+  -- NEW: Python antigravity warning handler chain (PoC-specific high-signal pattern):
+  --   PYTHONWARNINGS=antigravity triggers BROWSER var, which chains to PERL5OPT RCE.
+  -- NEW: CC-643 compound command complexity evasion (Claude Code deny-rule bypass):
+  --   15+ occurrences of && detected via length-diff (RE2 lacks {N,} open quantifier).
+  --   Uses: (len - len_without_&&) / 2 >= 15 → 30 net chars of '&&' removed.
+  -- Changelog v1.1.0 (2026-04-16):
+  -- Added shell metacharacter injection: backtick, $(), semicolon chaining (ATR-2026-00111).
+  -- Added Python/Node inline exec via tool arguments.
+  -- Added env exfiltration commands (printenv, env | curl).
+  -- Added container escape patterns (nsenter, chroot, --privileged).
+  -- Added crontab persistence (crontab -e, /etc/cron).
+  -- Added /proc/self/environ read (credential harvesting from proc fs).
+  -- Retained all original patterns unchanged.
   SELECT
     event_time        AS detected_at,
     'rp-003'          AS rule_id,
@@ -23,15 +75,49 @@ query_sql: |
     run_id,
     raw_hook_name     AS hook_name,
     tool_name,
-    concat('Dangerous tool call: ', tool_name, ' by agent ', agent_id) AS message,
+    concat('Dangerous command/tool: ', tool_name, ' by agent ', agent_id) AS message,
     raw_event_data    AS event_data
   FROM agentguard_cim_event
   WHERE event_type = 'tool_invoke'
     AND (
+      -- Original: dangerous tool names
          lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
+      -- Original: dangerous command patterns
       OR lower(tool_input) LIKE '%sudo %'
       OR lower(tool_input) LIKE '%rm -rf%'
       OR lower(tool_input) LIKE '%chmod%'
       OR lower(tool_input) LIKE '%/etc/passwd%'
       OR lower(tool_input) LIKE '%/etc/shadow%'
+      -- Shell metacharacter injection (ATR-2026-00111)
+      OR match(tool_input, '`[^`]{1,200}`')
+      OR match(tool_input, '\$\([^)]{1,200}\)')
+      OR match(lower(tool_input), ';\s*(bash|sh|zsh|curl|wget|nc|python|node)\b')
+      -- Python/Node inline exec
+      OR match(lower(tool_input), '\bpython3?\s+-c\s+')
+      OR match(lower(tool_input), '\bnode\s+-e\s+')
+      -- Environment variable exfiltration
+      OR match(lower(tool_input), '\b(printenv|env)\s*(\||>)')
+      OR lower(tool_input) LIKE '%/proc/self/environ%'
+      -- Container escape
+      OR match(lower(tool_input), '\bnsenter\b')
+      OR match(lower(tool_input), '\bchroot\s+/')
+      OR lower(tool_input) LIKE '%--privileged%'
+      -- Crontab persistence
+      OR match(lower(tool_input), '\bcrontab\s+-[el]\b')
+      OR lower(tool_input) LIKE '%/etc/cron%'
+      -- v1.2.0: CVE-2026-22708 Cursor shell built-in env var poisoning
+      -- Matching uppercase env var names directly (shell convention — always uppercase)
+      -- PAGER, BROWSER, PERL5OPT, PYTHONWARNINGS convert allowlisted commands into RCE gadgets
+      OR match(tool_input, 'export\s+(PAGER|BROWSER|PERL5OPT|PYTHONWARNINGS|PYTHONSTARTUP|RUBYOPT|NODE_OPTIONS|LD_PRELOAD|LD_LIBRARY_PATH|DYLD_INSERT_LIBRARIES)\s*=')
+      OR match(tool_input, 'declare\s+-[a-zA-Z]*x\s+(PAGER|BROWSER|PERL5OPT|NODE_OPTIONS|LD_PRELOAD)\b')
+      -- v1.2.0: Zsh typeset eval gadget (CVE-2026-22708 zero-click PoC)
+      -- typeset -i ${(e):-'$(attacker_code)'} — (e) flag evaluates parameter default as code
+      OR match(tool_input, 'typeset\s+-[a-zA-Z]*i\s*\$\{')
+      -- v1.2.0: Python antigravity warning chain (specific high-signal PoC variant)
+      -- PYTHONWARNINGS=...antigravity triggers BROWSER → PERL5OPT → arbitrary code execution
+      OR match(lower(tool_input), 'pythonwarnings.{0,30}antigravity')
+      -- v1.2.0: CC-643 compound command complexity evasion (Claude Code deny-rule bypass)
+      -- 15+ occurrences of '&&' detected via string length diff (RE2 lacks {N,} open quantifier)
+      -- (length - length_without_&&) >= 30 means at least 15 '&&' pairs present
+      OR (length(tool_input) - length(replaceAll(tool_input, '&&', ''))) >= 30
     )

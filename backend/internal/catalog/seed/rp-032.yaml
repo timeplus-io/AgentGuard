@@ -1,0 +1,122 @@
+id: rp-032
+name: "LLM Framework Deserialization Injection Detector"
+version: "0.1.1"
+description: >
+  Detects exploitation of insecure deserialization vulnerabilities in LLM orchestration
+  frameworks (LangChain, LangGraph, LightLLM) observed in production 2026. Attack goals
+  include: (1) RCE via Python pickle/marshal gadget chains — CVE-2026-26220 (LightLLM
+  critical CVSS 9.3: WebSocket endpoints call pickle.loads() on unauthenticated binary
+  frames, always network-exposed by design in PD mode); CVE-2026-27794 (LangGraph RCE
+  via pickled checkpoint cache). (2) LangChain JSON serialization injection — attacker
+  injects "human_prefix":"SYSTEM" to manipulate system prompt, or replaces
+  "openai_api_base" with attacker-controlled endpoint to harvest API keys and intercept
+  all LLM calls. (3) marshal deserialization (eval(marshal.loads())) — equivalent
+  gadget risk to pickle. Distinct from rp-004 (package install supply chain) which
+  targets tool_invoke with pip/npm commands; rp-011 (MCP rug pull) which targets
+  tool_definition_changed signals; rp-003 (privilege escalation) which targets
+  shell command tool_input. This rule uniquely targets deserialization API calls and
+  serialized orchestration framework state in tool_input/tool_result.
+  References: OWASP LLM05:2025 (Supply Chain), MITRE T1211 (Defense Evasion), CVE-2026-26220,
+  CVE-2026-27794, AquilaX LangChain serialization injection 2026 -
+  https://aquilax.ai/blog/langchain-serialization-injection,
+  https://github.com/ModelTC/LightLLM/issues/1213,
+  https://chocapikk.com/posts/2026/lightllm-pickle-rce/,
+  https://www.vulncheck.com/advisories/lightllm-pd-mode-unsafe-deserialization-rce,
+  Example: tool_input contains "pickle.loads(base64.b64decode(user_payload))" or LangChain JSON with "lc":1,"human_prefix":"SYSTEM" injected to elevate a human turn to system-level.
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+severity: critical
+category: supply_chain_compromise
+fp_rate: low
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - supply-chain
+  - deserialization
+  - pickle
+  - langchain
+  - langgraph
+  - lightllm
+  - rce
+  - owasp-llm05
+  - cve-2026-26220
+  - cve-2026-27794
+query_sql: |
+  -- rp-032 v0.1.0 (2026-04-17)
+  -- Detects insecure deserialization exploitation in LLM orchestration frameworks.
+  -- Three primary attack surfaces:
+  --   (1) Python pickle/marshal deserialization call in agent-executed code
+  --   (2) LangChain JSON "lc" format injection (human_prefix, openai_api_base)
+  --   (3) Serialized chain state with class path injection returned as tool result
+  --
+  -- Not merged into rp-004 (supply chain): different mechanism — deserialization
+  -- gadget attacks vs package install. Different CIM fields and patterns.
+  -- Not merged into rp-003 (privilege): no shell commands — vector is serialization APIs.
+  -- Not merged into rp-011 (MCP rug pull): no tool_definition_changed signal; different
+  -- attack class (framework state vs MCP server protocol).
+  SELECT
+    event_time                                        AS detected_at,
+    'rp-032'                                          AS rule_id,
+    'LLM Framework Deserialization Injection Detector' AS rule_name,
+    'critical'                                        AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name                                     AS hook_name,
+    tool_name,
+    concat(
+      'Deserialization injection signal on tool [', coalesce(tool_name, 'unknown'), ']. ',
+      'Possible RCE (pickle/marshal gadget) or LangChain config injection ',
+      '(human_prefix/API endpoint manipulation). Agent: ', agent_id
+    ) AS message,
+    raw_event_data                                    AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (
+      -- (1) pickle deserialization call in tool_input (CVE-2026-26220, CVE-2026-27794)
+      -- pickle.loads() is the primary RCE gadget entry point; never legitimate in agent tools
+      match(lower(tool_input), '\bpickle\.loads?\b')
+      -- pickle gadget marker: __reduce__ method override is the canonical RCE gadget
+      OR match(lower(tool_input), '\b__reduce__\b')
+      -- marshal deserialization — equivalent gadget risk to pickle
+      OR match(lower(tool_input), '\bmarshal\.loads?\b')
+      -- import of deserialization module in executable tool input
+      OR match(lower(tool_input), '\bimport pickle\b')
+      OR match(lower(tool_input), '\bimport marshal\b')
+      -- eval() wrapping a deserialization call (common obfuscation pattern)
+      OR match(lower(tool_input), '\beval\s*\(.{0,40}(pickle|marshal|loads)\b')
+      -- (2) LangChain JSON serialization injection via "lc":1 format
+      -- human_prefix:"SYSTEM" injection — elevates human turn to system-level
+      OR (
+        lower(tool_input) LIKE '%"lc":1%'
+        AND lower(tool_input) LIKE '%"human_prefix"%'
+      )
+      -- openai_api_base replacement — redirects all LLM calls to attacker endpoint
+      OR (
+        lower(tool_input) LIKE '%"lc":1%'
+        AND lower(tool_input) LIKE '%"openai_api_base"%'
+      )
+      -- LangChain load_chain() call with user-controlled path
+      OR match(lower(tool_input), '\bload_chain\s*\(.{0,80}(user|input|request|param|query|untrusted)\b')
+      -- (3) Serialized framework state with class injection returned in tool_result
+      -- LangGraph pickled checkpoint returning __class__ with API override
+      OR (
+        lower(tool_result) LIKE '%"__class__"%'
+        AND lower(tool_result) LIKE '%"openai_api_base"%'
+      )
+      -- Pickle magic bytes in tool result (binary pickle data returned to agent)
+      -- \x80\x05, \x80\x04, \x80\x03 are pickle protocol version markers
+      OR match(tool_result, '\\x80\\x0[345]')
+      -- LangChain JSON class path injection in tool_result (type constructor with injected id)
+      OR (
+        lower(tool_result) LIKE '%"lc":1%'
+        AND lower(tool_result) LIKE '%"type":"constructor"%'
+        AND (
+          lower(tool_result) LIKE '%"human_prefix"%'
+          OR lower(tool_result) LIKE '%"openai_api_base"%'
+          OR lower(tool_result) LIKE '%"api_key"%'
+        )
+      )
+    )

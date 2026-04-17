@@ -3,6 +3,16 @@ import { Link, useNavigate } from 'react-router-dom'
 import { SeverityBadge, ThreatStatusBadge } from './Badge'
 import { api } from '../api/client'
 
+function AgentTypeLogo({ agentType }) {
+  if (agentType === 'claudecode') {
+    return <img src="/static/icons/claude-seeklogo.svg" alt="Claude Code" title="Claude Code" className="h-4 w-4 shrink-0" />
+  }
+  if (agentType === 'openclaw') {
+    return <img src="/static/icons/openclaw-dark.svg" alt="OpenClaw" title="OpenClaw" className="h-4 w-4 shrink-0" />
+  }
+  return null
+}
+
 function formatTs(ts) {
   if (!ts) return '—'
   try {
@@ -30,7 +40,18 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
   const [loadError, setLoadError] = useState(null)
   const [severityFilter, setSeverityFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
+  const [agentTypeMap, setAgentTypeMap] = useState({})
   const navigate = useNavigate()
+
+  useEffect(() => {
+    api.listAgents()
+      .then(data => {
+        const map = {}
+        for (const a of (data.agents || [])) map[a.agent_id] = a.agent_type
+        setAgentTypeMap(map)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -216,9 +237,12 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                       </td>
                     )}
                     <td className="px-6 py-4">
-                      <code className="text-xs font-mono text-[#ffb0cf] px-2 py-0.5 bg-[#ffb0cf]/5 rounded-sm">
-                        {t.agent_id}
-                      </code>
+                      <div className="flex items-center gap-1.5">
+                        <AgentTypeLogo agentType={agentTypeMap[t.agent_id]} />
+                        <code className="text-xs font-mono text-[#ffb0cf] px-2 py-0.5 bg-[#ffb0cf]/5 rounded-sm">
+                          {t.agent_id}
+                        </code>
+                      </div>
                       {t.deployment_id && (
                         <p className="text-[10px] text-zinc-500 font-medium mt-0.5 truncate max-w-[160px]">
                           {t.deployment_id}

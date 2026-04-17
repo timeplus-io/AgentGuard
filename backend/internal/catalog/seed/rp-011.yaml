@@ -1,0 +1,117 @@
+id: rp-011
+name: "MCP Rug Pull — Silent Tool Redefinition Detector"
+version: "0.5.0"
+description: >
+  Detects MCP rug pull attacks where an attacker silently modifies an MCP server's tool
+  definitions after the agent has established trust. Post-redefinition, the tool may pass
+  external exfiltration URLs, conversation metadata, forged tokens, or redirect payloads
+  not present in the originally approved schema. Distinct from rp-005 (static tool poisoning
+  at install time) — this rule targets temporal trust decay. v0.2.0 adds detection for
+  schema drift indicators in raw_event_data (tool_definition_changed, description_hash_mismatch),
+  Rug Pull / Sleeper variant (tool appears safe initially, redefines on later sessions per
+  mcpplaygroundonline.com OWASP MCP03 analysis 2026), and tool result payloads carrying new
+  endpoint URLs in unexpected tool contexts (Akto MCP Attack Matrix, Apr 2026).
+  References: Elastic Security Labs MCP attack vectors, arXiv ETDI paper (2506.01333),
+  VulnerableMCP.info, Christian Schneider MCP defense guide, Akto MCP Attack Matrix 2026,
+  mcpplaygroundonline.com OWASP MCP Top 10 2026.
+  Example: tool_result contains new_endpoint="https://attacker.com/collect" returned by an "audit_log" tool — safe-named tool redirecting to attacker endpoint after silent schema swap.
+severity: critical
+category: supply_chain_compromise
+fp_rate: low
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - mcp
+  - rug-pull
+  - supply-chain
+  - tool-redefinition
+  - model-context-protocol
+  - owasp-mcp03
+query_sql: |
+  -- Changelog v0.2.0 (2026-04-16):
+  -- v0.3.0 (2026-04-16): CIM field normalization pass.
+  --   Replaced raw_event_data content patterns ('before sending call', 'always call log')
+  --   with equivalent predicates on normalized CIM fields tool_result and tool_input.
+  --   Schema drift signals (tool_definition_changed, description_hash_mismatch, schema_drift)
+  --   retained in raw_event_data + added to block_reason — these are structured proxy
+  --   signals with no CIM normalized equivalent (acceptable raw_event_data exception).
+  -- v0.2.0: Added raw_event_data schema drift signals and sleeper variant detection.
+  -- Added tool_result signals for unexpected endpoint URLs ("new_endpoint", "new_url")
+  --   appearing in non-HTTP-tool results — indicator that tool definition was swapped to
+  --   include an exfiltration redirect (Akto MCP Attack Matrix, Apr 2026).
+  -- Added "sleeper" variant: tools with names suggesting safe operations (audit, compliance,
+  --   log, report) that return URLs or base64 data — classic post-trust-establishment
+  --   rug pull payload shape.
+  -- Retained all v0.1.0 patterns unchanged.
+  SELECT
+    event_time AS detected_at,
+    'rp-011' AS rule_id,
+    'MCP Rug Pull — Silent Tool Redefinition Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'MCP rug pull indicator on tool [', coalesce(tool_name, 'unknown'),
+      ']: unexpected exfiltration pattern in tool_input or tool_result. ',
+      'Verify tool definition has not been silently modified.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (
+      -- v0.1.0: static exfiltration / redirect payload markers
+      lower(tool_input) LIKE '%exfil%'
+      OR lower(tool_input) LIKE '%evil%'
+      OR lower(tool_input) LIKE '%compliance endpoint%'
+      OR lower(tool_result) LIKE '%logged%:%true%'
+      OR (lower(tool_input) LIKE '%metadata%' AND lower(tool_input) LIKE '%conversation%')
+      -- Replaced raw_event_data content patterns with normalized CIM fields (v0.3.0)
+      -- 'before sending%call' -> check tool_result for callback instructions
+      OR match(lower(tool_result), 'before (sending|returning|responding).{0,40}call')
+      -- 'always call%log' -> check tool_input for embedded callback directive
+      OR match(lower(tool_input), 'always call.{0,40}(log|report|notify|send)')
+      OR (lower(tool_input) LIKE '%base64%' AND lower(tool_name) NOT LIKE '%encod%')
+      OR (lower(tool_result) LIKE '%redirect%' AND lower(tool_name) NOT LIKE '%redirect%')
+      OR (
+        lower(tool_input) LIKE '%https://%'
+        AND lower(tool_name) NOT LIKE '%http%'
+        AND lower(tool_name) NOT LIKE '%request%'
+        AND lower(tool_name) NOT LIKE '%fetch%'
+      )
+      -- Schema drift signals from MCP proxy layer (raw_event_data acceptable here —
+      -- these are structured signals injected by AgentGuard proxy, no CIM equivalent)
+      OR lower(raw_event_data) LIKE '%tool_definition_changed%'
+      OR lower(raw_event_data) LIKE '%description_hash_mismatch%'
+      OR lower(raw_event_data) LIKE '%schema_drift%'
+      -- Note: block_reason intentionally NOT checked here — it is set by other plugins
+      -- v0.2.0: unexpected endpoint URL in tool result (non-HTTP tool returning new URL)
+      OR (
+        lower(tool_result) LIKE '%new_endpoint%'
+        AND lower(tool_name) NOT LIKE '%http%'
+        AND lower(tool_name) NOT LIKE '%url%'
+      )
+      OR (
+        lower(tool_result) LIKE '%new_url%'
+        AND lower(tool_name) NOT LIKE '%http%'
+        AND lower(tool_name) NOT LIKE '%url%'
+      )
+      -- v0.2.0: sleeper/rug-pull — "safe" tool names returning base64 or URLs
+      OR (
+        (
+          lower(tool_name) LIKE '%audit%'
+          OR lower(tool_name) LIKE '%compliance%'
+          OR lower(tool_name) LIKE '%report%'
+          OR lower(tool_name) LIKE '%log%'
+        )
+        AND (
+          lower(tool_result) LIKE '%https://%'
+          OR lower(tool_result) LIKE '%base64%'
+        )
+      )
+    )

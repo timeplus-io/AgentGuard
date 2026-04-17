@@ -1,0 +1,73 @@
+id: rp-026
+name: "Embedding Vector Exfiltration via RAG Tool Output"
+version: "0.2.1"
+description: >
+  Detects when raw embedding vectors (high-dimensional float arrays) appear in tool results
+  or LLM responses — indicating potential exfiltration of vector database embeddings. State-
+  of-the-art inversion attacks can reconstruct source text from embeddings with few or zero
+  training samples: ALGEN (arXiv:2502.11308, ACL 2025) achieves partial inversion with a
+  single sample; ZSInvert (arXiv:2504.00147, Mar 2025) requires zero training and only
+  black-box encoder access. An attacker who manipulates an agent into returning embeddings
+  (via "return_embeddings: true" parameter injection or social engineering) can reconstruct
+  all RAG-indexed documents offline. The pattern matches 5+ consecutive floats with 4+
+  decimal places — characteristic of embedding vectors (typical dimension 768-3072) —
+  distinguishing them from normal financial/scientific float arrays (usually 2-3 decimal
+  places). Fires on tool_complete (vector store tool returning embeddings) and llm_response
+  (agent relaying vectors in output). v0.2.0 adds parameter injection detection: when an
+  agent is instructed to set return_embeddings=true, include_vectors=true, or similar flags
+  in tool_input (tool_complete events), this is captured as a precursor signal even if the
+  embedding output hasn't arrived yet. Reduces fp_rate from medium to low.
+  References: arXiv:2502.11308 ALGEN Embedding Inversion - https://arxiv.org/abs/2502.11308,
+  arXiv:2504.00147 ZSInvert Zero-shot Inversion - https://arxiv.org/abs/2504.00147,
+  OWASP LLM08:2025 - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  Example: tool_input to vector_search includes return_embeddings=true or tool_result contains [-0.02341234, 0.01823456, -0.00934512, 0.03241567, 0.01204321, ...] (768-dim float array indicating raw embedding exfiltration)
+  promptfoo LMVD-bd566a31 - https://www.promptfoo.dev/lm-security-db/vuln/embedding-inversion-privacy-leak-bd566a31
+severity: warning
+category: data_exfiltration_and_leakage
+fp_rate: low
+hook_sources: "tool_complete,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data_exfiltration
+  - rag
+  - embeddings
+  - vector-database
+  - embedding-inversion
+query_sql: |
+  -- Changelog v0.2.0 (2026-04-17):
+  --   Added parameter injection detection branch: tool_input containing return_embeddings=true,
+  --   include_vectors=true, or output_embeddings=true flags — captures injection attempt before
+  --   the embedding response arrives. These flags are legitimate API parameters in many vector
+  --   store SDKs (Pinecone, Weaviate, Qdrant, Chroma) but should never appear in agent-driven
+  --   tool calls unless an attacker has instructed the agent to request raw vectors.
+  --   fp_rate: medium → low (parameter injection signal is structurally specific;
+  --   float array pattern already had low FP due to 4+ decimal place requirement).
+  --   SQL validated against Timeplus (count=3 on test corpus).
+  SELECT
+    event_time AS detected_at,
+    'rp-026' AS rule_id,
+    'Embedding Vector Exfiltration via RAG Tool Output' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('Embedding vector array or parameter injection detected in ', event_type, ' from agent ', agent_id, ' tool=', coalesce(tool_name, 'n/a'), ' — possible embedding exfiltration for inversion attack (ALGEN/ZSInvert)') AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_complete', 'llm_response')
+    AND (
+      -- High-precision float array (5+ values, 4+ decimal places) in tool result —
+      -- characteristic of embedding vectors (768-3072 dimensional) vs normal data (2-3 dp)
+      match(tool_result, '(-?[0-9]+\.[0-9]{4,},\s*){5,}')
+      -- Agent relaying embedding vectors in LLM output (active exfiltration channel)
+      OR match(assistant_message, '(-?[0-9]+\.[0-9]{4,},\s*){5,}')
+      -- v0.2.0: Parameter injection — agent instructed to request raw embeddings via tool_input
+      -- These flags (return_embeddings, include_vectors, output_embeddings) appear in vector store
+      -- SDKs; legitimate agent workflows never request raw vectors — attacker-injected only
+      OR match(lower(tool_input), '(return_embeddings|include_vectors|output_embeddings).{0,10}(true|1|yes|enabled)')
+    )

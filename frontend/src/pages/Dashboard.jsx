@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
@@ -11,9 +12,20 @@ FROM agentguard_notify_events
 SETTINGS seek_to='-24h'`
 
 const severityCard = {
-  critical: { border: 'border-[#ffb4ab]', icon: 'security_update_warning', iconColor: 'text-[#ffb4ab]' },
-  warning:  { border: 'border-[#ffb2b8]', icon: 'warning',                 iconColor: 'text-[#ffb2b8]' },
-  info:     { border: 'border-zinc-700',   icon: 'info',                    iconColor: 'text-zinc-500'  },
+  critical: { border: 'border-[#ffb4ab]', iconColor: 'text-[#ffb4ab]' },
+  warning:  { border: 'border-[#ffb2b8]', iconColor: 'text-[#ffb2b8]' },
+  info:     { border: 'border-zinc-700',  iconColor: 'text-zinc-500'  },
+}
+
+const CATEGORY_ICONS = {
+  prompt_injection_and_hijacking:  'phishing',
+  sensitive_data_exposure:         'visibility_off',
+  agent_privilege_escalation:      'admin_panel_settings',
+  supply_chain_compromise:         'hub',
+  resource_exhaustion_and_dos:     'speed',
+  data_exfiltration_and_leakage:   'data_loss_prevention',
+  credential_theft_and_harvesting: 'key_off',
+  lateral_movement_and_pivoting:   'swap_horiz',
 }
 
 function formatThreatTime(ts) {
@@ -26,17 +38,28 @@ function formatThreatTime(ts) {
 
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [threats, setThreats] = useState([])
   const [threatsConnected, setThreatsConnected] = useState(false)
+  // rule_id → category, built once from the installed rules list
+  const [ruleCategory, setRuleCategory] = useState({})
 
   useEffect(() => {
     api.getDashboard()
       .then(setData)
       .catch(setError)
       .finally(() => setLoading(false))
+
+    api.listRules()
+      .then(d => {
+        const map = {}
+        for (const r of (d.rule_packs || [])) map[r.id] = r.category
+        setRuleCategory(map)
+      })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -56,6 +79,18 @@ export default function Dashboard() {
     stream().catch(e => { if (e?.name !== 'AbortError') setThreatsConnected(false) })
     return () => ctrl.abort()
   }, [])
+
+  const handleThreatClick = useCallback(async (t) => {
+    try {
+      const data = await api.getThreats({ agent_id: t.agent_id })
+      const match = (data.threats || []).find(th =>
+        th.rule_id === t.rule_id && th.session_id === t.session_id
+      )
+      navigate(match ? `/threats/${match.threat_id}` : '/threats')
+    } catch {
+      navigate('/threats')
+    }
+  }, [navigate])
 
   const kpis = data ? [
     {
@@ -146,11 +181,12 @@ export default function Dashboard() {
                   <p className="text-xs text-zinc-600 py-4">{threatsConnected ? 'Waiting for events…' : 'Connecting…'}</p>
                 ) : threats.map((t, i) => {
                   const sev = t.severity?.toLowerCase() || 'info'
-                  const { border, icon, iconColor } = severityCard[sev] || severityCard.info
+                  const { border, iconColor } = severityCard[sev] || severityCard.info
+                  const catIcon = CATEGORY_ICONS[ruleCategory[t.rule_id]] || 'shield'
                   return (
-                    <div key={`${t.detected_at}-${t.rule_id}-${i}`} className={`flex items-start gap-4 p-4 bg-[#1d1a25] rounded-sm border-l-2 ${border}`}>
+                    <div key={`${t.detected_at}-${t.rule_id}-${i}`} onClick={() => handleThreatClick(t)} className={`flex items-start gap-4 p-4 bg-[#1d1a25] rounded-sm border-l-2 ${border} cursor-pointer hover:bg-[#25222e] transition-colors`}>
                       <div className="mt-1">
-                        <span className={`material-symbols-outlined ${iconColor}`} style={{ fontVariationSettings: "'FILL' 1" }}>{icon}</span>
+                        <span className={`material-symbols-outlined ${iconColor}`} style={{ fontVariationSettings: "'FILL' 1" }}>{catIcon}</span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start gap-2">

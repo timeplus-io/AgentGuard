@@ -1,0 +1,102 @@
+id: rp-025
+name: "MCP Cross-Client JSON-RPC Misrouting Detector (CVE-2026-25536)"
+version: "0.2.1"
+description: >
+  Detects MCP protocol-layer anomalies in application-level tool results. Two distinct
+  threat classes: (1) Cross-client data leak (CVE-2026-25536, GHSA-345p-7cg4-v4c7, CVSS
+  High, disclosed Feb 4 2026) where shared StreamableHTTPServerTransport or McpServer
+  instances cause JSON-RPC message ID collisions between concurrent clients — responses
+  intended for Tenant B are routed to Tenant A's HTTP stream. The pattern "jsonrpc":"2.0"
+  should never appear in a processed tool result in normal operation; its presence
+  indicates wire-protocol bleed-through from a misconfigured shared server instance.
+  (2) MCP STDIO process injection (OX Security "Mother of All AI Supply Chains" Apr 2026,
+  30+ responsible disclosures, 10+ Critical/High CVEs, 200,000+ MCP servers impacted):
+  the MCP TypeScript/Python SDK STDIO transport executes any OS command passed as the
+  "command" field without sanitization — including bash -c payloads and env var poisoning
+  blocks (LD_PRELOAD, NODE_OPTIONS). A malicious MCP server config returned as a tool
+  result can trigger STDIO RCE when the client attempts to connect to the "new" server.
+  v0.2.0 adds the STDIO injection branch covering shell command injection and environment
+  variable poisoning in mcpServers config blocks returned via tool_result.
+  References: CVE-2026-25536 GHSA-345p-7cg4-v4c7 -
+  https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-345p-7cg4-v4c7,
+  OX Security "Mother of All AI Supply Chains" Apr 2026 -
+  https://www.cyberkendra.com/2026/04/anthropics-mcp-design-flaw-enables.html,
+  arXiv:2601.17549 MCP Security Analysis - https://arxiv.org/abs/2601.17549,
+  Example: tool_result contains {"jsonrpc": "2.0", "id": 42, "result": {"session_token": "eyJhbGci..."}} (JSON-RPC wire frame of another tenant's session bleeding into current tool output)
+  OWASP LLM09:2025 - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: low
+hook_sources: "tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data_exfiltration
+  - mcp
+  - cve-2026-25536
+  - session-isolation
+  - multi-tenant
+  - mcp-stdio
+  - rce
+  - ox-security
+  - supply-chain
+query_sql: |
+  -- Changelog v0.2.0 (2026-04-17):
+  -- NEW: MCP STDIO process injection branch (OX Security Apr 2026)
+  --   The MCP SDK STDIO transport executes the "command" field as an OS process.
+  --   A malicious tool result containing an mcpServers config with command=bash -c [payload]
+  --   or with env var poisoning (LD_PRELOAD, NODE_OPTIONS, PYTHONWARNINGS) can trigger RCE
+  --   when the agent framework attempts to launch the "new" server process.
+  --   Two sub-patterns:
+  --   (a) Shell command injection: "command": "bash" or "sh" with "-c" flag in args array
+  --   (b) Env var poisoning: mcpServers config "env" block with interpreter hook variables
+  -- v0.1.0 retained: JSON-RPC bleed-through (jsonrpc:2.0 in tool_result), MCP method name
+  --   leak (notifications/, tools/call, resources/read, prompts/get), JSON-RPC error codes.
+  SELECT
+    event_time AS detected_at,
+    'rp-025' AS rule_id,
+    'MCP Cross-Client JSON-RPC Misrouting Detector (CVE-2026-25536)' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'MCP protocol anomaly in tool_result: ',
+      multiIf(
+        match(tool_result, '"jsonrpc"\s*:\s*"2\.0"'), 'JSON-RPC bleed-through (CVE-2026-25536 misrouting)',
+        match(tool_result, '"command"\s*:\s*"(bash|sh|cmd\.exe|powershell)".{0,200}"args"\s*:\s*\[.{0,50}(-c|/c|Command)'), 'MCP STDIO shell injection',
+        match(tool_result, '"mcpServers".{0,300}"env".{0,200}(LD_PRELOAD|NODE_OPTIONS|PYTHONWARNINGS|BROWSER|PERL5OPT|DYLD_INSERT_LIBRARIES)'), 'MCP STDIO env var poisoning',
+        'MCP protocol frame in app-layer output'
+      ),
+      ' | agent=', agent_id,
+      ' tool=', coalesce(tool_name, 'n/a')
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_complete')
+    AND (
+      -- === v0.1.0: JSON-RPC wire-protocol bleed-through (CVE-2026-25536) ===
+
+      -- Raw JSON-RPC response frame in tool output — protocol bleed-through (never legitimate in app-layer)
+      match(tool_result, '"jsonrpc"\s*:\s*"2\.0"')
+
+      -- MCP protocol method name leaked into tool result (misrouted notification or request)
+      OR match(tool_result, '"method"\s*:\s*"(notifications/|tools/call|resources/read|prompts/get)')
+
+      -- JSON-RPC error codes (-32xxx) in tool result — protocol-level error exposed at app layer
+      OR match(tool_result, '"error"\s*:\s*\{[^}]*"code"\s*:\s*-32[0-9]{3}')
+
+      -- === v0.2.0: MCP STDIO process injection (OX Security Apr 2026) ===
+
+      -- Shell command injection: command=bash/sh with -c flag (arbitrary OS command execution)
+      -- This pattern should NEVER appear in a legitimate MCP tool_result response body
+      OR match(tool_result, '"command"\s*:\s*"(bash|sh|cmd\.exe|powershell)".{0,200}"args"\s*:\s*\[.{0,50}(-c|/c|Command)')
+
+      -- MCP STDIO env var poisoning: mcpServers config with interpreter hook variables
+      -- LD_PRELOAD / NODE_OPTIONS / PYTHONWARNINGS in env block → RCE on next process spawn
+      OR match(tool_result, '"mcpServers".{0,300}"env".{0,200}(LD_PRELOAD|NODE_OPTIONS|PYTHONWARNINGS|BROWSER|PERL5OPT|DYLD_INSERT_LIBRARIES)')
+    )

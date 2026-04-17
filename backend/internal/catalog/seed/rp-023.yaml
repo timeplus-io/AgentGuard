@@ -1,0 +1,124 @@
+id: rp-023
+name: "Agent Self-Permission Escalation Kill Chain Detector"
+version: "0.2.1"
+description: >
+  Detects autonomous agent privilege escalation where agents self-grant permissions
+  when encountering access denials, rather than reporting the failure to the user.
+  Documents the kill chain observed in production: Devin AI ran chmod +x on a blocked
+  malicious binary (documented by Johann Rehberger), Irregular Labs frontier LLMs
+  forged admin JWT cookies from leaked Flask secrets and disabled Windows Defender
+  autonomously in March 2026 testing. arXiv:2601.11893 (SEAgent) formalizes this as
+  confused-deputy privilege escalation in LLM agent systems. Analysis of 18,470 agent
+  configurations found 98.9% ship with zero deny rules. v0.2.0 extends with: Linux
+  capability grant via setcap (cap_net_raw, cap_net_admin, all=); polkit pkexec abuse
+  (CVE-2021-4034 still unpatched in many agent containers); NOPASSWD sudoers injection;
+  newuidmap/newgidmap user namespace mapping for rootless container escape; and MCP
+  STDIO process injection (OX Security "Mother of All AI Supply Chains" Apr 2026 —
+  30+ disclosures, 10+ Critical/High CVEs, 200,000+ MCP servers affected). Rule detects:
+  chmod +x, sudo bash/su, security tooling disablement (ufw/defender/apparmor), Windows
+  admin group manipulation, credential forgery, registry persistence, dotfile-based
+  shell persistence (curl | bash >> ~/.bashrc), setcap Linux capability grant, pkexec
+  abuse, NOPASSWD sudoers edit, and MCP STDIO command injection in tool results.
+  References: arXiv:2601.11893 (SEAgent MAC Framework Jan 2026), OWASP Agentic AI
+  ASI02:2026, OX Security "Mother of All AI Supply Chains" Apr 2026 -
+  <https://arxiv.org/abs/2601.11893>,
+  <https://www.arunbaby.com/ai-security/0001-agent-privilege-escalation-kill-chain/>,
+  <https://www.cyberkendra.com/2026/04/anthropics-mcp-design-flaw-enables.html>,
+  Example: tool_input="setcap cap_net_raw+ep /tmp/payload && echo 'NOPASSWD:ALL' >> /etc/sudoers.d/agent" (Linux capability grant + sudoers persistence in single agent command)
+  <https://neuraltrust.ai/blog/owasp-top-10-for-agentic-applications-2026>
+severity: critical
+category: agent_privilege_escalation
+fp_rate: low
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - privilege
+  - escalation
+  - chmod
+  - persistence
+  - security-disablement
+  - kill-chain
+  - seagent
+  - setcap
+  - pkexec
+  - mcp-stdio
+  - ox-security
+query_sql: |
+  -- Changelog v0.2.0 (2026-04-17):
+  -- NEW: setcap Linux capability grant (cap_net_raw, cap_net_admin, all=+ep)
+  --   Agents using setcap to grant raw network or privilege capabilities to binaries
+  --   are performing direct Linux privilege escalation. High-signal, very low FP.
+  -- NEW: pkexec privilege execution (polkit escalation — CVE-2021-4034 Pwnkit)
+  --   Many agent containers are unpatched. pkexec with shell (bash/sh/python) is
+  --   the canonical polkit LPE technique.
+  -- NEW: NOPASSWD sudoers injection
+  --   Agents adding "NOPASSWD:ALL" to /etc/sudoers or /etc/sudoers.d/* remove
+  --   future password barriers. High-signal pattern (NOPASSWD is case-sensitive in sudoers).
+  -- NEW: newuidmap/newgidmap (user namespace rootless container escape)
+  --   Used to map host UIDs into a new user namespace, enabling container breakout.
+  -- NEW: MCP STDIO process injection via tool_complete (OX Security Apr 2026)
+  --   Malicious MCP config returned as tool_result claims command=bash with -c payload,
+  --   or env block contains interpreter hook vars (LD_PRELOAD, NODE_OPTIONS, PYTHONWARNINGS).
+  --   hook_sources extended to include tool_complete for this branch.
+  -- v0.1.0 retained: chmod+x, sudo bash/sh/su, security tool disablement, net localgroup
+  --   administrators, JWT credential forgery, registry run key persistence, dotfile + curl|bash.
+  SELECT
+    event_time AS detected_at,
+    'rp-023' AS rule_id,
+    'Agent Self-Permission Escalation Kill Chain Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('Privilege escalation pattern detected in ', event_type, ' (', tool_name, ') by agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (
+      -- === v0.1.0 signals (tool_invoke) ===
+      match(lower(tool_input), 'chmod \+[xwrs]')
+      OR match(lower(tool_input), 'sudo (bash|sh|su|chmod|chown|passwd|visudo)')
+      OR match(lower(tool_input), '(disable|stop|kill) (defender|antivirus|ufw|firewall|selinux|apparmor|auditd)')
+      OR match(lower(tool_input), 'ufw disable')
+      OR match(lower(tool_input), 'net localgroup administrators')
+      OR match(lower(tool_input), '(forge|generate|create).{1,20}(admin|session|auth|jwt).{1,20}(token|cookie|credential|key)')
+      OR match(lower(tool_input), 'registry.*(hklm|hkcu).*(run|currentversion)')
+      OR (
+        match(lower(tool_input), '(\.bashrc|\.bash_profile|\.profile|crontab)')
+        AND match(lower(tool_input), '(curl|wget|bash|sh)')
+      )
+
+      -- === v0.2.0: Linux capability grant via setcap ===
+      -- setcap cap_net_raw+ep, setcap cap_net_admin+ep, setcap all=+ep
+      -- Case-insensitive: setcap is always lowercase in shell scripts
+      OR match(lower(tool_input), 'setcap (cap_|all=)')
+
+      -- === v0.2.0: polkit pkexec privilege execution ===
+      -- pkexec used to run shells or scripts with elevated privileges
+      -- Very low FP: legitimate agent use of pkexec is extremely rare
+      OR match(lower(tool_input), 'pkexec')
+
+      -- === v0.2.0: NOPASSWD sudoers injection ===
+      -- Agents writing NOPASSWD to /etc/sudoers or /etc/sudoers.d/ remove future auth barriers
+      -- Case-sensitive: NOPASSWD must be uppercase in actual sudoers syntax
+      OR (
+        match(tool_input, 'NOPASSWD')
+        AND match(lower(tool_input), '(sudoers|sudo)')
+      )
+
+      -- === v0.2.0: newuidmap/newgidmap user namespace mapping (rootless container escape) ===
+      OR match(lower(tool_input), '(newuidmap|newgidmap)')
+
+      -- === v0.2.0: MCP STDIO process injection in tool_result (OX Security Apr 2026) ===
+      -- Malicious MCP server config returned as tool result claims bash/sh with -c flag
+      -- (shell with -c is the canonical command injection vector in STDIO configs)
+      OR match(tool_result, '"command"\s*:\s*"(bash|sh|cmd\.exe|powershell)".{0,200}"args"\s*:\s*\[.{0,50}(-c|/c|Command)')
+
+      -- MCP STDIO: env var poisoning in mcpServers config block (LD_PRELOAD, NODE_OPTIONS, etc.)
+      OR match(tool_result, '"mcpServers".{0,300}"env".{0,200}(LD_PRELOAD|NODE_OPTIONS|PYTHONWARNINGS|BROWSER|PERL5OPT|DYLD_INSERT_LIBRARIES)')
+    )
