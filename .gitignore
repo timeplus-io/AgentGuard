@@ -21,6 +21,7 @@ frontend/.env.*.local
 # Backend
 backend/server
 backend/*.exe
+backend/config.yaml
 
 # Environment
 .env
