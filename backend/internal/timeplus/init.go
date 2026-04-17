@@ -1045,7 +1045,8 @@ SELECT
   json_value(event_data, '$.tool_input.skill') AS skill_name,
   'invoked' AS skill_action
 FROM agentguard_hook_events
-WHERE hook_name = 'before_tool_call'
+WHERE _tp_time > earliest_ts()
+  AND hook_name = 'before_tool_call'
   AND tool_name = 'Skill'
   AND agent_type = 'claudecode'
   AND json_value(event_data, '$.tool_input.skill') != ''`
@@ -1062,7 +1063,8 @@ SELECT
   extract(json_value(event_data, '$.params.path'), '/skills/([a-zA-Z][a-zA-Z0-9-]*)/SKILL') AS skill_name,
   'invoked' AS skill_action
 FROM agentguard_hook_events
-WHERE hook_name = 'before_tool_call'
+WHERE _tp_time > earliest_ts()
+  AND hook_name = 'before_tool_call'
   AND tool_name = 'read'
   AND agent_type = 'openclaw'
   AND position(event_data, 'SKILL.md') > 0
@@ -1081,7 +1083,8 @@ SELECT
   'loaded' AS skill_action
 FROM agentguard_hook_events
 ARRAY JOIN extract_all(event_data, '---..name: ([a-zA-Z][a-zA-Z0-9-]*)') AS sn
-WHERE hook_name = 'prompt_context'
+WHERE _tp_time > earliest_ts()
+  AND hook_name = 'prompt_context'
   AND agent_type = 'claudecode'
   AND length(trim(sn)) > 0`
 
@@ -1098,7 +1101,8 @@ SELECT
   'loaded' AS skill_action
 FROM agentguard_hook_events
 ARRAY JOIN extract_all(event_data, '<name>([a-zA-Z][a-zA-Z0-9-]*)</name>') AS sn
-WHERE hook_name = 'llm_input'
+WHERE _tp_time > earliest_ts()
+  AND hook_name = 'llm_input'
   AND agent_type = 'openclaw'
   AND length(trim(sn)) > 0`
 
