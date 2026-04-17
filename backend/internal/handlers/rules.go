@@ -601,12 +601,12 @@ func isThreatAlreadyOpen(cfg *config.Config, agentID, deploymentID, ruleID strin
 	var sql string
 	if deploymentID != "" {
 		sql = fmt.Sprintf(
-			`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND deployment_id = '%s' AND rule_id = '%s' AND status = 'open'`,
+			`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND deployment_id = '%s' AND rule_id = '%s' AND (status = '' OR status = 'open')`,
 			escapeSQL(agentID), escapeSQL(deploymentID), escapeSQL(ruleID),
 		)
 	} else {
 		sql = fmt.Sprintf(
-			`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND rule_id = '%s' AND status = 'open'`,
+			`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND rule_id = '%s' AND (status = '' OR status = 'open')`,
 			escapeSQL(agentID), escapeSQL(ruleID),
 		)
 	}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,11 +53,15 @@ func Load() (*Config, error) {
 	return load(viper.GetViper(), true)
 }
 
-// LoadFrom reads configuration from a specific file path. Used in tests.
+// LoadFrom reads configuration from a specific file path.
+// Returns a config with defaults if the file does not exist.
 func LoadFrom(path string) (*Config, error) {
 	v := viper.New()
 	v.SetConfigFile(path)
 	if err := v.ReadInConfig(); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return load(v, false)
+		}
 		return nil, fmt.Errorf("reading config file %s: %w", path, err)
 	}
 	return load(v, false)
@@ -80,7 +85,8 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 		}
 
 		if err := v.ReadInConfig(); err != nil {
-			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			var notFound viper.ConfigFileNotFoundError
+			if !errors.As(err, &notFound) && !errors.Is(err, os.ErrNotExist) {
 				return nil, fmt.Errorf("reading config file: %w", err)
 			}
 		}
