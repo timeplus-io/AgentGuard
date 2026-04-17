@@ -424,6 +424,98 @@ function RunEventCard({ event }) {
   )
 }
 
+// ── SkillsTab ─────────────────────────────────────────────────────────────────
+
+function SkillsTab({ sessionId }) {
+  const [loaded, setLoaded] = useState([])
+  const [invoked, setInvoked] = useState([])
+  const [connecting, setConnecting] = useState(true)
+
+  useEffect(() => {
+    if (!sessionId) return
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(sessionId)) return
+    setLoaded([])
+    setInvoked([])
+    setConnecting(true)
+    const ctrl = new AbortController()
+    const sql = `SELECT event_time, skill_name, skill_action FROM agentguard_skills WHERE session_id = '${sessionId}' ORDER BY event_time ASC SETTINGS seek_to = 'earliest'`
+    async function stream() {
+      for await (const row of api.protonQuery(sql, { signal: ctrl.signal })) {
+        if (ctrl.signal.aborted) break
+        setConnecting(false)
+        if (row.skill_action === 'loaded') {
+          setLoaded(prev => prev.some(s => s.name === row.skill_name) ? prev : [...prev, { name: row.skill_name, firstSeen: row.event_time }])
+        } else if (row.skill_action === 'invoked') {
+          setInvoked(prev => [...prev, { time: row.event_time, name: row.skill_name }])
+        }
+      }
+      setConnecting(false)
+    }
+    stream().catch(e => { if (e?.name !== 'AbortError') setConnecting(false) })
+    return () => ctrl.abort()
+  }, [sessionId])
+
+  function fmtTime(ts) {
+    if (!ts) return '—'
+    try {
+      return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
+        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } catch { return String(ts) }
+  }
+
+  if (connecting) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-5 space-y-6">
+      {/* Loaded section */}
+      <div>
+        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">
+          Loaded — available in system prompt
+        </p>
+        {loaded.length === 0 ? (
+          <p className="text-xs text-zinc-600">No loaded skills detected for this session.</p>
+        ) : (
+          <div className="space-y-2">
+            {loaded.map(({ name, firstSeen }) => (
+              <div key={name} className="flex items-center gap-2 w-full">
+                <span className="material-symbols-outlined text-[14px] text-[#ffb0cf]" style={{ fontVariationSettings: "'FILL' 0" }}>hexagon</span>
+                <span className="text-xs font-mono text-[#e7dff0]">{name}</span>
+                <span className="ml-auto text-[10px] font-mono text-zinc-500">first seen&nbsp;&nbsp;{fmtTime(firstSeen)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Invoked section */}
+      <div>
+        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">
+          Invoked — skill activations
+        </p>
+        {invoked.length === 0 ? (
+          <p className="text-xs text-zinc-600">No skill invocations detected for this session.</p>
+        ) : (
+          <div className="space-y-2">
+            {invoked.map((item, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-[14px] text-[#ffb2b8]">play_arrow</span>
+                <span className="text-[10px] font-mono text-zinc-500 w-16 shrink-0">{fmtTime(item.time)}</span>
+                <span className="text-xs font-mono text-[#e7dff0]">{item.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── RunWaterfall ──────────────────────────────────────────────────────────────
 
 function RunWaterfall({ spans }) {
@@ -1066,12 +1158,13 @@ export default function AgentDetail() {
             )}
 
             {/* Tab bar — only when a run is selected */}
-            {selectedRun && (
+            {selectedSession && (
               <div role="tablist" className="flex border-b border-[#574149]/20 shrink-0">
                 {[
                   { id: 'timeline', label: 'Timeline' },
                   { id: 'events',   label: 'Events' },
                   { id: 'trace',    label: 'Trace' },
+                  { id: 'skills',   label: 'Skills' },
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -1092,13 +1185,19 @@ export default function AgentDetail() {
 
             {/* Event list */}
             <div className="flex-1 overflow-y-auto">
-              {!selectedRun ? (
-                selectedSession && sessionDetail ? (
+              {!selectedSession ? (
+                <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                  <span className="material-symbols-outlined text-4xl">timeline</span>
+                  <p className="text-sm">Select a session from the left to begin</p>
+                </div>
+              ) : activeTab === 'skills' ? (
+                <SkillsTab sessionId={selectedSession} />
+              ) : !selectedRun ? (
+                sessionDetail ? (
                   <SessionSummary sessionDetail={sessionDetail} />
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
-                    <span className="material-symbols-outlined text-4xl">timeline</span>
-                    <p className="text-sm">Select a session from the left to begin</p>
+                  <div className="flex items-center justify-center h-full">
+                    <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
                   </div>
                 )
               ) : activeTab === 'trace' ? (
@@ -1134,7 +1233,6 @@ export default function AgentDetail() {
               ) : (
                 // Timeline tab
                 (() => {
-                  // Still loading session detail — don't show "No runs found" yet
                   if (!sessionDetail) {
                     return (
                       <div className="flex items-center justify-center h-full">
@@ -1153,14 +1251,12 @@ export default function AgentDetail() {
                       </div>
                     )
                   }
-                  // Group events by run_id
                   const byRun = {}
                   for (const e of events) {
                     if (!e.run_id) continue
                     if (!byRun[e.run_id]) byRun[e.run_id] = []
                     byRun[e.run_id].push(e)
                   }
-                  // Sort each run's events by event_time ASC
                   for (const rid of Object.keys(byRun)) {
                     byRun[rid].sort((a, b) => {
                       const ta = new Date(typeof a.event_time === 'string' ? a.event_time.replace(' ', 'T') : a.event_time)
