@@ -449,6 +449,7 @@ function SkillsTab({ sessionId }) {
           setInvoked(prev => [...prev, { time: row.event_time, name: row.skill_name }])
         }
       }
+      setConnecting(false)
     }
     stream().catch(e => { if (e?.name !== 'AbortError') setConnecting(false) })
     return () => ctrl.abort()
