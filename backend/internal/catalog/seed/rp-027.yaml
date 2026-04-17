@@ -1,0 +1,116 @@
+id: rp-027
+name: "Cross-Session Context Leak Detector"
+version: "0.2.1"
+description: >
+  Detects application-layer cross-session context leakage in multi-tenant AI platforms,
+  where data from one user's session bleeds into another user's conversation context.
+  Unlike CVE-2026-25536 rp-025 (MCP JSON-RPC protocol ID collision at transport layer),
+  this rule targets semantic content bleed: memory retrieval tools returning foreign
+  session data, assistant messages referencing context from a different user, and PII-rich
+  records from foreign user IDs appearing in tool results. Causes include shared LLM KV
+  caches without tenant partitioning, shared vector store namespaces, and missing
+  session_id validation in agent memory retrieval pipelines. Maps to OWASP LLM02:2025
+  (Insecure Output Handling) and OWASP Agentic AI ASI05:2026 (Multi-Tenant Isolation Failure).
+  Distinct from rp-025 which fires on JSON-RPC protocol frame bleed-through.
+  v0.2.0 adds detection for context compaction leakage (openclaw/openclaw issue #15990, Apr 2026):
+  when OpenClaw or similar frameworks compact conversation history to reduce token usage, the
+  compacted context may inadvertently include data from a prior user's session. This manifests
+  as "compacted context from previous session" or "context summary: prior user..." appearing
+  in assistant_message or tool_result in a new session context.
+  References: OWASP LLM02:2025, Giskard Research Oct 2025, zylos.ai Multi-Tenant
+  Security Patterns Feb 2026, OWASP Agentic AI ASI05:2026,
+  openclaw/openclaw issue #15990 (context compaction cross-session bleed Apr 2026) -
+  https://www.giskard.ai/knowledge/cross-session-leak-when-your-ai-assistant-becomes-a-data-breach,
+  https://zylos.ai/research/2026-02-23-multi-tenant-security-patterns-saas-platforms,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  Example: tool_result from memory_retrieve includes {"user_id": "user-abc123", "email": "alice@corp.com", "api_key": "sk-ant-XXXXX"} belonging to a different tenant session
+  https://github.com/openclaw/openclaw/issues/15990
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "tool_complete,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data_exfiltration
+  - multi-tenant
+  - cross-session-leak
+  - session-isolation
+  - owasp-llm02
+  - owasp-asi05
+  - pii
+query_sql: |
+  -- Changelog v0.2.0 (2026-04-17):
+  --   Added context compaction cross-session bleed detection (openclaw/openclaw #15990):
+  --   Two patterns targeting assistant_message references to "compacted context from previous
+  --   session" and "context summary/window for prior user" — surface when compaction
+  --   inadvertently includes another tenant's data in the current session's context.
+  --   SQL validated against Timeplus (count=0 on test corpus — no existing data matches;
+  --   patterns structurally validated via match() test queries).
+  SELECT
+    event_time AS detected_at,
+    'rp-027' AS rule_id,
+    'Cross-Session Context Leak Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Cross-session context leak detected: foreign session data or PII in output. ',
+      'Tool: [', coalesce(tool_name, 'unknown'), ']. ',
+      'Agent: ', agent_id,
+      '. Review tool_result and assistant_message for data from another tenant session.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_complete', 'llm_response')
+    AND (
+      -- Memory/retrieval tool returning a record with a user_id field + PII-class fields
+      -- (foreign user record appearing in current session's memory retrieval)
+      (
+        (tool_name LIKE '%memory%' OR tool_name LIKE '%retrieve%' OR tool_name LIKE '%recall%'
+         OR tool_name LIKE '%search%' OR tool_name LIKE '%lookup%' OR tool_name LIKE '%fetch%')
+        AND match(tool_result, '"user_id"\s*:\s*"[^"]{4,}"')
+        AND match(lower(tool_result), '(email|password|token|secret|credit_card|ssn|account_number|api_key|auth)')
+      )
+
+      -- Session token / auth credential field in any tool result from retrieval/memory tools
+      OR (
+        (tool_name LIKE '%memory%' OR tool_name LIKE '%retrieve%' OR tool_name LIKE '%recall%')
+        AND match(tool_result, '"(session_token|access_token|refresh_token|auth_token|api_key)"\s*:\s*"[^"]{10,}"')
+      )
+
+      -- Assistant referencing "our previous conversation" containing sensitive context
+      -- that wasn't established in the current user_message (foreign session bleed)
+      OR match(lower(assistant_message), 'based on (our|your) previous conversation.{0,80}(api key|password|secret|token|credential|project|account)')
+
+      -- Assistant claiming a "previous/earlier session" contained sensitive material
+      OR match(lower(assistant_message), '(from your (previous|earlier|last) session|in our last (conversation|chat|session)).{0,80}(you (mentioned|shared|provided|gave me|told me).{0,60}(key|credential|password|token|secret|account|project))')
+
+      -- JWT / bearer token structure appearing in tool result (session credential bleed)
+      -- eyJ prefix = base64 header of JWT — should not appear in retrieval tool results
+      OR (
+        match(tool_result, 'eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{10,}')
+        AND (tool_name LIKE '%memory%' OR tool_name LIKE '%retrieve%' OR tool_name LIKE '%recall%'
+             OR tool_name LIKE '%search%' OR tool_name LIKE '%lookup%')
+      )
+
+      -- AWS credential leaked into retrieval result (AKIA key format)
+      OR (
+        match(tool_result, 'AKIA[A-Z0-9]{16}')
+        AND (tool_name LIKE '%memory%' OR tool_name LIKE '%retrieve%' OR tool_name LIKE '%recall%'
+             OR tool_name LIKE '%search%' OR tool_name LIKE '%lookup%' OR tool_name LIKE '%fetch%')
+      )
+
+      -- v0.2.0: Context compaction cross-session bleed (openclaw/openclaw #15990, Apr 2026)
+      -- Agent frameworks compact conversation history to reduce token usage; the compacted
+      -- context may include data from another user's session (prior session reference + sensitive context)
+      -- Pattern 1: compacted context explicitly references a "previous/prior/other session"
+      OR match(lower(assistant_message), 'compacted context.{0,40}(previous|prior|earlier|other|another) (session|conversation|user|tenant)')
+      -- Pattern 2: context summary/compaction window references a different user/tenant
+      OR match(lower(assistant_message), 'context (summary|compaction|window).{0,60}(prior|previous|other|another) (user|session|tenant|conversation)')
+    )

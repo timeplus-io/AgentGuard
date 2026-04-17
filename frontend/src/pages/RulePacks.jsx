@@ -7,13 +7,15 @@ import PageHeader from '../components/PageHeader'
 import Toggle from '../components/Toggle'
 import { api } from '../api/client'
 
-const RULE_ICONS = {
-  'rp-001': 'security_update_good',
-  'rp-002': 'data_loss_prevention',
-  'rp-003': 'admin_panel_settings',
-  'rp-004': 'account_tree',
-  'rp-005': 'paid',
-  'rp-006': 'description',
+const CATEGORY_ICONS = {
+  prompt_injection_and_hijacking:    'phishing',
+  sensitive_data_exposure:           'visibility_off',
+  agent_privilege_escalation:        'admin_panel_settings',
+  supply_chain_compromise:           'hub',
+  resource_exhaustion_and_dos:       'speed',
+  data_exfiltration_and_leakage:     'data_loss_prevention',
+  credential_theft_and_harvesting:   'key_off',
+  lateral_movement_and_pivoting:     'swap_horiz',
 }
 
 
@@ -39,7 +41,7 @@ export default function RulePacks() {
       if (data.rule_packs) {
         setRules(data.rule_packs.map(r => ({
           id: r.id,
-          icon: RULE_ICONS[r.id] || 'shield',
+          icon: CATEGORY_ICONS[r.category] || 'shield',
           name: r.name,
           desc: r.description,
           enabled: r.enabled,
@@ -314,7 +316,7 @@ export default function RulePacks() {
                 </div>
                 <div className="z-10">
                   <h3 className="text-lg font-semibold tracking-tight text-white mb-2">{rule.name}</h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed min-h-[4.5rem]">{rule.desc}</p>
+                  <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3 min-h-[4.5rem]">{rule.desc}</p>
                   {rule.detections24h > 0 && (
                     <p className="text-[10px] font-mono text-[#ffb0cf] mt-2">{rule.detections24h.toLocaleString()} events detected (24h)</p>
                   )}
@@ -349,7 +351,7 @@ export default function RulePacks() {
                   <div key={entry.id} className="bg-[#1d1a25]/60 border border-dashed border-zinc-700/40 p-5 rounded-sm flex flex-col gap-4">
                     <div className="flex justify-between items-start">
                       <div className="w-10 h-10 bg-[#0f0c17] flex items-center justify-center rounded-sm text-zinc-600">
-                        <span className="material-symbols-outlined">{entry.is_custom ? 'tune' : (RULE_ICONS[entry.id] || 'shield')}</span>
+                        <span className="material-symbols-outlined">{entry.is_custom ? 'tune' : (CATEGORY_ICONS[entry.category] || 'shield')}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         {entry.is_custom && (

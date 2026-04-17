@@ -8,11 +8,15 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import { api } from '../api/client'
 
-const RULE_ICONS = {
-  'rp-001': 'security_update_good',
-  'rp-002': 'data_loss_prevention',
-  'rp-003': 'admin_panel_settings',
-  'rp-004': 'account_tree',
+const CATEGORY_ICONS = {
+  prompt_injection_and_hijacking:    'phishing',
+  sensitive_data_exposure:           'visibility_off',
+  agent_privilege_escalation:        'admin_panel_settings',
+  supply_chain_compromise:           'hub',
+  resource_exhaustion_and_dos:       'speed',
+  data_exfiltration_and_leakage:     'data_loss_prevention',
+  credential_theft_and_harvesting:   'key_off',
+  lateral_movement_and_pivoting:     'swap_horiz',
 }
 
 function severityBadge(severity) {
@@ -128,7 +132,7 @@ export default function RuleDetail() {
     )
   }
 
-  const icon = RULE_ICONS[id] || 'shield'
+  const icon = CATEGORY_ICONS[rule.category] || 'shield'
 
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">

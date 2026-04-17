@@ -1,0 +1,87 @@
+id: rp-049
+name: "Slopsquatting — Hallucinated AI Package Supply Chain Detector"
+version: "0.1.1"
+description: >
+  Detects slopsquatting: a supply chain attack where LLMs hallucinate plausible-but-
+  nonexistent package names that attackers pre-register on PyPI/npm/crates.io with
+  malicious payloads. Unlike rp-004 (Supply Chain Watch, which catches any package
+  install in tool_invoke), this rule fires at the LLM recommendation phase
+  (llm_response/assistant_message) before the install executes. The hallucination
+  fingerprint: 3+ hyphen-separated compound names containing AI ecosystem terms
+  (langchain, openai, anthropic, llm, gpt, claude, agent, copilot, huggingface,
+  transformers, diffusers) — patterns that real packages rarely exhibit but LLMs
+  frequently generate. USENIX Security 2025 (arXiv:2406.10279) measured at least
+  5.2% hallucination rate for commercial LLMs and 21.7% for open-source models,
+  generating 205,474 unique hallucinated names across 576,000 code samples.
+  PackMonitor (arXiv:2602.20717, Feb 2026) demonstrates that hallucinations are
+  theoretically preventable via decoding-time monitoring. In agentic contexts,
+  slopsquatting is especially dangerous because agents install packages autonomously
+  without human review, amplifying the attack surface.
+  Distinct from rp-004 (tool_invoke install detection) and rp-020 (DDIPE skill
+  documentation-driven install): this rule targets the LLM output recommendation
+  phase (llm_response) for hallucinated AI-ecosystem compound package names.
+  References: OWASP LLM05:2025 (Supply Chain), arXiv:2406.10279 USENIX Sec 2025,
+  arXiv:2602.20717 PackMonitor Feb 2026, socket.dev slopsquatting blog Apr 2025,
+  redteams.ai AI-Generated Dependency Confusion 2026 -
+  https://arxiv.org/abs/2406.10279,
+  https://arxiv.org/abs/2602.20717,
+  https://socket.dev/blog/slopsquatting-how-ai-hallucinations-are-fueling-a-new-class-of-supply-chain-attacks,
+  Example: assistant_message="pip install langchain-openai-helpers-extended" (3-segment AI-ecosystem compound package name hallucinated by LLM — pre-registered by attacker on PyPI with malicious payload)
+  https://redteams.ai/topics/code-gen-security/ai-generated-dependency-confusion
+severity: warning
+category: supply_chain_compromise
+fp_rate: medium
+hook_sources: "llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - supply-chain
+  - slopsquatting
+  - hallucination
+  - package-confusion
+  - owasp-llm05
+  - usenix-2025
+  - packmonitor
+  - ai-coding-agent
+query_sql: |
+  -- rp-049 v0.1.0 (2026-04-17)
+  -- Fires at the LLM recommendation phase (llm_response) when the LLM suggests
+  -- installing a 3+-segment compound package name containing AI ecosystem terms.
+  -- The dual-anchor (3+ segment name AND AI ecosystem term) reduces FP rate by
+  -- requiring BOTH the compound hallucination structure AND an AI/ML framework term.
+  --
+  -- Pattern rationale:
+  --   - Real AI packages: langchain-community (2 segments), langchain-openai (2),
+  --     openai (1), anthropic (1) — legitimate packages rarely have 3+ segments
+  --   - Hallucinated packages: langchain-openai-helpers, react-query-ai-adapter,
+  --     anthropic-tools-extended — 3+ segments, AI term in name
+  --   - The install command keyword anchors to actual recommendation context
+  --     (not just mentions of AI terms in any context)
+  --
+  -- Pair with rp-004 for defense-in-depth: rp-049 catches recommendation phase,
+  -- rp-004 catches execution phase (tool_invoke with pip/npm install).
+  SELECT
+    event_time AS detected_at,
+    'rp-049' AS rule_id,
+    'Slopsquatting — Hallucinated AI Package Supply Chain Detector' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Slopsquatting: LLM recommended hallucination-prone compound AI package in ',
+      event_type, ' for agent ', agent_id,
+      '. Verify package exists on authoritative registry before install.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'llm_response'
+    -- Dual-anchor: 3+ segment compound package name AND AI ecosystem term
+    -- The package install command anchors context (pip install X, npm install X, etc.)
+    AND match(lower(assistant_message), '(pip install|npm install|uv add|pipx install|poetry add|cargo install) [a-z0-9]+-[a-z0-9]+-[a-z0-9]+(-[a-z0-9]+)*')
+    -- AI/ML ecosystem term in same message (hallucination fingerprint)
+    AND match(lower(assistant_message), '(langchain|openai|anthropic|llm|ai-|gpt|claude|agent|copilot|huggingface|transformers|diffusers)')
