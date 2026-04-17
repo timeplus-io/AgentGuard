@@ -36,6 +36,9 @@ type Config struct {
 	CatalogDir    string
 	AgentGuardURL string
 	SetupComplete bool
+	// ConfigPath is the file path this config was loaded from (or will be written to).
+	// Populated by the caller after Load(); not read from the config file itself.
+	ConfigPath string
 }
 
 // Load reads configuration from (in order of increasing precedence):

@@ -65,6 +65,15 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
+	// Record the config file path so Provision writes to the same file the
+	// server reads from (important when --config points to a non-default path).
+	if p := viper.ConfigFileUsed(); p != "" {
+		cfg.ConfigPath = p
+	} else if cfgFile, _ := cmd.Flags().GetString("config"); cfgFile != "" {
+		cfg.ConfigPath = cfgFile
+	} else {
+		cfg.ConfigPath = "config.yaml"
+	}
 
 	frontendFS, err := web.FS()
 	if err != nil {
