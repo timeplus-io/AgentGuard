@@ -345,12 +345,13 @@ type RuleDetailResponse struct {
 }
 
 type AlertWebhookPayload struct {
-	RuleID     string `json:"rule_id"`
-	RuleName   string `json:"rule_name"`
-	Severity   string `json:"severity"`
-	AgentID    string `json:"agent_id"`
-	Message    string `json:"message"`
-	DetectedAt string `json:"detected_at"`
+	RuleID       string `json:"rule_id"`
+	RuleName     string `json:"rule_name"`
+	Severity     string `json:"severity"`
+	AgentID      string `json:"agent_id"`
+	DeploymentID string `json:"deployment_id"`
+	Message      string `json:"message"`
+	DetectedAt   string `json:"detected_at"`
 }
 
 type QueryResult struct {
