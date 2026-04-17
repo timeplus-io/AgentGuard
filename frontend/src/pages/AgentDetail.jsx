@@ -439,7 +439,7 @@ function SkillsTab({ sessionId }) {
       for await (const row of api.protonQuery(sql, { signal: ctrl.signal })) {
         setConnecting(false)
         if (row.skill_action === 'loaded') {
-          setLoaded(prev => prev.some(s => s === row.skill_name) ? prev : [...prev, row.skill_name])
+          setLoaded(prev => prev.some(s => s.name === row.skill_name) ? prev : [...prev, { name: row.skill_name, firstSeen: row.event_time }])
         } else if (row.skill_action === 'invoked') {
           setInvoked(prev => [...prev, { time: row.event_time, name: row.skill_name }])
         }
@@ -476,10 +476,11 @@ function SkillsTab({ sessionId }) {
           <p className="text-xs text-zinc-600">No loaded skills detected for this session.</p>
         ) : (
           <div className="space-y-2">
-            {loaded.map(name => (
-              <div key={name} className="flex items-center gap-2">
+            {loaded.map(({ name, firstSeen }) => (
+              <div key={name} className="flex items-center gap-2 w-full">
                 <span className="material-symbols-outlined text-[14px] text-[#ffb0cf]" style={{ fontVariationSettings: "'FILL' 0" }}>hexagon</span>
                 <span className="text-xs font-mono text-[#e7dff0]">{name}</span>
+                <span className="ml-auto text-[10px] font-mono text-zinc-500">first seen&nbsp;&nbsp;{fmtTime(firstSeen)}</span>
               </div>
             ))}
           </div>
