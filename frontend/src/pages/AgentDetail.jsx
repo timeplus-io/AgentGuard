@@ -433,10 +433,15 @@ function SkillsTab({ sessionId }) {
 
   useEffect(() => {
     if (!sessionId) return
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(sessionId)) return
+    setLoaded([])
+    setInvoked([])
+    setConnecting(true)
     const ctrl = new AbortController()
     const sql = `SELECT event_time, skill_name, skill_action FROM agentguard_skills WHERE session_id = '${sessionId}' ORDER BY event_time ASC SETTINGS seek_to = 'earliest'`
     async function stream() {
       for await (const row of api.protonQuery(sql, { signal: ctrl.signal })) {
+        if (ctrl.signal.aborted) break
         setConnecting(false)
         if (row.skill_action === 'loaded') {
           setLoaded(prev => prev.some(s => s.name === row.skill_name) ? prev : [...prev, { name: row.skill_name, firstSeen: row.event_time }])
