@@ -118,7 +118,7 @@ func Provision(cfg *config.Config, mgr *catalog.Manager, store *auth.SessionStor
 		newCfg.Timeplus.NativePort = body.NativePort
 		newCfg.AgentGuardURL = agentGuardURL
 		newCfg.SetupComplete = true
-		if err := config.Save(&newCfg, "config.yaml"); err != nil {
+		if err := config.Save(&newCfg, cfg.ConfigPath); err != nil {
 			sendEvent("error", "Failed to save config: "+err.Error())
 			return
 		}

@@ -28,16 +28,19 @@ func GetDashboard(cfg *config.Config) gin.HandlerFunc {
 			totalAgents = int(parseInt64(agentRows[0]["total"]))
 		}
 
-		// Active threats in the last 24 h.
+		// Active threats: deduplicated threats in open or acknowledged status
+		// with activity in the last 24 h. Queries agentguard_threats (the
+		// mutable stream of threat statuses) rather than agentguard_security_events
+		// (raw detection events) so the count reflects threats, not event firings.
 		threatRows, err := tp.Query(&cfg.Timeplus,
-			`SELECT count() AS total FROM table(agentguard_security_events) WHERE detected_at >= now() - interval 1 day`)
+			`SELECT count() AS total FROM table(agentguard_threats) WHERE (status = '' OR status IN ('open', 'acknowledged')) AND last_seen >= now() - interval 1 day`)
 		if err != nil {
 			log.Printf("[dashboard] threat count query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
 		criticalRows, err := tp.Query(&cfg.Timeplus,
-			`SELECT count() AS critical FROM table(agentguard_security_events) WHERE detected_at >= now() - interval 1 day AND severity = 'critical'`)
+			`SELECT count() AS critical FROM table(agentguard_threats) WHERE (status = '' OR status IN ('open', 'acknowledged')) AND last_seen >= now() - interval 1 day AND severity = 'critical'`)
 		if err != nil {
 			log.Printf("[dashboard] critical threat count query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
