@@ -104,6 +104,12 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	if err := seedPricingData(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning seeding pricing: %v", err)
 	}
+	if err := createSkillsStream(ctx, conn, emit); err != nil {
+		log.Printf("timeplus init: warning creating skills stream: %v", err)
+	}
+	if err := createSkillsMVs(ctx, conn, emit); err != nil {
+		log.Printf("timeplus init: warning creating skills MVs: %v", err)
+	}
 	if err := seedCatalogRules(ctx, conn, catalogEntries); err != nil {
 		log.Printf("timeplus init: warning seeding rules: %v", err)
 	}
@@ -1015,6 +1021,87 @@ CREATE MUTABLE STREAM IF NOT EXISTS agentguard_pricing
   updated_at                  datetime64(3)
 ) PRIMARY KEY (provider, model)`
 
+const ddlSkillsStream = `
+CREATE STREAM IF NOT EXISTS agentguard_skills
+(
+  event_time    datetime64(3),
+  agent_id      string,
+  session_id    string,
+  deployment_id string,
+  agent_type    low_cardinality(string),
+  skill_name    string,
+  skill_action  low_cardinality(string)
+)`
+
+const ddlMVSkillsInvokedClaudeCode = `
+CREATE MATERIALIZED VIEW mv_skills_invoked_claudecode
+INTO agentguard_skills AS
+SELECT
+  event_time,
+  agent_id,
+  session_id,
+  deployment_id,
+  agent_type,
+  json_value(event_data, '$.tool_input.skill') AS skill_name,
+  'invoked' AS skill_action
+FROM agentguard_hook_events
+WHERE hook_name = 'before_tool_call'
+  AND tool_name = 'Skill'
+  AND agent_type = 'claudecode'
+  AND json_value(event_data, '$.tool_input.skill') != ''`
+
+const ddlMVSkillsInvokedOpenClaw = `
+CREATE MATERIALIZED VIEW mv_skills_invoked_openclaw
+INTO agentguard_skills AS
+SELECT
+  event_time,
+  agent_id,
+  session_id,
+  deployment_id,
+  agent_type,
+  extract(json_value(event_data, '$.params.path'), '/skills/([a-zA-Z][a-zA-Z0-9-]*)/SKILL') AS skill_name,
+  'invoked' AS skill_action
+FROM agentguard_hook_events
+WHERE hook_name = 'before_tool_call'
+  AND tool_name = 'read'
+  AND agent_type = 'openclaw'
+  AND position(event_data, 'SKILL.md') > 0
+  AND extract(json_value(event_data, '$.params.path'), '/skills/([a-zA-Z][a-zA-Z0-9-]*)/SKILL') != ''`
+
+const ddlMVSkillsLoadedClaudeCode = `
+CREATE MATERIALIZED VIEW mv_skills_loaded_claudecode
+INTO agentguard_skills AS
+SELECT
+  event_time,
+  agent_id,
+  session_id,
+  deployment_id,
+  agent_type,
+  trim(sn) AS skill_name,
+  'loaded' AS skill_action
+FROM agentguard_hook_events
+ARRAY JOIN extract_all(event_data, '---..name: ([a-zA-Z][a-zA-Z0-9-]*)') AS sn
+WHERE hook_name = 'prompt_context'
+  AND agent_type = 'claudecode'
+  AND length(trim(sn)) > 0`
+
+const ddlMVSkillsLoadedOpenClaw = `
+CREATE MATERIALIZED VIEW mv_skills_loaded_openclaw
+INTO agentguard_skills AS
+SELECT
+  event_time,
+  agent_id,
+  session_id,
+  deployment_id,
+  agent_type,
+  trim(sn) AS skill_name,
+  'loaded' AS skill_action
+FROM agentguard_hook_events
+ARRAY JOIN extract_all(event_data, '<name>([a-zA-Z][a-zA-Z0-9-]*)</name>') AS sn
+WHERE hook_name = 'llm_input'
+  AND agent_type = 'openclaw'
+  AND length(trim(sn)) > 0`
+
 type pricingSeed struct {
 	provider  string
 	model     string
@@ -1042,6 +1129,28 @@ func createThreatsStream(ctx context.Context, conn proton.Conn, emit func(string
 
 func createThreatsMV(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "view", "mv_threats", ddlThreatsMV, emit)
+}
+
+func createSkillsStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "stream", "agentguard_skills", ddlSkillsStream, emit)
+}
+
+func createSkillsMVs(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	mvs := []struct {
+		name string
+		ddl  string
+	}{
+		{"mv_skills_invoked_claudecode", ddlMVSkillsInvokedClaudeCode},
+		{"mv_skills_invoked_openclaw", ddlMVSkillsInvokedOpenClaw},
+		{"mv_skills_loaded_claudecode", ddlMVSkillsLoadedClaudeCode},
+		{"mv_skills_loaded_openclaw", ddlMVSkillsLoadedOpenClaw},
+	}
+	for _, mv := range mvs {
+		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl, emit); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func seedPricingData(ctx context.Context, conn proton.Conn) error {
