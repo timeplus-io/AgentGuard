@@ -590,15 +590,59 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	}
 }
 
-func AlertWebhook(cfg *config.Config) gin.HandlerFunc {
+// isThreatAlreadyOpen queries agentguard_threats to check whether an open
+// threat already exists for the given (agent_id, deployment_id, rule_id)
+// combination. When deployment_id is empty the check is by (agent_id, rule_id)
+// alone. Returns false on any error so the caller fails open.
+func isThreatAlreadyOpen(cfg *config.Config, agentID, deploymentID, ruleID string) bool {
+	if agentID == "" || ruleID == "" {
+		return false
+	}
+	var sql string
+	if deploymentID != "" {
+		sql = fmt.Sprintf(
+			`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND deployment_id = '%s' AND rule_id = '%s' AND status = 'open'`,
+			escapeSQL(agentID), escapeSQL(deploymentID), escapeSQL(ruleID),
+		)
+	} else {
+		sql = fmt.Sprintf(
+			`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND rule_id = '%s' AND status = 'open'`,
+			escapeSQL(agentID), escapeSQL(ruleID),
+		)
+	}
+	rows, err := tp.Query(&cfg.Timeplus, sql)
+	if err != nil || len(rows) == 0 {
+		return false
+	}
+	return parseInt64(rows[0]["cnt"]) > 0
+}
+
+func AlertWebhook(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var payload models.AlertWebhookPayload
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
 			return
 		}
-		log.Printf("alert: rule=%s severity=%s agent=%s msg=%s",
-			payload.RuleID, payload.Severity, payload.AgentID, payload.Message)
+		log.Printf("alert: rule=%s severity=%s agent=%s deployment=%s msg=%s",
+			payload.RuleID, payload.Severity, payload.AgentID, payload.DeploymentID, payload.Message)
+
+		// Deduplicate: suppress the SSE notification when an open threat already
+		// exists for this (agent, deployment, rule) — the MV occasionally fires
+		// multiple times for the same active threat. Use any live session for
+		// credentials; if none exists, fail open and allow the notification.
+		queryCfg := *cfg
+		if user, pass := store.AnyCredentials(); user != "" {
+			queryCfg.Timeplus.User = user
+			queryCfg.Timeplus.Password = pass
+			if isThreatAlreadyOpen(&queryCfg, payload.AgentID, payload.DeploymentID, payload.RuleID) {
+				log.Printf("alert: suppressed duplicate notification for rule=%s agent=%s (threat already open)",
+					payload.RuleID, payload.AgentID)
+				c.JSON(http.StatusOK, gin.H{"received": true, "suppressed": true})
+				return
+			}
+		}
+
 		GlobalAlertBroadcaster.Publish(payload)
 		c.JSON(http.StatusOK, gin.H{"received": true})
 	}

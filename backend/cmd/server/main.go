@@ -109,7 +109,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.POST("/setup/provision", handlers.Provision(cfg, mgr, store))
 		// /alerts/webhook is called by Timeplus (server-to-server), not by the browser,
 		// so it must be reachable without a session cookie.
-		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
+		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg, store))
 
 		// All existing routes — require a valid session cookie.
 		protected := api.Group("/", auth.AuthRequired(store))
