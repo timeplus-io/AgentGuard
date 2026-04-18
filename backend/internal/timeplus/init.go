@@ -110,6 +110,12 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	if err := createSkillsMVs(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating skills MVs: %v", err)
 	}
+	if err := createMemoryOpsStream(ctx, conn, emit); err != nil {
+		log.Printf("timeplus init: warning creating memory ops stream: %v", err)
+	}
+	if err := createMemoryMVs(ctx, conn, emit); err != nil {
+		log.Printf("timeplus init: warning creating memory MVs: %v", err)
+	}
 	if err := seedCatalogRules(ctx, conn, catalogEntries); err != nil {
 		log.Printf("timeplus init: warning seeding rules: %v", err)
 	}
@@ -1106,6 +1112,105 @@ WHERE _tp_time > earliest_ts()
   AND agent_type = 'openclaw'
   AND length(trim(sn)) > 0`
 
+const ddlMemoryOpsStream = `
+CREATE STREAM IF NOT EXISTS agentguard_memory_ops
+(
+  event_time      datetime64(3),
+  session_id      string,
+  agent_id        string,
+  agent_type      low_cardinality(string),
+  deployment_id   low_cardinality(string),
+  memory_source   low_cardinality(string),
+  memory_op       low_cardinality(string),
+  tool_name       string,
+  server_name     low_cardinality(string),
+  memory_path     string,
+  content_payload string
+)`
+
+const ddlMVMemoryClaudeCodeAutoMem = `
+CREATE MATERIALIZED VIEW mv_memory_claudecode_automem
+INTO agentguard_memory_ops AS
+SELECT
+  event_time,
+  session_id,
+  agent_id,
+  agent_type,
+  deployment_id,
+  'auto_memory' AS memory_source,
+  CASE
+    WHEN tool_name = 'Write' THEN 'save'
+    WHEN tool_name = 'Edit'  THEN 'update'
+    WHEN tool_name = 'Read'  THEN 'read'
+    ELSE 'other'
+  END AS memory_op,
+  tool_name,
+  '' AS server_name,
+  json_value(event_data, '$.tool_input.file_path') AS memory_path,
+  json_query(event_data, '$.tool_input') AS content_payload
+FROM agentguard_hook_events
+WHERE _tp_time > earliest_ts()
+  AND hook_name = 'before_tool_call'
+  AND agent_type = 'claudecode'
+  AND tool_name IN ('Write', 'Edit', 'Read')
+  AND position(json_value(event_data, '$.tool_input.file_path'), '/.claude/projects/') > 0
+  AND position(json_value(event_data, '$.tool_input.file_path'), '/memory/') > 0`
+
+const ddlMVMemoryClaudeCodeMCP = `
+CREATE MATERIALIZED VIEW mv_memory_claudecode_mcp
+INTO agentguard_memory_ops AS
+SELECT
+  event_time,
+  session_id,
+  agent_id,
+  agent_type,
+  deployment_id,
+  'mcp' AS memory_source,
+  CASE
+    WHEN match(lower(tool_name), 'save|store|remember|upsert|embed|write') THEN 'save'
+    WHEN match(lower(tool_name), 'search|query|recall|retrieve|find')      THEN 'search'
+    WHEN match(lower(tool_name), 'read|load|get|fetch|observation')        THEN 'read'
+    WHEN match(lower(tool_name), 'delete|forget|remove')                   THEN 'delete'
+    WHEN match(lower(tool_name), 'update|edit|patch')                      THEN 'update'
+    ELSE 'other'
+  END AS memory_op,
+  tool_name,
+  split_by_string('__', tool_name)[2] AS server_name,
+  '' AS memory_path,
+  json_query(event_data, '$.tool_input') AS content_payload
+FROM agentguard_hook_events
+WHERE _tp_time > earliest_ts()
+  AND hook_name = 'before_tool_call'
+  AND agent_type = 'claudecode'
+  AND match(tool_name, '^mcp__')
+  AND match(lower(tool_name), 'memory|mem|recall|remember|store|knowledge|forget|embedding')`
+
+const ddlMVMemoryOpenClawFile = `
+CREATE MATERIALIZED VIEW mv_memory_openclaw_file
+INTO agentguard_memory_ops AS
+SELECT
+  event_time,
+  session_id,
+  agent_id,
+  agent_type,
+  deployment_id,
+  'openclaw_file' AS memory_source,
+  CASE
+    WHEN tool_name = 'write' THEN 'save'
+    WHEN tool_name = 'read'  THEN 'read'
+    ELSE 'other'
+  END AS memory_op,
+  tool_name,
+  '' AS server_name,
+  json_value(event_data, '$.params.path') AS memory_path,
+  json_query(event_data, '$.params') AS content_payload
+FROM agentguard_hook_events
+WHERE _tp_time > earliest_ts()
+  AND hook_name = 'before_tool_call'
+  AND agent_type = 'openclaw'
+  AND tool_name IN ('write', 'read')
+  AND match(json_value(event_data, '$.params.path'), '\.openclaw/workspace/memory/')`
+
 type pricingSeed struct {
 	provider  string
 	model     string
@@ -1148,6 +1253,27 @@ func createSkillsMVs(ctx context.Context, conn proton.Conn, emit func(string, st
 		{"mv_skills_invoked_openclaw", ddlMVSkillsInvokedOpenClaw},
 		{"mv_skills_loaded_claudecode", ddlMVSkillsLoadedClaudeCode},
 		{"mv_skills_loaded_openclaw", ddlMVSkillsLoadedOpenClaw},
+	}
+	for _, mv := range mvs {
+		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl, emit); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func createMemoryOpsStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "stream", "agentguard_memory_ops", ddlMemoryOpsStream, emit)
+}
+
+func createMemoryMVs(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	mvs := []struct {
+		name string
+		ddl  string
+	}{
+		{"mv_memory_claudecode_automem", ddlMVMemoryClaudeCodeAutoMem},
+		{"mv_memory_claudecode_mcp", ddlMVMemoryClaudeCodeMCP},
+		{"mv_memory_openclaw_file", ddlMVMemoryOpenClawFile},
 	}
 	for _, mv := range mvs {
 		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl, emit); err != nil {

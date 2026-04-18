@@ -1,6 +1,6 @@
 # AgentGuard — Skills Monitoring
 
-AgentGuard tracks which **skills** are available to an AI coding agent during a session and which are actively invoked. This document explains how that data is collected, processed, and surfaced.
+AgentGuard tracks which **skills** are available to an AI agent during a session and which are actively invoked. This document explains how that data is collected, processed, and surfaced.
 
 ---
 
