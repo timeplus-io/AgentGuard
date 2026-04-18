@@ -211,7 +211,7 @@ SETTINGS
 COMMENT 'AgentGuard agent telemetry via OTLP/HTTP (Claude Code + OpenClaw)';
 ```
 
-> If you previously created `openclaw_otel_input` on port 4318, it already accepts Claude Code data — no new input is needed.
+> If you previously created `agentguard_otel_input` on port 4318, it already accepts Claude Code data — no new input is needed.
 
 ---
 

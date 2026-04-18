@@ -857,7 +857,7 @@ func createOTelStreams(ctx context.Context, conn proton.Conn, emit func(string, 
 `createOTelInput`:
 ```go
 func createOTelInput(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
-	return execIfNotExists(ctx, conn, "input", "openclaw_otel_input", ddlOTelInput, emit)
+	return execIfNotExists(ctx, conn, "input", "agentguard_otel_input", ddlOTelInput, emit)
 }
 ```
 

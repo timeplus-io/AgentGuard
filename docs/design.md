@@ -101,7 +101,7 @@ The backend uses two separate connections to Timeplus:
 
 1. Wait for Timeplus native port 8463 to respond (polls every 5 s indefinitely)
 2. Create 5 OTel streams (`otel_traces`, `otel_logs`, `otel_metrics_gauge/sum/histogram`)
-3. Create `openclaw_otel_input` (OTLP/HTTP input on port 4318)
+3. Create `agentguard_otel_input` (OTLP/HTTP input on port 4318)
 4. Create `agentguard_hook_events`
 5. Create `agentguard_cim_event` (CIM unified event stream)
 6. Drop and recreate `mv_cim_claudecode` and `mv_cim_openclaw` (CIM normalization MVs — always recreated so DDL fixes apply without manual drops)
@@ -133,7 +133,7 @@ A Timeplus **Input** listens on port 4318 and routes incoming OTLP data into fiv
 
 **Input definition:**
 ```sql
-CREATE INPUT openclaw_otel_input
+CREATE INPUT agentguard_otel_input
 SETTINGS
   type                            = 'otel',
   protocol                        = 'http',

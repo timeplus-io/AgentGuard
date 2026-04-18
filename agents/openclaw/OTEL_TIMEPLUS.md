@@ -193,7 +193,7 @@ CREATE STREAM otel_metrics_histogram
 The `diagnostics-otel` plugin uses **OTLP/HTTP (Protobuf)** only — gRPC is not supported. Use port **4318**.
 
 ```sql
-CREATE INPUT openclaw_otel_input
+CREATE INPUT agentguard_otel_input
 SETTINGS
   type                                          = 'otel',
   protocol                                      = 'http',
