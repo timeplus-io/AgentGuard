@@ -516,6 +516,110 @@ function SkillsTab({ sessionId }) {
   )
 }
 
+// ── MemoryTab ─────────────────────────────────────────────────────────────────
+
+const OP_COLORS = {
+  save:   'text-amber-400',
+  search: 'text-blue-400',
+  read:   'text-emerald-400',
+  delete: 'text-red-400',
+  update: 'text-purple-400',
+  other:  'text-zinc-500',
+}
+
+function MemoryTab({ sessionId }) {
+  const [ops, setOps] = useState([])
+  const [connecting, setConnecting] = useState(true)
+  const [expanded, setExpanded] = useState({})
+
+  useEffect(() => {
+    if (!sessionId) return
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(sessionId)) return
+    setOps([])
+    setConnecting(true)
+    setExpanded({})
+    const ctrl = new AbortController()
+    const sql = `SELECT event_time, memory_op, memory_source, tool_name, server_name, memory_path, content_payload FROM agentguard_memory_ops WHERE session_id = '${sessionId}' ORDER BY event_time ASC SETTINGS seek_to = 'earliest'`
+    async function stream() {
+      for await (const row of api.protonQuery(sql, { signal: ctrl.signal })) {
+        if (ctrl.signal.aborted) break
+        setConnecting(false)
+        setOps(prev => [...prev, row])
+      }
+      setConnecting(false)
+    }
+    stream().catch(e => { if (e?.name !== 'AbortError') setConnecting(false) })
+    return () => ctrl.abort()
+  }, [sessionId])
+
+  function fmtTime(ts) {
+    if (!ts) return '—'
+    try {
+      return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
+        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } catch { return String(ts) }
+  }
+
+  function displayLabel(op) {
+    const server = op.server_name
+    const path = op.memory_path
+    if (server) return server
+    if (path) return path.split('/').pop()
+    return op.tool_name
+  }
+
+  if (connecting) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-5 space-y-1">
+      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">
+        Memory Operations
+      </p>
+      {ops.length === 0 ? (
+        <p className="text-xs text-zinc-600">No memory operations detected for this session.</p>
+      ) : (
+        ops.map((op, i) => (
+          <div key={i}>
+            <div
+              className="flex items-center gap-3 cursor-pointer hover:bg-[#2a1e24] rounded px-2 py-1 -mx-2"
+              onClick={() => setExpanded(prev => ({ ...prev, [i]: !prev[i] }))}
+            >
+              <span className="text-[10px] font-mono text-zinc-500 w-16 shrink-0">{fmtTime(op.event_time)}</span>
+              <span className={`text-[10px] font-bold uppercase w-14 shrink-0 ${OP_COLORS[op.memory_op] ?? 'text-zinc-500'}`}>
+                {op.memory_op}
+              </span>
+              <span className="text-[10px] text-zinc-500 w-24 shrink-0">{op.memory_source}</span>
+              <span className="text-xs font-mono text-[#e7dff0] truncate">{displayLabel(op)}</span>
+              <span className="material-symbols-outlined text-[12px] text-zinc-600 ml-auto shrink-0">
+                {expanded[i] ? 'expand_less' : 'expand_more'}
+              </span>
+            </div>
+            {expanded[i] && (
+              <div className="ml-2 mt-1 mb-2 pl-3 border-l border-[#574149]/40 space-y-1">
+                {op.memory_path && (
+                  <p className="text-[10px] font-mono text-zinc-400 break-all">{op.memory_path}</p>
+                )}
+                {op.content_payload && (() => {
+                  const parsed = safeParse(op.content_payload)
+                  return parsed !== null
+                    ? <div className="text-[10px] font-mono text-[#e7dff0] leading-relaxed"><JsonValue value={parsed} depth={0} /></div>
+                    : <pre className="text-[10px] font-mono text-zinc-400 bg-[#1a1218] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">{op.content_payload}</pre>
+                })()}
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
 // ── RunWaterfall ──────────────────────────────────────────────────────────────
 
 function RunWaterfall({ spans }) {
@@ -1165,6 +1269,7 @@ export default function AgentDetail() {
                   { id: 'events',   label: 'Events' },
                   { id: 'trace',    label: 'Trace' },
                   { id: 'skills',   label: 'Skills' },
+                  { id: 'memory',   label: 'Memory' },
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -1192,6 +1297,8 @@ export default function AgentDetail() {
                 </div>
               ) : activeTab === 'skills' ? (
                 <SkillsTab sessionId={selectedSession} />
+              ) : activeTab === 'memory' ? (
+                <MemoryTab sessionId={selectedSession} />
               ) : !selectedRun ? (
                 sessionDetail ? (
                   <SessionSummary sessionDetail={sessionDetail} />
