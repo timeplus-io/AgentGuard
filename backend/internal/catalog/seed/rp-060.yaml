@@ -1,0 +1,130 @@
+id: rp-060
+name: "Agent File Tool Path Traversal Detector"
+version: "0.1.0"
+description: >
+  Detects path traversal attacks in agent file operation tool parameters that
+  allow attackers to read or write files outside the intended workspace boundary.
+  GHSA-7j2f-xc8p-fjmq (PraisonAI praisonaiagents, Apr 2026): the list_files()
+  FileTools method validates the directory parameter via _validate_path() but
+  passes the pattern parameter directly to Python's Path.glob() without any
+  validation. Since Path.glob() resolves .. segments, an attacker can supply
+  {"directory": ".", "pattern": "../../../etc/*"} to enumerate arbitrary
+  filesystem paths — returning file names, sizes, and timestamps for any path the
+  server process can access. CVE-2026-3954 (XAgent ToolServerNode): the
+  /upload_file endpoint uses os.path.join(work_directory, file.filename) with no
+  filename sanitization, allowing {"filename": "../../.ssh/authorized_keys"} to
+  write SSH keys anywhere on the container filesystem (runs as root). MCP
+  modelcontextprotocol/servers#3752: @modelcontextprotocol/server-filesystem exposes
+  11 tools (read_file, write_file, edit_file, move_file, etc.) that accept
+  unbounded path strings with no schema-level traversal validation — under prompt
+  injection, the LLM supplies attacker-controlled traversal paths to read SSH keys,
+  credentials, and source code outside the working directory.
+  The combined attack chain: attacker embeds traversal path in RAG document or
+  web content → agent reads/writes it via file tool → credential or source code
+  exfiltration / backdoor install.
+  Distinct from rp-007 (SSRF via HTTP tools, different tool surface),
+  rp-023 (privilege escalation via shell commands), rp-002 (DLP credential
+  patterns in tool_result). This rule gates specifically on file operation tool
+  names and detects the traversal path in tool_input before execution.
+  References: GHSA-7j2f-xc8p-fjmq (PraisonAI glob traversal Apr 2026),
+  CVE-2026-3954 (XAgent upload_file path traversal), modelcontextprotocol/servers
+  issue #3752, OWASP LLM08:2025 (Excessive Agency), CWE-22 (Path Traversal) -
+  https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-7j2f-xc8p-fjmq,
+  https://github.com/OpenBMB/XAgent/issues/420,
+  https://github.com/modelcontextprotocol/servers/issues/3752,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "tool_invoke"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - path-traversal
+  - file-tools
+  - cwe-22
+  - owasp-llm08
+  - mcp
+  - praisonai
+  - xagent
+  - ghsa-7j2f-xc8p-fjmq
+  - cve-2026-3954
+  - glob-traversal
+  - workspace-escape
+query_sql: |
+  -- v0.1.0 (2026-04-18):
+  -- NEW: Agent file tool path traversal detection.
+  -- Fires on tool_invoke events for file operation tools where tool_input
+  -- contains directory traversal sequences or sensitive path targets.
+  --
+  -- Gated to file operation tool_names to suppress FP from non-file tools:
+  -- shell tools (rp-003), HTTP tools (rp-007), code interpreter (rp-052).
+  --
+  -- Covers three vulnerability classes:
+  --   (1) GHSA-7j2f-xc8p-fjmq: glob pattern traversal (../../../etc/*)
+  --   (2) CVE-2026-3954: filename traversal in upload (../../.ssh/authorized_keys)
+  --   (3) MCP servers#3752: unbounded path parameter (../../.ssh/id_rsa)
+  --
+  -- Signals:
+  --   1. Unix ../ traversal sequence in path/filename/pattern parameters
+  --   2. Windows ..\\ traversal sequence
+  --   3. Direct sensitive path access: /etc/passwd, /etc/shadow, /.ssh/, /proc/self
+  --   4. Windows sensitive system directory access
+  --   5. URL-encoded traversal (%2e%2e or %2f) in tool_input
+  --   6. JSON glob pattern with traversal (GHSA-7j2f-xc8p-fjmq specific signal)
+  SELECT
+    event_time AS detected_at,
+    'rp-060' AS rule_id,
+    'Agent File Tool Path Traversal Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Path traversal attempt in file tool [', coalesce(tool_name, 'unknown'), ']. ',
+      'Traversal or sensitive path in tool_input. ',
+      'Agent: ', coalesce(agent_id, 'unknown')
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke')
+    -- Gate to file operation tool names
+    -- Covers common names across PraisonAI, XAgent, MCP filesystem, and custom agent tools
+    AND match(lower(tool_name), '(read_file|write_file|list_files|list_directory|upload_file|download_file|copy_file|move_file|glob|search_files|filesystem|open_file|file_read|file_write|create_file|delete_file|edit_file|append_file|rename_file)')
+    AND (
+      -- Signal 1: Unix path traversal sequence ../ in tool_input
+      -- GHSA-7j2f-xc8p-fjmq: {"pattern": "../../../etc/*"}
+      -- CVE-2026-3954: {"filename": "../../.ssh/authorized_keys"}
+      -- MCP servers#3752: {"path": "../../.ssh/id_rsa"}
+      lower(tool_input) LIKE '%../%'
+
+      -- Signal 2: Windows-style traversal sequence ..\
+      OR lower(tool_input) LIKE '%..\\%'
+
+      -- Signal 3: Direct access to /etc/passwd (Unix password database)
+      OR lower(tool_input) LIKE '%/etc/passwd%'
+
+      -- Signal 4: Direct access to /etc/shadow (shadow password file, root-only)
+      OR lower(tool_input) LIKE '%/etc/shadow%'
+
+      -- Signal 5: Access to SSH directory (private keys, authorized_keys)
+      OR lower(tool_input) LIKE '%/.ssh/%'
+
+      -- Signal 6: Access to Linux /proc/self (environment variables, memory maps)
+      OR lower(tool_input) LIKE '%/proc/self%'
+
+      -- Signal 7: Windows System32 directory (sensitive system binaries/configs)
+      OR lower(tool_input) LIKE '%windows/system32%'
+
+      -- Signal 8: URL-encoded traversal bypass (%2e%2e = ..)
+      -- Used to bypass naive traversal string filters
+      OR lower(tool_input) LIKE '%%2e%2e%'
+
+      -- Signal 9: JSON glob pattern with traversal (GHSA-7j2f-xc8p-fjmq specific)
+      -- {"pattern": "../../../etc/*"} — the pattern key contains traversal
+      OR match(lower(tool_input), '"pattern"[^"]*"[^"]*\\.\\.[^"]*"')
+    )

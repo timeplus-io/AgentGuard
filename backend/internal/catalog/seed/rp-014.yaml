@@ -1,6 +1,6 @@
 id: rp-014
 name: "Indirect Prompt Injection via Tool Result"
-version: "0.5.0"
+version: "0.8.0"
 description: >
   Detects indirect prompt injection attacks (OWASP LLM01:2025) where malicious
   instructions are embedded in external content returned by agent tools — web page
@@ -32,15 +32,47 @@ description: >
   PR titles, Jira descriptions, n8n/Zapier webhook bodies), supervisor-blind-spot user
   profile injection pattern, and webhook tool_name-gated new-task directive.
   Also covers CVE-2026-21858 (n8n unauthenticated RCE) and CVE-2025-68613 (CISA KEV).
+  v0.7.0 adds CoT Forgery — Fabricated Chain-of-Thought Role Confusion Attack
+  (arXiv:2603.12277, MIT/WUSTL, Feb 2026, 60% ASR StrongREJECT across frontier models
+  including GPT-4, Gemini, Claude with near-0% baseline). Models infer "who is speaking"
+  from syntactic patterns rather than actual provenance. Injecting <think>/<thinking>
+  reasoning-block tokens into retrieved content (tool_result) or user_message causes
+  the model to mistake attacker-injected fabricated reasoning for its own internal
+  thoughts — bypassing safety training. Distinct from v0.3.0 ChatInject (role-boundary
+  template tokens) and v0.6.0 Phantom STI (Llama/Mistral structural tokens) — CoT
+  Forgery targets the thinking/reasoning modality standardized by DeepSeek-R1, Claude
+  extended thinking, Gemini Flash Thinking, and QwQ models.
+  v0.8.0 adds Hidden-Comment Skill Injection (arXiv:2602.10498, Shandong Univ. Feb 2026):
+  LLM agents load Markdown Skill documentation verbatim into model context. HTML comment blocks
+  (<!-- ... -->) are invisible to humans reviewing rendered documentation but fully visible to
+  the LLM reading the raw text. An attacker who can modify a Skill file (supply chain, project
+  repo, MCP server) embeds high-priority malicious instructions in HTML comments, steering the
+  agent to call credential-harvesting or data-exfiltration tools without any visible indication.
+  Confirmed against DeepSeek-V3.2 and GLM-4.5-Air. Distinct from v0.4.0 (CSS display:none in
+  fetched web content) — this targets raw Skill files loaded by IDE/coding agents.
+  v0.6.0 adds Phantom Structural Template Injection (arXiv:2602.16958, Feb 2026):
+  automated agent hijacking using optimized structural LLM role-boundary tokens
+  injected into retrieved content. Unlike ChatInject (v0.3.0), Phantom targets
+  Llama-3 header tokens (<|start_header_id|>tool/assistant<|end_header_id|>,
+  <|eot_id|>), Mistral function-calling tags (<|python_tag|>), and XML fabricated
+  tool-call blocks (<tool_call>...</tool_call>) that are distinct from Qwen/Mistral
+  <|im_start|> tokens already covered. The paper confirmed 70+ vulnerabilities in
+  real-world commercial products across GPT-4, Gemini, and Qwen. Additionally adds
+  fabricated nested tool-result JSON ("tool_name":..."result":...exfil action) which
+  exploits role confusion by masquerading attacker instructions as prior agent outputs.
   References: OWASP LLM01:2025, OWASP Agentic AI ASI02:2026, Unit42/MSRC incidents,
   arXiv:2602.20720 (AdapTools), arXiv:2510.23675 (QueryIPI), arXiv:2509.22830
   (ChatInject ICLR 2026), Unit42 Web-IDPI Mar 2026, Cisco Talos n8n n8mare Apr 2026,
-  Security Boulevard Supervisor Blind Spot Apr 2026 -
+  Security Boulevard Supervisor Blind Spot Apr 2026, arXiv:2602.16958 (Phantom STI
+  Feb 2026) -
   https://arxiv.org/abs/2509.22830,
+  https://arxiv.org/abs/2602.16958,
   https://unit42.paloaltonetworks.com/ai-agent-prompt-injection/,
   https://unit42.paloaltonetworks.com/indirect-prompt-injection,
   https://blog.talosintelligence.com/the-n8n-n8mare/,
   https://securityboulevard.com/2026/04/bypassing-llm-supervisor-agents-through-indirect-prompt-injection/,
+  https://arxiv.org/abs/2603.12277,
+  https://arxiv.org/abs/2602.10498,
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 severity: critical
 category: prompt_injection_and_hijacking
@@ -68,7 +100,31 @@ tags:
   - supervisor-blind-spot
   - cisco-talos
   - event-driven-injection
+  - phantom-sti
+  - structural-template-injection
+  - arxiv-2602.16958
+  - llama3-token-injection
+  - tool-call-fabrication
+  - cot-forgery
+  - role-confusion
+  - chain-of-thought-injection
+  - arxiv-2603.12277
+  - deepseek-thinking-token
+  - hidden-comment-injection
+  - skill-poisoning
+  - html-comment-steganography
+  - arxiv-2602.10498
 query_sql: |
+  -- v0.8.0 changelog (2026-04-18):
+  --   NEW: Hidden-Comment Skill Injection (arXiv:2602.10498, Shandong Univ. Feb 2026)
+  --   Attacker embeds malicious instructions inside HTML <!-- --> comments in Markdown Skill
+  --   files loaded verbatim into LLM context. Invisible in rendered HTML, visible to model.
+  --   Three signals added:
+  --   (1) HTML comment with credential/env access directive
+  --   (2) HTML comment instructing tool call before legitimate task
+  --   (3) HTML comment with admin/system override framing + action verb
+  --   Extends existing comment pattern in v0.0 (which was: '<!--.*(instruction|override|inject|system|task)')
+  --   with higher-specificity alternatives targeting the credential-harvest scenario.
   -- v0.2.0 changelog:
   --   PRECISION: Replaced broad LIKE patterns with tight regex alternatives.
   --   NEW: new primary/main objective directive pattern (AdapTools adaptive IPI)
@@ -193,4 +249,59 @@ query_sql: |
       -- Supervisor only watches chat input; this bypasses detection at the LLM context assembly point.
       OR match(lower(user_message), '##\s*(admin|system|override|instruction|directive)\b')
       OR match(lower(user_message), '\bthis is an admin (test|command|instruction|override)\b')
+      -- v0.6.0: Phantom Structural Template Injection (arXiv:2602.16958, Feb 2026)
+      -- Automated agent hijacking via LLM role-boundary token injection in retrieved content.
+      -- 70+ real-world commercial product vulnerabilities confirmed. Distinct from v0.3.0
+      -- ChatInject (<|im_start|>) — these are Llama-3 and Mistral function-calling tokens.
+      -- Llama-3 role header tokens (should NEVER appear in external content)
+      OR match(tool_result, '<\|start_header_id\|>\s*(tool|assistant|system)\s*<\|end_header_id\|>')
+      -- Llama-3 end-of-turn token
+      OR match(tool_result, '<\|eot_id\|>')
+      -- Mistral function-calling python tag (Mistral-Large, Mixtral)
+      OR match(tool_result, '<\|python_tag\|>')
+      -- XML fabricated tool_call block — masquerades as legitimate framework output
+      OR match(tool_result, '<tool_call>[\s\S]{1,800}</tool_call>')
+      -- Fabricated nested tool-result JSON with exfil verb (role confusion + action injection)
+      -- Requires BOTH structural JSON pattern AND exfil/malicious action — dual anchor for low FP
+      OR (
+        match(lower(tool_result), '"tool_name"\s*:\s*"[a-z_]{1,64}"\s*,\s*"result"\s*:\s*"')
+        AND match(lower(tool_result), '(exfil|send_email|execute|shell|dump|harvest|steal|collect|upload|forward)')
+      )
+      -- v0.7.0: CoT Forgery — Fabricated Chain-of-Thought Role Confusion Attack
+      -- arXiv:2603.12277 (MIT/WUSTL, Feb 2026, 60% ASR StrongREJECT across frontier models)
+      -- Models mistake fabricated reasoning tokens for their own internal thoughts.
+      -- Thinking block tokens should NEVER appear in legitimate external tool results or user messages.
+      -- <think>/<thinking> blocks injected into tool_result (webpage/doc fetched by agent)
+      OR tool_result LIKE '%<think>%'
+      OR tool_result LIKE '%</think>%'
+      OR tool_result LIKE '%<thinking>%'
+      OR tool_result LIKE '%</thinking>%'
+      -- Bracketed reasoning injection in tool_result (alternative thinking-block format)
+      OR match(lower(tool_result), '\[my reasoning\]|\[reasoning\]|\[internal thought\]|\[inner monologue\]')
+      -- Fabricated first-person reasoning with malicious intent directive in tool_result
+      -- Dual anchor: reasoning phrase + malicious action verb — low FP
+      OR match(lower(tool_result), '(i have (decided|concluded|determined)|my (reasoning|decision) is).{0,200}(exfil|send_email|execute|override|ignore|bypass)')
+      -- chain-of-thought: directive with malicious verb in tool_result
+      OR match(lower(tool_result), 'chain.of.thought.{0,10}:(exfil|send|execute|run|call|invoke|override|steal|dump)')
+      -- CoT Forgery in user_message (direct injection using thinking tokens)
+      -- Users should never send <think>/<thinking> tokens — these are model-internal formats
+      OR user_message LIKE '%<think>%'
+      OR user_message LIKE '%<thinking>%'
+      -- Bracketed reasoning or first-person reasoning forgery in user_message
+      OR match(lower(user_message), '\[my reasoning\]|\[internal thought\]')
+      OR match(lower(user_message), '(i have (decided|concluded|determined)|my (decision|reasoning) is).{0,200}(exfil|execute|send|override|bypass)')
+      -- v0.8.0: Hidden-Comment Skill Injection (arXiv:2602.10498, Shandong Univ. Feb 2026)
+      -- LLM agents load Markdown Skill files verbatim; HTML comments are invisible to human
+      -- reviewers but fully visible to the model. Attacker embeds malicious instructions in
+      -- <!-- --> comment blocks to redirect tool planning toward credential harvest or exfil.
+      -- Confirmed against DeepSeek-V3.2 and GLM-4.5-Air.
+      -- Pattern 1: HTML comment with credential/env access directive
+      -- (More specific than existing '<!--.*(instruction|override...)' pattern at higher priority)
+      OR match(lower(tool_result), '<!--.{0,500}(list.environ|read.{0,20}(credential|aws|config|passwd|shadow|ssh)|http_request.{0,100}(exfil|collect|attacker))')
+      -- Pattern 2: HTML comment instructing tool call before legitimate task
+      -- "Before [task]: call [tool] to [malicious action]"
+      OR match(lower(tool_result), '<!--.{0,300}before.{0,80}(call|invoke|execute|run).{0,80}(tool|function|api)')
+      -- Pattern 3: HTML comment with explicit admin/system override framing + action verb
+      -- Dual-anchor: admin framing + imperative action prevents broad match on comment-only docs
+      OR match(lower(tool_result), '<!--.{0,200}(admin|system).{0,80}(instruction|override|command|directive).{0,200}(call|send|read|exfil|collect|upload)')
     )

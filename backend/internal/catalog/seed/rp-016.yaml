@@ -1,6 +1,6 @@
 id: rp-016
 name: "Persistent Agent Memory Poisoning Detector"
-version: "0.4.0"
+version: "0.5.0"
 description: >
   Detects persistent memory poisoning attacks (MINJA, NeurIPS 2025 — arXiv:2503.03704) where
   an attacker injects malicious behavioral instructions into an AI agent's long-term memory bank
@@ -26,7 +26,7 @@ description: >
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: low
-hook_sources: "tool_invoke,tool_complete"
+hook_sources: "tool_invoke,tool_complete,memory_ops"
 required_telemetry: ""
 author: "AgentGuard Research Team"
 tags:
@@ -45,6 +45,14 @@ tags:
   - arXiv-2603.28013
   - arXiv-2601.09625
 query_sql: |
+  -- v0.5.0 changelog (2026-04-18):
+  --   ADDED: Second SELECT branch via UNION ALL querying agentguard_memory_ops directly.
+  --   This stream provides precise memory_op, memory_path, and content_payload fields,
+  --   eliminating the need for fuzzy tool_name LIKE patterns used in the CIM branch.
+  --   New branch detects both injection phase (memory_op IN save/update/upsert with
+  --   suspicious content_payload) and execution phase (memory_op = read with poisoned
+  --   content retrieved). The existing agentguard_cim_event branch is kept for backward
+  --   compatibility with deployments that do not yet emit agentguard_memory_ops events.
   -- v0.3.0 changelog (2026-04-16):
   --   EXTENDED: Kill-Chain Canaries (arXiv:2603.28013, MIT/UChicago, Mar 2026):
   --     Added "this supersedes all prior/previous instructions" pattern in memory write tool_input.
@@ -175,4 +183,71 @@ query_sql: |
         (tool_name LIKE '%memory%' OR tool_name LIKE '%mem_read%' OR tool_name LIKE '%retrieve%' OR tool_name LIKE '%recall%')
         AND match(tool_result, 'SECRET-[A-F0-9]{6,12}')
       )
+    )
+
+UNION ALL
+
+  -- v0.5.0: agentguard_memory_ops branch — precise detection via dedicated memory telemetry.
+  -- Uses memory_op, memory_path, and content_payload instead of fuzzy tool_name LIKE patterns.
+  SELECT
+    event_time AS detected_at,
+    'rp-016' AS rule_id,
+    'Persistent Agent Memory Poisoning Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    '' AS run_id,
+    memory_op AS hook_name,
+    tool_name,
+    concat('Memory op [', memory_op, '] on path [', memory_path, '] agent=', agent_id) AS message,
+    content_payload AS event_data
+  FROM agentguard_memory_ops
+  WHERE
+    -- Injection phase: stealth exfiltration directive written to memory
+    (
+      memory_op IN ('save','update','upsert')
+      AND match(lower(content_payload), '(silently|secretly).{0,80}(forward|send|relay|exfiltrate)')
+    )
+
+    -- Injection phase: override/ignore directive persisted to memory
+    OR (
+      memory_op IN ('save','update','upsert')
+      AND match(lower(content_payload), 'ignore.{0,40}(instructions|guidelines|system|policy|rules)')
+    )
+
+    -- Injection phase: attacker-style memory seeding with 'note to AI/agent:' (colon required)
+    OR (
+      memory_op IN ('save','update','upsert')
+      AND match(lower(content_payload), 'note to (ai|assistant|agent|llm)\s*:')
+    )
+
+    -- Injection phase: persistent rule injection 'remember always/forever/this rule:'
+    OR (
+      memory_op IN ('save','update','upsert')
+      AND match(lower(content_payload), 'remember (always|forever|this rule):')
+    )
+
+    -- Injection phase: kill-chain 'this supersedes' directive (arXiv:2603.28013 PERSISTED stage)
+    OR (
+      memory_op IN ('save','update','upsert')
+      AND match(lower(content_payload), 'this supersedes (all )?(prior|previous|existing) (instructions|rules|guidelines|policies)')
+    )
+
+    -- Injection phase: fabricated 'system rule / admin rule' override directive (arXiv:2601.09625)
+    OR (
+      memory_op IN ('save','update','upsert')
+      AND match(lower(content_payload), '(system rule|admin rule|override rule|new rule)\s*:\s*(always|never|forward|send|ignore|exfiltrate|call)')
+    )
+
+    -- Execution phase: retrieved memory contains stealth exfiltration directive (session B)
+    OR (
+      memory_op = 'read'
+      AND match(lower(content_payload), 'silently.{0,80}(forward|send|relay|exfiltrate)')
+    )
+
+    -- Execution phase: retrieved memory contains ignore-instructions directive (session B)
+    OR (
+      memory_op = 'read'
+      AND match(lower(content_payload), 'ignore.{0,40}(instructions|guidelines|system)')
     )

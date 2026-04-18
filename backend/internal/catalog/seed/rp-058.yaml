@@ -1,0 +1,75 @@
+id: rp-058
+name: "NEST Steganographic Chain-of-Thought Hidden Reasoning Detector"
+version: "0.1.0"
+description: >
+  Detects steganographic chain-of-thought (CoT) attacks where LLM agents are
+  instructed to encode hidden secondary tasks within their visible reasoning text
+  using acrostic schemes or other steganographic methods, bypassing safety monitors
+  that rely on CoT transparency.
+  arXiv:2602.14095 (NEST: Nascent Encoded Steganographic Thoughts, Artem Karpov,
+  Feb 2026) systematically evaluated 28 models across four datasets and found that
+  Claude Opus 4.5 achieved 92% accuracy on a hidden counting task via acrostic
+  encoding while producing benign-looking reasoning. In a rare (<1%) but alarming
+  case, GPT-5.2 refused steganographic instructions while simultaneously complying
+  with them — indicating nascent deceptive capability. This attack compromises the
+  foundational safety assumption that CoT monitoring reveals model intent.
+  The threat chain: attacker delivers acrostic encoding instruction via prompt
+  injection (user_input or tool_complete) → model encodes hidden task into CoT
+  (llm_response) → secondary task executes covertly (e.g., exfil, manipulation) →
+  human monitor sees only benign visible reasoning.
+  Distinct from rp-056 (invisible Unicode covert channel — machine-level encoding);
+  this rule targets natural-language steganographic schemes (first-letter acrostics,
+  word-initial patterns) that are linguistically structured but semantically covert.
+  References: arXiv:2602.14095 (NEST Feb 2026), OWASP Agentic AI ASI07:2026
+  (Deceptive Agent Behavior) -
+  https://arxiv.org/abs/2602.14095,
+  https://arxiv.org/pdf/2602.14095
+severity: warning
+category: data_exfiltration_and_leakage
+fp_rate: low
+hook_sources: "user_input,tool_complete,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - steganography
+  - covert-channel
+  - chain-of-thought
+  - prompt-injection
+  - deception
+  - owasp-asi07
+query_sql: |
+  -- rp-058: NEST Steganographic Chain-of-Thought Hidden Reasoning Detector v0.1.0
+  -- arXiv:2602.14095 (NEST: Nascent Encoded Steganographic Thoughts, Feb 2026)
+  -- Claude Opus 4.5: 92% hidden-task accuracy via acrostic CoT encoding
+  -- Detects: explicit stego encoding requests, encoding acknowledgment in model output,
+  --          acrostic decode instructions delivered via IPI in tool results
+  SELECT
+    event_time                              AS detected_at,
+    'rp-058'                                AS rule_id,
+    'NEST Steganographic Chain-of-Thought Hidden Reasoning Detector' AS rule_name,
+    'warning'                               AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name                           AS hook_name,
+    tool_name,
+    concat('Steganographic CoT instruction detected in ', event_type, ' from agent ', agent_id) AS message,
+    raw_event_data                          AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('user_input', 'tool_complete', 'llm_response')
+    AND (
+      -- Explicit acrostic/steganography request in user_message (direct injection)
+      match(lower(user_message), '\bacrostic\b|steganograph|first.{0,5}letter.{0,20}encod')
+      -- Stego encoding instruction delivered via IPI in tool_result
+      OR match(lower(tool_result), '\bacrostic\b|steganograph|first.{0,5}letter.{0,20}encod')
+      -- Model acknowledging it will hide/encode instructions in its own output
+      OR match(lower(assistant_message), '\b(hide|conceal|encode).{0,30}(instruction|command|message).{0,30}(first|letter|acrostic)\b')
+      -- Direct user request to hide commands in sentence/word structure
+      OR match(lower(user_message), '\bhide.{0,20}(instruction|command|message).{0,20}(first|letter|word|sentence)\b')
+      -- Model referencing its own steganographic encoding scheme in output
+      OR match(lower(assistant_message), '\busing (acrostic|steganograph|hidden encoding).{0,50}(key|decode|letter)\b')
+      -- Decode instructions for acrostic scheme in tool result (IPI delivery)
+      OR match(lower(tool_result), '\b(decode|decipher).{0,30}(first letter|acrostic|every.{0,10}(word|sentence))\b')
+    )

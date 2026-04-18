@@ -1,0 +1,131 @@
+id: rp-051
+name: "Constrained Decoding Attack — Schema-Level Structured Output Jailbreak Detector"
+version: "0.1.0"
+description: >
+  Detects Constrained Decoding Attacks (CDA, arXiv:2503.24191 v2 Jan 2026), a novel
+  control-plane jailbreak class that embeds malicious intent in JSON schema grammar
+  rules (enum fields, dict grammar keys) rather than in surface prompts. Unlike
+  traditional prompt injection (data-plane), CDA operates by hiding malicious payloads
+  in the schema-level grammar constraints that guide token generation, bypassing both
+  external prompt auditing and internal safety alignment. Two attack variants:
+  EnumAttack — embeds harmful instructions as enum values in a JSON schema property;
+  the surface prompt appears benign ("select the appropriate response") while enum
+  values encode the attack. DictAttack — decouples the malicious payload across
+  dictionary grammar keys so no single key is harmful but their composition is.
+  DictAttack achieves 94.3-99.5% ASR against gpt-5, gemini-2.5-pro, deepseek-r1,
+  and gpt-oss-120b, and maintains 75.8% ASR even against multiple state-of-the-art
+  jailbreak guardrails. Evaluated across 13 proprietary and open-weight models.
+  This rule targets the tool_invoke event where users or malicious retrieval content
+  supply a JSON schema to a structured-output tool, and user_input where users directly
+  supply malicious response_format schemas. Distinct from rp-001 (data-plane prompt
+  injection in surface prompts) and rp-005 (tool description poisoning in tool metadata):
+  CDA operates exclusively in the schema/grammar control-plane of structured output APIs.
+  References: arXiv:2503.24191 (CDA Jan 2026), OWASP LLM01:2025, OWASP LLM07:2025 -
+  https://arxiv.org/abs/2503.24191,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: low
+hook_sources: "tool_invoke,user_input"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - jailbreak
+  - structured-output
+  - constrained-decoding
+  - enum-attack
+  - dict-attack
+  - schema-injection
+  - control-plane-attack
+  - arxiv-2503.24191
+  - owasp-llm01
+  - owasp-llm07
+query_sql: |
+  -- v0.1.0 — three detection branches:
+  --   Branch A: EnumAttack — harmful multi-word instructions in enum array values
+  --     in tool_input (schema supplied to structured-output tool)
+  --   Branch B: EnumAttack — same pattern in user_message (user-supplied schema)
+  --   Branch C: DictAttack — toxic keyword in dict grammar key array
+  --     in tool_input or user_message
+  --   Branch D: response_format schema with enum containing jailbreak/bypass instructions
+  --
+  --   PATTERN PRECISION:
+  --   - All patterns require BOTH structural JSON marker ("enum":[ or "keys":[)
+  --     AND harmful keyword — dual anchor keeps fp_rate low.
+  --   - EnumAttack uses multi-word harmful phrases (never in legitimate enums).
+  --   - DictAttack requires specific toxic nouns (weapon, explosive, synthesize, etc.)
+  --     that are not domain enumeration words.
+  SELECT
+    event_time AS detected_at,
+    'rp-051' AS rule_id,
+    'Constrained Decoding Attack — Schema-Level Structured Output Jailbreak Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Constrained Decoding Attack detected: malicious content in JSON schema grammar ',
+      'submitted by agent ', agent_id, ' via ', coalesce(tool_name, 'direct input'), '. ',
+      'Enum or dict grammar keys may contain jailbreak payload (CDA arXiv:2503.24191).'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'user_input')
+    AND (
+      -- Branch A: EnumAttack in tool_input — harmful multi-word instruction in enum array
+      -- Two-part detection: (1) schema contains "enum" key AND (2) harmful phrase present
+      -- Dual-anchor approach avoids large {0,N} RE2 quantifier limit.
+      -- Legitimate enums contain domain values (status codes, category names), never
+      -- multi-word harmful instructions embedded as selectable response options.
+      (
+        lower(tool_input) LIKE '%"enum"%'
+        AND (
+          match(lower(tool_input), 'provide.{0,80}(instructions for|how to).{0,80}(weapon|explosive|drug|synthesize|malware|ransomware|hack|poison|kill)')
+          OR match(lower(tool_input), 'ignore.{0,60}(safety guidelines|content filter|all restrictions|all guardrails)')
+          OR match(lower(tool_input), 'bypass.{0,60}(safety filter|content filter|guardrail|alignment|restriction)')
+          OR match(lower(tool_input), 'jailbreak.{0,40}(mode|yourself|this model|the ai|the llm)')
+          OR match(lower(tool_input), 'without.{0,20}(safety filter|content filter|all restrictions|guardrails)')
+        )
+      )
+      -- Branch B: EnumAttack in user_message — user supplies malicious schema directly
+      OR (
+        lower(user_message) LIKE '%"enum"%'
+        AND (
+          match(lower(user_message), 'provide.{0,80}(instructions for|how to).{0,80}(weapon|explosive|drug|synthesize|malware|ransomware|hack|poison|kill)')
+          OR match(lower(user_message), 'ignore.{0,60}(safety guidelines|content filter|all restrictions|all guardrails)')
+          OR match(lower(user_message), 'bypass.{0,60}(safety filter|content filter|guardrail|alignment|restriction)')
+          OR match(lower(user_message), 'jailbreak.{0,40}(mode|yourself|this model|the ai|the llm)')
+          OR match(lower(user_message), 'without.{0,20}(safety filter|content filter|all restrictions|guardrails)')
+        )
+      )
+      -- Branch C: DictAttack — toxic keyword embedded as grammar dict key
+      -- DictAttack achieves 94.3-99.5% ASR by distributing payload across array keys.
+      -- Two-part: schema contains "keys" array AND toxic noun present anywhere in field.
+      -- These toxic nouns (weapon, explosive, synthesize, etc.) are not domain enumeration words.
+      OR (
+        lower(tool_input) LIKE '%"keys"%'
+        AND match(lower(tool_input), '"(weapon|explosive|synthesize|malware|ransomware|bioweapon|nerve agent|bomb|poison gas|illegal drug|bypass filter|jailbreak|self harm)"')
+      )
+      OR (
+        lower(user_message) LIKE '%"keys"%'
+        AND match(lower(user_message), '"(weapon|explosive|synthesize|malware|ransomware|bioweapon|nerve agent|bomb|poison gas|illegal drug|bypass filter|jailbreak|self harm)"')
+      )
+      -- Branch D: response_format schema with malicious enum (API-level abuse)
+      -- Users submit response_format JSON objects to OpenAI-compatible APIs.
+      -- Two-part: field contains response_format AND enum AND jailbreak directive.
+      OR (
+        lower(tool_input) LIKE '%"response_format"%'
+        AND lower(tool_input) LIKE '%"enum"%'
+        AND match(lower(tool_input), '(ignore all|jailbreak|bypass (safety|filter|guardrail)|provide harmful|without (restriction|safety filter))')
+      )
+      OR (
+        lower(user_message) LIKE '%"response_format"%'
+        AND lower(user_message) LIKE '%"enum"%'
+        AND match(lower(user_message), '(ignore all|jailbreak|bypass (safety|filter|guardrail)|provide harmful|without (restriction|safety filter))')
+      )
+    )

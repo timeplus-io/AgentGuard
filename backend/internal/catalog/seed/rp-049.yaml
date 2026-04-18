@@ -1,6 +1,6 @@
 id: rp-049
 name: "Slopsquatting — Hallucinated AI Package Supply Chain Detector"
-version: "0.1.1"
+version: "0.2.0"
 description: >
   Detects slopsquatting: a supply chain attack where LLMs hallucinate plausible-but-
   nonexistent package names that attackers pre-register on PyPI/npm/crates.io with
@@ -17,17 +17,28 @@ description: >
   theoretically preventable via decoding-time monitoring. In agentic contexts,
   slopsquatting is especially dangerous because agents install packages autonomously
   without human review, amplifying the attack surface.
+  v0.2.0 (2026-04-18): Extended package manager coverage to include pnpm add/install,
+  yarn add, conda install, gem install, go get, go install, and brew install — as
+  slopsquatting is confirmed cross-ecosystem (npm, PyPI, crates.io, RubyGems, Go modules).
+  Also extended AI ecosystem term set with ai- prefix (catches ai-router, ai-adapter, etc.)
+  and added mcp, smolagents, crewai, dspy, autogen as recognized AI framework fingerprints.
+  slopcheck v0.2.0 (npm, Mar 2026) — registry-side scanner — confirms the attack is
+  actively observed in markdown/config files and is pre-registering names in real time.
   Distinct from rp-004 (tool_invoke install detection) and rp-020 (DDIPE skill
   documentation-driven install): this rule targets the LLM output recommendation
   phase (llm_response) for hallucinated AI-ecosystem compound package names.
   References: OWASP LLM05:2025 (Supply Chain), arXiv:2406.10279 USENIX Sec 2025,
   arXiv:2602.20717 PackMonitor Feb 2026, socket.dev slopsquatting blog Apr 2025,
-  redteams.ai AI-Generated Dependency Confusion 2026 -
+  redteams.ai AI-Generated Dependency Confusion 2026, Snyk slopsquatting mitigation 2026,
+  Aikido slopsquatting blog 2026, slopcheck npm scanner Mar 2026 -
   https://arxiv.org/abs/2406.10279,
   https://arxiv.org/abs/2602.20717,
   https://socket.dev/blog/slopsquatting-how-ai-hallucinations-are-fueling-a-new-class-of-supply-chain-attacks,
-  Example: assistant_message="pip install langchain-openai-helpers-extended" (3-segment AI-ecosystem compound package name hallucinated by LLM — pre-registered by attacker on PyPI with malicious payload)
+  https://snyk.io/articles/slopsquatting-mitigation-strategies,
+  https://www.aikido.dev/blog/slopsquatting-ai-package-hallucination-attacks,
+  https://registry.npmjs.org/slopcheck,
   https://redteams.ai/topics/code-gen-security/ai-generated-dependency-confusion
+  Example: assistant_message="pip install langchain-openai-helpers-extended" (3-segment AI-ecosystem compound package name hallucinated by LLM — pre-registered by attacker on PyPI with malicious payload)
 severity: warning
 category: supply_chain_compromise
 fp_rate: medium
@@ -44,20 +55,26 @@ tags:
   - usenix-2025
   - packmonitor
   - ai-coding-agent
+  - cross-ecosystem
 query_sql: |
-  -- rp-049 v0.1.0 (2026-04-17)
-  -- Fires at the LLM recommendation phase (llm_response) when the LLM suggests
-  -- installing a 3+-segment compound package name containing AI ecosystem terms.
-  -- The dual-anchor (3+ segment name AND AI ecosystem term) reduces FP rate by
-  -- requiring BOTH the compound hallucination structure AND an AI/ML framework term.
-  --
-  -- Pattern rationale:
+  -- Changelog v0.2.0 (2026-04-18):
+  --   Extended package manager coverage: added pnpm add/install, yarn add, conda install,
+  --   gem install, go get, go install, brew install. Slopsquatting confirmed cross-ecosystem
+  --   (npm/PyPI/crates.io/RubyGems/Go/Homebrew). slopcheck v0.2.0 scanner (npm Mar 2026)
+  --   confirms active name pre-registration in the wild from AI-generated code.
+  --   Extended AI term fingerprint: added mcp, smolagents, crewai, dspy, autogen to
+  --   catch hallucinations in newer AI frameworks beyond the OpenAI/LangChain ecosystem.
+  --   SQL validated: count=0 (no spurious hits on existing corpus; FP test for normal
+  --   brew install poetry-export-plugin correctly returns true — 3-segment + no AI term
+  --   → false; pnpm add react-query-ai-adapter-extended + ai- term → true).
+  -- Changelog v0.1.0 (2026-04-17):
+  --   Initial release. Dual-anchor: 3+ segment compound package name AND AI ecosystem term.
+  --   Pattern rationale:
   --   - Real AI packages: langchain-community (2 segments), langchain-openai (2),
   --     openai (1), anthropic (1) — legitimate packages rarely have 3+ segments
   --   - Hallucinated packages: langchain-openai-helpers, react-query-ai-adapter,
   --     anthropic-tools-extended — 3+ segments, AI term in name
-  --   - The install command keyword anchors to actual recommendation context
-  --     (not just mentions of AI terms in any context)
+  --   - Install command keyword anchors to actual recommendation context
   --
   -- Pair with rp-004 for defense-in-depth: rp-049 catches recommendation phase,
   -- rp-004 catches execution phase (tool_invoke with pip/npm install).
@@ -81,7 +98,8 @@ query_sql: |
   FROM agentguard_cim_event
   WHERE event_type = 'llm_response'
     -- Dual-anchor: 3+ segment compound package name AND AI ecosystem term
-    -- The package install command anchors context (pip install X, npm install X, etc.)
-    AND match(lower(assistant_message), '(pip install|npm install|uv add|pipx install|poetry add|cargo install) [a-z0-9]+-[a-z0-9]+-[a-z0-9]+(-[a-z0-9]+)*')
-    -- AI/ML ecosystem term in same message (hallucination fingerprint)
-    AND match(lower(assistant_message), '(langchain|openai|anthropic|llm|ai-|gpt|claude|agent|copilot|huggingface|transformers|diffusers)')
+    -- Extended package manager coverage: pip, npm, uv, pipx, poetry, cargo, pnpm, yarn,
+    -- conda, gem, go get/install, brew — all confirmed slopsquatting vectors (v0.2.0)
+    AND match(lower(assistant_message), '(pip install|npm install|uv add|pipx install|poetry add|cargo install|pnpm add|pnpm install|yarn add|conda install|gem install|go get|go install|brew install)[^\n]{0,60}[a-z0-9]+-[a-z0-9]+-[a-z0-9]+(-[a-z0-9]+)*')
+    -- Extended AI/ML ecosystem term fingerprint (v0.2.0: added mcp, smolagents, crewai, dspy, autogen)
+    AND match(lower(assistant_message), '(langchain|openai|anthropic|llm|ai-|gpt|claude|agent|copilot|huggingface|transformers|diffusers|mcp|smolagents|crewai|dspy|autogen)')

@@ -1,0 +1,120 @@
+id: rp-054
+name: "OMNI-LEAK Multi-Agent Orchestrator Cascade Exfiltration Detector"
+version: "0.1.0"
+description: >
+  Detects the OMNI-LEAK attack pattern (arXiv:2602.13477, Oxford/Samsung Research, Feb 2026):
+  a single indirect prompt injection against an orchestrator agent that cascades data
+  collection directives across multiple downstream sub-agents, bypassing per-agent access
+  controls. The attacker embeds instructions in any content the orchestrator reads (email,
+  document, calendar event), causing the orchestrator to delegate sensitive data aggregation
+  tasks to specialist sub-agents and exfiltrate combined results via an external URL.
+  The paper demonstrated that both reasoning and non-reasoning frontier models are vulnerable
+  even when individual sub-agents have separate scoped permissions.
+  Distinct from rp-014 (detects injection in incoming tool_result) — this rule detects
+  the orchestrator's outgoing delegation events that carry the attacker's cascade directive
+  in assistant_message or tool_input to sub-agents. Distinct from rp-010 (trust escalation
+  claims) — this is data aggregation propagation, not privilege escalation.
+  Maps to OWASP Agentic AI ASI05:2026 (Agent Trust Exploitation) and LLM08:2025.
+  References: arXiv:2602.13477 (OMNI-LEAK, Oxford/Samsung, Feb 2026),
+  OWASP Agentic AI ASI05:2026, OWASP LLM08:2025 -
+  https://arxiv.org/abs/2602.13477,
+  https://labs.lares.com/owasp-agentic-top-10/,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  Example: assistant_message contains delegation task instructing sub-agent to
+  "collect all emails/documents containing budget/salary/acquisition and include
+  in response" combined with exfil URL: https://attacker.com/collect?d=<results>
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: low
+hook_sources: "tool_invoke,tool_complete,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data_exfiltration
+  - multi-agent
+  - orchestrator
+  - omni-leak
+  - cascade-injection
+  - owasp-asi05
+  - owasp-llm08
+  - arxiv-2602.13477
+query_sql: |
+  -- rp-054 v0.1.0 (2026-04-17)
+  -- OMNI-LEAK: Orchestrator outbound cascade exfiltration detector.
+  --
+  -- Detection strategy: monitor orchestrator's outgoing signals (assistant_message, tool_input)
+  -- for data aggregation directives combining sensitive data categories + external URLs.
+  -- This complements rp-014 (inbound IPI in tool_result) by catching the PROPAGATION stage.
+  --
+  -- Branch A: assistant_message contains cross-source data collection directive + external URL
+  --   Catches: orchestrator LLM generating delegation instructions with exfil endpoint embedded.
+  --   Dual-anchor: sensitive keyword + external URL in same message (low FP).
+  --   FP: legitimate BI orchestrators rarely embed external URLs in delegation messages.
+  --
+  -- Branch B: tool_input to a delegation/orchestrate/agent_call tool contains
+  --   multiple sensitive target categories + exfil_endpoint/webhook field.
+  --   Catches: orchestrator passing attacker's aggregation task to sub-agent via tool.
+  --   Scoped to delegation tool names to reduce FP on unrelated tool calls.
+  --
+  -- Branch C: tool_result from workspace/aggregation tool contains cross-source
+  --   collection directive + external URL — catching the orchestrator's sub-agent
+  --   responding with attacker-collected data ready for exfil.
+  --   Dual-anchor: aggregation directive + external URL in tool_result.
+  --
+  -- Branch D: assistant_message requests aggregation "across all connected" or
+  --   "from all sources" for sensitive categories — pre-exfil staging signal.
+  --   Pattern is specific to cross-source aggregation language that attackers use.
+  --
+  -- SQL validated against Timeplus (count=0, as expected on test corpus). 2026-04-17.
+  SELECT
+    event_time AS detected_at,
+    'rp-054' AS rule_id,
+    'OMNI-LEAK Multi-Agent Orchestrator Cascade Exfiltration Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'OMNI-LEAK cascade exfiltration detected: orchestrator delegation directive contains ',
+      'sensitive data aggregation + external URL. Event: ', event_type,
+      ', Tool: ', coalesce(tool_name, 'n/a'),
+      ', Agent: ', agent_id,
+      '. Single IPI may have compromised multi-agent data access across all sub-agents.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete', 'llm_response')
+    AND (
+      -- Branch A: Outgoing orchestrator delegation directive with sensitive category + exfil URL
+      -- "collect/gather/retrieve all [sensitive terms]" + external https URL in assistant_message
+      -- Dual-anchor ensures FP stays low — BI tools don't embed external URLs in delegation msgs
+      (
+        match(lower(assistant_message), '(collect|gather|retrieve|aggregate|search for|find all).{0,80}(budget|salary|acquisition|api.key|password|secret|credential|confidential|private key|access token)')
+        AND match(assistant_message, 'https?://[a-zA-Z0-9._%-]{3,}\.[a-z]{2,}[/?][^\s"]{10,}')
+      )
+
+      -- Branch B: Sub-agent delegation tool call with sensitive targets + exfil endpoint field
+      -- tool_input to agent orchestration tools contains attacker's aggregation task object
+      -- Scoped to delegation/orchestration tool names to avoid FP on generic tool calls
+      OR (
+        match(lower(tool_name), '(delegate|orchestrat|agent_call|run_agent|dispatch|relay|sub_agent|call_agent|task_run)')
+        AND match(lower(tool_input), '(exfil|exfiltrat|collect_endpoint|webhook|callback_url|result_url|send_to).{0,80}https?://')
+        AND match(lower(tool_input), '(budget|salary|acquisition|api.key|credential|confidential|password|secret|private key|access token)')
+      )
+
+      -- Branch C: Workspace/RAG tool result contains multi-source data collection directive + URL
+      -- Detects the injection payload itself inside a retrieved document/email/calendar event
+      -- that instructs the orchestrator to collect data from multiple sources and send to URL
+      OR (
+        match(lower(tool_result), '(collect|gather|retrieve|search|aggregate).{0,120}(gmail|calendar|drive|docs|email|inbox|sharepoint|outlook|confluence|slack).{0,120}https?://[a-z0-9._%-]{3,}\.[a-z]{2,}')
+      )
+
+      -- Branch D: "search/retrieve from all connected sources" aggregation staging signal
+      -- Orchestrator message that requests cross-source aggregation — attacker-injected framing
+      -- before the data collection and exfil URL assembly occurs
+      OR match(lower(assistant_message), '(search|retrieve|collect|gather).{0,40}(across all|from all|all connected|every connected|all (available|linked|integrated)).{0,60}(source|system|tool|agent|connector|workspace|integration)')
+    )

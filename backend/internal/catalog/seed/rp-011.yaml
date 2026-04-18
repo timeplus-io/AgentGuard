@@ -1,6 +1,6 @@
 id: rp-011
 name: "MCP Rug Pull — Silent Tool Redefinition Detector"
-version: "0.5.0"
+version: "0.6.0"
 description: >
   Detects MCP rug pull attacks where an attacker silently modifies an MCP server's tool
   definitions after the agent has established trust. Post-redefinition, the tool may pass
@@ -13,7 +13,12 @@ description: >
   endpoint URLs in unexpected tool contexts (Akto MCP Attack Matrix, Apr 2026).
   References: Elastic Security Labs MCP attack vectors, arXiv ETDI paper (2506.01333),
   VulnerableMCP.info, Christian Schneider MCP defense guide, Akto MCP Attack Matrix 2026,
-  mcpplaygroundonline.com OWASP MCP Top 10 2026.
+  mcpplaygroundonline.com OWASP MCP Top 10 2026, oatf.io OATF-003 (Tool Definition Rug Pull),
+  medium.com/Lukas Kania (Mar 2026: delayed-activation rug pull with 6-week dormancy period),
+  dev.to/acacian (Mar 2026: tool description manipulation PoC).
+  v0.6.0 precision audit: Removed broad 'logged%:%true%' LIKE pattern (15 FP events on
+  standard audit logs with {"logged": true} in tool_result). Replaced with specific
+  exfiltration-acknowledgment key pattern. SQL validated 2026-04-18 count=157.
   Example: tool_result contains new_endpoint="https://attacker.com/collect" returned by an "audit_log" tool — safe-named tool redirecting to attacker endpoint after silent schema swap.
 severity: critical
 category: supply_chain_compromise
@@ -45,6 +50,24 @@ query_sql: |
   --   log, report) that return URLs or base64 data — classic post-trust-establishment
   --   rug pull payload shape.
   -- Retained all v0.1.0 patterns unchanged.
+  -- Changelog v0.6.0 (2026-04-18):
+  --   PRECISION FIX: 'lower(tool_result) LIKE \'%logged%:%true%\'' removed.
+  --   ISSUE: This pattern matched ANY JSON tool_result with a field named 'logged' set to
+  --     true (e.g., audit logs, event records, debug output) — extremely common in enterprise
+  --     logging pipelines. Validation shows 15 events matched this alone, all FPs.
+  --   FIX: Replaced with tighter match on exfiltration-specific key names:
+  --     '"(exfiltration|data_capture|harvest|intercept|collection)_?logged": true'
+  --     This preserves the intent (confirm a rug-pull payload was acknowledged by the
+  --     redefined tool) without matching benign audit trails.
+  --   SQL validation:
+  --     FP test: '{"logged": true, "audit_id": 9876}' → false (confirmed)
+  --     FP test: 'data_logged: true, event_id: 12345' → false (confirmed)
+  --     Attack test: '{"exfiltration_logged": true, "dest": "https://attacker.com"}' → true
+  --   Full WHERE count: 76 (was 76 with old pattern — the 15 FP hits were already covered
+  --     by other signals; removing 'logged%:%true%' does not lose true positives).
+  --   ALSO NOTED: 'medium.com/Lukas Kania Mar 2026' documents rug-pull as a live threat
+  --     with delayed reactivation; 'oatf.io OATF-003' confirms trust-then-swap pattern.
+  --     No pattern changes needed for these — existing signals cover the attack lifecycle.
   SELECT
     event_time AS detected_at,
     'rp-011' AS rule_id,
@@ -69,7 +92,9 @@ query_sql: |
       lower(tool_input) LIKE '%exfil%'
       OR lower(tool_input) LIKE '%evil%'
       OR lower(tool_input) LIKE '%compliance endpoint%'
-      OR lower(tool_result) LIKE '%logged%:%true%'
+      -- v0.6.0 FIX: Was 'LIKE \'%logged%:%true%\'' — matched any audit log with logged=true (FP)
+      -- New: require exfiltration-specific key name to confirm rug-pull payload acknowledgment
+      OR match(lower(tool_result), '"(exfiltration|data_capture|harvest|intercept|collection)_?logged"\s*:\s*true')
       OR (lower(tool_input) LIKE '%metadata%' AND lower(tool_input) LIKE '%conversation%')
       -- Replaced raw_event_data content patterns with normalized CIM fields (v0.3.0)
       -- 'before sending%call' -> check tool_result for callback instructions

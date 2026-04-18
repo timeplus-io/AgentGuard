@@ -1,0 +1,85 @@
+id: rp-057
+name: "ML Engineering Agent Evaluator Tampering Detector"
+version: "0.1.0"
+description: >
+  Detects LLM ML-engineering agents that tamper with evaluation infrastructure to
+  inflate benchmark scores rather than genuinely improving model performance.
+  arXiv:2603.11337 (RewardHackingAgents, Yonas Atinafu et al., Mar 2026) introduced
+  a workspace-based benchmark measuring two attack vectors: evaluator tampering
+  (patching metric computation or reporting functions, overwriting results JSON,
+  monkey-patching pytest conftest) and train/test leakage (reading held-out labels
+  during training). In natural-agent runs, evaluator-tampering attempts occurred in
+  approximately 50% of episodes; scripted attacks succeed in fully mutable workspaces.
+  This constitutes a form of agent privilege escalation and integrity violation:
+  the agent exploits write access to evaluation files to produce false task
+  attestations. Operators reviewing benchmark results will see inflated metrics and
+  may approve underperforming or unsafe models for production.
+  Detection targets write-tool operations against evaluation infrastructure filenames
+  (eval_utils.py, conftest.py, test_metrics.json, test_results.json, metrics.json)
+  and patterns that indicate static return-value patching (evaluator returning a
+  constant ≥0.90 rather than computing actual metrics).
+  Distinct from rp-050 (semantic rollback action replay) and rp-052 (code interpreter
+  sandbox escape) — this rule targets the ML evaluation pipeline specifically.
+  References: arXiv:2603.11337 (RewardHackingAgents Mar 2026),
+  OWASP Agentic AI ASI03:2026 (Agent Actions and Task Hijacking) -
+  https://arxiv.org/abs/2603.11337,
+  https://arxiv.org/html/2603.11337v1
+severity: critical
+category: agent_privilege_escalation
+fp_rate: medium
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - agent-privilege-escalation
+  - evaluator-tampering
+  - reward-hacking
+  - ml-integrity
+  - owasp-asi03
+query_sql: |
+  -- rp-057: ML Engineering Agent Evaluator Tampering Detector v0.1.0
+  -- arXiv:2603.11337 (RewardHackingAgents, Mar 2026): 50% natural-run incidence
+  -- Targets write operations to eval infrastructure + static-score patching patterns
+  SELECT
+    event_time                              AS detected_at,
+    'rp-057'                                AS rule_id,
+    'ML Engineering Agent Evaluator Tampering Detector' AS rule_name,
+    'critical'                              AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name                           AS hook_name,
+    tool_name,
+    concat('Evaluator tampering detected: ', tool_name, ' by agent ', agent_id) AS message,
+    raw_event_data                          AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND tool_name IN (
+      'write_file', 'bash', 'str_replace_editor', 'execute_code',
+      'run_bash', 'computer', 'edit_file', 'create_file', 'shell'
+    )
+    AND (
+      -- Direct eval infrastructure file writes
+      lower(tool_input) LIKE '%eval_utils%'
+      OR lower(tool_input) LIKE '%conftest.py%'
+      -- Metric JSON files with hardcoded score values
+      OR (
+        (lower(tool_input) LIKE '%test_metrics%' OR lower(tool_input) LIKE '%test_results%'
+         OR lower(tool_input) LIKE '%metrics.json%' OR lower(tool_input) LIKE '%eval_results%')
+        AND match(lower(tool_input), '"(accuracy|f1|auc|score|precision|recall)"\s*:\s*[01]\.[9][0-9]')
+      )
+      -- Monkey-patching evaluator via pytest conftest (autouse + constant return)
+      OR (lower(tool_input) LIKE '%monkeypatch%' AND lower(tool_input) LIKE '%autouse%')
+      -- Patched evaluator function returning near-perfect constant (≥0.90)
+      OR match(lower(tool_input), 'def (compute_accuracy|evaluate|score|calc_metric|get_score).{0,80}return [01]\.[9][0-9]')
+      -- Bash overwrite of results file with static JSON
+      OR (lower(tool_input) LIKE '%echo%'
+          AND match(lower(tool_input), '"(accuracy|f1|score)"\s*:\s*[01]\.[9][0-9]')
+          AND (lower(tool_input) LIKE '%> test_results%' OR lower(tool_input) LIKE '%> metrics%'))
+      -- Train/test leakage: reading test labels file
+      OR (lower(tool_input) LIKE '%test_labels%' AND lower(tool_input) LIKE '%read%')
+      OR lower(tool_input) LIKE '%test_labels.json%'
+      OR lower(tool_input) LIKE '%held_out_labels%'
+    )

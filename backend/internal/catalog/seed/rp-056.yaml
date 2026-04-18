@@ -1,0 +1,93 @@
+id: rp-056
+name: "Invisible Unicode Instruction Injection Detector"
+version: "0.1.0"
+description: >
+  Detects covert instruction injection via invisible Unicode characters embedded in
+  agent communications. Zero-width characters (U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ,
+  U+200E LRM, U+200F RLM, U+FEFF BOM) and Unicode Tags block characters (U+E0000–
+  U+E007F) are completely invisible in all rendering environments — chat UIs, log
+  viewers, SIEM dashboards — yet LLMs decode them as executable instructions.
+  arXiv:2603.00164 (Reverse CAPTCHA, Marcus Graves, Feb 2026) measured 8,308 model
+  outputs across five models and two encoding schemes, finding tool use dramatically
+  amplifies compliance (Claude Haiku 0.8% → 49.2% ASR, Cohen's h = 1.37 large
+  effect, OR = 115.1). OpenAI models prefer zero-width binary encoding; Anthropic
+  models prefer Unicode Tags block. Explicit decoding instructions increase compliance
+  by up to 95 percentage points within a single model.
+  Attackers embed payloads in: user messages (direct injection), tool results (IPI
+  via web fetch/email/document), or LLM output (propagating payload to next turn).
+  Distinct from rp-001 which only detects zero-width chars used to split specific
+  keyword strings like "ignore"; this rule detects any cluster of invisible Unicode
+  regardless of surrounding text — covering the full covert channel attack surface.
+  References: arXiv:2603.00164 (Reverse CAPTCHA Feb 2026), OWASP LLM01:2025 -
+  https://arxiv.org/abs/2603.00164,
+  https://github.com/canonicalmg/reverse-captcha-eval
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: low
+hook_sources: "user_input,tool_complete,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - unicode
+  - steganography
+  - covert-channel
+  - owasp-llm01
+query_sql: |
+  -- rp-056: Invisible Unicode Instruction Injection Detector v0.1.0
+  -- arXiv:2603.00164 (Reverse CAPTCHA, Feb 2026)
+  -- Zero-width chars: U+200B (E2 80 8B), U+200C (E2 80 8C), U+200D (E2 80 8D),
+  --                   U+200E (E2 80 8E), U+200F (E2 80 8F), U+FEFF (EF BB BF)
+  -- Unicode Tags block: U+E0000 (F3 A0 80 80), U+E0020 (F3 A0 80 A0), U+E0040 (F3 A0 81 80)
+  -- Using multiSearchAny() as RE2 cannot match multi-byte UTF-8 character ranges.
+  SELECT
+    event_time                              AS detected_at,
+    'rp-056'                                AS rule_id,
+    'Invisible Unicode Instruction Injection Detector' AS rule_name,
+    'critical'                              AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name                           AS hook_name,
+    tool_name,
+    concat('Invisible Unicode payload detected in ', event_type, ' from agent ', agent_id) AS message,
+    raw_event_data                          AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('user_input', 'tool_complete', 'llm_response')
+    AND (
+      -- Zero-width chars in user_message (direct injection)
+      multiSearchAny(user_message, [
+        '\xe2\x80\x8b',  -- U+200B ZERO WIDTH SPACE
+        '\xe2\x80\x8c',  -- U+200C ZERO WIDTH NON-JOINER
+        '\xe2\x80\x8d',  -- U+200D ZERO WIDTH JOINER
+        '\xe2\x80\x8e',  -- U+200E LEFT-TO-RIGHT MARK
+        '\xe2\x80\x8f',  -- U+200F RIGHT-TO-LEFT MARK
+        '\xef\xbb\xbf'   -- U+FEFF BOM / ZERO WIDTH NO-BREAK SPACE
+      ])
+      -- Zero-width chars in tool_result (IPI via web fetch / document / email)
+      OR multiSearchAny(tool_result, [
+        '\xe2\x80\x8b', '\xe2\x80\x8c', '\xe2\x80\x8d',
+        '\xe2\x80\x8e', '\xe2\x80\x8f', '\xef\xbb\xbf'
+      ])
+      -- Zero-width chars in tool_input (smuggled into tool parameters)
+      OR multiSearchAny(tool_input, [
+        '\xe2\x80\x8b', '\xe2\x80\x8c', '\xe2\x80\x8d',
+        '\xe2\x80\x8e', '\xe2\x80\x8f', '\xef\xbb\xbf'
+      ])
+      -- Unicode Tags block in assistant_message (payload propagation to next turn)
+      OR multiSearchAny(assistant_message, [
+        '\xf3\xa0\x80\x80',  -- U+E0000 TAG SPACE
+        '\xf3\xa0\x80\xa0',  -- U+E0020 TAG SPACE (printable range start)
+        '\xf3\xa0\x81\x80'   -- U+E0040 range midpoint
+      ])
+      -- Unicode Tags block in user_message (direct covert injection)
+      OR multiSearchAny(user_message, [
+        '\xf3\xa0\x80\x80', '\xf3\xa0\x80\xa0', '\xf3\xa0\x81\x80'
+      ])
+      -- Unicode Tags block in tool_result (IPI covert delivery)
+      OR multiSearchAny(tool_result, [
+        '\xf3\xa0\x80\x80', '\xf3\xa0\x80\xa0', '\xf3\xa0\x81\x80'
+      ])
+    )

@@ -1,0 +1,103 @@
+id: rp-052
+name: "Code Interpreter Sandbox Escape via Python Frame Traversal"
+version: "0.1.0"
+description: >
+  Detects Python code interpreter sandbox escape attempts via exception frame
+  traversal and whitelisted library introspection. CVE-2026-39888 (PraisonAI,
+  CVSS 9.9) exploited missing AST blocklist entries for __traceback__, tb_frame,
+  f_back, and f_builtins to climb the Python call stack and access unrestricted
+  builtins — achieving full host RCE. GHSA-pmgp-2m3v-34mq (Agenta) abused the
+  whitelisted numpy package: numpy.ma.core.inspect.sys.modules["os"] bypassed
+  RestrictedPython to execute arbitrary shell commands with API server access.
+  CIBER benchmark (arXiv:2602.19547, Feb 2026) confirmed these attacks are
+  systematically underdetected: natural-language-disguised sandbox escapes achieve
+  14.1% higher ASR than explicit code patterns, bypassing syntax-only defenses.
+  Distinct from rp-003 (Privilege Guard / shell tool abuse) — this rule targets
+  code interpreter tools specifically and Python-level runtime sandbox bypass
+  patterns rather than shell-level command patterns.
+  References: CVE-2026-39888 CVSS 9.9 (PraisonAI praisonaiagents <v1.5.115),
+  GHSA-pmgp-2m3v-34mq (Agenta <v0.48.1 RestrictedPython numpy whitelist bypass),
+  arXiv:2602.19547 CIBER benchmark (Southeast/Huazhong Univ, Feb 2026),
+  OWASP LLM08:2025, MITRE T1059.006 (Python Command Execution) -
+  https://vulert.com/vuln-db/CVE-2026-39888,
+  https://github.com/Agenta-AI/agenta/security/advisories/GHSA-pmgp-2m3v-34mq,
+  https://arxiv.org/abs/2602.19547
+severity: critical
+category: agent_privilege_escalation
+fp_rate: low
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - sandbox-escape
+  - code-interpreter
+  - python-frame-traversal
+  - cve-2026-39888
+  - privilege-escalation
+  - owasp-llm08
+  - praisonai
+  - agenta
+  - restrictedpython
+query_sql: |
+  -- v0.1.0 (2026-04-17):
+  -- NEW: Code interpreter sandbox escape via Python exception frame traversal.
+  -- CVE-2026-39888: __traceback__ / tb_frame / f_back / f_builtins attribute access
+  -- GHSA-pmgp-2m3v-34mq: numpy.ma.core.inspect.sys.modules["os"] whitelist bypass
+  -- CIBER: sys.modules extraction, __subclasses__() MRO traversal, __class__.__mro__
+  -- Gated to code interpreter tool_name to suppress FP from non-sandbox contexts.
+  -- tool_complete branch: post-execution evidence (uid/gid output, /etc/passwd access).
+  SELECT
+    event_time AS detected_at,
+    'rp-052' AS rule_id,
+    'Code Interpreter Sandbox Escape via Python Frame Traversal' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Sandbox escape pattern in code interpreter [', coalesce(tool_name, 'unknown'),
+      ']: Python frame traversal or whitelist bypass detected. Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND tool_name IN (
+      'execute_code', 'python_interpreter', 'code_interpreter',
+      'run_code', 'execute_python', 'python', 'repl', 'sandboxed_exec'
+    )
+    AND (
+      -- CVE-2026-39888: exception frame traversal — primary escape attribute chain
+      -- These attributes are absent from PraisonAI/RestrictedPython AST blocklists
+      lower(tool_input) LIKE '%__traceback__%'
+      OR lower(tool_input) LIKE '%tb_frame%'
+      OR lower(tool_input) LIKE '%f_builtins%'
+      -- f_back is legitimate in some logging code; require co-presence of builtins access
+      OR (lower(tool_input) LIKE '%f_back%' AND lower(tool_input) LIKE '%builtins%')
+      -- GHSA-pmgp-2m3v-34mq: numpy whitelisted library introspection path
+      OR lower(tool_input) LIKE '%numpy.ma.core.inspect%'
+      -- General sys.modules["os"] extraction (cross-library escape path)
+      OR match(lower(tool_input), 'sys[.]modules')
+      -- Python class hierarchy / MRO traversal (classic sandbox escape technique)
+      OR lower(tool_input) LIKE '%__class__.__mro__%'
+      -- __subclasses__() enumeration — enumerates all Python classes to find file/OS access
+      OR match(lower(tool_input), '__subclasses__[(][)]')
+      -- ctypes.CDLL / importlib.import_module sandbox bypass via low-level C access
+      OR match(lower(tool_input), '(importlib|ctypes)[.](import_module|cdll|util)')
+      -- tool_complete: post-execution evidence of successful escape
+      -- uid=N(root) / gid=N output indicates OS-level command executed
+      OR (
+        event_type = 'tool_complete'
+        AND match(lower(tool_result), 'uid[=][0-9]|gid[=][0-9]')
+        AND tool_success = true
+      )
+      -- /etc/passwd content in tool_result from interpreter (not expected in legitimate use)
+      OR (
+        event_type = 'tool_complete'
+        AND lower(tool_result) LIKE '%/etc/passwd%'
+        AND tool_success = true
+      )
+    )

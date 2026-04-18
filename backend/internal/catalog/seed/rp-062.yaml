@@ -1,0 +1,125 @@
+id: rp-062
+name: "AgentLeak Inter-Agent Delegation PII Channel Propagation Detector"
+version: "0.1.0"
+description: >
+  Detects excessive PII/PHI/financial data propagation through inter-agent delegation
+  channels in multi-agent LLM systems. The AgentLeak benchmark (arXiv:2602.11510,
+  Feb 2026, 4,979 execution traces across 5 frontier models) found that inter-agent
+  communication (C2) leaks PII at 68.8% vs 27.2% for direct output — meaning output-only
+  auditing misses 41.7% of violations. Multi-agent configurations reduce per-channel
+  leakage but open unmonitored internal channels that raise total system exposure to 68.9%.
+  This pattern holds consistently across GPT-4o, GPT-4o-mini, Claude 3.5 Sonnet,
+  Mistral Large, and Llama 3.3 70B, and across healthcare, finance, legal, and
+  corporate domains.
+  The attack surface: orchestrator agents pass full conversation context (including
+  SSNs, medical records, credit card numbers, authentication tokens) to specialist
+  sub-agents via delegation tool calls. Without per-sub-agent context minimization,
+  sensitive data flows freely across the agent network to any compromised or over-scoped
+  sub-agent.
+  Distinct from rp-027 (cross-session bleed between tenant sessions), rp-054 (OMNI-LEAK
+  cascade exfil with explicit URL exfiltration destination), and rp-010 (trust escalation
+  in A2A delegation). This rule targets the data-in-transit pattern: PII/PHI/financial
+  data in the tool_input of agent-to-agent delegation calls, regardless of whether the
+  downstream sub-agent is malicious or merely over-scoped.
+  References: arXiv:2602.11510 (AgentLeak Feb/Mar 2026),
+  OWASP LLM02:2025, OWASP Agentic AI ASI05:2026 -
+  https://arxiv.org/abs/2602.11510,
+  https://github.com/Privatris/AgentLeak,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  https://labs.lares.com/owasp-agentic-top-10/
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "tool_invoke"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data-exfiltration
+  - multi-agent
+  - inter-agent-channel
+  - pii
+  - phi
+  - pci-dss
+  - hipaa
+  - gdpr
+  - context-minimization
+  - owasp-llm02
+  - owasp-asi05
+  - agentleak
+  - arxiv-2602.11510
+query_sql: |
+  -- v0.1.0 (2026-04-18):
+  -- NEW: AgentLeak inter-agent delegation PII channel propagation detection.
+  -- Fires on tool_invoke events for agent delegation tools where tool_input
+  -- contains PII, PHI, financial data, or authentication credentials.
+  --
+  -- Source: arXiv:2602.11510 (AgentLeak, Feb/Mar 2026)
+  -- 68.8% PII leak rate via inter-agent channel vs 27.2% direct output.
+  -- Output-only audits miss 41.7% of violations.
+  --
+  -- Gate: tool_name must be an agent delegation/dispatch tool.
+  -- This captures:
+  --   CrewAI delegate_work, LangGraph send_message/invoke_agent, AutoGen proxy calls,
+  --   MCP multi-agent dispatch, custom forward/delegate patterns.
+  --
+  -- Signals (each = one PII/data type being forwarded to a sub-agent):
+  --   1. SSN pattern in delegation payload
+  --   2. Credit card number in delegation payload
+  --   3. PHI: medical record, diagnosis, prescription, insurance ID
+  --   4. Date-of-birth in delegation context
+  --   5. Authentication token / API key forwarded to sub-agent
+  --   6. PCI-scope: card number prefix or CVV/CVC adjacent label
+  --   7. SSN field label (not just the number — catches labelled PII)
+  SELECT
+    event_time AS detected_at,
+    'rp-062' AS rule_id,
+    'AgentLeak Inter-Agent Delegation PII Channel Propagation Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'PII/sensitive data in inter-agent delegation call to [', coalesce(tool_name, 'unknown'), ']. ',
+      'Sensitive data propagated without context minimization. ',
+      'Agent: ', coalesce(agent_id, 'unknown')
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke')
+    -- Gate: delegation/dispatch tool names used in multi-agent frameworks
+    -- CrewAI: delegate_work | LangGraph: send_message, invoke_agent | AutoGen: proxy_call
+    -- Custom patterns: agent_call, dispatch_agent, forward_to_agent, spawn_agent
+    AND match(lower(tool_name), '\b(delegate|dispatch|invoke_agent|call_agent|sub_agent|spawn_agent|send_to_agent|forward_to_agent|delegate_work|agent_call|proxy_call|task_delegate|assign_agent|route_to_agent)\b')
+    AND (
+      -- Signal 1: SSN (Social Security Number) pattern in delegation payload
+      -- nnn-nn-nnnn format — distinctive and rarely appears in non-PII contexts
+      match(tool_input, '[0-9]{3}-[0-9]{2}-[0-9]{4}')
+
+      -- Signal 2: Credit card number pattern (4x4 digit groups with spaces or dashes)
+      -- PCI-DSS scope: cardholder data in inter-agent message is a compliance violation
+      OR match(tool_input, '[0-9]{4}[\s\-][0-9]{4}[\s\-][0-9]{4}[\s\-][0-9]{4}')
+
+      -- Signal 3: PHI — protected health information in delegation payload
+      -- Medical domain data flowing to sub-agents = HIPAA exposure risk
+      OR match(lower(tool_input), '\b(diagnosis|prescription|medical.record|patient.id|insurance.id|physician|health.insurance|treatment.plan|icd.?[0-9]|ndc.?[0-9]{5})\b')
+
+      -- Signal 4: Date of birth with year — common PII in healthcare/finance delegation
+      -- Dual-anchor: dob/birth date label + year prevents match on generic date strings
+      OR match(lower(tool_input), '\b(dob|date.of.birth|birth.?date|birthdate)\b.{0,20}[0-9]{4}')
+
+      -- Signal 5: Authentication token forwarded to sub-agent
+      -- Credentials should NEVER be passed between agents in plaintext
+      OR match(lower(tool_input), '\b(bearer\s+[a-z0-9._\-]{20,}|api.?key\s*[=:]\s*["\x27]?[a-z0-9_\-]{16,})')
+
+      -- Signal 6: SSN field label (catches labelled PII even without number pattern)
+      -- "ssn: 523-45-6789" or "social_security_number: ..." patterns
+      OR match(lower(tool_input), '\b(ssn|social.security.number|taxpayer.id|ein)\s*[=:,.]\s*[0-9]')
+
+      -- Signal 7: Known API key prefixes in delegation payload
+      -- Tokens passed between agents expose them to any compromised sub-agent
+      OR match(tool_input, '(sk-ant-api[0-9]{2}-|sk-proj-|ghp_|gho_|AKIA[0-9A-Z]{16}|xoxb-)[a-zA-Z0-9_\-]{16,}')
+    )

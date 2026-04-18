@@ -17,10 +17,15 @@ description: >
   agent is instructed to set return_embeddings=true, include_vectors=true, or similar flags
   in tool_input (tool_complete events), this is captured as a precursor signal even if the
   embedding output hasn't arrived yet. Reduces fp_rate from medium to low.
+  v0.3.0 adds: base64-encoded embedding exfiltration bypass detection. Some attackers
+  instruct agents to return embeddings encoded as base64 (embeddings_b64 / vectors_b64
+  key with 40+ char base64 value) to evade the float-array detection pattern.
+  The redteams.ai Embedding Inversion topic (2026) documents this evasion variant.
   References: arXiv:2502.11308 ALGEN Embedding Inversion - https://arxiv.org/abs/2502.11308,
   arXiv:2504.00147 ZSInvert Zero-shot Inversion - https://arxiv.org/abs/2504.00147,
   OWASP LLM08:2025 - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
-  Example: tool_input to vector_search includes return_embeddings=true or tool_result contains [-0.02341234, 0.01823456, -0.00934512, 0.03241567, 0.01204321, ...] (768-dim float array indicating raw embedding exfiltration)
+  redteams.ai Embedding Inversion 2026 - https://redteams.ai/topics/embedding-vector-security/embedding-inversion-attacks,
+  Example: tool_result {"embeddings_b64": "eyJlbWJlZGRpbmdzIjpbMC4wMjM0..."} (base64-encoded 768-dim float array)
   promptfoo LMVD-bd566a31 - https://www.promptfoo.dev/lm-security-db/vuln/embedding-inversion-privacy-leak-bd566a31
 severity: warning
 category: data_exfiltration_and_leakage
@@ -36,6 +41,12 @@ tags:
   - vector-database
   - embedding-inversion
 query_sql: |
+  -- Changelog v0.3.0 (2026-04-17):
+  --   ADDED: Base64-encoded embedding exfiltration bypass detection.
+  --     Attackers instruct agents to return embeddings as base64 to evade float-array detection.
+  --     Pattern: tool_result key *embed*b64 or *vectors*b64 with 40+ chars of base64 content.
+  --     Test: 'embeddings_b64: eyJlbWJlZGRpb...' → match; 'embed_size: 768' → no match.
+  --     SQL validated 2026-04-17.
   -- Changelog v0.2.0 (2026-04-17):
   --   Added parameter injection detection branch: tool_input containing return_embeddings=true,
   --   include_vectors=true, or output_embeddings=true flags — captures injection attempt before
@@ -70,4 +81,10 @@ query_sql: |
       -- These flags (return_embeddings, include_vectors, output_embeddings) appear in vector store
       -- SDKs; legitimate agent workflows never request raw vectors — attacker-injected only
       OR match(lower(tool_input), '(return_embeddings|include_vectors|output_embeddings).{0,10}(true|1|yes|enabled)')
+
+      -- v0.3.0: Base64-encoded embedding bypass (redteams.ai 2026 evasion variant)
+      -- Attackers encode float arrays as base64 to evade the numeric pattern above.
+      -- Matches key names: embeddings_b64, vectors_b64, embed_encoded, embedding_base64, etc.
+      -- with 40+ chars of base64 payload. Test: 'embeddings_b64: eyJ...' match; 'embed_dim: 768' no match.
+      OR match(lower(tool_result), '(embeddings?|vectors?|embed).{0,5}(b64|base64|encoded|hex).{0,3}[=:].{0,5}[a-zA-Z0-9+/]{40,}')
     )

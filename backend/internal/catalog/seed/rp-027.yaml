@@ -1,6 +1,6 @@
 id: rp-027
 name: "Cross-Session Context Leak Detector"
-version: "0.2.1"
+version: "0.4.0"
 description: >
   Detects application-layer cross-session context leakage in multi-tenant AI platforms,
   where data from one user's session bleeds into another user's conversation context.
@@ -19,16 +19,33 @@ description: >
   in assistant_message or tool_result in a new session context.
   References: OWASP LLM02:2025, Giskard Research Oct 2025, zylos.ai Multi-Tenant
   Security Patterns Feb 2026, OWASP Agentic AI ASI05:2026,
-  openclaw/openclaw issue #15990 (context compaction cross-session bleed Apr 2026) -
+  openclaw/openclaw issue #15990 (context compaction cross-session bleed Apr 2026),
+  tianpan.co Cross-Tenant Data Leakage (Apr 2026) -
   https://www.giskard.ai/knowledge/cross-session-leak-when-your-ai-assistant-becomes-a-data-breach,
   https://zylos.ai/research/2026-02-23-multi-tenant-security-patterns-saas-platforms,
   https://owasp.org/www-project-top-10-for-large-language-model-applications/,
   Example: tool_result from memory_retrieve includes {"user_id": "user-abc123", "email": "alice@corp.com", "api_key": "sk-ant-XXXXX"} belonging to a different tenant session
-  https://github.com/openclaw/openclaw/issues/15990
+  https://github.com/openclaw/openclaw/issues/15990,
+  https://tianpan.co/blog/2026-04-10-cross-tenant-data-leakage-llm-infrastructure,
+  arXiv:2603.10726 CacheSolidarity (prefix caching side-channel, Mar 2026) - https://arxiv.org/abs/2603.10726,
+  arXiv:2508.08438 Selective KV-Cache Sharing (timing side-channel mitigation) - https://arxiv.org/abs/2508.08438,
+  v0.3.1 reference audit (2026-04-18): Added CacheSolidarity arXiv:2603.10726 (Mar 2026,
+  IMDEA Software/UPM) — documents timing side-channel via prefix caching in multi-tenant
+  LLM serving (vLLM, SGLang, TensorRT-LLM). Attacker infers another tenant's system prompt
+  length/content by measuring cache hit latency differences. Distinct from rp-027's content-
+  bleed detection (timing attacks are infrastructure-layer, not detectable at CIM event level);
+  this paper validates the threat category and is added as reference. Also added Semantic
+  Scholar cross-ref to 'I Know What You Asked' (KV-Cache Sharing Prompt Leakage). SQL
+  unchanged — no new patterns (timing side-channels require network telemetry, not CIM events).
+  v0.3.0 adds: (1) KV cache hit cross-session bleed signal — when a shared-KV-cache
+  LLM infrastructure leaks a prior user's context via cache reuse, it may surface as
+  'kv_cache_hit' or 'context_bleed' markers in tool_result or assistant_message paired
+  with a session/user/tenant reference. Low FP because 'kv_cache_hit' without a
+  session-cross reference is benign.
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium
-hook_sources: "tool_complete,llm_response"
+hook_sources: "tool_complete,llm_response,memory_ops"
 required_telemetry: ""
 author: "AgentGuard Research Team"
 tags:
@@ -41,6 +58,32 @@ tags:
   - owasp-asi05
   - pii
 query_sql: |
+  -- v0.4.0 changelog (2026-04-18):
+  --   ADDED: Second SELECT branch via UNION ALL querying agentguard_memory_ops directly.
+  --   The new branch detects cross-session data access at the memory stream level:
+  --   Fires when memory_op = 'read' and memory_path contains a UUID that does not match
+  --   the current session_id, indicating an agent is reading another session's memory store.
+  --   Uses match() on the UUID pattern plus NOT match(memory_path, session_id) as a heuristic.
+  --   The existing agentguard_cim_event branch is kept for backward compatibility.
+  -- Changelog v0.3.1 (2026-04-18):
+  --   REFERENCE AUDIT: Added CacheSolidarity arXiv:2603.10726 (IMDEA Software/UPM, Mar 2026):
+  --     Documents prefix-caching timing side-channels in multi-tenant LLM serving (vLLM,
+  --     SGLang, TensorRT-LLM). Attacker infers another tenant's system prompt content by
+  --     measuring cache hit latency differences. NOTE: This is an infrastructure-layer timing
+  --     attack not detectable at CIM event level; added as reference category context.
+  --   Also added arXiv:2508.08438 (Selective KV-Cache Sharing, Aug 2025) as related mitigation
+  --     research and Semantic Scholar cross-ref to 'I Know What You Asked'.
+  --   SQL UNCHANGED: No pattern changes (timing side-channels require network telemetry).
+  --   SQL validated count=1 (corpus stable from v0.3.0).
+  -- Changelog v0.3.0 (2026-04-17):
+  --   ADDED: KV cache cross-session bleed signal (tianpan.co Apr 2026 research).
+  --     Shared-KV-cache LLM infrastructure (e.g. vLLM, SGLang RadixAttention) may leak
+  --     prior user context via cache reuse. This surfaces as 'kv_cache_hit' or 'cache_reuse'
+  --     markers in tool_result or assistant_message with a session/user/tenant cross-reference.
+  --     Pattern: (kv_cache_hit|cache_reuse) + session/user/tenant within 80 chars.
+  --     Test match: 'kv_cache_hit: context from session user-b9f2 loaded'
+  --     Test FP: 'cache hit rate was 95% this session' → no match.
+  --     SQL validated 2026-04-17.
   -- Changelog v0.2.0 (2026-04-17):
   --   Added context compaction cross-session bleed detection (openclaw/openclaw #15990):
   --   Two patterns targeting assistant_message references to "compacted context from previous
@@ -113,4 +156,39 @@ query_sql: |
       OR match(lower(assistant_message), 'compacted context.{0,40}(previous|prior|earlier|other|another) (session|conversation|user|tenant)')
       -- Pattern 2: context summary/compaction window references a different user/tenant
       OR match(lower(assistant_message), 'context (summary|compaction|window).{0,60}(prior|previous|other|another) (user|session|tenant|conversation)')
+
+      -- v0.3.0: KV cache cross-session bleed (tianpan.co Apr 2026, shared vLLM/SGLang KV cache)
+      -- Shared KV cache infrastructure may leak a prior user's context via cache reuse.
+      -- Surfaces as 'kv_cache_hit'/'cache_reuse' marker with a session/user/tenant cross-reference.
+      -- Low FP: 'kv_cache_hit' paired with 'session'/'user'/'tenant' is highly specific.
+      OR match(lower(tool_result), '(kv.?cache.?hit|cache.?reuse|kv.?cache.?miss|context.?bleed).{0,80}(session|user|tenant|prior|previous|another)')
+      OR match(lower(assistant_message), '(kv.?cache.?hit|cache.?reuse).{0,80}(session|user|tenant|prior|previous|another)')
     )
+
+UNION ALL
+
+  -- v0.4.0: agentguard_memory_ops branch — precise cross-session memory access detection.
+  -- Fires when an agent reads a memory path that contains a foreign session UUID:
+  -- the memory_path encodes another session's identifier (UUID pattern present but
+  -- not matching the current session_id), indicating potential cross-session data access.
+  SELECT
+    event_time AS detected_at,
+    'rp-027' AS rule_id,
+    'Cross-Session Context Leak Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    '' AS run_id,
+    memory_op AS hook_name,
+    tool_name,
+    concat('Memory op [', memory_op, '] on path [', memory_path, '] agent=', agent_id) AS message,
+    content_payload AS event_data
+  FROM agentguard_memory_ops
+  WHERE
+    -- Read of a memory path containing a foreign session UUID
+    -- Heuristic: memory_path embeds a UUID (another session's identifier) that does not
+    -- match the current session_id — indicates cross-session memory store access.
+    memory_op = 'read'
+    AND match(memory_path, '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+    AND NOT match(memory_path, session_id)

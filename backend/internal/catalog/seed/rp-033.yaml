@@ -1,6 +1,6 @@
 id: rp-033
 name: "ADAM Agent Memory Extraction Attack Detector"
-version: "0.1.1"
+version: "0.2.0"
 description: >
   Detects ADAM-style systematic data extraction attacks against LLM agents with memory
   or RAG modules. ADAM (arXiv:2604.09747, Apr 2026) uses entropy-guided adaptive querying
@@ -24,7 +24,7 @@ description: >
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: low
-hook_sources: "user_input,tool_invoke"
+hook_sources: "user_input,tool_invoke,memory_ops"
 required_telemetry: ""
 author: "AgentGuard Research Team"
 tags:
@@ -39,6 +39,14 @@ tags:
   - owasp-llm02
   - arXiv-2604.09747
 query_sql: |
+  -- v0.2.0 changelog (2026-04-18):
+  --   ADDED: Second SELECT branch via UNION ALL querying agentguard_memory_ops directly.
+  --   The new branch detects ADAM/MEXTRA-style memory extraction at the memory stream level:
+  --   (1) High-frequency memory reads per session using a ROWS window function (CTE subquery
+  --       required since Timeplus does not allow window functions directly in WHERE);
+  --   (2) Credential-category search queries in memory_op='search' content_payload;
+  --   (3) Sensitive memory_path patterns indicating targeted access to credential/key stores.
+  --   The existing agentguard_cim_event branch is kept for backward compatibility.
   SELECT
     event_time AS detected_at,
     'rp-033' AS rule_id,
@@ -105,3 +113,56 @@ query_sql: |
         AND match(lower(user_message), '\b(password|secret|api.?key|token|credential|billing|ssn|bank|account number|private)\b')
       )
     )
+
+UNION ALL
+
+  -- v0.2.0: agentguard_memory_ops branch — precise ADAM/MEXTRA extraction detection.
+  -- Branch 1: High-frequency reads per session via ROWS window (CTE required—Timeplus rejects
+  --   window functions in WHERE directly and does not support RANGE INTERVAL on DateTime64).
+  SELECT
+    detected_at,
+    rule_id,
+    rule_name,
+    severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    hook_name,
+    tool_name,
+    message,
+    event_data
+  FROM (
+    SELECT
+      event_time AS detected_at,
+      'rp-033' AS rule_id,
+      'ADAM Agent Memory Extraction Attack Detector' AS rule_name,
+      'critical' AS severity,
+      agent_id,
+      deployment_id,
+      session_id,
+      '' AS run_id,
+      memory_op AS hook_name,
+      tool_name,
+      concat('Memory op [', memory_op, '] on path [', memory_path, '] agent=', agent_id) AS message,
+      content_payload AS event_data,
+      -- Window: count reads per session over the preceding 10 rows (ROWS required;
+      -- RANGE INTERVAL on DateTime64 is not implemented in Timeplus 3.x)
+      count() OVER (PARTITION BY session_id ORDER BY event_time ROWS BETWEEN 10 PRECEDING AND CURRENT ROW) AS reads_in_window,
+      memory_op AS _op,
+      memory_path AS _path,
+      content_payload AS _payload
+    FROM agentguard_memory_ops
+  )
+  WHERE
+    -- High-frequency read burst per session (ADAM adaptive enumeration pattern)
+    (_op = 'read' AND reads_in_window > 10)
+
+    -- Credential-category search query in memory store (ADAM Boolean-OR enumeration)
+    OR (
+      _op = 'search'
+      AND match(lower(_payload), '(password|secret|token|credential|key|api_key)')
+    )
+
+    -- Targeted access to sensitive memory paths (credential/key/env stores)
+    OR match(lower(_path), '(credential|secret|password|token|\.env|\.key|auth)')
