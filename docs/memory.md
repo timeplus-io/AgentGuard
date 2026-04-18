@@ -1,6 +1,6 @@
 # AgentGuard — Memory Monitoring
 
-AgentGuard tracks what AI coding agents read from and write to persistent memory — across all memory mechanisms in use. This document explains how that data is collected, processed, and surfaced.
+AgentGuard tracks what AI agents read from and write to persistent memory — across all memory mechanisms in use. This document explains how that data is collected, processed, and surfaced.
 
 ---
 
