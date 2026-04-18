@@ -620,6 +620,131 @@ function MemoryTab({ sessionId }) {
   )
 }
 
+// ── AgentMemoryPanel ──────────────────────────────────────────────────────────
+
+function AgentMemoryPanel({ agentId }) {
+  const [stats, setStats] = useState(null)
+  const [recentOps, setRecentOps] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState({})
+
+  useEffect(() => {
+    if (!agentId) return
+    setLoading(true)
+    setStats(null)
+    setRecentOps([])
+    setExpanded({})
+
+    const safeId = agentId.replace(/'/g, '')
+
+    const statsSQL = `SELECT count() AS total_ops, count_if(memory_op = 'save') AS saves, count_if(memory_op = 'search') AS searches, count_if(memory_op = 'read') AS reads FROM table(agentguard_memory_ops) WHERE agent_id = '${safeId}'`
+    const recentSQL = `SELECT event_time, session_id, memory_op, memory_source, tool_name, server_name, memory_path, content_payload FROM table(agentguard_memory_ops) WHERE agent_id = '${safeId}' ORDER BY event_time DESC LIMIT 50`
+
+    Promise.all([
+      (async () => {
+        for await (const row of api.protonQuery(statsSQL)) {
+          setStats(row)
+          break
+        }
+      })(),
+      (async () => {
+        const rows = []
+        for await (const row of api.protonQuery(recentSQL)) {
+          rows.push(row)
+        }
+        setRecentOps(rows)
+      })(),
+    ]).finally(() => setLoading(false))
+  }, [agentId])
+
+  function fmtTime(ts) {
+    if (!ts) return '—'
+    try {
+      return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
+        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    } catch { return String(ts) }
+  }
+
+  function displayLabel(op) {
+    if (op.server_name) return op.server_name
+    if (op.memory_path) return op.memory_path.split('/').pop()
+    return op.tool_name
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+      </div>
+    )
+  }
+
+  const totalOps = Number(stats?.total_ops ?? 0)
+
+  return (
+    <div className="p-5 space-y-6">
+      <div>
+        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Memory Footprint</p>
+        {totalOps === 0 ? (
+          <p className="text-xs text-zinc-600">No memory operations recorded for this agent.</p>
+        ) : (
+          <div className="grid grid-cols-4 gap-3 mb-6">
+            {[
+              { label: 'Total',    value: stats?.total_ops ?? 0, color: 'text-[#e7dff0]' },
+              { label: 'Saves',    value: stats?.saves     ?? 0, color: 'text-amber-400' },
+              { label: 'Searches', value: stats?.searches  ?? 0, color: 'text-blue-400' },
+              { label: 'Reads',    value: stats?.reads     ?? 0, color: 'text-emerald-400' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="bg-[#1a1218] rounded p-3 text-center">
+                <p className={`text-lg font-bold font-mono ${color}`}>{value}</p>
+                <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">{label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {recentOps.length > 0 && (
+        <div>
+          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Recent Operations</p>
+          <div className="space-y-1">
+            {recentOps.map((op, i) => (
+              <div key={i}>
+                <div
+                  className="flex items-center gap-3 cursor-pointer hover:bg-[#2a1e24] rounded px-2 py-1 -mx-2"
+                  onClick={() => setExpanded(prev => ({ ...prev, [i]: !prev[i] }))}
+                >
+                  <span className="text-[10px] font-mono text-zinc-500 w-16 shrink-0">{fmtTime(op.event_time)}</span>
+                  <span className={`text-[10px] font-bold uppercase w-14 shrink-0 ${OP_COLORS[op.memory_op] ?? 'text-zinc-500'}`}>
+                    {op.memory_op}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 w-24 shrink-0">{op.memory_source}</span>
+                  <span className="text-xs font-mono text-[#e7dff0] truncate">{displayLabel(op)}</span>
+                  <span className="material-symbols-outlined text-[12px] text-zinc-600 ml-auto shrink-0">
+                    {expanded[i] ? 'expand_less' : 'expand_more'}
+                  </span>
+                </div>
+                {expanded[i] && (
+                  <div className="ml-2 mt-1 mb-2 pl-3 border-l border-[#574149]/40 space-y-1">
+                    {op.memory_path && (
+                      <p className="text-[10px] font-mono text-zinc-400 break-all">{op.memory_path}</p>
+                    )}
+                    {op.content_payload && (
+                      safeParse(op.content_payload) !== null
+                        ? <div className="text-[10px] font-mono text-[#e7dff0] leading-relaxed"><JsonValue value={safeParse(op.content_payload)} depth={0} /></div>
+                        : <pre className="text-[10px] font-mono text-zinc-400 bg-[#1a1218] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">{op.content_payload}</pre>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── RunWaterfall ──────────────────────────────────────────────────────────────
 
 function RunWaterfall({ spans }) {
@@ -1291,10 +1416,7 @@ export default function AgentDetail() {
             {/* Event list */}
             <div className="flex-1 overflow-y-auto">
               {!selectedSession ? (
-                <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
-                  <span className="material-symbols-outlined text-4xl">timeline</span>
-                  <p className="text-sm">Select a session from the left to begin</p>
-                </div>
+                <AgentMemoryPanel agentId={agent?.agent_id} />
               ) : activeTab === 'skills' ? (
                 <SkillsTab sessionId={selectedSession} />
               ) : activeTab === 'memory' ? (
