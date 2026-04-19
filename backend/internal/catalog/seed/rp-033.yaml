@@ -114,7 +114,7 @@ query_sql: |
       )
     )
 
-UNION ALL
+  UNION ALL
 
   -- v0.2.0: agentguard_memory_ops branch — precise ADAM/MEXTRA extraction detection.
   -- Branch 1: High-frequency reads per session via ROWS window (CTE required—Timeplus rejects
