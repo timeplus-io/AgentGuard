@@ -1326,6 +1326,8 @@ func migrateSkillsStreamIfNeeded(ctx context.Context, conn proton.Conn, emit fun
 		"mv_skills_loaded_openclaw",
 	} {
 		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", mv)); err != nil {
+			log.Printf("timeplus: migrate drop view %s: %v", mv, err)
+		} else {
 			emit("ok", "  ✓ dropped "+mv+" (or did not exist)")
 		}
 	}
