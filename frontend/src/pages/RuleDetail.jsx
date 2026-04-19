@@ -73,7 +73,7 @@ export default function RuleDetail() {
     if (!rule || actionLoading) return
     setActionLoading(true)
     try {
-      await api.upgradeRule(id, rule.query_sql)
+      await api.upgradeRule(id)
       setRule(prev => ({ ...prev, version: prev.latest_version, latest_version: undefined }))
     } catch (e) {
       console.error('Upgrade failed', e)
