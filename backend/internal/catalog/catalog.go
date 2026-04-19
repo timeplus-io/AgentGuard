@@ -25,6 +25,7 @@ type Entry struct {
 	RequiredTelemetry string   `yaml:"required_telemetry" json:"required_telemetry"`
 	Author            string   `yaml:"author"             json:"author"`
 	Tags              []string `yaml:"tags"               json:"tags"`
+	UDFs              []string `yaml:"udfs"               json:"udfs"`
 	QuerySQL          string   `yaml:"query_sql"          json:"query_sql"`
 }
 

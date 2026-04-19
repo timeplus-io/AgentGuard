@@ -318,8 +318,9 @@ type RulePack struct {
 	RequiredTelemetry string `json:"required_telemetry"`
 	FPRate            string `json:"fp_rate"`
 	HookSources       string `json:"hook_sources"`
-	Detections24h     int    `json:"detections_24h"`
-	LatestVersion     string `json:"latest_version,omitempty"`
+	Detections24h     int      `json:"detections_24h"`
+	LatestVersion     string   `json:"latest_version,omitempty"`
+	UDFs              []string `json:"udfs,omitempty"`
 }
 
 type RulesResponse struct {

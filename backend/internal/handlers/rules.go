@@ -202,7 +202,8 @@ GROUP BY rule_id`, id)
 					return
 				}
 			} else {
-				if err := tp.CreateRuleMV(&cfg.Timeplus, id, current.QuerySQL); err != nil {
+				catalogEntry, _ := mgr.Lookup(id)
+				if err := tp.CreateRuleMV(&cfg.Timeplus, id, current.QuerySQL, catalogEntry.UDFs); err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 					return
 				}
@@ -289,7 +290,7 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 		if current.Enabled {
-			if err := tp.CreateRuleMV(&cfg.Timeplus, id, targetSQL); err != nil {
+			if err := tp.CreateRuleMV(&cfg.Timeplus, id, targetSQL, catalogEntry.UDFs); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 				return
 			}
@@ -464,7 +465,7 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "install insert failed"})
 			return
 		}
-		if err := tp.CreateRuleMV(&cfg.Timeplus, id, entry.QuerySQL); err != nil {
+		if err := tp.CreateRuleMV(&cfg.Timeplus, id, entry.QuerySQL, entry.UDFs); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 			return
 		}
@@ -559,7 +560,8 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 			if p.Enabled {
 				if !exists {
-					if err := tp.CreateRuleMV(&cfg.Timeplus, p.ID, p.QuerySQL); err != nil {
+					catalogEntry, _ := mgr.Lookup(p.ID)
+					if err := tp.CreateRuleMV(&cfg.Timeplus, p.ID, p.QuerySQL, catalogEntry.UDFs); err != nil {
 						res.Action = "create_failed"
 						res.Error = err.Error()
 					} else {
@@ -654,14 +656,15 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := auth.RequestCfg(c, cfg)
 		var body struct {
-			ID          string `json:"id"`
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			QuerySQL    string `json:"query_sql"`
-			Severity    string `json:"severity"`
-			Category    string `json:"category"`
-			FPRate      string `json:"fp_rate"`
-			HookSources string `json:"hook_sources"`
+			ID          string   `json:"id"`
+			Name        string   `json:"name"`
+			Description string   `json:"description"`
+			QuerySQL    string   `json:"query_sql"`
+			Severity    string   `json:"severity"`
+			Category    string   `json:"category"`
+			FPRate      string   `json:"fp_rate"`
+			HookSources string   `json:"hook_sources"`
+			UDFs        []string `json:"udfs"`
 		}
 		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -702,6 +705,7 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			HookSources: body.HookSources,
 			Author:      "custom",
 			Tags:        []string{},
+			UDFs:        body.UDFs,
 		}
 
 		// Persist to catalog first.
@@ -728,7 +732,7 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 
-		if err := tp.CreateRuleMV(&cfg.Timeplus, ruleID, finalSQL); err != nil {
+		if err := tp.CreateRuleMV(&cfg.Timeplus, ruleID, finalSQL, body.UDFs); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 			return
 		}
@@ -772,11 +776,12 @@ func queryCurrentRulePacks(cfg *config.TimeplusConfig, mgr *catalog.Manager) ([]
 			FPRate:            parseStr(row["fp_rate"]),
 			HookSources:       parseStr(row["hook_sources"]),
 		}
-		// Check catalog for a newer version.
+		// Enrich from catalog: newer version and UDFs.
 		if catalogEntry, ok := mgr.Lookup(id); ok {
 			if versionGreater(catalogEntry.Version, pack.Version) {
 				pack.LatestVersion = catalogEntry.Version
 			}
+			pack.UDFs = catalogEntry.UDFs
 		}
 		packs = append(packs, pack)
 	}

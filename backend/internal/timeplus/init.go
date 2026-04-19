@@ -133,7 +133,13 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 		log.Printf("timeplus init: warning creating alert: %v", err)
 	}
 	emit("running", "$ Syncing rule materialized views…")
-	if err := startupSyncMVs(ctx, conn); err != nil {
+	udfsByRuleID := make(map[string][]string, len(catalogEntries))
+	for _, e := range catalogEntries {
+		if len(e.UDFs) > 0 {
+			udfsByRuleID[e.ID] = e.UDFs
+		}
+	}
+	if err := startupSyncMVs(ctx, conn, udfsByRuleID); err != nil {
 		log.Printf("timeplus init: warning syncing MVs: %v", err)
 	}
 	emit("ok", "  ✓ All resources provisioned")
@@ -351,7 +357,7 @@ FROM table(agentguard_rules)
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = false`
 
-func startupSyncMVs(ctx context.Context, conn proton.Conn) error {
+func startupSyncMVs(ctx context.Context, conn proton.Conn, udfsByRuleID map[string][]string) error {
 	rows, err := conn.Query(ctx, sqlStartupRules)
 	if err != nil {
 		return fmt.Errorf("startup sync query: %w", err)
@@ -381,6 +387,13 @@ func startupSyncMVs(ctx context.Context, conn proton.Conn) error {
 		exists, _ := streamExists(ctx, conn, mvName)
 		if r.enabled {
 			if !exists {
+				for i, udf := range udfsByRuleID[r.ruleID] {
+					if err := conn.Exec(ctx, udf); err != nil {
+						log.Printf("timeplus: startup create UDF[%d] for %s: %v", i, r.ruleID, err)
+					} else {
+						log.Printf("timeplus: startup created/updated UDF[%d] for %s", i, r.ruleID)
+					}
+				}
 				ddl := fmt.Sprintf("CREATE MATERIALIZED VIEW IF NOT EXISTS %s INTO agentguard_security_events AS %s", mvName, r.querySQL)
 				if err := conn.Exec(ctx, ddl); err != nil {
 					log.Printf("timeplus: startup create MV %s: %v", mvName, err)

@@ -318,6 +318,20 @@ export default function RuleDetail() {
             />
           </div>
 
+          {/* UDF Definitions */}
+          {rule.udfs?.length > 0 && (
+            <div className="bg-[#1d1a25] p-8 rounded-sm">
+              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-4">UDF Definitions</h2>
+              <div className="flex flex-col gap-3">
+                {rule.udfs.map((udf, i) => (
+                  <pre key={i} className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: highlight(udf || '', languages.sql, 'sql') }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Recent Detections */}
           <div>
             <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-4">
