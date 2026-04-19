@@ -426,10 +426,21 @@ function RunEventCard({ event }) {
 
 // ── SkillsTab ─────────────────────────────────────────────────────────────────
 
+const SOURCE_TYPE_COLORS = {
+  workspace: 'text-red-400',
+  managed:   'text-emerald-400',
+  personal:  'text-blue-400',
+  bundled:   'text-zinc-400',
+  plugin:    'text-purple-400',
+  user:      'text-zinc-500',
+  unknown:   'text-zinc-500',
+}
+
 function SkillsTab({ sessionId }) {
   const [loaded, setLoaded] = useState([])
   const [invoked, setInvoked] = useState([])
   const [connecting, setConnecting] = useState(true)
+  const [expanded, setExpanded] = useState({})
 
   useEffect(() => {
     if (!sessionId) return
@@ -437,16 +448,27 @@ function SkillsTab({ sessionId }) {
     setLoaded([])
     setInvoked([])
     setConnecting(true)
+    setExpanded({})
     const ctrl = new AbortController()
-    const sql = `SELECT event_time, skill_name, skill_action FROM agentguard_skills WHERE session_id = '${sessionId}' ORDER BY event_time ASC SETTINGS seek_to = 'earliest'`
+    const sql = `SELECT event_time, skill_name, skill_action, skill_namespace, skill_source_type, skill_location, skill_description, skill_args FROM agentguard_skills WHERE session_id = '${sessionId}' ORDER BY event_time ASC SETTINGS seek_to = 'earliest'`
     async function stream() {
       for await (const row of api.protonQuery(sql, { signal: ctrl.signal })) {
         if (ctrl.signal.aborted) break
         setConnecting(false)
         if (row.skill_action === 'loaded') {
-          setLoaded(prev => prev.some(s => s.name === row.skill_name) ? prev : [...prev, { name: row.skill_name, firstSeen: row.event_time }])
+          setLoaded(prev => prev.some(s => s.name === row.skill_name) ? prev : [...prev, {
+            name: row.skill_name,
+            firstSeen: row.event_time,
+            sourceType: row.skill_source_type || 'unknown',
+            location: row.skill_location || '',
+            description: row.skill_description || '',
+          }])
         } else if (row.skill_action === 'invoked') {
-          setInvoked(prev => [...prev, { time: row.event_time, name: row.skill_name }])
+          setInvoked(prev => [...prev, {
+            time: row.event_time,
+            name: row.skill_name,
+            args: row.skill_args || '',
+          }])
         }
       }
       setConnecting(false)
@@ -482,11 +504,35 @@ function SkillsTab({ sessionId }) {
           <p className="text-xs text-zinc-600">No loaded skills detected for this session.</p>
         ) : (
           <div className="space-y-2">
-            {loaded.map(({ name, firstSeen }) => (
-              <div key={name} className="flex items-center gap-2 w-full">
-                <span className="material-symbols-outlined text-[14px] text-[#ffb0cf]" style={{ fontVariationSettings: "'FILL' 0" }}>hexagon</span>
-                <span className="text-xs font-mono text-[#e7dff0]">{name}</span>
-                <span className="ml-auto text-[10px] font-mono text-zinc-500">first seen&nbsp;&nbsp;{fmtTime(firstSeen)}</span>
+            {loaded.map(({ name, firstSeen, sourceType, location, description }) => (
+              <div key={name}>
+                <div
+                  className="flex items-center gap-2 w-full cursor-pointer"
+                  onClick={() => setExpanded(prev => ({ ...prev, [name]: !prev[name] }))}
+                >
+                  <span className="material-symbols-outlined text-[14px] text-[#ffb0cf]" style={{ fontVariationSettings: "'FILL' 0" }}>hexagon</span>
+                  <span className="text-xs font-mono text-[#e7dff0]">{name}</span>
+                  {sourceType && (
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full border border-current ${SOURCE_TYPE_COLORS[sourceType] || 'text-zinc-500'}`}>
+                      {sourceType}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[10px] font-mono text-zinc-500">first seen&nbsp;&nbsp;{fmtTime(firstSeen)}</span>
+                </div>
+                {expanded[name] && (location || description) && (
+                  <div className="ml-6 mt-1 space-y-1">
+                    {location && (
+                      <p className="text-[10px] font-mono text-zinc-500 break-all">
+                        <span className="text-zinc-600">location </span>{location}
+                      </p>
+                    )}
+                    {description && (
+                      <p className="text-[10px] font-mono text-zinc-400 break-words">
+                        <span className="text-zinc-600">desc </span>{description}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -503,10 +549,25 @@ function SkillsTab({ sessionId }) {
         ) : (
           <div className="space-y-2">
             {invoked.map((item, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[14px] text-[#ffb2b8]">play_arrow</span>
-                <span className="text-[10px] font-mono text-zinc-500 w-16 shrink-0">{fmtTime(item.time)}</span>
-                <span className="text-xs font-mono text-[#e7dff0]">{item.name}</span>
+              <div key={i}>
+                <div
+                  className={`flex items-center gap-3 ${item.args ? 'cursor-pointer' : ''}`}
+                  onClick={() => item.args && setExpanded(prev => ({ ...prev, [`inv-${i}`]: !prev[`inv-${i}`] }))}
+                >
+                  <span className="material-symbols-outlined text-[14px] text-[#ffb2b8]">play_arrow</span>
+                  <span className="text-[10px] font-mono text-zinc-500 w-16 shrink-0">{fmtTime(item.time)}</span>
+                  <span className="text-xs font-mono text-[#e7dff0]">{item.name}</span>
+                  {item.args && (
+                    <span className="ml-auto text-[10px] font-mono text-zinc-600">args ▾</span>
+                  )}
+                </div>
+                {expanded[`inv-${i}`] && item.args && (
+                  <div className="ml-10 mt-1">
+                    <p className="text-[10px] font-mono text-zinc-400 break-words">
+                      <span className="text-zinc-600">args </span>{item.args}
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>
