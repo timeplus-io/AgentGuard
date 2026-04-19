@@ -477,14 +477,6 @@ function SkillsTab({ sessionId }) {
     return () => ctrl.abort()
   }, [sessionId])
 
-  function fmtTime(ts) {
-    if (!ts) return '—'
-    try {
-      return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
-        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    } catch { return String(ts) }
-  }
-
   if (connecting) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -507,8 +499,8 @@ function SkillsTab({ sessionId }) {
             {loaded.map(({ name, firstSeen, sourceType, location, description }) => (
               <div key={name}>
                 <div
-                  className="flex items-center gap-2 w-full cursor-pointer"
-                  onClick={() => setExpanded(prev => ({ ...prev, [name]: !prev[name] }))}
+                  className={`flex items-center gap-2 w-full ${(location || description) ? 'cursor-pointer' : ''}`}
+                  onClick={() => (location || description) && setExpanded(prev => ({ ...prev, [name]: !prev[name] }))}
                 >
                   <span className="material-symbols-outlined text-[14px] text-[#ffb0cf]" style={{ fontVariationSettings: "'FILL' 0" }}>hexagon</span>
                   <span className="text-xs font-mono text-[#e7dff0]">{name}</span>
@@ -517,7 +509,7 @@ function SkillsTab({ sessionId }) {
                       {sourceType}
                     </span>
                   )}
-                  <span className="ml-auto text-[10px] font-mono text-zinc-500">first seen&nbsp;&nbsp;{fmtTime(firstSeen)}</span>
+                  <span className="ml-auto text-[10px] font-mono text-zinc-500">first seen&nbsp;&nbsp;{fmtShortTime(firstSeen)}</span>
                 </div>
                 {expanded[name] && (location || description) && (
                   <div className="ml-6 mt-1 space-y-1">
@@ -548,28 +540,31 @@ function SkillsTab({ sessionId }) {
           <p className="text-xs text-zinc-600">No skill invocations detected for this session.</p>
         ) : (
           <div className="space-y-2">
-            {invoked.map((item, i) => (
-              <div key={i}>
-                <div
-                  className={`flex items-center gap-3 ${item.args ? 'cursor-pointer' : ''}`}
-                  onClick={() => item.args && setExpanded(prev => ({ ...prev, [`inv-${i}`]: !prev[`inv-${i}`] }))}
-                >
-                  <span className="material-symbols-outlined text-[14px] text-[#ffb2b8]">play_arrow</span>
-                  <span className="text-[10px] font-mono text-zinc-500 w-16 shrink-0">{fmtTime(item.time)}</span>
-                  <span className="text-xs font-mono text-[#e7dff0]">{item.name}</span>
-                  {item.args && (
-                    <span className="ml-auto text-[10px] font-mono text-zinc-600">args ▾</span>
+            {invoked.map((item, i) => {
+              const itemKey = `${item.time}-${item.name}-${i}`
+              return (
+                <div key={itemKey}>
+                  <div
+                    className={`flex items-center gap-3 ${item.args ? 'cursor-pointer' : ''}`}
+                    onClick={() => item.args && setExpanded(prev => ({ ...prev, [itemKey]: !prev[itemKey] }))}
+                  >
+                    <span className="material-symbols-outlined text-[14px] text-[#ffb2b8]">play_arrow</span>
+                    <span className="text-[10px] font-mono text-zinc-500 w-16 shrink-0">{fmtShortTime(item.time)}</span>
+                    <span className="text-xs font-mono text-[#e7dff0]">{item.name}</span>
+                    {item.args && (
+                      <span className="ml-auto text-[10px] font-mono text-zinc-600">args ▾</span>
+                    )}
+                  </div>
+                  {expanded[itemKey] && item.args && (
+                    <div className="ml-10 mt-1">
+                      <p className="text-[10px] font-mono text-zinc-400 break-words">
+                        <span className="text-zinc-600">args </span>{item.args}
+                      </p>
+                    </div>
                   )}
                 </div>
-                {expanded[`inv-${i}`] && item.args && (
-                  <div className="ml-10 mt-1">
-                    <p className="text-[10px] font-mono text-zinc-400 break-words">
-                      <span className="text-zinc-600">args </span>{item.args}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
