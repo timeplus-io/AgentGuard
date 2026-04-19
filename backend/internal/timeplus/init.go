@@ -104,6 +104,9 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	if err := seedPricingData(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning seeding pricing: %v", err)
 	}
+	if err := migrateSkillsStreamIfNeeded(ctx, conn, emit); err != nil {
+		log.Printf("timeplus init: warning migrating skills stream: %v", err)
+	}
 	if err := createSkillsStream(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating skills stream: %v", err)
 	}
@@ -1030,26 +1033,35 @@ CREATE MUTABLE STREAM IF NOT EXISTS agentguard_pricing
 const ddlSkillsStream = `
 CREATE STREAM IF NOT EXISTS agentguard_skills
 (
-  event_time    datetime64(3),
-  agent_id      string,
-  session_id    string,
-  deployment_id string,
-  agent_type    low_cardinality(string),
-  skill_name    string,
-  skill_action  low_cardinality(string)
+  event_time        datetime64(3),
+  agent_id          string,
+  session_id        string,
+  deployment_id     string,
+  agent_type        low_cardinality(string),
+  skill_name        string,
+  skill_action      low_cardinality(string),
+  skill_namespace   low_cardinality(string),
+  skill_source_type low_cardinality(string),
+  skill_location    string,
+  skill_description string,
+  skill_args        string
 )`
 
 const ddlMVSkillsInvokedClaudeCode = `
 CREATE MATERIALIZED VIEW mv_skills_invoked_claudecode
 INTO agentguard_skills AS
 SELECT
-  event_time,
-  agent_id,
-  session_id,
-  deployment_id,
-  agent_type,
+  event_time, agent_id, session_id, deployment_id, agent_type,
   json_value(event_data, '$.tool_input.skill') AS skill_name,
-  'invoked' AS skill_action
+  'invoked' AS skill_action,
+  if(position(json_value(event_data, '$.tool_input.skill'), ':') > 0,
+     split_by_string(':', json_value(event_data, '$.tool_input.skill'))[1],
+     '') AS skill_namespace,
+  if(position(json_value(event_data, '$.tool_input.skill'), ':') > 0,
+     'plugin', 'user') AS skill_source_type,
+  ''  AS skill_location,
+  ''  AS skill_description,
+  json_value(event_data, '$.tool_input.args') AS skill_args
 FROM agentguard_hook_events
 WHERE _tp_time > earliest_ts()
   AND hook_name = 'before_tool_call'
@@ -1061,34 +1073,46 @@ const ddlMVSkillsInvokedOpenClaw = `
 CREATE MATERIALIZED VIEW mv_skills_invoked_openclaw
 INTO agentguard_skills AS
 SELECT
-  event_time,
-  agent_id,
-  session_id,
-  deployment_id,
-  agent_type,
-  extract(json_value(event_data, '$.params.path'), '/skills/([a-zA-Z][a-zA-Z0-9-]*)/SKILL') AS skill_name,
-  'invoked' AS skill_action
+  event_time, agent_id, session_id, deployment_id, agent_type,
+  extract(json_value(event_data, '$.params.path'),
+          '/skills/([a-zA-Z][a-zA-Z0-9-]*)/SKILL') AS skill_name,
+  'invoked' AS skill_action,
+  ''         AS skill_namespace,
+  CASE
+    WHEN position(json_value(event_data, '$.params.path'), '~/.openclaw/')        = 1 THEN 'managed'
+    WHEN position(json_value(event_data, '$.params.path'), '~/.config/openclaw/') = 1 THEN 'managed'
+    WHEN position(json_value(event_data, '$.params.path'), '~/.agents/')          = 1 THEN 'personal'
+    WHEN position(json_value(event_data, '$.params.path'), 'node_modules')        > 0 THEN 'bundled'
+    WHEN length(json_value(event_data, '$.params.path'))                          > 0 THEN 'workspace'
+    ELSE 'unknown'
+  END        AS skill_source_type,
+  json_value(event_data, '$.params.path') AS skill_location,
+  ''         AS skill_description,
+  ''         AS skill_args
 FROM agentguard_hook_events
 WHERE _tp_time > earliest_ts()
   AND hook_name = 'before_tool_call'
   AND tool_name = 'read'
   AND agent_type = 'openclaw'
   AND position(event_data, 'SKILL.md') > 0
-  AND extract(json_value(event_data, '$.params.path'), '/skills/([a-zA-Z][a-zA-Z0-9-]*)/SKILL') != ''`
+  AND extract(json_value(event_data, '$.params.path'),
+              '/skills/([a-zA-Z][a-zA-Z0-9-]*)/SKILL') != ''`
 
 const ddlMVSkillsLoadedClaudeCode = `
 CREATE MATERIALIZED VIEW mv_skills_loaded_claudecode
 INTO agentguard_skills AS
 SELECT
-  event_time,
-  agent_id,
-  session_id,
-  deployment_id,
-  agent_type,
+  event_time, agent_id, session_id, deployment_id, agent_type,
   trim(sn) AS skill_name,
-  'loaded' AS skill_action
+  'loaded'  AS skill_action,
+  if(position(trim(sn), ':') > 0,
+     split_by_string(':', trim(sn))[1], '') AS skill_namespace,
+  if(position(trim(sn), ':') > 0, 'plugin', 'user') AS skill_source_type,
+  '' AS skill_location,
+  '' AS skill_description,
+  '' AS skill_args
 FROM agentguard_hook_events
-ARRAY JOIN extract_all(event_data, '---..name: ([a-zA-Z][a-zA-Z0-9-]*)') AS sn
+ARRAY JOIN extract_all(event_data, '---..name: ([a-zA-Z][a-zA-Z0-9:-]*)') AS sn
 WHERE _tp_time > earliest_ts()
   AND hook_name = 'prompt_context'
   AND agent_type = 'claudecode'
@@ -1098,19 +1122,36 @@ const ddlMVSkillsLoadedOpenClaw = `
 CREATE MATERIALIZED VIEW mv_skills_loaded_openclaw
 INTO agentguard_skills AS
 SELECT
-  event_time,
-  agent_id,
-  session_id,
-  deployment_id,
-  agent_type,
-  trim(sn) AS skill_name,
-  'loaded' AS skill_action
+  event_time, agent_id, session_id, deployment_id, agent_type,
+  trim(skill_tuple.1)    AS skill_name,
+  'loaded'               AS skill_action,
+  if(position(trim(skill_tuple.1), ':') > 0,
+     split_by_string(':', trim(skill_tuple.1))[1], '') AS skill_namespace,
+  CASE
+    WHEN position(skill_tuple.3, '~/.openclaw/')        = 1 THEN 'managed'
+    WHEN position(skill_tuple.3, '~/.config/openclaw/') = 1 THEN 'managed'
+    WHEN position(skill_tuple.3, '~/.agents/')          = 1 THEN 'personal'
+    WHEN position(skill_tuple.3, 'node_modules')        > 0 THEN 'bundled'
+    WHEN length(skill_tuple.3)                          > 0 THEN 'workspace'
+    ELSE 'unknown'
+  END                    AS skill_source_type,
+  trim(skill_tuple.3)    AS skill_location,
+  trim(skill_tuple.2)    AS skill_description,
+  ''                     AS skill_args
 FROM agentguard_hook_events
-ARRAY JOIN extract_all(event_data, '<name>([a-zA-Z][a-zA-Z0-9-]*)</name>') AS sn
+ARRAY JOIN array_zip(
+  extract_all(event_data, '<name>([a-zA-Z][a-zA-Z0-9-]*)</name>'),
+  array_resize(
+    extract_all(event_data, '<description>([^<]+)</description>'),
+    length(extract_all(event_data, '<name>([a-zA-Z][a-zA-Z0-9-]*)</name>')),
+    ''
+  ),
+  extract_all(event_data, '<location>([^<]+)</location>')
+) AS skill_tuple
 WHERE _tp_time > earliest_ts()
   AND hook_name = 'llm_input'
   AND agent_type = 'openclaw'
-  AND length(trim(sn)) > 0`
+  AND length(trim(skill_tuple.1)) > 0`
 
 const ddlMemoryOpsStream = `
 CREATE STREAM IF NOT EXISTS agentguard_memory_ops
@@ -1259,6 +1300,39 @@ func createSkillsMVs(ctx context.Context, conn proton.Conn, emit func(string, st
 			return err
 		}
 	}
+	return nil
+}
+
+// migrateSkillsStreamIfNeeded drops the old agentguard_skills stream and its
+// four source MVs when the stream exists but lacks the skill_namespace column.
+// The normal createSkillsStream / createSkillsMVs calls that follow will
+// recreate them with the enriched schema and backfill via earliest_ts().
+func migrateSkillsStreamIfNeeded(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	q := "SELECT count() FROM system.columns WHERE table = 'agentguard_skills' AND name = 'skill_namespace' AND database = current_database()"
+	row := conn.QueryRow(ctx, q)
+	var count uint64
+	if err := row.Scan(&count); err != nil {
+		// Stream may not exist yet — nothing to migrate.
+		return nil
+	}
+	if count > 0 {
+		return nil // Already on the new schema.
+	}
+	emit("running", "$ Migrating agentguard_skills to enriched schema…")
+	for _, mv := range []string{
+		"mv_skills_invoked_claudecode",
+		"mv_skills_invoked_openclaw",
+		"mv_skills_loaded_claudecode",
+		"mv_skills_loaded_openclaw",
+	} {
+		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", mv)); err != nil {
+			emit("ok", "  ✓ dropped "+mv+" (or did not exist)")
+		}
+	}
+	if err := conn.Exec(ctx, "DROP STREAM IF EXISTS agentguard_skills"); err != nil {
+		return fmt.Errorf("dropping agentguard_skills for migration: %w", err)
+	}
+	emit("ok", "  ✓ Dropped old agentguard_skills — will recreate with enriched schema")
 	return nil
 }
 
