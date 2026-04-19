@@ -33,6 +33,7 @@ export default function RuleDetail() {
   const [detections24h, setDetections24h] = useState(0)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [copiedUDFs, setCopiedUDFs] = useState({})
   const [uninstallConfirm, setUninstallConfirm] = useState(false)
   const [toggleConfirm, setToggleConfirm] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
@@ -99,6 +100,17 @@ export default function RuleDetail() {
     navigator.clipboard.writeText(rule.query_sql)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const copyUDF = (i, text) => {
+    navigator.clipboard.writeText(text)
+    setCopiedUDFs(prev => ({ ...prev, [i]: true }))
+    setTimeout(() => setCopiedUDFs(prev => ({ ...prev, [i]: false })), 2000)
+  }
+
+  const udfFuncName = udf => {
+    const m = udf.match(/FUNCTION\s+(\w+)\s*\(/i)
+    return m ? m[1] : `UDF`
   }
 
   if (loading) {
@@ -319,18 +331,26 @@ export default function RuleDetail() {
           </div>
 
           {/* UDF Definitions */}
-          {rule.udfs?.length > 0 && (
-            <div className="bg-[#1d1a25] p-8 rounded-sm">
-              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-4">UDF Definitions</h2>
-              <div className="flex flex-col gap-3">
-                {rule.udfs.map((udf, i) => (
-                  <pre key={i} className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: highlight(udf || '', languages.sql, 'sql') }}
-                  />
-                ))}
+          {rule.udfs?.map((udf, i) => (
+            <div key={i} className="bg-[#1d1a25] p-8 rounded-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest">
+                  {udfFuncName(udf)}
+                  <span className="ml-2 text-[10px] text-zinc-600 normal-case font-normal">UDF</span>
+                </h2>
+                <button
+                  onClick={() => copyUDF(i, udf)}
+                  className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[14px]">{copiedUDFs[i] ? 'check' : 'content_copy'}</span>
+                  {copiedUDFs[i] ? 'Copied' : 'Copy'}
+                </button>
               </div>
+              <pre className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: highlight(udf || '', languages.sql, 'sql') }}
+              />
             </div>
-          )}
+          ))}
 
           {/* Recent Detections */}
           <div>
