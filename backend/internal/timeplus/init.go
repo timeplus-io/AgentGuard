@@ -1146,7 +1146,11 @@ ARRAY JOIN array_zip(
     length(extract_all(event_data, '<name>([a-zA-Z][a-zA-Z0-9-]*)</name>')),
     ''
   ),
-  extract_all(event_data, '<location>([^<]+)</location>')
+  array_resize(
+    extract_all(event_data, '<location>([^<]+)</location>'),
+    length(extract_all(event_data, '<name>([a-zA-Z][a-zA-Z0-9-]*)</name>')),
+    ''
+  )
 ) AS skill_tuple
 WHERE _tp_time > earliest_ts()
   AND hook_name = 'llm_input'
@@ -1308,12 +1312,18 @@ func createSkillsMVs(ctx context.Context, conn proton.Conn, emit func(string, st
 // The normal createSkillsStream / createSkillsMVs calls that follow will
 // recreate them with the enriched schema and backfill via earliest_ts().
 func migrateSkillsStreamIfNeeded(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	exists, err := streamExists(ctx, conn, "agentguard_skills")
+	if err != nil {
+		return fmt.Errorf("checking agentguard_skills existence: %w", err)
+	}
+	if !exists {
+		return nil // Fresh install — nothing to migrate.
+	}
 	q := "SELECT count() FROM system.columns WHERE table = 'agentguard_skills' AND name = 'skill_namespace' AND database = current_database()"
 	row := conn.QueryRow(ctx, q)
 	var count uint64
 	if err := row.Scan(&count); err != nil {
-		// Stream may not exist yet — nothing to migrate.
-		return nil
+		return fmt.Errorf("checking skills schema for migration: %w", err)
 	}
 	if count > 0 {
 		return nil // Already on the new schema.
