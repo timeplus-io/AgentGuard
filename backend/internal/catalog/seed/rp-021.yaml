@@ -154,7 +154,7 @@ query_sql: |
       )
     )
 
-UNION ALL
+  UNION ALL
 
   -- v0.4.0: agentguard_memory_ops branch — precise MemoryGraft detection via dedicated memory telemetry.
   -- Detects poisoned experience injection at the memory_op level without tool_name fuzzy matching.

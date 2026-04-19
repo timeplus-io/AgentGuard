@@ -165,7 +165,7 @@ query_sql: |
       OR match(lower(assistant_message), '(kv.?cache.?hit|cache.?reuse).{0,80}(session|user|tenant|prior|previous|another)')
     )
 
-UNION ALL
+  UNION ALL
 
   -- v0.4.0: agentguard_memory_ops branch — precise cross-session memory access detection.
   -- Fires when an agent reads a memory path that contains a foreign session UUID:
