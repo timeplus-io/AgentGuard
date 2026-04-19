@@ -1079,11 +1079,11 @@ SELECT
   'invoked' AS skill_action,
   ''         AS skill_namespace,
   CASE
-    WHEN position(json_value(event_data, '$.params.path'), '~/.openclaw/')        = 1 THEN 'managed'
-    WHEN position(json_value(event_data, '$.params.path'), '~/.config/openclaw/') = 1 THEN 'managed'
-    WHEN position(json_value(event_data, '$.params.path'), '~/.agents/')          = 1 THEN 'personal'
-    WHEN position(json_value(event_data, '$.params.path'), 'node_modules')        > 0 THEN 'bundled'
-    WHEN length(json_value(event_data, '$.params.path'))                          > 0 THEN 'workspace'
+    WHEN position(json_value(event_data, '$.params.path'), '/.openclaw/')        > 0 THEN 'managed'
+    WHEN position(json_value(event_data, '$.params.path'), '/.config/openclaw/') > 0 THEN 'managed'
+    WHEN position(json_value(event_data, '$.params.path'), '/.agents/')          > 0 THEN 'personal'
+    WHEN position(json_value(event_data, '$.params.path'), 'node_modules')       > 0 THEN 'bundled'
+    WHEN length(json_value(event_data, '$.params.path'))                         > 0 THEN 'workspace'
     ELSE 'unknown'
   END        AS skill_source_type,
   json_value(event_data, '$.params.path') AS skill_location,
@@ -1128,11 +1128,11 @@ SELECT
   if(position(trim(skill_tuple.1), ':') > 0,
      split_by_string(':', trim(skill_tuple.1))[1], '') AS skill_namespace,
   CASE
-    WHEN position(skill_tuple.3, '~/.openclaw/')        = 1 THEN 'managed'
-    WHEN position(skill_tuple.3, '~/.config/openclaw/') = 1 THEN 'managed'
-    WHEN position(skill_tuple.3, '~/.agents/')          = 1 THEN 'personal'
-    WHEN position(skill_tuple.3, 'node_modules')        > 0 THEN 'bundled'
-    WHEN length(skill_tuple.3)                          > 0 THEN 'workspace'
+    WHEN position(skill_tuple.3, '/.openclaw/')        > 0 THEN 'managed'
+    WHEN position(skill_tuple.3, '/.config/openclaw/') > 0 THEN 'managed'
+    WHEN position(skill_tuple.3, '/.agents/')          > 0 THEN 'personal'
+    WHEN position(skill_tuple.3, 'node_modules')       > 0 THEN 'bundled'
+    WHEN length(skill_tuple.3)                         > 0 THEN 'workspace'
     ELSE 'unknown'
   END                    AS skill_source_type,
   trim(skill_tuple.3)    AS skill_location,
@@ -1336,10 +1336,9 @@ func migrateSkillsStreamIfNeeded(ctx context.Context, conn proton.Conn, emit fun
 		"mv_skills_loaded_openclaw",
 	} {
 		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", mv)); err != nil {
-			log.Printf("timeplus: migrate drop view %s: %v", mv, err)
-		} else {
-			emit("ok", "  ✓ dropped "+mv+" (or did not exist)")
+			return fmt.Errorf("migrate drop view %s: %w", mv, err)
 		}
+		emit("ok", "  ✓ dropped "+mv+" (or did not exist)")
 	}
 	if err := conn.Exec(ctx, "DROP STREAM IF EXISTS agentguard_skills"); err != nil {
 		return fmt.Errorf("dropping agentguard_skills for migration: %w", err)
