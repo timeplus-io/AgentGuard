@@ -37,6 +37,7 @@ export default function RuleDetail() {
   const [uninstallConfirm, setUninstallConfirm] = useState(false)
   const [toggleConfirm, setToggleConfirm] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState(null)
 
   useEffect(() => {
     api.getRule(id)
@@ -72,11 +73,12 @@ export default function RuleDetail() {
   const handleUpgrade = async () => {
     if (!rule || actionLoading) return
     setActionLoading(true)
+    setActionError(null)
     try {
       await api.upgradeRule(id)
       setRule(prev => ({ ...prev, version: prev.latest_version, latest_version: undefined }))
     } catch (e) {
-      console.error('Upgrade failed', e)
+      setActionError(e.message || 'Upgrade failed')
     } finally {
       setActionLoading(false)
     }
@@ -267,6 +269,17 @@ export default function RuleDetail() {
               )}
             </div>
           </div>
+
+          {/* Action error */}
+          {actionError && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 flex items-start gap-3">
+              <span className="material-symbols-outlined text-red-400 text-[18px] shrink-0 mt-0.5">error</span>
+              <p className="text-xs text-red-400 font-mono break-all">{actionError}</p>
+              <button onClick={() => setActionError(null)} className="ml-auto text-zinc-500 hover:text-white shrink-0">
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            </div>
+          )}
 
           {/* Rule Definition */}
           <div className="bg-[#1d1a25] p-8 rounded-sm">

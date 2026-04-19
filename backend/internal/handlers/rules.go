@@ -281,16 +281,19 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			current.RequiredTelemetry, current.FPRate, current.HookSources,
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "upgrade insert failed"})
+			log.Printf("rules: upgrade %s insert: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("upgrade insert failed: %v", err)})
 			return
 		}
 
 		if err := tp.DropRuleMV(&cfg.Timeplus, id); err != nil {
+			log.Printf("rules: upgrade %s drop MV: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV drop failed: %v", err)})
 			return
 		}
 		if current.Enabled {
 			if err := tp.CreateRuleMV(&cfg.Timeplus, id, targetSQL, catalogEntry.UDFs); err != nil {
+				log.Printf("rules: upgrade %s create MV: %v", id, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 				return
 			}
