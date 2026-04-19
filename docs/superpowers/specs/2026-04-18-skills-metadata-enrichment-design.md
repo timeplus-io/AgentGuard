@@ -92,16 +92,18 @@ CREATE STREAM IF NOT EXISTS agentguard_skills
 
 ```sql
 CASE
-  WHEN position(skill_location, '~/.openclaw/')        = 1 THEN 'managed'
-  WHEN position(skill_location, '~/.config/openclaw/') = 1 THEN 'managed'
-  WHEN position(skill_location, '~/.agents/')          = 1 THEN 'personal'
-  WHEN position(skill_location, 'node_modules')        > 0 THEN 'bundled'
-  WHEN length(skill_location)                          > 0 THEN 'workspace'
+  WHEN position(skill_location, '/.openclaw/')        > 0 THEN 'managed'
+  WHEN position(skill_location, '/.config/openclaw/') > 0 THEN 'managed'
+  WHEN position(skill_location, '/.agents/')          > 0 THEN 'personal'
+  WHEN position(skill_location, 'node_modules')       > 0 THEN 'bundled'
+  WHEN length(skill_location)                         > 0 THEN 'workspace'
   ELSE 'unknown'
 END
 ```
 
-The key signal: any non-empty `skill_location` that does not match the known trusted prefixes (`~/.*`) is classified as `'workspace'` — meaning the SKILL.md lives inside the working repository and could have been planted by an attacker.
+The key signal: any non-empty `skill_location` that does not match the known trusted path segments is classified as `'workspace'` — meaning the SKILL.md lives inside the working repository and could have been planted by an attacker.
+
+> **Implementation note:** OpenClaw emits fully expanded absolute paths (e.g. `/home/user/.openclaw/skills/…`), never tilde-prefixed paths. The match therefore uses substring search (`> 0`) on the path segment (e.g. `'/.openclaw/'`) rather than a prefix check (`= 1`) on `'~/.openclaw/'`. Using `= 1` with a tilde prefix would silently misclassify all managed and personal skills as `workspace` in containerised or CI deployments.
 
 ---
 
@@ -249,11 +251,16 @@ This runs once on first start after upgrade. Historical data in `agentguard_hook
 
 ```go
 func migrateSkillsStreamIfNeeded(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
-    // Check if skill_namespace column exists
-    // If not: drop 4 MVs + drop stream
-    // Return nil (createSkillsStream will recreate)
+    // 1. Check if stream exists at all — skip on fresh install.
+    // 2. Check system.columns for skill_namespace — skip if already migrated.
+    // 3. DROP VIEW for each of the 4 skill MVs — return error immediately on any failure
+    //    (a failed MV drop means the stream drop will also fail, leaving the old schema in place).
+    // 4. DROP STREAM agentguard_skills — return error on failure.
+    // createSkillsStream + createSkillsMVs recreate with enriched schema.
 }
 ```
+
+> **Implementation note:** MV drop failures must abort the migration immediately (not log-and-continue). If a dependent MV cannot be dropped, the subsequent `DROP STREAM` will also fail, leaving the stream on the old schema while some MVs are already gone — an inconsistent state that is silent and hard to diagnose. Fail fast and surface the error so the operator can resolve it.
 
 ---
 
