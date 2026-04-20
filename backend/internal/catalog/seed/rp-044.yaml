@@ -1,6 +1,6 @@
 id: rp-044
 name: "ClawWorm Self-Propagating Agent Configuration Worm Detector"
-version: "0.2.0"
+version: "0.3.0"
 description: >
   Detects ClawWorm (arXiv:2603.15727v2, Mar 2026), the first self-replicating worm
   demonstrated against a production-scale LLM agent framework (OpenClaw, 40,000+
@@ -144,3 +144,36 @@ query_sql: |
       -- Malicious skill functions that execute before arg parsing as infection trigger
       OR match(lower(tool_result), '(warmup|auto_init|__setup__|preload_hook|pre_exec).{0,200}(reverse.shell|c2\.|command.control|backdoor|exec.{0,10}payload|connect.{0,20}attacker)')
     )
+  UNION ALL
+  -- v0.3.0: Sequential lags() branch — catches the ClawWorm 3-phase propagation sequence
+  -- as a precise event chain within the same session:
+  --   Step 1 (prev2): tool_invoke — write_file to AGENTS.md/SOUL.md (config poisoning)
+  --   Step 2 (prev1): tool_invoke — messaging tool carrying peer propagation payload
+  --   Step 3 (current): tool_invoke — remote fetch/HTTP call (payload retrieval from C2)
+  -- This is the definitive worm cycle: poison config → spread to peers → fetch next payload.
+  -- SQL validated: count=0 (test corpus).
+  WITH enriched AS (
+    SELECT *,
+      lags(event_type, 1, 2)  OVER (PARTITION BY session_id) AS prev2_events,
+      lags(tool_name, 1, 2)   OVER (PARTITION BY session_id) AS prev2_tools,
+      lags(tool_input, 1, 2)  OVER (PARTITION BY session_id) AS prev2_inputs
+    FROM agentguard_cim_event
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-044' AS rule_id,
+    'ClawWorm Self-Propagating Agent Configuration Worm Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id, deployment_id, session_id, run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('Sequential ClawWorm 3-phase cycle: config_write → peer_propagate → remote_fetch [', coalesce(tool_name,'unknown'), '] by agent ', agent_id, ' session ', session_id) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'tool_invoke'
+    AND prev2_events[1] = 'tool_invoke'
+    AND prev2_events[2] = 'tool_invoke'
+    AND match(lower(prev2_tools[2]), '(write_file|create_file|append_file|file_write|write_to_file|save_file|update_file|edit_file)')
+    AND match(lower(prev2_inputs[2]), '(agents\.md|soul\.md|heartbeat\.md|bootstrap\.md|agents_md|soul_md)')
+    AND match(lower(prev2_tools[1]), '(send_message|post_message|broadcast|telegram_send|discord_send|slack_post|whatsapp_send|signal_send|matrix_send|notify_peer|agent_message|forward_message)')
+    AND match(lower(tool_name), '(fetch_url|http_request|http_get|http_post|curl|wget|browse|web_fetch|open_url|get_url|read_url|navigate)')

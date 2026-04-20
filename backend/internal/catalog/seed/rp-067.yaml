@@ -1,0 +1,145 @@
+id: rp-067
+name: "Unicode Confusable Homoglyph Permission Bypass Detector"
+version: "0.1.0"
+description: >
+  Detects Unicode confusable homoglyph attacks against LLM agent permission systems.
+  Agents like Claude Code and OpenAI Codex match allow/deny rules (e.g. Bash(rm:/etc/*),
+  Read(~/.ssh/*)) via exact string comparison without Unicode normalization. An attacker
+  substitutes one or more characters in a file path or shell command with visually identical
+  Unicode confusables from Cyrillic (U+0400-04FF), Greek (U+0370-03FF), or Armenian
+  (U+0531-058F) script. The resulting string renders identically to a human operator but
+  fails the permission rule string match, bypassing both allow-list and deny-rule enforcement.
+  arXiv:2508.14070 (Special-Character Adversarial Attacks, Nov 2025) measured 58.7% filter
+  bypass rate. Claude Code issue #29489 and OpenAI Codex issue #13095 both confirm the bypass
+  in production agent permission systems. No tokenizer (tiktoken, SentencePiece, Claude BPE)
+  applies TR39 skeleton normalization for cross-script confusables — the normalization gap is
+  structural. Key confusable pairs: Cyrillic а/с/е/о/р/і (U+0430/0441/0435/043E/0440/0456),
+  Greek α/ο/ρ (U+03B1/03BF/03C1). Distinct from rp-056 (invisible zero-width Unicode):
+  rp-056 targets invisible characters; rp-067 targets VISIBLE homoglyphs that are
+  perceptually identical but differ in Unicode codepoint, creating permission bypass.
+  References: arXiv:2508.14070 (Special-Character Adversarial Attacks Nov 2025),
+  Claude Code #29489, OpenAI Codex #13095, paultendo confusable-vision 2026,
+  Cambridge "Bad Characters" IEEE S&P 2022, OWASP LLM01:2025 -
+  https://arxiv.org/abs/2508.14070,
+  https://github.com/anthropics/claude-code/issues/29489,
+  https://github.com/openai/codex/issues/13095,
+  https://paultendo.github.io/posts/confusable-llm-attack-vectors/,
+  https://www.cl.cam.ac.uk/~is410/Papers/badchars_draft.pdf
+severity: warning
+category: prompt_injection_and_hijacking
+fp_rate: medium
+hook_sources: "tool_invoke,user_input"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - unicode
+  - homoglyph
+  - confusable
+  - permission-bypass
+  - cyrillic
+  - greek
+  - owasp-llm01
+  - arxiv-2508.14070
+  - claude-code-29489
+query_sql: |
+  -- rp-067: Unicode Confusable Homoglyph Permission Bypass Detector v0.1.0
+  -- arXiv:2508.14070 (58.7% filter bypass via special-char substitution, Nov 2025)
+  -- Claude Code #29489 and OpenAI Codex #13095: permission rule bypass via homoglyphs
+  -- Distinct from rp-056: rp-056=invisible zero-width chars; rp-067=visible confusables.
+  --
+  -- Strategy: Use multiSearchAny() to detect Cyrillic/Greek/Armenian bytes in
+  -- security-sensitive contexts (tool_input file paths and shell commands,
+  -- user_message path/command tokens). RE2 cannot match multi-byte UTF-8 ranges directly.
+  --
+  -- Cyrillic confusables (top cross-script pairs per paultendo confusable-vision 2026):
+  --   а = U+0430 (bytes: \xd0\xb0)  — confusable for Latin 'a'
+  --   с = U+0441 (bytes: \xd1\x81)  — confusable for Latin 'c'
+  --   е = U+0435 (bytes: \xd0\xb5)  — confusable for Latin 'e'
+  --   о = U+043E (bytes: \xd0\xbe)  — confusable for Latin 'o'
+  --   р = U+0440 (bytes: \xd1\x80)  — confusable for Latin 'p'
+  --   і = U+0456 (bytes: \xd1\x96)  — confusable for Latin 'i'
+  --   ѕ = U+0455 (bytes: \xd1\x95)  — confusable for Latin 's'
+  -- Greek confusables:
+  --   α = U+03B1 (bytes: \xce\xb1)  — confusable for Latin 'a'
+  --   ο = U+03BF (bytes: \xce\xbf)  — confusable for Latin 'o'
+  --   ρ = U+03C1 (bytes: \xcf\x81)  — confusable for Latin 'p'/'r'
+  -- Armenian confusables:
+  --   հ = U+570D (bytes in range) — less common but documented
+  --
+  -- Anchoring to security-sensitive path/command context to reduce FP on legitimate
+  -- international text in tool results (which is not checked by this rule).
+  SELECT
+    event_time AS detected_at,
+    'rp-067' AS rule_id,
+    'Unicode Confusable Homoglyph Permission Bypass Detector' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Unicode homoglyph detected in [', event_type, '] ',
+      'tool_input or user_message — permission bypass risk. ',
+      'Tool=[', coalesce(tool_name, 'n/a'), '] Agent=', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'user_input')
+    AND (
+
+      -- Branch 1: Cyrillic confusables in tool_input (file path / shell command context)
+      -- Agent invoking a file or shell tool with confusable chars in the path/command arg.
+      -- Anchored to file/shell tool_name to avoid FP on legitimate Cyrillic text in content tools.
+      (
+        match(lower(tool_name), '(read_file|read|edit|write|bash|shell|exec|run|file_read|get_file|open_file|cat|create_file|delete_file|move_file|copy_file|chmod|chown|mkdir|rm|ls|find|grep)')
+        AND multiSearchAny(tool_input, [
+          '\xd0\xb0',  -- Cyrillic а (U+0430) — confusable for Latin 'a'
+          '\xd1\x81',  -- Cyrillic с (U+0441) — confusable for Latin 'c'
+          '\xd0\xb5',  -- Cyrillic е (U+0435) — confusable for Latin 'e'
+          '\xd0\xbe',  -- Cyrillic о (U+043E) — confusable for Latin 'o'
+          '\xd1\x80',  -- Cyrillic р (U+0440) — confusable for Latin 'p'
+          '\xd1\x96',  -- Cyrillic і (U+0456) — confusable for Latin 'i'
+          '\xd1\x95'   -- Cyrillic ѕ (U+0455) — confusable for Latin 's'
+        ])
+      )
+
+      -- Branch 2: Greek confusables in tool_input (file path / shell command context)
+      OR (
+        match(lower(tool_name), '(read_file|read|edit|write|bash|shell|exec|run|file_read|get_file|open_file|cat|create_file|delete_file|move_file|copy_file|chmod|chown|mkdir|rm|ls|find|grep)')
+        AND multiSearchAny(tool_input, [
+          '\xce\xb1',  -- Greek α (U+03B1) — confusable for Latin 'a'
+          '\xce\xbf',  -- Greek ο (U+03BF) — confusable for Latin 'o'
+          '\xcf\x81'   -- Greek ρ (U+03C1) — confusable for Latin 'p'/'r'
+        ])
+      )
+
+      -- Branch 3: Any non-ASCII in tool_name itself (MCP tool name homoglyph spoofing)
+      -- A malicious MCP server could register a tool named "ехес" (Cyrillic) to shadow "exec"
+      -- or "rеad" to shadow "read" — bypassing tool-name-based allow/deny rules.
+      OR (
+        event_type = 'tool_invoke'
+        AND multiSearchAny(tool_name, [
+          '\xd0', '\xd1',  -- Cyrillic UTF-8 lead bytes (range U+0400-04FF)
+          '\xce', '\xcf',  -- Greek UTF-8 lead bytes (range U+0370-03FF)
+          '\xd4', '\xd5'   -- Armenian UTF-8 lead bytes (range U+0531-058F)
+        ])
+      )
+
+      -- Branch 4: Cyrillic confusables in user_message path-like context
+      -- Attacker crafts a user message with homoglyph paths that the agent
+      -- will pass through to tool calls, bypassing permission checks.
+      -- Anchor: path-separator context (slash or tilde before confusable char).
+      OR (
+        event_type = 'user_input'
+        AND multiSearchAny(user_message, [
+          '\xd0\xb0', '\xd1\x81', '\xd0\xb5',
+          '\xd0\xbe', '\xd1\x80', '\xd1\x96', '\xd1\x95'
+        ])
+        AND match(lower(user_message), '(~/|/etc/|/proc/|/sys/|/run/|/var/|/usr/|\.ssh|\.aws|\.config|/home/)')
+      )
+
+    )

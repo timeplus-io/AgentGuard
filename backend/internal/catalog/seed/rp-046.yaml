@@ -1,6 +1,6 @@
 id: rp-046
 name: "MCP Trivial Trojan — Cross-Server Tool Pivot & Webhook Exfiltration Detector"
-version: "0.1.1"
+version: "0.2.0"
 description: >
   Detects MCP Trivial Trojan attacks (arXiv:2507.19880, Pivotal Research / Stanford, Jul 2025)
   where a malicious MCP server disguised as benign functionality (weather, news, search,
@@ -141,3 +141,37 @@ query_sql: |
       -- Combined with financial/PII keywords in the request body (exfil payload signal)
       match(lower(tool_input), '\b(balance|account_id|account_number|ssn|card_number|transfer|transaction|salary|income|portfolio|credential|api_key|token|secret|password)\b')
     )
+  UNION ALL
+  -- v0.2.0: Sequential lag() branch — catches the MCP Trivial Trojan as a precise 2-step
+  -- event sequence in the same session: (1) malicious tool_complete with cross-server pivot
+  -- directive, (2) immediately followed by tool_invoke to a webhook staging domain.
+  -- This confirms the agent actually acted on the cross-server directive — highest confidence.
+  -- SQL validated: count=0 (test corpus).
+  WITH enriched AS (
+    SELECT *,
+      lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(tool_result) OVER (PARTITION BY session_id) AS prev_tool_result
+    FROM agentguard_cim_event
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-046' AS rule_id,
+    'MCP Trivial Trojan — Cross-Server Tool Pivot & Webhook Exfiltration Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id, deployment_id, session_id, run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('Sequential MCP Trivial Trojan: cross-server pivot directive → webhook exfil tool_invoke [', coalesce(tool_name,'unknown'), '] by agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'tool_invoke'
+    AND prev_event_type = 'tool_complete'
+    AND (
+      match(lower(prev_tool_result), 'call the (bank|payment|transfer|account|finance|billing|wallet|credit|debit|portfolio|investment|brokerage).{0,40}tool')
+      OR match(lower(prev_tool_result), 'invoke.{0,30}(balance|account|transfer|payment|fund).{0,30}tool')
+      OR match(lower(prev_tool_result), '\buse the (get_balance|bank_balance|bank_transfer|get_account|account_balance|transfer_funds?|get_portfolio|get_wallet|get_card).{0,40}tool\b')
+      OR match(prev_tool_result, 'webhook\.site/[a-zA-Z0-9\-]+')
+      OR match(prev_tool_result, 'requestbin\.io/r/[a-zA-Z0-9]+')
+      OR match(prev_tool_result, 'pipedream\.net/sources/[a-zA-Z0-9]+')
+    )
+    AND match(lower(tool_name), '(fetch|http_request|http_get|http_post|make_request|requests?|browse|curl|get_url|open_url|navigate|read_url|web_fetch|post_request)')

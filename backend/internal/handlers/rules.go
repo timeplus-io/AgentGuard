@@ -16,6 +16,16 @@ import (
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
+// escapeSQLStr escapes a string for embedding in a Proton/ClickHouse single-quoted
+// string literal. Backslashes must be escaped first because Proton's
+// ValuesBlockInputFormat interprets \' as an escaped single-quote, which would
+// cause premature string termination if we only escaped the quote character.
+func escapeSQLStr(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "'", "''")
+	return s
+}
+
 const sqlDeletedRules = `
 SELECT
   rule_id,
@@ -268,13 +278,13 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 
-		escapedSQL := strings.ReplaceAll(targetSQL, "'", "''")
+		escapedSQL := escapeSQLStr(targetSQL)
 		insertSQL := fmt.Sprintf(`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES
 ('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s',now64(3))`,
 			id,
-			strings.ReplaceAll(current.Name, "'", "''"),
+			escapeSQLStr(current.Name),
 			targetVersion,
-			strings.ReplaceAll(current.Description, "'", "''"),
+			escapeSQLStr(current.Description),
 			escapedSQL,
 			current.Enabled,
 			current.Severity, current.Category,
@@ -453,13 +463,13 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 
-		escapedSQL := strings.ReplaceAll(entry.QuerySQL, "'", "''")
+		escapedSQL := escapeSQLStr(entry.QuerySQL)
 		insertSQL := fmt.Sprintf(
 			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s',now64(3))`,
 			id,
-			strings.ReplaceAll(entry.Name, "'", "''"),
+			escapeSQLStr(entry.Name),
 			entry.Version,
-			strings.ReplaceAll(entry.Description, "'", "''"),
+			escapeSQLStr(entry.Description),
 			escapedSQL,
 			entry.Severity, entry.Category,
 			entry.RequiredTelemetry, entry.FPRate, entry.HookSources,
@@ -717,17 +727,17 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			// Non-fatal — continue to insert into Proton.
 		}
 
-		escapedSQL := strings.ReplaceAll(finalSQL, "'", "''")
+		escapedSQL := escapeSQLStr(finalSQL)
 		insertSQL := fmt.Sprintf(
 			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
 			ruleID,
-			escapedName,
-			strings.ReplaceAll(body.Description, "'", "''"),
+			escapeSQLStr(body.Name),
+			escapeSQLStr(body.Description),
 			escapedSQL,
-			strings.ReplaceAll(body.Severity, "'", "''"),
-			strings.ReplaceAll(body.Category, "'", "''"),
-			strings.ReplaceAll(body.FPRate, "'", "''"),
-			strings.ReplaceAll(body.HookSources, "'", "''"),
+			escapeSQLStr(body.Severity),
+			escapeSQLStr(body.Category),
+			escapeSQLStr(body.FPRate),
+			escapeSQLStr(body.HookSources),
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
 			log.Printf("rules: create rule insert: %v", err)

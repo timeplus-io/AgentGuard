@@ -1,0 +1,160 @@
+id: rp-082
+name: "ANSI Terminal Escape Code Injection via Agent Tool Output"
+version: "0.1.0"
+description: >
+  Detects ANSI/VT100 terminal escape sequence injection in LLM agent tool output.
+  When terminal-based coding agents (Codex CLI, Claude Code, OpenHands) echo tool
+  results to stdout without sanitization, malicious content from files, web pages, or
+  APIs can inject escape sequences that manipulate terminal state: erasing lines to
+  cover tracks (ESC[2K), poisoning the clipboard via OSC 52, enabling mouse-tracking
+  for keystroke interception, or switching to alternate screen buffers (ESC[?1049h).
+  dganev.com (Feb 2026) demonstrated RCE via Codex CLI --model ANSI injection.
+  NVIDIA garak ANSI probe reports 76.7% ASR against frontier LLMs. Claude Code #18418
+  and OpenHands SDK #2244 confirm terminal corruption from tool output escape sequences.
+  Distinct from rp-014 (structural template token injection in tool_result) and
+  rp-056 (invisible Unicode/zero-width injection): this rule targets byte-level control
+  sequences that hijack the terminal emulator, not the LLM context parser.
+  References: CWE-150 (Improper Neutralization of Escape/Control Sequences),
+  OWASP LLM02:2025, dganev.com ANSI RCE Feb 2026, EmbraceTheRed Terminal DiLLMa,
+  NVIDIA garak garak.probes.ansiescape (76.7% ASR), Claude Code #18418,
+  OpenHands SDK #2244 -
+  https://dganev.com/posts/2026-02-12-ansi-escape-injection-codex-cli/,
+  https://embracethered.com/blog/posts/2024/terminal-dillmas-prompt-injection-ansi-sequences/,
+  https://reference.garak.ai/en/stable/garak.probes.ansiescape.html,
+  https://github.com/anthropics/claude-code/issues/18418,
+  https://github.com/OpenHands/software-agent-sdk/issues/2244,
+  https://cwe.mitre.org/data/definitions/150.html,
+  Example: tool_result contains \x1b[2K\x1b[1A which erases the previous terminal line
+  and overwrites it with attacker content; or \x1b]52;c;BASE64 which poisons clipboard
+  with ssh command.
+severity: warning
+category: prompt_injection_and_hijacking
+fp_rate: medium
+hook_sources: "tool_complete,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - ansi-escape
+  - terminal-injection
+  - cwe-150
+  - codex-cli
+  - claude-code
+  - openhands
+  - osc-52-clipboard
+  - terminal-hijack
+  - owasp-llm02
+  - garak
+query_sql: |
+  -- rp-082 v0.1.0 (2026-04-19)
+  -- ANSI Terminal Escape Code Injection via Agent Tool Output
+  -- CWE-150: Improper Neutralization of Escape, Meta, or Control Sequences
+  -- dganev.com (Feb 2026): Codex CLI --model param ANSI injection → RCE
+  -- NVIDIA garak AnsiEscaped probe: 76.7% ASR against frontier LLMs
+  -- Claude Code #18418: terminal escape sequences in tool stdout corrupt terminal state
+  --
+  -- Pattern strategy: detect dangerous terminal control sequence families by
+  -- their string-encoded representations (most common in tool_result/assistant_message).
+  -- Malicious content arrives as escaped strings (\x1b, \033, \e, ESC) — not raw bytes,
+  -- since AgentGuard normalizes to UTF-8 text before CIM ingestion.
+  --
+  -- Dangerous sequence families targeted (not benign color/bold):
+  --   (1) ESC[2K / ESC[1K / ESC[0K — Erase Line (cover tracks / display spoofing)
+  --   (2) ESC[1A / ESC[NА — Cursor Up (line overwrite setup for display spoofing)
+  --   (3) ESC[?1049h / ESC[?1047h — Alternate Screen Buffer (full display hijack)
+  --   (4) ESC[?1000h / ?1002h / ?1003h — Mouse Tracking Enable (keystroke intercept)
+  --   (5) ESC]52; — OSC 52 Clipboard Write (exfil via clipboard poison)
+  --   (6) ESC]8;; — OSC 8 Hyperlink injection (terminal phishing link)
+  --   (7) ESC[?1006h / ?1015h — Extended mouse mode
+  --   (8) ESC_  / ESC P — APC / DCS sequences (arbitrary terminal program commands)
+  --
+  -- String encoding variants covered: \x1b, \033, \e, esc (case-insensitive column lowercasing)
+  -- Note: raw ESC byte (0x1B) in tool_result becomes literal '\x1b' or remains as-is;
+  -- we match both escaped-string and raw-ESC representations.
+  --
+  -- Scoped to tool_complete (tool_result) and llm_response (assistant_message).
+  -- fp_rate: medium — benign color codes (ESC[32m, ESC[0m) are NOT flagged (not in our patterns).
+  --   Only sequences performing dangerous state manipulation are matched.
+
+  -- Branch 1: Dangerous ANSI sequences in tool_result (from tool_complete events)
+  SELECT
+    event_time AS detected_at,
+    'rp-082' AS rule_id,
+    'ANSI Terminal Escape Code Injection via Agent Tool Output' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'ANSI terminal escape sequence detected in tool_result from tool=',
+      coalesce(tool_name, 'unknown'),
+      ', agent=', agent_id,
+      '. Possible terminal display spoofing, clipboard poison, or mouse-tracking injection.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_complete'
+    AND (
+      -- (1) Erase Line: ESC[2K, ESC[1K, ESC[0K — primary cover-tracks sequence
+      -- Matches: \x1b[2k, \033[2k, \e[2k (case-insensitive via lower())
+      match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[[012]k')
+      -- (2) Cursor Up: ESC[1A, ESC[2A, etc — setup for line overwrite display spoofing
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[[0-9]*a')
+      -- (3) Alternate Screen Buffer: ESC[?1049h / ESC[?1047h — full terminal takeover
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[\?10(49|47|48)h')
+      -- (4) Mouse Tracking Enable: ESC[?1000h, ?1002h, ?1003h, ?1006h, ?1015h
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[\?10(00|02|03|06|15)h')
+      -- (5) OSC 52 Clipboard Write: ESC]52; — clipboard poison / data exfil
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\]52;')
+      -- (6) OSC 8 Hyperlink Injection: ESC]8;; — terminal phishing link
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\]8;;')
+      -- (7) APC/DCS: ESC_ or ESC P — arbitrary application program commands
+      -- String-encoded: \\x1b_ or \\x1bP (rare but dangerous)
+      OR match(lower(tool_result), '(\\\\x1b|\\\\033)[_p]')
+      -- (8) String-literal encoded ESC sequences in tool_result text
+      -- Attackers may embed as \x1b literally: "content\x1b[2K\x1b[1A fake line"
+      OR match(lower(tool_result), '\\\\x1b\[[0-9;]*[aAbBjksuHhfmr]')
+    )
+
+  UNION ALL
+
+  -- Branch 2: Dangerous ANSI sequences in assistant_message (from llm_response events)
+  -- LLMs can be prompted to natively emit ANSI escape codes (76.7% ASR per garak)
+  -- This branch catches the LLM-generation path (vs. tool reflection path in Branch 1)
+  SELECT
+    event_time AS detected_at,
+    'rp-082' AS rule_id,
+    'ANSI Terminal Escape Code Injection via Agent Tool Output' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'ANSI terminal escape sequence detected in assistant_message from agent=',
+      agent_id,
+      '. LLM may be generating malicious control sequences to manipulate terminal display.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'llm_response'
+    AND (
+      -- Erase Line in LLM output — primary cover-tracks sequence
+      match(lower(assistant_message), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[[012]k')
+      -- Cursor Up in LLM output — display spoofing setup
+      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[[0-9]*a')
+      -- Alternate Screen in LLM output
+      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[\?10(49|47|48)h')
+      -- Mouse Tracking Enable in LLM output
+      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[\?10(00|02|03|06|15)h')
+      -- OSC 52 Clipboard Poison in LLM output
+      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\]52;')
+      -- String-literal encoded ESC in LLM output
+      OR match(lower(assistant_message), '\\\\x1b\[[0-9;]*[aAbBjksuHhfmr]')
+    )

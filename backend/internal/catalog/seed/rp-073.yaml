@@ -1,0 +1,134 @@
+id: rp-073
+name: "AgentRaft Data Over-Exposure — Cross-Tool PII Egress Detector"
+version: "0.1.0"
+description: >
+  Detects Data Over-Exposure (DOE) in LLM agent cross-tool data flows: the agent
+  inadvertently forwards sensitive PII, PHI, PCI data, or credentials to egress tools
+  (email, messaging, upload, webhook) beyond the scope of user intent and functional
+  necessity. The AgentRaft study (arXiv:2603.07557, Sun Yat-sen Univ. / UCF, Mar 2026)
+  evaluated 6,675 real-world MCP tools and found DOE present in 57.07% of potential
+  tool interaction paths, with 65.42% of transmitted data fields over-exposed (GDPR/CCPA/PIPL
+  violations). The canonical example: user asks "extract the payment date from the log and
+  email it to the auditor" — the upstream read_file tool returns the full record containing
+  credit card number, CVV, and SSN, and the agent passes all of it to send_email without
+  stripping non-requested fields.
+  This is a structural privacy risk driven by: (1) tools that return broad data payloads
+  by default and (2) LLM failure to enforce data minimization at tool boundaries at runtime.
+  Distinct from rp-062 (inter-agent delegation PII channel, where data flows between agents
+  in a multi-agent system) — this rule targets the final egress step where sensitive data
+  is sent to external services, third parties, or communication channels.
+  Distinct from rp-002 (DLP Sentinel, which detects raw sensitive data in tool outputs) —
+  DOE specifically targets the cross-tool egress pattern where sensitive data from a read
+  tool flows into a send/upload tool in the same agent turn.
+  References: arXiv:2603.07557 (AgentRaft, Sun Yat-sen / UCF, Mar 2026), GDPR 2018,
+  CCPA 2024, PIPL 2024, OWASP LLM02:2025 -
+  https://arxiv.org/abs/2603.07557,
+  https://arxiv.org/html/2603.07557v1,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  https://gdpr-info.eu/,
+  https://oag.ca.gov/privacy/ccpa
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "tool_invoke"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data-exfiltration
+  - pii
+  - pci-dss
+  - phi
+  - hipaa
+  - gdpr
+  - ccpa
+  - pipl
+  - data-over-exposure
+  - cross-tool
+  - agentraft
+  - owasp-llm02
+  - arxiv-2603.07557
+query_sql: |
+  -- v0.1.0 (2026-04-19):
+  -- NEW: AgentRaft Data Over-Exposure cross-tool PII egress detection.
+  --
+  -- Detection strategy: Gate on known egress/communication tool names (send_email,
+  -- post_message, upload_file, etc.), then detect sensitive data patterns in tool_input.
+  -- This captures the moment the agent is about to forward over-exposed data to an
+  -- external party — the most critical intervention point.
+  --
+  -- Source: arXiv:2603.07557 (AgentRaft, Mar 2026)
+  -- 57.07% of tool interaction paths have DOE; 65.42% of transmitted fields are over-exposed.
+  -- Real-world app "Pokee": send_email carries full transaction CSV including CC+CVV+SSN
+  -- when user only asked for the payment date.
+  --
+  -- Egress tool gate: matches common send/upload/share/notify tool names.
+  -- This prevents firing on read-file operations that contain sensitive data legitimately.
+  --
+  -- Signals (each = one over-exposed data type in egress tool_input):
+  --   1. SSN (nnn-nn-nnnn) — PII; almost never legitimately forwarded to email/messaging
+  --   2. Credit card number (4x4 digit group) — PCI-DSS scope
+  --   3. CVV/CVC/routing number label — PCI-scope financial security codes
+  --   4. PHI terms — HIPAA: diagnosis, prescription, patient ID, ICD codes
+  --   5. SSN label+value — labelled PII catches JSON/CSV key-value pairs
+  --   6. DB schema dump in egress — full SQL SELECT * results forwarded to external party
+  --   7. Known API key prefixes — credentials should never appear in outbound tool calls
+  --
+  -- fp_rate: medium — egress tool gate is broad (many legitimate send_email calls exist);
+  -- SSN/CC patterns are very specific; PHI terms have low-moderate FP in health agent context.
+  SELECT
+    event_time AS detected_at,
+    'rp-073' AS rule_id,
+    'AgentRaft Data Over-Exposure — Cross-Tool PII Egress Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Data Over-Exposure (DOE): sensitive data forwarded to egress tool [',
+      coalesce(tool_name, 'unknown'),
+      ']. Agent may be transmitting PII/PHI/credentials beyond task scope. ',
+      'Agent: ', coalesce(agent_id, 'unknown'),
+      '. Session: ', coalesce(session_id, 'unknown'),
+      '. Review tool_input for over-exposed sensitive fields (GDPR/CCPA/PIPL violation risk).'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke')
+
+    -- Egress tool gate: agent is about to send data to an external party
+    -- Covers: email, messaging (Slack/Teams/Discord/Telegram/WhatsApp/SMS),
+    -- file upload/share, webhook/HTTP POST, notification, ticket creation
+    AND match(lower(tool_name), '\b(send_email|compose_email|forward_email|create_email|email_send|send_message|post_message|slack_send|teams_send|discord_send|telegram_send|whatsapp_send|sms_send|upload_file|share_file|publish_file|export_data|export_file|save_to_cloud|create_document|http_post|webhook_send|push_notification|send_notification|broadcast|notify|post_to|create_ticket|open_issue|create_issue|github_create_issue|jira_create|servicenow_create|log_event|write_log)\b')
+
+    AND (
+      -- Signal 1: SSN pattern (nnn-nn-nnnn) — highly specific, rarely in legitimate egress
+      match(tool_input, '[0-9]{3}-[0-9]{2}-[0-9]{4}')
+
+      -- Signal 2: Credit card number (4x4 digit group) — PCI-DSS scope
+      -- Captures space-separated and dash-separated CC formats
+      OR match(tool_input, '[0-9]{4}[\s\-][0-9]{4}[\s\-][0-9]{4}[\s\-][0-9]{4}')
+
+      -- Signal 3: PCI financial security codes in egress tool_input
+      -- CVV/CVC/card security code or bank routing/SWIFT/IBAN codes in outbound call
+      OR match(lower(tool_input), '\b(cvv|cvc|cvv2|card.?security.?code|account.?number|routing.?number|swift.?code|iban|sort.?code)\s*[=:,.]\s*[0-9]')
+
+      -- Signal 4: PHI (Protected Health Information) — HIPAA scope
+      -- Medical domain data forwarded to email/messaging is a HIPAA breach
+      OR match(lower(tool_input), '\b(diagnosis|prescription|medical.record|patient.id|insurance.id|physician|health.insurance|treatment.plan|icd.?[0-9]|ndc.?[0-9]{5}|dea.?number|npi.?number)\b')
+
+      -- Signal 5: SSN field label+value — catches JSON/CSV labelled PII
+      -- "ssn: 523-45-6789" or "social_security_number: 847-32-5901" in egress payload
+      OR match(lower(tool_input), '\b(ssn|social.security.number|taxpayer.id|ein)\s*[=:,.]\s*[0-9]')
+
+      -- Signal 6: DB schema dump forwarded to external party
+      -- SELECT * or full SQL table dump in an outbound email/message is a data breach indicator
+      OR match(lower(tool_input), '(select \*|create table|alter table|insert into).{0,200}(where|from|values|varchar|int|bigint)')
+
+      -- Signal 7: Known API key/credential prefixes in egress tool_input
+      -- Credentials forwarded to email/slack/ticketing systems expose them to third parties
+      OR match(tool_input, '(sk-ant-api[0-9]{2}-|sk-proj-|ghp_|gho_|AKIA[0-9A-Z]{16}|xoxb-|xoxp-|AIza|ya29\.)[a-zA-Z0-9_\-\.]{16,}')
+    )

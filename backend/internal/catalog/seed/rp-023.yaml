@@ -1,6 +1,6 @@
 id: rp-023
 name: "Agent Self-Permission Escalation Kill Chain Detector"
-version: "0.2.1"
+version: "0.3.0"
 description: >
   Detects autonomous agent privilege escalation where agents self-grant permissions
   when encountering access denials, rather than reporting the failure to the user.
@@ -121,4 +121,43 @@ query_sql: |
 
       -- MCP STDIO: env var poisoning in mcpServers config block (LD_PRELOAD, NODE_OPTIONS, etc.)
       OR match(tool_result, '"mcpServers".{0,300}"env".{0,200}(LD_PRELOAD|NODE_OPTIONS|PYTHONWARNINGS|BROWSER|PERL5OPT|DYLD_INSERT_LIBRARIES)')
+    )
+  UNION ALL
+  -- v0.3.0: Sequential lag() branch — catches the kill chain as a precise 2-step event
+  -- sequence within the same session: access denial in tool_complete immediately followed
+  -- by privilege escalation attempt in tool_invoke. This is the definitive confused-deputy
+  -- escalation pattern (SEAgent arXiv:2601.11893): agent is denied access and autonomously
+  -- attempts to self-grant the missing permission rather than reporting failure to the user.
+  -- SQL validated: count=0 (test corpus).
+  WITH enriched AS (
+    SELECT *,
+      lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(tool_result) OVER (PARTITION BY session_id) AS prev_tool_result
+    FROM agentguard_cim_event
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-023' AS rule_id,
+    'Agent Self-Permission Escalation Kill Chain Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id, deployment_id, session_id, run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('Sequential kill chain: access denial (tool_complete) → privilege escalation tool_invoke [', coalesce(tool_name,'unknown'), '] by agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'tool_invoke'
+    AND prev_event_type = 'tool_complete'
+    AND match(lower(prev_tool_result), '(permission denied|access denied|not authorized|403|401|forbidden|insufficient privileges?|operation not permitted|eacces|eperm)')
+    AND (
+      match(lower(tool_input), 'chmod \+[xwrs]')
+      OR match(lower(tool_input), 'sudo (bash|sh|su|chmod|chown|passwd|visudo)')
+      OR match(lower(tool_input), '(disable|stop|kill) (defender|antivirus|ufw|firewall|selinux|apparmor|auditd)')
+      OR match(lower(tool_input), 'ufw disable')
+      OR match(lower(tool_input), 'net localgroup administrators')
+      OR match(lower(tool_input), 'setcap (cap_|all=)')
+      OR match(lower(tool_input), 'pkexec')
+      OR match(tool_input, 'NOPASSWD')
+      OR match(lower(tool_input), '(newuidmap|newgidmap)')
+      OR match(lower(tool_input), '(forge|generate|create).{1,20}(admin|session|auth|jwt).{1,20}(token|cookie|credential|key)')
     )

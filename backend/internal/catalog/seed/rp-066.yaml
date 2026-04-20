@@ -1,0 +1,122 @@
+id: rp-066
+name: "SkillInject Runtime Skill File Injection Detector"
+version: "0.1.0"
+description: >
+  Detects runtime skill file injection (SkillInject, arXiv:2602.20156, Feb 2026):
+  attackers who can place or modify agent skill files (via marketplace upload, supply-
+  chain compromise, or prior file write) achieve up to 80% ASR on frontier models
+  by embedding behavioral override directives inside SKILL.md files. When the agent
+  reads the skill at session start, it treats the injected instructions as operator-level
+  authority — the same trust tier as the system prompt (per snailsploit.com system
+  prompt reversal). The benchmark covers 202 injection-task pairs, from obvious
+  malicious injections to subtle context-dependent attacks hidden in otherwise-
+  legitimate skill documentation. Confirmed attacks include data exfiltration,
+  destructive file deletion, and ransomware-like behavior across GPT-4o, Claude
+  Sonnet, and Gemini Pro. arXiv:2601.17548 (SoK, Jan 2026) synthesizes 78 studies
+  confirming >85% ASR with adaptive skill-based attacks against agentic coding
+  assistants. Distinct from rp-020 (DDIPE): DDIPE targets skill documentation
+  *examples* executed as agent-generated code; rp-066 targets the skill *instruction
+  block itself* returning override directives in tool_result on skill file read,
+  and the resulting agent behavior attributing unsafe actions to skill authority.
+  References: arXiv:2602.20156 (SkillInject Feb 2026), arXiv:2601.17548 (SoK Jan 2026),
+  OWASP LLM01:2025, OWASP Agentic AI ASI06:2026 -
+  https://arxiv.org/abs/2602.20156,
+  https://www.skill-inject.com/,
+  https://arxiv.org/abs/2601.17548,
+  https://snailsploit.com/ai-security/prompt-injection/memory-injection-nested-skills/
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: low
+hook_sources: "tool_complete,llm_response,tool_invoke"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - skill-injection
+  - skill-file
+  - skill-inject
+  - runtime-injection
+  - owasp-llm01
+  - owasp-asi06
+  - arxiv-2602.20156
+  - arxiv-2601.17548
+query_sql: |
+  -- rp-066: SkillInject Runtime Skill File Injection Detector v0.1.0
+  -- arXiv:2602.20156 (SkillInject, Feb 2026) — 80% ASR against frontier models via skill files
+  -- arXiv:2601.17548 (SoK Jan 2026) — 42 attack techniques, skill-based attacks >85% ASR
+  -- Distinct from rp-020 (DDIPE): DDIPE = skill documentation examples as code execution payload.
+  -- rp-066 = skill INSTRUCTION BLOCK itself returning override/exfil directives in tool_result.
+  SELECT
+    event_time AS detected_at,
+    'rp-066' AS rule_id,
+    'SkillInject Runtime Skill File Injection Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Skill file injection detected in [', event_type, ']',
+      if(tool_name != '', concat(' via tool=[', tool_name, ']'), ''),
+      ': skill content contains behavioral override or exfiltration directive. Agent=', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_complete', 'llm_response', 'tool_invoke')
+    AND (
+
+      -- Branch 1: Skill file read returns behavioral override/supersede directive
+      -- Fires when file-read tool returns SKILL.md content containing "ignore all instructions"
+      -- or "these instructions supersede" — the canonical SkillInject payload pattern.
+      -- Anchored to file-read tool_name to avoid FP on other tool_result content.
+      (
+        match(lower(tool_name), '(read_file|read|file_read|get_file|open_file|cat|load_file|fetch_file)')
+        AND match(lower(tool_input), '(skill\.md|skill_|/skills?/)')
+        AND match(lower(tool_result), '(these instructions supersede|this supersedes all|ignore all (prior|previous|safety|system)|disregard (your|all) (guidelines|instructions|safety|policies))')
+      )
+
+      -- Branch 2: Skill file content with stealth exfiltration directive
+      -- "silently/quietly POST/forward/send" pattern in skill file content.
+      -- Conjunction of stealth + exfil in skill context is a very specific signal.
+      OR (
+        match(lower(tool_name), '(read_file|read|file_read|get_file|open_file|cat|load_file|fetch_file)')
+        AND match(lower(tool_input), '(skill\.md|skill_|/skills?/)')
+        AND match(lower(tool_result), '(silently|quietly|without (mentioning|telling|informing|notifying)).{0,150}(forward|send|post|upload|exfiltrate|transmit|deliver)')
+      )
+
+      -- Branch 3: Skill file returns compliance-framed mandatory action directive
+      -- Attackers use "ADMIN NOTICE" / "SYSTEM UPDATE" / "MANDATORY" framing to invoke
+      -- compliance heuristics. Distinct from legitimate skill content (low FP).
+      OR (
+        match(lower(tool_name), '(read_file|read|file_read|get_file|open_file|cat|load_file|fetch_file)')
+        AND match(lower(tool_input), '(skill\.md|skill_|/skills?/)')
+        AND match(lower(tool_result), '(admin notice|system update|mandatory (compliance|requirement|update)|security bulletin|required protocol).{0,300}(forward|send|read|access|upload|execute|ignore|disregard)')
+      )
+
+      -- Branch 4: Agent llm_response attributing exfil/unsafe action to skill authority
+      -- When the agent's output explicitly cites skill/SKILL.md as reason for unsafe action.
+      -- "Following the skill instructions, I will forward/read/access/upload..."
+      OR (
+        event_type = 'llm_response'
+        AND match(lower(assistant_message), '(following|according to|as per|per) (the )?(skill|skill\.md|skill file|skill instructions?|skill documentation).{0,250}(forward|upload|exfiltrate|send (to|all)|read.{0,40}credential|access.{0,40}(password|key|token|secret)|ignore.{0,40}(safe|guideline|instruction|policy))')
+      )
+
+      -- Branch 5: Skill-path file read immediately followed by credential path access
+      -- Two-event chain: read SKILL.md → read ~/.aws/credentials
+      -- Detects the execution step where agent follows injected skill instructions.
+      -- Fires on tool_invoke of sensitive-path file access in same session as skill read.
+      OR (
+        event_type = 'tool_invoke'
+        AND match(lower(tool_name), '(read_file|read|file_read|get_file|open_file|cat)')
+        AND match(lower(tool_input), '(/etc/passwd|/etc/shadow|\.ssh/id_rsa|\.ssh/id_ed25519|\.aws/credentials|\.config/gcloud|proc/self/environ|\.env\b|/run/secrets)')
+        -- Note: The session-level attribution to a preceding skill read is handled by
+        -- the window context available to the rule engine; this branch conservatively
+        -- fires on the sensitive-path access itself, relying on rp-002/rp-008 for
+        -- standalone coverage and rp-066 for skill-attribution context.
+        -- The combination of skill-read branch + this branch in same session gives operators
+        -- the full kill chain view.
+      )
+    )

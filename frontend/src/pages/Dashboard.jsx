@@ -178,7 +178,7 @@ export default function Dashboard() {
               </div>
               <div className="overflow-y-auto max-h-[500px] px-6 pb-6 space-y-4">
                 {threats.length === 0 ? (
-                  <p className="text-xs text-zinc-600 py-4">{threatsConnected ? 'Waiting for events…' : 'Connecting…'}</p>
+                  <p className="text-xs text-zinc-600 py-4">{threatsConnected ? 'Waiting for events…' : 'Monitoring…'}</p>
                 ) : threats.map((t, i) => {
                   const sev = t.severity?.toLowerCase() || 'info'
                   const { border, iconColor } = severityCard[sev] || severityCard.info

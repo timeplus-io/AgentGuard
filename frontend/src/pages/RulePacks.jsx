@@ -19,6 +19,8 @@ const CATEGORY_ICONS = {
 }
 
 
+const RULES_PAGE_SIZE = 12
+
 export default function RulePacks() {
   const navigate = useNavigate()
   const [rules, setRules] = useState([])
@@ -35,6 +37,21 @@ export default function RulePacks() {
   const [confirmToggle, setConfirmToggle] = useState(null) // { id, newVal, name }
   const [confirmInstall, setConfirmInstall] = useState(null) // catalog entry
   const [installing, setInstalling] = useState(null) // rule id being installed
+  const [search, setSearch] = useState('')
+  const [rulesPage, setRulesPage] = useState(1)
+  const [catalogPage, setCatalogPage] = useState(1)
+
+  const sortedRules = [...rules].sort((a, b) => {
+    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+  const filteredRules = sortedRules.filter(r => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return r.name.toLowerCase().includes(q) || r.desc.toLowerCase().includes(q)
+  })
+  const totalRulesPages = Math.ceil(filteredRules.length / RULES_PAGE_SIZE)
+  const pagedRules = filteredRules.slice((rulesPage - 1) * RULES_PAGE_SIZE, rulesPage * RULES_PAGE_SIZE)
 
   const loadRules = () =>
     api.listRules().then(data => {
@@ -100,6 +117,8 @@ export default function RulePacks() {
     loadCharts()
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => { setRulesPage(1); setCatalogPage(1) }, [search])
 
   const handleToggle = (id, newVal) => {
     const rule = rules.find(r => r.id === id)
@@ -167,7 +186,14 @@ export default function RulePacks() {
     a.click()
   }
 
-  const uninstalledCatalog = catalog.filter(e => !e.installed)
+  const uninstalledCatalog = catalog.filter(e => {
+    if (e.installed) return false
+    if (!search) return true
+    const q = search.toLowerCase()
+    return e.name.toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q)
+  })
+  const totalCatalogPages = Math.ceil(uninstalledCatalog.length / RULES_PAGE_SIZE)
+  const pagedCatalog = uninstalledCatalog.slice((catalogPage - 1) * RULES_PAGE_SIZE, catalogPage * RULES_PAGE_SIZE)
 
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
@@ -300,54 +326,116 @@ export default function RulePacks() {
             </div>
           )}
 
-          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-            {loading ? (
-              [1,2,3,4].map(i => <div key={i} className="bg-[#1d1a25] p-6 rounded-sm h-64 animate-pulse" />)
-            ) : rules.map(rule => (
-              <div key={rule.id} className="group bg-[#1d1a25] p-6 rounded-sm flex flex-col gap-6 hover:bg-[#2c2834] transition-all duration-300 relative overflow-hidden">
-                {rule.active && (
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-[#ffb0cf]/5 blur-3xl rounded-full -translate-y-12 translate-x-12"></div>
-                )}
-                <div className="flex justify-between items-start z-10">
-                  <div className={`w-12 h-12 bg-[#0f0c17] flex items-center justify-center rounded-sm ${rule.active ? 'text-[#ffb0cf]' : 'text-zinc-500'}`}>
-                    <span className="material-symbols-outlined" style={rule.active ? { fontVariationSettings: "'FILL' 1" } : {}}>{rule.icon}</span>
-                  </div>
-                  <Toggle checked={rule.enabled} onChange={val => handleToggle(rule.id, val)} />
-                </div>
-                <div className="z-10">
-                  <h3 className="text-lg font-semibold tracking-tight text-white mb-2">{rule.name}</h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3 min-h-[4.5rem]">{rule.desc}</p>
-                  {rule.detections24h > 0 && (
-                    <p className="text-[10px] font-mono text-[#ffb0cf] mt-2">{rule.detections24h.toLocaleString()} events detected (24h)</p>
+          <section className="space-y-4">
+            {/* Search bar */}
+            <div className="relative max-w-sm">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-[16px] pointer-events-none">search</span>
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search rules…"
+                className="w-full bg-[#1d1a25] text-sm text-[#e7dff0] placeholder-zinc-600 pl-9 pr-8 py-2 rounded-sm outline-none focus:ring-1 focus:ring-[#ffb0cf]/40"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white">
+                  <span className="material-symbols-outlined text-[14px]">close</span>
+                </button>
+              )}
+            </div>
+
+            {/* Rules grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+              {loading ? (
+                [1,2,3,4].map(i => <div key={i} className="bg-[#1d1a25] p-6 rounded-sm h-64 animate-pulse" />)
+              ) : pagedRules.length === 0 ? (
+                <p className="text-sm text-zinc-500 col-span-4 py-4">No rules match your search.</p>
+              ) : pagedRules.map(rule => (
+                <div key={rule.id} className="group bg-[#1d1a25] p-6 rounded-sm flex flex-col gap-6 hover:bg-[#2c2834] transition-all duration-300 relative overflow-hidden">
+                  {rule.active && (
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-[#ffb0cf]/5 blur-3xl rounded-full -translate-y-12 translate-x-12"></div>
                   )}
-                </div>
-                <div className="mt-auto flex items-center justify-between z-10">
-                  <Link to={`/rules/${rule.id}`} className="text-xs font-semibold text-[#ffb0cf] tracking-wider uppercase hover:underline decoration-2 underline-offset-4">
-                    View Details
-                  </Link>
-                  <span className="text-[10px] text-zinc-500 flex items-center gap-1">
-                    {rule.version ? (
-                      <>
-                        <span className="material-symbols-outlined text-[12px] text-[#ffb0cf]" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
-                        {rule.version}
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-symbols-outlined text-[12px]">pause_circle</span>
-                        Inactive
-                      </>
+                  <div className="flex justify-between items-start z-10">
+                    <div className={`w-12 h-12 bg-[#0f0c17] flex items-center justify-center rounded-sm ${rule.active ? 'text-[#ffb0cf]' : 'text-zinc-500'}`}>
+                      <span className="material-symbols-outlined" style={rule.active ? { fontVariationSettings: "'FILL' 1" } : {}}>{rule.icon}</span>
+                    </div>
+                    <Toggle checked={rule.enabled} onChange={val => handleToggle(rule.id, val)} />
+                  </div>
+                  <div className="z-10">
+                    <h3 className="text-lg font-semibold tracking-tight text-white mb-2">{rule.name}</h3>
+                    <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3 min-h-[4.5rem]">{rule.desc}</p>
+                    {rule.detections24h > 0 && (
+                      <p className="text-[10px] font-mono text-[#ffb0cf] mt-2">{rule.detections24h.toLocaleString()} events detected (24h)</p>
                     )}
-                  </span>
+                  </div>
+                  <div className="mt-auto flex items-center justify-between z-10">
+                    <Link to={`/rules/${rule.id}`} className="text-xs font-semibold text-[#ffb0cf] tracking-wider uppercase hover:underline decoration-2 underline-offset-4">
+                      View Details
+                    </Link>
+                    <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+                      {rule.version ? (
+                        <>
+                          <span className="material-symbols-outlined text-[12px] text-[#ffb0cf]" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                          {rule.version}
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-[12px]">pause_circle</span>
+                          Inactive
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {!loading && totalRulesPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-zinc-500">
+                  {filteredRules.length} rule{filteredRules.length !== 1 ? 's' : ''}
+                  {search ? ` matching "${search}"` : ''}
+                  {' · '}page {rulesPage} of {totalRulesPages}
+                </p>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setRulesPage(p => Math.max(1, p - 1))}
+                    disabled={rulesPage === 1}
+                    className="px-2 py-1 text-xs rounded-sm bg-[#1d1a25] text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-default transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">chevron_left</span>
+                  </button>
+                  {Array.from({ length: totalRulesPages }, (_, i) => i + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setRulesPage(p)}
+                      className={`w-7 h-7 text-xs rounded-sm transition-colors ${
+                        p === rulesPage
+                          ? 'bg-[#ffb0cf]/20 text-[#ffb0cf] font-semibold'
+                          : 'bg-[#1d1a25] text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setRulesPage(p => Math.min(totalRulesPages, p + 1))}
+                    disabled={rulesPage === totalRulesPages}
+                    className="px-2 py-1 text-xs rounded-sm bg-[#1d1a25] text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-default transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                  </button>
                 </div>
               </div>
-            ))}
+            )}
           </section>
 
           {uninstalledCatalog.length > 0 && (
-            <section>
-              <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-4">Available to Install</h4>
+            <section className="space-y-4">
+              <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Available to Install</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                {uninstalledCatalog.map(entry => (
+                {pagedCatalog.map(entry => (
                   <div key={entry.id} className="bg-[#1d1a25]/60 border border-dashed border-zinc-700/40 p-5 rounded-sm flex flex-col gap-4">
                     <div className="flex justify-between items-start">
                       <div className="w-10 h-10 bg-[#0f0c17] flex items-center justify-center rounded-sm text-zinc-600">
@@ -378,6 +466,45 @@ export default function RulePacks() {
                   </div>
                 ))}
               </div>
+
+              {totalCatalogPages > 1 && (
+                <div className="flex items-center justify-between pt-2">
+                  <p className="text-xs text-zinc-500">
+                    {uninstalledCatalog.length} available
+                    {search ? ` matching "${search}"` : ''}
+                    {' · '}page {catalogPage} of {totalCatalogPages}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCatalogPage(p => Math.max(1, p - 1))}
+                      disabled={catalogPage === 1}
+                      className="px-2 py-1 text-xs rounded-sm bg-[#1d1a25] text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-default transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">chevron_left</span>
+                    </button>
+                    {Array.from({ length: totalCatalogPages }, (_, i) => i + 1).map(p => (
+                      <button
+                        key={p}
+                        onClick={() => setCatalogPage(p)}
+                        className={`w-7 h-7 text-xs rounded-sm transition-colors ${
+                          p === catalogPage
+                            ? 'bg-[#ffb0cf]/20 text-[#ffb0cf] font-semibold'
+                            : 'bg-[#1d1a25] text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setCatalogPage(p => Math.min(totalCatalogPages, p + 1))}
+                      disabled={catalogPage === totalCatalogPages}
+                      className="px-2 py-1 text-xs rounded-sm bg-[#1d1a25] text-zinc-400 hover:text-white disabled:opacity-30 disabled:cursor-default transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 

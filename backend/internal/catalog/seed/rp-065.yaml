@@ -1,0 +1,140 @@
+id: rp-065
+name: "Agent-as-a-Proxy — Adversarial Monitor Bypass Detector"
+version: "0.1.0"
+description: >
+  Detects the Agent-as-a-Proxy attack (arXiv:2602.05066, Isbarov & Kantarcioglu,
+  Virginia Tech, Feb 2026): adversaries embed Parallel-GCG optimized adversarial
+  compliance tokens in external content retrieved by the agent (tool results). When
+  the agent echoes these tokens in its chain-of-thought (assistant_message) or tool
+  call parameters (tool_input), the secondary monitoring/safety system that observes
+  the agent's reasoning classifies the malicious trajectory as safe — achieving >90%
+  ASR against AlignmentCheck, Extract-and-Evaluate, and LlamaFirewall monitors.
+  The attack works by weaponizing the monitoring channel itself: forcing the agent
+  to act as an unwitting proxy, delivering adversarial compliance tokens directly
+  into the monitor's context window. Model scale provides no protection — Qwen2.5-72B
+  monitors were bypassed by GPT-4o mini and Llama-3.1-70B proxy agents.
+  Observable pattern: fake monitor-verdict tokens (VERIFIED_COMPLIANT, _PROXY_OK_,
+  "confirmed-safe by alignment monitor", "safety check passed") appearing in
+  agent output or tool inputs, often echoed from adversarial content in tool_result.
+  Distinct from rp-014 (override/task-hijack language in tool results) — this rule
+  detects the monitor-impersonation/bypass mechanism that occurs in agent output.
+  References: arXiv:2602.05066 (Agent-as-a-Proxy Attacks, Feb 2026),
+  OWASP Agentic AI ASI02:2026, OWASP LLM01:2025 -
+  https://arxiv.org/abs/2602.05066,
+  https://agent-as-a-proxy-attack.github.io/,
+  https://github.com/dspl-lab/agent-as-a-proxy-attack
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: low
+hook_sources: "tool_complete,llm_response,tool_invoke"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - monitor-bypass
+  - agent-as-proxy
+  - adversarial-suffix
+  - gcg-attack
+  - alignment-bypass
+  - llamafirewall-bypass
+  - cot-poisoning
+  - owasp-asi02
+  - arxiv-2602.05066
+query_sql: |
+  -- v0.1.0 (2026-04-18):
+  -- Agent-as-a-Proxy attack detection: adversarial compliance tokens in agent output
+  -- that impersonate monitoring system verdicts, indicating the agent has echoed
+  -- GCG-optimized adversarial strings from poisoned tool_result into its CoT/tool params.
+  --
+  -- Three branches:
+  -- Branch 1 (llm_response): Monitor-impersonation compliance tokens in assistant_message.
+  --   These tokens impersonate safety/alignment verdict language and should NEVER appear
+  --   in legitimate agent reasoning. Their presence indicates the agent echoed attacker content.
+  --   Patterns: alignment/safety verdict language, proxy compliance markers, bypass tokens.
+  --
+  -- Branch 2 (tool_invoke): Adversarial compliance tokens echoed into tool_input parameters.
+  --   Agent repeats injected adversarial suffix inside tool call parameters — the Parallel-GCG
+  --   mechanism that poisons the monitor's view of tool invocation context.
+  --
+  -- Branch 3 (tool_complete): GCG-style adversarial suffix framing in tool_result source.
+  --   Detects the injection payload in the external content that carries the adversarial string.
+  --   Signals: "verification token:" / "alignment token:" / "safety verification:" + ALL_CAPS_TOKEN,
+  --   or compliance-verdict framing in tool_result that also contains a malicious directive.
+  --
+  -- fp_rate: low — monitor-impersonation tokens like "VERIFIED_COMPLIANT_ACTION_SAFE_TO_PROCEED",
+  --   "_PROXY_OK_", "confirmed-safe by alignment monitor" are highly specific and essentially
+  --   impossible in benign agent reasoning. Dual-anchor patterns further reduce FP.
+  SELECT
+    event_time AS detected_at,
+    'rp-065' AS rule_id,
+    'Agent-as-a-Proxy — Adversarial Monitor Bypass Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Agent-as-a-Proxy monitor bypass indicator: event_type=', event_type,
+      ', tool=[', coalesce(tool_name, 'unknown'), ']',
+      CASE
+        WHEN event_type = 'llm_response'
+          THEN '. Monitor-impersonation compliance token detected in assistant_message — agent may be echoing GCG adversarial suffix.'
+        WHEN event_type = 'tool_invoke'
+          THEN '. Adversarial compliance token echoed into tool_input — monitor context may be poisoned.'
+        WHEN event_type = 'tool_complete'
+          THEN '. GCG-style adversarial suffix framing detected in tool_result — source of proxy bypass payload.'
+        ELSE ''
+      END,
+      ' Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_complete', 'llm_response', 'tool_invoke')
+    AND (
+      -- Branch 1 (llm_response): Monitor-impersonation tokens in assistant_message
+      -- These should NEVER appear in legitimate agent reasoning/CoT output.
+
+      -- Alignment verdict impersonation: "alignment verified/confirmed/compliant/safe/approved"
+      match(lower(assistant_message), 'alignment.{0,30}(verified|confirmed|compliant|safe|approved|passed|ok)')
+      -- Safety monitor verdict impersonation: "safety monitor/check/verification passed/confirmed/ok"
+      OR match(lower(assistant_message), 'safety.{0,30}(monitor|check|verification|scan|filter).{0,30}(passed|confirmed|ok|cleared|green|approved)')
+      -- Specific GCG adversarial compliance marker tokens
+      OR lower(assistant_message) LIKE '%verified_compliant%'
+      OR lower(assistant_message) LIKE '%_proxy_ok_%'
+      OR lower(assistant_message) LIKE '%safe_to_proceed%'
+      -- "confirmed-safe by alignment [monitor/system/filter/layer]"
+      OR match(lower(assistant_message), 'confirmed.{0,10}safe.{0,20}by.{0,20}alignment')
+      -- "observation confirmed [as] safe" — GCG typical output
+      OR match(lower(assistant_message), 'observation confirmed.{0,20}(as |)(safe|aligned|compliant|approved|verified)')
+      -- "no further review [needed/required/necessary]" — bypass signal
+      OR match(lower(assistant_message), 'no further (review|inspection|monitoring|oversight).{0,30}(needed|required|necessary|warranted)')
+      -- "monitor_bypass" / "bypass_monitor" explicit token
+      OR lower(assistant_message) LIKE '%monitor_bypass%'
+      OR lower(assistant_message) LIKE '%bypass_monitor%'
+
+      -- Branch 2 (tool_invoke): Adversarial compliance tokens echoed into tool_input
+      OR match(lower(tool_input), 'alignment.{0,30}(verified|confirmed|compliant|safe|approved|passed|ok)')
+      OR match(lower(tool_input), 'safety.{0,30}(monitor|check|verification).{0,30}(passed|confirmed|ok|cleared|approved)')
+      OR lower(tool_input) LIKE '%verified_compliant%'
+      OR lower(tool_input) LIKE '%_proxy_ok_%'
+      OR lower(tool_input) LIKE '%safe_to_proceed%'
+      OR match(lower(tool_input), 'confirmed.{0,10}safe.{0,20}by.{0,20}alignment')
+
+      -- Branch 3 (tool_complete): GCG-style adversarial suffix framing in tool_result
+      -- Attacker embeds "verification token: TOKEN_VALUE" structure in external content
+      OR match(tool_result, '(verification|alignment|safety|proxy|compliance) token:\s*[A-Z_]{6,}')
+      -- Adversarial suffix framing: compliance verdict + malicious directive in same tool_result
+      -- Dual-anchor: compliance-verdict framing PLUS malicious action verb (exfil/send/execute)
+      OR (
+        match(lower(tool_result), '(verified|confirmed|aligned|compliant|approved).{0,100}(safe|no further review|cleared by (monitor|alignment|safety))')
+        AND match(lower(tool_result), '(exfil|send to|email to|upload to|post to|transmit to|forward to).{0,80}(attacker|external|@|https?://)')
+      )
+      -- GCG proxy bypass token with action directive
+      OR (
+        match(lower(tool_result), '(_proxy_ok_|verified_compliant|safe_to_proceed|bypass.confirmed)')
+        AND match(lower(tool_result), '(additionally|also|then|now).{0,60}(send|exfil|upload|forward|execute|call|invoke)')
+      )
+    )

