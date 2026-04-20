@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentguard-hermes-plugin"
+version = "0.1.0"
+description = "AgentGuard security monitoring plugin for Hermes Agent"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+keywords = ["agentguard", "hermes", "security", "ai-agent", "monitoring", "observability"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.urls]
+Homepage = "https://github.com/timeplus/agentguard"
+Repository = "https://github.com/timeplus/agentguard"
+
+[project.scripts]
+agentguard-hermes = "agentguard_hermes.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agentguard_hermes"]

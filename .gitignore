@@ -8,6 +8,9 @@ agents/litellm/config/*.json
 agents/openclaw/.openclaw/
 agents/openclaw/agentguard-plugin/dist
 agents/claudecode/agentguard-plugin/dist
+agents/hermes/agentguard-plugin/dist
+agents/hermes/agentguard-plugin/.hatch
+agents/hermes/agentguard-plugin/**/__pycache__
 .claude/
 agents/paperclip/.paperclip/
 

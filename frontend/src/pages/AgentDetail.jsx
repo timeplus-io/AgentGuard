@@ -46,9 +46,9 @@ function fmtShortTime(iso) {
 function dotColor(event) {
   if (event.hook_decision === 'block') return '#ffb4ab'
   const n = event.hook_name
-  if (n === 'llm_input' || n === 'llm_output') return '#ffb0cf'
-  if (n === 'before_tool_call' || n === 'after_tool_call' || n === 'tool_result_persist') return '#93c5fd'
-  if (n === 'before_agent_start' || n === 'agent_end') return '#a1a1aa'
+  if (n === 'llm_input' || n === 'llm_output' || n === 'pre_llm_call' || n === 'post_llm_call' || n === 'pre_api_request' || n === 'post_api_request') return '#ffb0cf'
+  if (n === 'before_tool_call' || n === 'after_tool_call' || n === 'tool_result_persist' || n === 'pre_tool_call' || n === 'post_tool_call') return '#93c5fd'
+  if (n === 'before_agent_start' || n === 'agent_end' || n === 'on_session_start' || n === 'on_session_end' || n === 'on_session_finalize' || n === 'on_session_reset') return '#a1a1aa'
   return '#52525b'
 }
 
@@ -193,6 +193,10 @@ function parseEvtData(evt) {
 }
 
 function buildRunData(events) {
+  // Detect Hermes by presence of its plugin hook names
+  const isHermes = events.some(e => e.hook_name === 'pre_llm_call' || e.hook_name === 'post_llm_call')
+  if (isHermes) return buildRunDataHermes(events)
+
   const llmIn       = events.find(e => e.hook_name === 'llm_input')
   const llmOut      = events.find(e => e.hook_name === 'llm_output')
   const beforeTools = events.filter(e => e.hook_name === 'before_tool_call')
@@ -284,6 +288,97 @@ function buildRunData(events) {
   return { runInfo, steps }
 }
 
+function buildRunDataHermes(events) {
+  const preLlm    = events.find(e => e.hook_name === 'pre_llm_call')
+  const postLlm   = events.find(e => e.hook_name === 'post_llm_call')
+  const postApi   = events.find(e => e.hook_name === 'post_api_request')
+  const preTools  = events.filter(e => e.hook_name === 'pre_tool_call')
+  const postTools = events.filter(e => e.hook_name === 'post_tool_call')
+
+  const preLlmData  = preLlm  ? parseEvtData(preLlm)  : {}
+  const postApiData = postApi  ? parseEvtData(postApi)  : {}
+
+  const runInfo = {
+    model:        preLlm?.model    || postApiData.model    || null,
+    provider:     preLlm?.provider || postApiData.provider || null,
+    systemPrompt: null,
+    historyCount: null,
+    imagesCount:  null,
+  }
+
+  const steps = []
+
+  // ── User Input ────────────────────────────────────────────────────────────
+  const userMsg = preLlmData.user_message
+  if (userMsg && String(userMsg).trim()) {
+    const t = String(userMsg).trim()
+    steps.push({
+      type:    'user_input',
+      label:   'User Input',
+      content: t.slice(0, 400) + (t.length > 400 ? '…' : ''),
+    })
+  }
+
+  // ── Tool Calls (pre + post paired by tool_call_id) ────────────────────────
+  for (let i = 0; i < preTools.length; i++) {
+    const pre     = preTools[i]
+    const preData = parseEvtData(pre)
+    const blocked = pre.hook_decision === 'block'
+    const tcID    = preData.tool_call_id || null
+
+    const args = (preData.args && typeof preData.args === 'object' && Object.keys(preData.args).length > 0)
+      ? preData.args : null
+
+    const post = tcID
+      ? postTools.find(p => parseEvtData(p).tool_call_id === tcID)
+      : postTools[i]
+
+    let resultError = null
+    if (post) {
+      const postData = parseEvtData(post)
+      // Hermes post_tool_call has no error field; treat non-null result as success
+      resultError = postData.error || null
+    }
+
+    steps.push({
+      type:      'tool_call',
+      label:     blocked ? 'Tool Blocked' : 'Tool Called',
+      content:   pre.tool_name || preData.tool_name || '—',
+      blocked,
+      params:    args,
+      hasResult: post != null,
+      resultError,
+      duration:  null,
+    })
+  }
+
+  // ── LLM Response ─────────────────────────────────────────────────────────
+  const postLlmData = postLlm ? parseEvtData(postLlm) : {}
+  const usage       = postApiData.usage ?? {}
+  const tokenParts  = [
+    usage.input_tokens  != null ? `${fmtTokens(usage.input_tokens)} in`   : null,
+    usage.output_tokens != null ? `${fmtTokens(usage.output_tokens)} out`  : null,
+    (usage.cache_read_input_tokens > 0) ? `${fmtTokens(usage.cache_read_input_tokens)} cached` : null,
+  ].filter(Boolean)
+
+  if (postApiData.api_duration != null) {
+    tokenParts.push(`${Math.round(postApiData.api_duration * 1000)} ms`)
+  }
+
+  const responseText = postLlmData.assistant_response || ''
+
+  if (postLlm || postApi) {
+    steps.push({
+      type:    'llm_response',
+      label:   'Response',
+      tokens:  tokenParts.length > 0 ? tokenParts.join(' · ') : null,
+      content: responseText ? responseText.slice(0, 500) + (responseText.length > 500 ? '…' : '') : null,
+    })
+  }
+
+  return { runInfo, steps }
+}
+
 // ── JsonValue ─────────────────────────────────────────────────────────────────
 // Recursive collapsible JSON tree. Nested objects/arrays start collapsed.
 
@@ -345,13 +440,23 @@ function JsonValue({ value, depth }) {
 // ── RunEventCard ──────────────────────────────────────────────────────────────
 
 const hookBadgeColor = {
-  llm_input:           'text-[#ffb0cf] bg-[#ffb0cf]/10',
-  llm_output:          'text-[#ffb0cf] bg-[#ffb0cf]/10',
-  before_tool_call:    'text-[#93c5fd] bg-[#93c5fd]/10',
-  after_tool_call:     'text-[#93c5fd] bg-[#93c5fd]/10',
-  tool_result_persist: 'text-[#93c5fd] bg-[#93c5fd]/10',
-  session_start:       'text-zinc-400  bg-zinc-700/30',
-  session_end:         'text-zinc-400  bg-zinc-700/30',
+  llm_input:            'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  llm_output:           'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  pre_llm_call:         'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  post_llm_call:        'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  pre_api_request:      'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  post_api_request:     'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  before_tool_call:     'text-[#93c5fd] bg-[#93c5fd]/10',
+  after_tool_call:      'text-[#93c5fd] bg-[#93c5fd]/10',
+  tool_result_persist:  'text-[#93c5fd] bg-[#93c5fd]/10',
+  pre_tool_call:        'text-[#93c5fd] bg-[#93c5fd]/10',
+  post_tool_call:       'text-[#93c5fd] bg-[#93c5fd]/10',
+  session_start:        'text-zinc-400  bg-zinc-700/30',
+  session_end:          'text-zinc-400  bg-zinc-700/30',
+  on_session_start:     'text-zinc-400  bg-zinc-700/30',
+  on_session_end:       'text-zinc-400  bg-zinc-700/30',
+  on_session_finalize:  'text-zinc-400  bg-zinc-700/30',
+  on_session_reset:     'text-zinc-400  bg-zinc-700/30',
 }
 
 function RunEventCard({ event }) {
@@ -1266,6 +1371,9 @@ export default function AgentDetail() {
           )}
           {agentType === 'openclaw' && (
             <img src="/static/icons/openclaw-dark.svg" alt="OpenClaw" title="OpenClaw" className="h-5 w-5 shrink-0" />
+          )}
+          {agentType === 'hermes' && (
+            <img src="/static/icons/hermes-logo.png" alt="Hermes" title="Hermes" className="h-5 w-5 shrink-0" />
           )}
           <span className="font-medium tracking-tight text-lg text-[#e7dff0]">{agentName}</span>
           {deploymentName && (

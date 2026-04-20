@@ -67,6 +67,17 @@ for event in hook_events:
     if not already:
         entries.append(hook_entry)
 
+plugin_env = {
+    "AGENTGUARD_AGENT_ID":        "$(AGENTGUARD_AGENT_ID)",
+    "AGENTGUARD_DEPLOYMENT_ID":   "$(AGENTGUARD_DEPLOYMENT_ID)",
+    "AGENTGUARD_DEPLOYMENT_NAME": "$(AGENTGUARD_DEPLOYMENT_NAME)",
+    "AGENTGUARD_TIMEPLUS_URL":    "$(AGENTGUARD_TIMEPLUS_URL)",
+    "AGENTGUARD_STREAM":          "$(AGENTGUARD_STREAM)",
+    "AGENTGUARD_USERNAME":        "$(AGENTGUARD_USERNAME)",
+    "AGENTGUARD_PASSWORD":        "$(AGENTGUARD_PASSWORD)",
+}
+data.setdefault("env", {}).update(plugin_env)
+
 with open(settings_path, "w") as f:
     json.dump(data, f, indent=2)
 print("AgentGuard hooks configured in", settings_path)
@@ -78,6 +89,15 @@ import json, os
 
 settings_path = os.path.expanduser("$(SETTINGS_FILE)")
 hook_command = 'node "$(PLUGIN_DIR)/dist/index.js"'
+plugin_env_keys = [
+    "AGENTGUARD_AGENT_ID",
+    "AGENTGUARD_DEPLOYMENT_ID",
+    "AGENTGUARD_DEPLOYMENT_NAME",
+    "AGENTGUARD_TIMEPLUS_URL",
+    "AGENTGUARD_STREAM",
+    "AGENTGUARD_USERNAME",
+    "AGENTGUARD_PASSWORD",
+]
 
 hook_events = [
     "SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse",
@@ -102,6 +122,12 @@ for event in hook_events:
     ]
     if not hooks[event]:
         del hooks[event]
+
+env = data.get("env", {})
+for key in plugin_env_keys:
+    env.pop(key, None)
+if not env:
+    data.pop("env", None)
 
 with open(settings_path, "w") as f:
     json.dump(data, f, indent=2)

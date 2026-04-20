@@ -1,3 +1,5 @@
+import { hostname } from "os";
+
 export type AgentGuardConfig = {
   timeplusUrl: string;
   stream: string;
@@ -24,7 +26,7 @@ export function resolveConfig(): AgentGuardConfig {
     stream: process.env.AGENTGUARD_STREAM || DEFAULTS.stream,
     username: process.env.AGENTGUARD_USERNAME || DEFAULTS.username,
     password: process.env.AGENTGUARD_PASSWORD ?? DEFAULTS.password,
-    agentId: process.env.AGENTGUARD_AGENT_ID ?? DEFAULTS.agentId,
+    agentId: process.env.AGENTGUARD_AGENT_ID || hostname(),
     deploymentId: process.env.AGENTGUARD_DEPLOYMENT_ID || DEFAULTS.deploymentId,
     deploymentName: process.env.AGENTGUARD_DEPLOYMENT_NAME || DEFAULTS.deploymentName,
   };

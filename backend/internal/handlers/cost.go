@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -204,35 +203,32 @@ func DeletePricing(cfg *config.Config) gin.HandlerFunc {
 // queryCostByAgent returns cost aggregated by (agent_id, deployment_id, provider, model).
 // Pass since as "2006-01-02 15:04:05" UTC to filter by event_time; empty string = all time.
 func queryCostByAgent(cfg *config.TimeplusConfig, since string) ([]models.AgentModelCost, error) {
-	where := []string{"e.hook_name = 'llm_output'"}
+	sinceClause := ""
 	if since != "" {
-		where = append(where, fmt.Sprintf("e.event_time >= '%s'", since))
+		sinceClause = fmt.Sprintf("\n  AND m.event_time >= '%s'", since)
 	}
 
 	q := fmt.Sprintf(`
 SELECT
-  e.agent_id,
-  e.deployment_id,
-  e.provider,
-  e.model,
-  count()                                                                                     AS request_count,
-  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))                         AS input_tokens,
-  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))                        AS output_tokens,
-  sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))    AS cache_tokens,
+  m.agent_id,
+  m.deployment_id,
+  m.tags['provider']                                                    AS provider,
+  m.tags['model']                                                       AS model,
+  to_int64(sum_if(m.metric_value, m.metric_name = 'llm.call'))         AS request_count,
+  to_int64(sum_if(m.metric_value, m.metric_name = 'llm.input_tokens')) AS input_tokens,
+  to_int64(sum_if(m.metric_value, m.metric_name = 'llm.output_tokens')) AS output_tokens,
+  to_int64(sum_if(m.metric_value, m.metric_name = 'llm.cache_read_tokens')) AS cache_tokens,
   (
-    sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))
-      * any(p.input_cost_per_million)
-    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))
-      * any(p.output_cost_per_million)
-    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
-      * any(p.cache_read_cost_per_million)
-  ) / 1000000.0                                                                               AS total_cost
-FROM table(agentguard_hook_events) AS e
+    sum_if(m.metric_value, m.metric_name = 'llm.input_tokens')      * any(p.input_cost_per_million)
+    + sum_if(m.metric_value, m.metric_name = 'llm.output_tokens')   * any(p.output_cost_per_million)
+    + sum_if(m.metric_value, m.metric_name = 'llm.cache_read_tokens') * any(p.cache_read_cost_per_million)
+  ) / 1000000.0                                                         AS total_cost
+FROM table(agentguard_cim_metrics) AS m
 LEFT JOIN table(agentguard_pricing) AS p
-  ON e.provider = p.provider AND e.model = p.model
-WHERE %s
-GROUP BY e.agent_id, e.deployment_id, e.provider, e.model
-ORDER BY total_cost DESC`, strings.Join(where, " AND "))
+  ON m.tags['provider'] = p.provider AND m.tags['model'] = p.model
+WHERE m.metric_name IN ('llm.call', 'llm.input_tokens', 'llm.output_tokens', 'llm.cache_read_tokens')%s
+GROUP BY m.agent_id, m.deployment_id, provider, model
+ORDER BY total_cost DESC`, sinceClause)
 
 	rows, err := tp.Query(cfg, q)
 	if err != nil {
@@ -263,23 +259,20 @@ ORDER BY total_cost DESC`, strings.Join(where, " AND "))
 func queryCostDailyTrend(cfg *config.TimeplusConfig) ([]models.DailySpend, error) {
 	q := `
 SELECT
-  to_start_of_day(e.event_time)                                                              AS day,
-  e.provider,
-  e.model,
+  to_start_of_day(m.event_time)                                        AS day,
+  m.tags['provider']                                                    AS provider,
+  m.tags['model']                                                       AS model,
   (
-    sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))
-      * any(p.input_cost_per_million)
-    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))
-      * any(p.output_cost_per_million)
-    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
-      * any(p.cache_read_cost_per_million)
-  ) / 1000000.0                                                                              AS cost_per_model
-FROM table(agentguard_hook_events) AS e
+    sum_if(m.metric_value, m.metric_name = 'llm.input_tokens')      * any(p.input_cost_per_million)
+    + sum_if(m.metric_value, m.metric_name = 'llm.output_tokens')   * any(p.output_cost_per_million)
+    + sum_if(m.metric_value, m.metric_name = 'llm.cache_read_tokens') * any(p.cache_read_cost_per_million)
+  ) / 1000000.0                                                         AS cost_per_model
+FROM table(agentguard_cim_metrics) AS m
 LEFT JOIN table(agentguard_pricing) AS p
-  ON e.provider = p.provider AND e.model = p.model
-WHERE e.hook_name = 'llm_output'
-  AND e.event_time >= now() - interval 30 day
-GROUP BY day, e.provider, e.model
+  ON m.tags['provider'] = p.provider AND m.tags['model'] = p.model
+WHERE m.metric_name IN ('llm.input_tokens', 'llm.output_tokens', 'llm.cache_read_tokens')
+  AND m.event_time >= now() - interval 30 day
+GROUP BY day, provider, model
 ORDER BY day ASC`
 
 	rows, err := tp.Query(cfg, q)
@@ -310,22 +303,22 @@ ORDER BY day ASC`
 func queryCostTokenBreakdown(cfg *config.TimeplusConfig) ([]models.TokenBreakdown, error) {
 	q := `
 SELECT
-  e.provider,
-  e.model,
-  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))                        AS input_tokens,
-  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))                       AS output_tokens,
-  sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))   AS cache_tokens,
-  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))
-    * any(p.input_cost_per_million) / 1000000.0                                              AS input_cost,
-  sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))
-    * any(p.output_cost_per_million) / 1000000.0                                             AS output_cost,
-  sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
-    * any(p.cache_read_cost_per_million) / 1000000.0                                         AS cache_cost
-FROM table(agentguard_hook_events) AS e
+  m.tags['provider']                                                         AS provider,
+  m.tags['model']                                                            AS model,
+  to_int64(sum_if(m.metric_value, m.metric_name = 'llm.input_tokens'))      AS input_tokens,
+  to_int64(sum_if(m.metric_value, m.metric_name = 'llm.output_tokens'))     AS output_tokens,
+  to_int64(sum_if(m.metric_value, m.metric_name = 'llm.cache_read_tokens')) AS cache_tokens,
+  sum_if(m.metric_value, m.metric_name = 'llm.input_tokens')
+    * any(p.input_cost_per_million) / 1000000.0                              AS input_cost,
+  sum_if(m.metric_value, m.metric_name = 'llm.output_tokens')
+    * any(p.output_cost_per_million) / 1000000.0                             AS output_cost,
+  sum_if(m.metric_value, m.metric_name = 'llm.cache_read_tokens')
+    * any(p.cache_read_cost_per_million) / 1000000.0                         AS cache_cost
+FROM table(agentguard_cim_metrics) AS m
 LEFT JOIN table(agentguard_pricing) AS p
-  ON e.provider = p.provider AND e.model = p.model
-WHERE e.hook_name = 'llm_output'
-GROUP BY e.provider, e.model`
+  ON m.tags['provider'] = p.provider AND m.tags['model'] = p.model
+WHERE m.metric_name IN ('llm.input_tokens', 'llm.output_tokens', 'llm.cache_read_tokens')
+GROUP BY provider, model`
 
 	rows, err := tp.Query(cfg, q)
 	if err != nil {

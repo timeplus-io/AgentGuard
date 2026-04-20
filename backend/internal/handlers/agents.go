@@ -28,8 +28,8 @@ SELECT agent_id, deployment_id,
 FROM (
     SELECT agent_id, deployment_id, session_id,
            count_distinct(if(run_id != '', run_id, null))    AS run_count,
-           count_if(hook_name = 'before_tool_call')          AS tool_call_count,
-           if(count_if(hook_name = 'session_end') = 0, 1, 0) AS is_active
+           count_if(hook_name IN ('before_tool_call', 'pre_tool_call'))                               AS tool_call_count,
+           if(count_if(hook_name IN ('session_end', 'on_session_end')) = 0, 1, 0) AS is_active
     FROM table(agentguard_hook_events)
     WHERE session_id != ''
     GROUP BY agent_id, deployment_id, session_id
@@ -70,7 +70,7 @@ FROM (
            any(agent_type)                     AS agent_type,
            max(event_time)                     AS last_seen,
            count()                             AS event_count,
-           count_if(hook_name = 'llm_output') AS llm_call_count
+           count_if(hook_name IN ('llm_output', 'post_llm_call')) AS llm_call_count
     FROM table(agentguard_hook_events)
     WHERE agent_id != ''
     GROUP BY agent_id, deployment_id
@@ -201,8 +201,8 @@ LEFT JOIN (
     FROM (
         SELECT session_id,
                count_distinct(if(run_id != '', run_id, null))    AS run_count,
-               count_if(hook_name = 'before_tool_call')          AS tool_call_count,
-               if(count_if(hook_name = 'session_end') = 0, 1, 0) AS is_active
+               count_if(hook_name IN ('before_tool_call', 'pre_tool_call'))                               AS tool_call_count,
+               if(count_if(hook_name IN ('session_end', 'on_session_end')) = 0, 1, 0) AS is_active
         FROM table(agentguard_hook_events)
         WHERE deployment_id = '%s'
           AND agent_id      = '%s'

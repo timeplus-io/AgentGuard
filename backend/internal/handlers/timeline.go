@@ -51,6 +51,8 @@ func GetRunTrace(cfg *config.Config) gin.HandlerFunc {
 		switch agentType {
 		case "openclaw":
 			spans = analyzeOpenClaw(runID, rows)
+		case "hermes":
+			spans = analyzeHermes(runID, rows)
 		default:
 			spans = analyzeFallback(runID, rows)
 		}

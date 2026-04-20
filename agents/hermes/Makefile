@@ -3,8 +3,8 @@ HERMES_DATA := $(PWD)/.hermes
 HERMES_IMAGE := nousresearch/hermes-agent:latest
 
 export AGENTGUARD_AGENT_ID        ?= $(shell hostname)
-export AGENTGUARD_DEPLOYMENT_ID   ?= local
-export AGENTGUARD_DEPLOYMENT_NAME ?= Local Dev
+export AGENTGUARD_DEPLOYMENT_ID   ?= local-hermes
+export AGENTGUARD_DEPLOYMENT_NAME ?= Local Hermes
 # host.docker.internal resolves to the host from inside Docker containers
 export AGENTGUARD_TIMEPLUS_URL    ?= http://host.docker.internal:3218
 export AGENTGUARD_STREAM          ?= agentguard_hook_events
@@ -32,7 +32,8 @@ configure: workspace
 	cp agentguard-plugin/HOOK.yaml  $(HERMES_DATA)/hooks/agentguard/HOOK.yaml
 	cp agentguard-plugin/handler.py $(HERMES_DATA)/hooks/agentguard/handler.py
 	mkdir -p $(HERMES_DATA)/plugins/agentguard
-	cp agentguard-plugin/plugin.py  $(HERMES_DATA)/plugins/agentguard/plugin.py
+	cp agentguard-plugin/agentguard_hermes/plugin.yaml $(HERMES_DATA)/plugins/agentguard/plugin.yaml
+	cp agentguard-plugin/agentguard_hermes/plugin.py   $(HERMES_DATA)/plugins/agentguard/__init__.py
 	@echo "AgentGuard gateway hook → $(HERMES_DATA)/hooks/agentguard/"
 	@echo "AgentGuard plugin       → $(HERMES_DATA)/plugins/agentguard/"
 	@python3 -c "import yaml; path='$(HERMES_DATA)/config.yaml'; cfg=yaml.safe_load(open(path)) if __import__('os').path.exists(path) else {}; cfg.setdefault('model',{}).update({'default':'claude-sonnet-4-6','provider':'custom','base_url':'$(LITELLM_URL)'}); yaml.dump(cfg,open(path,'w'),default_flow_style=False); print('LiteLLM config → ' + path)"
