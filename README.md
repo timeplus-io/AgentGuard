@@ -5,6 +5,9 @@
 [![Latest Release](https://img.shields.io/github/v/release/timeplus-io/agentguard)](https://github.com/timeplus-io/agentguard/releases/latest)
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/timeplus-io/agentguard/pkgs/container/agentguard)
 [![Go Version](https://img.shields.io/badge/go-1.23-00ADD8?logo=go)](https://golang.org)
+[![npm: Claude Code plugin](https://img.shields.io/npm/v/%40timeplus%2Fagentguard-claudecode-plugin?label=claudecode-plugin&logo=npm)](https://www.npmjs.com/package/@timeplus/agentguard-claudecode-plugin)
+[![npm: OpenClaw plugin](https://img.shields.io/npm/v/%40timeplus%2Fagentguard-openclaw-plugin?label=openclaw-plugin&logo=npm)](https://www.npmjs.com/package/@timeplus/agentguard-openclaw-plugin)
+[![PyPI: Hermes plugin](https://img.shields.io/pypi/v/agentguard-hermes-plugin?label=hermes-plugin&logo=pypi)](https://pypi.org/project/agentguard-hermes-plugin/)
 
 Real-time security monitoring and governance platform for AI coding agents. AgentGuard ingests telemetry from **OpenClaw**, **Claude Code**, and **Hermes Agent**, detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), enforces cost budgets, and surfaces everything through a streaming security dashboard.
 
