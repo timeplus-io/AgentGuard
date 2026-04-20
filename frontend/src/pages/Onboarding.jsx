@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
 
 const STEPS = [
   { label: 'Select Agent', icon: 'smart_toy' },
@@ -23,6 +22,14 @@ const agentTypes = [
     name: 'Claude Code',
     desc: "Anthropic's Claude Code CLI. Monitor tool use, LLM calls, cost, and security events in real time.",
     icon: 'code',
+    badge: 'Supported',
+    disabled: false,
+  },
+  {
+    id: 'hermes',
+    name: 'Hermes Agent',
+    desc: 'NousResearch Hermes AI agent. Monitor sessions, LLM calls, and tool use via the AgentGuard Python plugin.',
+    imgSrc: '/static/icons/nousresearch-dark.png',
     badge: 'Supported',
     disabled: false,
   },
@@ -73,6 +80,14 @@ export default function Onboarding() {
     setConfigTab(selectedAgent === 'claude-code' ? 'json' : 'env')
   }, [selectedAgent])
 
+  const hermesEnvCode =
+    `export AGENTGUARD_TIMEPLUS_URL="${timeplusUrl}"\n` +
+    `export AGENTGUARD_AGENT_ID="${agentId || '<your-hostname>'}"\n` +
+    `export AGENTGUARD_DEPLOYMENT_ID="${deploymentId}"\n` +
+    `export AGENTGUARD_DEPLOYMENT_NAME="${deploymentName}"\n` +
+    `export AGENTGUARD_USERNAME=proton\n` +
+    `export AGENTGUARD_PASSWORD=<your-password>`
+
   // Step 2 OTel config — derived from timeplusUrl host, port 4318; user can override
   const [otelEndpointOverride, setOtelEndpointOverride] = useState(null)
   const derivedOtelEndpoint = useMemo(() => {
@@ -84,32 +99,6 @@ export default function Onboarding() {
   const otelEndpoint = otelEndpointOverride ?? derivedOtelEndpoint
   const setOtelEndpoint = val => setOtelEndpointOverride(val === derivedOtelEndpoint ? null : val)
 
-  // Step 3 rules
-  const [catalogRules, setCatalogRules] = useState([])
-  const [enabledRuleIds, setEnabledRuleIds] = useState(new Set())
-  const [loadingRules, setLoadingRules] = useState(false)
-  const [selectedRules, setSelectedRules] = useState({})
-  const [activating, setActivating] = useState(false)
-  const [done, setDone] = useState(false)
-
-  useEffect(() => {
-    if (step !== 3) return
-    setLoadingRules(true)
-    Promise.all([api.getRulesCatalog(), api.listRules()])
-      .then(([catalog, rules]) => {
-        const items = catalog.catalog || []
-        const enabled = new Set((rules.rule_packs || []).filter(r => r.enabled).map(r => r.id))
-        setCatalogRules(items)
-        setEnabledRuleIds(enabled)
-        const sel = {}
-        items.forEach(r => {
-          if (!enabled.has(r.id)) sel[r.id] = false
-        })
-        setSelectedRules(sel)
-      })
-      .catch(() => {})
-      .finally(() => setLoadingRules(false))
-  }, [step])
 
   const envVarsCode =
     `export AGENTGUARD_TIMEPLUS_URL=${timeplusUrl}\nexport AGENTGUARD_DEPLOYMENT_ID=${deploymentId}\nexport AGENTGUARD_DEPLOYMENT_NAME="${deploymentName}"`
@@ -199,43 +188,10 @@ export default function Onboarding() {
 
   const handleNext = () => setStep(s => Math.min(3, s + 1))
   const handleBack = () => setStep(s => Math.max(0, s - 1))
-  const toggleRuleSel = id => setSelectedRules(prev => ({ ...prev, [id]: !prev[id] }))
 
-  const handleActivate = async () => {
-    setActivating(true)
-    const toEnable = Object.entries(selectedRules).filter(([, v]) => v).map(([id]) => id)
-    for (const id of toEnable) {
-      const rule = catalogRules.find(r => r.id === id)
-      try {
-        if (!rule?.installed) await api.installRule(id)
-        if (!enabledRuleIds.has(id)) await api.toggleRule(id)
-      } catch {
-        // best effort
-      }
-    }
+  const handleFinish = () => {
     localStorage.setItem('agentguard_onboarded', '1')
-    setActivating(false)
-    setDone(true)
-  }
-
-  if (done) {
-    return (
-      <div className="bg-[#15121d] text-[#e7dff0] min-h-screen flex flex-col items-center justify-center">
-        <div className="text-center space-y-6 max-w-sm">
-          <div className="w-16 h-16 mx-auto rounded-full bg-[#ffb0cf]/10 flex items-center justify-center">
-            <span className="material-symbols-outlined text-3xl text-[#ffb0cf]">check_circle</span>
-          </div>
-          <h2 className="text-2xl font-semibold text-white">Agent Activated</h2>
-          <p className="text-zinc-400 text-sm leading-relaxed">Your agent is now protected by AgentGuard. Head to the dashboard to monitor activity.</p>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="bg-primary-button px-8 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] transition-transform"
-          >
-            Go to Dashboard
-          </button>
-        </div>
-      </div>
-    )
+    navigate('/rules')
   }
 
   return (
@@ -330,7 +286,10 @@ export default function Onboarding() {
                       >
                         <div className="flex items-center justify-between">
                           <div className={`w-10 h-10 rounded-sm flex items-center justify-center ${!at.disabled && selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'bg-[#211e29] text-zinc-500'}`}>
-                            <span className="material-symbols-outlined text-lg">{at.icon}</span>
+                            {at.imgSrc
+                              ? <img src={at.imgSrc} alt={at.name} className="h-6 w-6 object-contain" />
+                              : <span className="material-symbols-outlined text-lg">{at.icon}</span>
+                            }
                           </div>
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${at.disabled ? 'bg-[#37333f] text-zinc-600' : selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'bg-[#37333f] text-zinc-500'}`}>
                             {at.badge}
@@ -454,6 +413,46 @@ export default function Onboarding() {
                 </>
               )}
 
+              {step === 1 && selectedAgent === 'hermes' && (
+                <>
+                  <div>
+                    <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
+                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Install the AgentGuard plugin via pip, then run the install command to place it in your Hermes plugins directory.</p>
+                  </div>
+
+                  <CodeBlock label="1. Install via pip" code="pip install agentguard-hermes-plugin" />
+                  <CodeBlock label="2. Install plugin into Hermes" code="agentguard-hermes install" />
+
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">3. Configuration</p>
+                    <div className="grid grid-cols-1 gap-3">
+                      {[
+                        { label: 'Agent ID *', val: agentId, set: setAgentId, ph: 'your-hostname' },
+                        { label: 'Deployment ID', val: deploymentId, set: setDeploymentId, ph: 'local' },
+                        { label: 'Deployment Name', val: deploymentName, set: setDeploymentName, ph: 'Local Dev' },
+                        { label: 'Timeplus URL', val: timeplusUrl, set: setTimeplusUrl, ph: 'http://localhost:3218' },
+                      ].map(({ label, val, set, ph }) => (
+                        <div key={label} className="flex items-center gap-4">
+                          <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">{label}</label>
+                          <input
+                            value={val}
+                            onChange={e => set(e.target.value)}
+                            placeholder={ph}
+                            className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 leading-relaxed">* Agent ID identifies this Hermes instance — use your hostname or machine name.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">4. Set env vars before starting Hermes</p>
+                    <CodeBlock label="Shell profile (.zshrc / .bashrc)" code={hermesEnvCode} />
+                  </div>
+                </>
+              )}
+
               {/* Step 2: OTel Config */}
               {step === 2 && selectedAgent === 'openclaw' && (
                 <>
@@ -513,59 +512,63 @@ export default function Onboarding() {
                 </>
               )}
 
+              {step === 2 && selectedAgent === 'hermes' && (
+                <>
+                  <div>
+                    <h2 className="text-xl font-semibold text-white tracking-tight">OpenTelemetry Config</h2>
+                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                      OTel telemetry export is not yet supported by Hermes Agent.
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-4 p-5 bg-[#1d1a25] rounded-sm border border-[#574149]/20">
+                    <span className="material-symbols-outlined text-amber-400 text-xl mt-0.5 shrink-0">info</span>
+                    <div className="space-y-1.5">
+                      <p className="text-sm font-medium text-[#e7dff0]">OTel not yet available for Hermes</p>
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        Hermes Agent does not yet expose an OpenTelemetry exporter. Token usage and latency metrics are captured
+                        via the AgentGuard plugin's <code className="text-zinc-300">post_api_request</code> hook instead —
+                        no additional configuration is required.
+                      </p>
+                      <p className="text-xs text-zinc-500 leading-relaxed mt-1">
+                        OTel support will be added here once Hermes ships an OTLP exporter.
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-zinc-500">Click <span className="text-zinc-300">Next</span> to proceed to rule activation.</p>
+                </>
+              )}
+
               {/* Step 3: Activate Rules */}
               {step === 3 && (
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Activate Security Rules</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Select the security rules to enable for your agent. Toggle rules on to activate them when you click "Activate Agent".</p>
+                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                      AgentGuard ships with 80+ pre-built security rules. Browse and enable them from the Rules page.
+                    </p>
                   </div>
 
-                  {loadingRules ? (
-                    <div className="flex items-center justify-center py-12">
-                      <span className="material-symbols-outlined animate-spin text-[#ffb0cf]">refresh</span>
-                    </div>
-                  ) : catalogRules.length === 0 ? (
-                    <div className="py-8 text-center text-zinc-500 text-xs">No rules found. Check your backend connection.</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {catalogRules.map(rule => {
-                        const alreadyEnabled = enabledRuleIds.has(rule.id)
-                        const isSelected = selectedRules[rule.id] ?? false
-                        return (
-                          <div key={rule.id} className="flex items-center gap-4 p-4 bg-[#1d1a25] rounded-sm hover:bg-[#211e29] transition-colors">
-                            <div className={`w-8 h-8 shrink-0 rounded-sm flex items-center justify-center ${alreadyEnabled || isSelected ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'bg-[#37333f] text-zinc-500'}`}>
-                              <span className="material-symbols-outlined text-xs">security</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-xs font-medium text-[#e7dff0]">{rule.name}</p>
-                                {alreadyEnabled && (
-                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-900/30 text-emerald-400 shrink-0">Already Enabled</span>
-                                )}
-                                {rule.severity && (
-                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${rule.severity === 'critical' ? 'bg-red-900/30 text-red-400' : 'bg-amber-900/30 text-amber-400'}`}>
-                                    {rule.severity}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[10px] text-zinc-500 mt-0.5">{rule.description}</p>
-                            </div>
-                            {alreadyEnabled ? (
-                              <span className="material-symbols-outlined text-emerald-400 text-base shrink-0">check_circle</span>
-                            ) : (
-                              <button
-                                onClick={() => toggleRuleSel(rule.id)}
-                                className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${isSelected ? 'bg-[#D53F8C]' : 'bg-[#4b4754]'}`}
-                              >
-                                <span className={`absolute top-[3px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${isSelected ? 'left-0 translate-x-[19px]' : 'left-[3px]'}`} />
-                              </button>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                  <div className="flex flex-col gap-4">
+                    {[
+                      { icon: 'shield', title: 'Rule Packs', desc: 'Pre-built detection rules grouped by threat category — prompt injection, data exfiltration, policy violations, and more.' },
+                      { icon: 'toggle_on', title: 'One-click enable', desc: 'Install and enable individual rules or entire packs with a single click. Changes take effect immediately.' },
+                      { icon: 'tune', title: 'Custom rules', desc: 'Write your own SQL-based detection rules tailored to your agent\'s specific tools and workflows.' },
+                    ].map(({ icon, title, desc }) => (
+                      <div key={title} className="flex items-start gap-4 p-4 bg-[#1d1a25] rounded-sm">
+                        <div className="w-9 h-9 shrink-0 rounded-sm bg-[#ffb0cf]/10 flex items-center justify-center text-[#ffb0cf]">
+                          <span className="material-symbols-outlined text-base">{icon}</span>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-[#e7dff0] mb-0.5">{title}</p>
+                          <p className="text-[11px] text-zinc-400 leading-relaxed">{desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    Click <span className="text-zinc-300 font-medium">Go to Rules</span> to open the Rules page where you can browse the full catalog and enable the rules that fit your security policy.
+                  </p>
                 </>
               )}
             </div>
@@ -591,14 +594,11 @@ export default function Onboarding() {
                   </button>
                 ) : (
                   <button
-                    onClick={handleActivate}
-                    disabled={activating}
-                    className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-70"
+                    onClick={handleFinish}
+                    className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
                   >
-                    {activating
-                      ? <><span className="material-symbols-outlined animate-spin text-xs">refresh</span> Activating...</>
-                      : <><span className="material-symbols-outlined text-xs">check_circle</span> Activate Agent</>
-                    }
+                    <span className="material-symbols-outlined text-xs">rule</span>
+                    Go to Rules
                   </button>
                 )}
               </div>

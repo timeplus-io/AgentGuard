@@ -127,7 +127,8 @@ SELECT
     model,
     hook_decision,
     block_reason,
-    event_data
+    event_data,
+    agent_type
 FROM table(agentguard_hook_events)
 WHERE %s
 ORDER BY event_time ASC
@@ -154,6 +155,7 @@ LIMIT %d OFFSET %d`,
 				HookDecision: parseStr(row["hook_decision"]),
 				BlockReason:  parseStr(row["block_reason"]),
 				EventData:    parseStr(row["event_data"]),
+				AgentType:    parseStr(row["agent_type"]),
 			})
 		}
 

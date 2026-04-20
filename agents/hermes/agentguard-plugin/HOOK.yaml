@@ -1,0 +1,11 @@
+name: agentguard
+description: "Forwards Hermes gateway lifecycle events to AgentGuard for real-time security monitoring. NOTE: gateway hooks only fire when running 'hermes gateway' — not in CLI mode. For CLI coverage, use the plugin (plugin.py)."
+events:
+  - gateway:startup
+  - session:start
+  - session:end
+  - session:reset
+  - agent:start
+  - agent:step
+  - agent:end
+  - command:*

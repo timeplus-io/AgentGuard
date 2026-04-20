@@ -116,7 +116,7 @@ SELECT
     count()                                              AS event_count,
     min(event_time)                                      AS first_seen,
     max(event_time)                                      AS last_seen,
-    count_if(hook_name = 'session_end')                  AS ended_event_count
+    count_if(hook_name IN ('session_end', 'on_session_end')) AS ended_event_count
 FROM table(agentguard_hook_events)
 WHERE deployment_id = '%s'
   AND agent_id      = '%s'
@@ -187,7 +187,7 @@ SELECT
     max(event_time)                         AS end_time,
     count()                                 AS event_count,
     any(model)                              AS model,
-    count_if(hook_name = 'before_tool_call') AS tool_count,
+    count_if(hook_name IN ('before_tool_call', 'pre_tool_call')) AS tool_count,
     count_if(hook_decision = 'block')        AS block_count
 FROM table(agentguard_hook_events)
 WHERE deployment_id = '%s'
@@ -212,8 +212,8 @@ ORDER BY start_time ASC`,
 		// Second query: session-level counters (no run_id filter, catches session_end).
 		statsSQL := fmt.Sprintf(`
 SELECT
-    count_if(hook_name = 'session_end')      AS has_ended,
-    count_if(hook_name = 'before_tool_call') AS total_tool_calls,
+    count_if(hook_name IN ('session_end', 'on_session_end')) AS has_ended,
+    count_if(hook_name IN ('before_tool_call', 'pre_tool_call'))                   AS total_tool_calls,
     any_if(model,    model    != '')         AS model,
     any_if(provider, provider != '')         AS provider
 FROM table(agentguard_hook_events)

@@ -6,7 +6,7 @@
 [![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/timeplus-io/agentguard/pkgs/container/agentguard)
 [![Go Version](https://img.shields.io/badge/go-1.23-00ADD8?logo=go)](https://golang.org)
 
-Real-time security monitoring and governance platform for AI coding agents. AgentGuard ingests telemetry from **OpenClaw** and **Claude Code** agents, detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), enforces cost budgets, and surfaces everything through a streaming security dashboard.
+Real-time security monitoring and governance platform for AI coding agents. AgentGuard ingests telemetry from **OpenClaw**, **Claude Code**, and **Hermes Agent**, detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), enforces cost budgets, and surfaces everything through a streaming security dashboard.
 
 Built on [Timeplus](https://timeplus.com) — a streaming SQL engine for real-time data.
 
@@ -165,7 +165,7 @@ If this URL is wrong, security rules will still detect events and write to the `
 | Cost Governance | `/cost` | Daily spend trends, per-model token breakdown, configurable pricing table |
 | Rule Packs | `/rules` | Install, enable/disable, and upgrade detection rules; real-time MV health status |
 | Investigate | `/investigate` | Ad-hoc streaming SQL console backed by Timeplus |
-| Onboarding | `/onboarding` | 4-step wizard to connect an OpenClaw or Claude Code agent |
+| Onboarding | `/onboarding` | 4-step wizard to connect an OpenClaw, Claude Code, or Hermes agent |
 | Settings | `/settings` | Application configuration |
 
 ---
@@ -174,14 +174,15 @@ If this URL is wrong, security rules will still detect events and write to the `
 
 Use the **Onboarding** wizard (`/onboarding`) to connect your first agent. The wizard walks through:
 
-1. **Select agent** — OpenClaw or Claude Code
+1. **Select agent** — OpenClaw, Claude Code, or Hermes Agent
 2. **Install plugin** — agent-specific install command and configuration (deployment ID, name, Timeplus URL, and for Claude Code an agent ID)
-3. **OTel config** — optional OpenTelemetry export to Timeplus for LLM token / cost / latency metrics (skippable; hook events still work without it)
-4. **Activate rules** — select which security rules to enable; rules are disabled by default and must be explicitly activated
+3. **OTel config** — optional OpenTelemetry export to Timeplus for LLM token / cost / latency metrics (skippable; hook events still work without it; not available for Hermes)
+4. **Activate rules** — navigate to the Rules page to enable detection rules; rules are disabled by default
 
 Agent-specific setup guides:
 - [`agents/openclaw/README.md`](agents/openclaw/README.md) — OpenClaw + AgentGuard full setup
 - [`agents/claudecode/agentguard-plugin/README.md`](agents/claudecode/agentguard-plugin/README.md) — Claude Code hook plugin
+- [`agents/hermes/agentguard-plugin/README.md`](agents/hermes/agentguard-plugin/README.md) — Hermes Agent plugin (PyPI: `agentguard-hermes-plugin`)
 
 ---
 

@@ -46,9 +46,9 @@ function fmtShortTime(iso) {
 function dotColor(event) {
   if (event.hook_decision === 'block') return '#ffb4ab'
   const n = event.hook_name
-  if (n === 'llm_input' || n === 'llm_output') return '#ffb0cf'
-  if (n === 'before_tool_call' || n === 'after_tool_call' || n === 'tool_result_persist') return '#93c5fd'
-  if (n === 'before_agent_start' || n === 'agent_end') return '#a1a1aa'
+  if (n === 'llm_input' || n === 'llm_output' || n === 'pre_llm_call' || n === 'post_llm_call' || n === 'pre_api_request' || n === 'post_api_request') return '#ffb0cf'
+  if (n === 'before_tool_call' || n === 'after_tool_call' || n === 'tool_result_persist' || n === 'pre_tool_call' || n === 'post_tool_call') return '#93c5fd'
+  if (n === 'before_agent_start' || n === 'agent_end' || n === 'on_session_start' || n === 'on_session_end' || n === 'on_session_finalize' || n === 'on_session_reset') return '#a1a1aa'
   return '#52525b'
 }
 
@@ -193,6 +193,18 @@ function parseEvtData(evt) {
 }
 
 function buildRunData(events) {
+  // Detect Hermes by agent_type (primary) or by hook names unique to Hermes plugins:
+  //   installed plugin: session_start / session_end / user_prompt_submit / llm_output (with response field)
+  //   dev plugin:       pre_llm_call / post_llm_call
+  const isHermes = events.some(e =>
+    e.agent_type === 'hermes' ||
+    e.hook_name === 'pre_llm_call' ||
+    e.hook_name === 'post_llm_call' ||
+    e.hook_name === 'session_start' ||
+    e.hook_name === 'session_end'
+  )
+  if (isHermes) return buildRunDataHermes(events)
+
   const llmIn       = events.find(e => e.hook_name === 'llm_input')
   const llmOut      = events.find(e => e.hook_name === 'llm_output')
   const beforeTools = events.filter(e => e.hook_name === 'before_tool_call')
@@ -284,6 +296,180 @@ function buildRunData(events) {
   return { runInfo, steps }
 }
 
+function buildRunDataHermes(events) {
+  // Handles two Hermes plugin formats in a single pass (time-ordered):
+  //
+  // Installed plugin (~/.hermes/plugins/agentguard/plugin.py):
+  //   user_prompt_submit  → event_data.message  = user message text
+  //   llm_output          → event_data.response = assistant response text
+  //   before_tool_call    → event_data.args (params), paired with after_tool_call by index
+  //   after_tool_call     → event_data.result
+  //
+  // Dev/package plugin (agentguard-plugin/):
+  //   pre_llm_call        → token count from paired pre_api_request
+  //   post_api_request    → usage tokens + latency
+  //   pre_tool_call       → event_data.args, paired with post_tool_call by tool_call_id
+  //   post_tool_call      → event_data.result
+
+  const runInfo = { model: null, provider: null, systemPrompt: null, historyCount: null, imagesCount: null }
+  const steps = []
+  const consumed = new Set()
+  let stashedApiTokens = null  // set by post_api_request, consumed by post_llm_call
+
+  // Pre-index after_tool_call (installed plugin) by position for sequential pairing.
+  const afterTools = events.reduce((acc, e, i) => {
+    if (e.hook_name === 'after_tool_call') acc.push(i)
+    return acc
+  }, [])
+  let afterToolCursor = 0
+
+  // Pre-index post_tool_call (dev plugin) by tool_call_id.
+  const postToolByTcID = {}
+  for (let i = 0; i < events.length; i++) {
+    if (events[i].hook_name === 'post_tool_call') {
+      const d = parseEvtData(events[i])
+      if (d.tool_call_id) postToolByTcID[d.tool_call_id] = i
+    }
+  }
+
+  for (let i = 0; i < events.length; i++) {
+    if (consumed.has(i)) continue
+    const e = events[i]
+    const data = parseEvtData(e)
+
+    // ── Installed plugin: user message ────────────────────────────────────────
+    if (e.hook_name === 'user_prompt_submit') {
+      consumed.add(i)
+      if (!runInfo.model) runInfo.model = e.model || data.model || null
+      const msg = typeof data.message === 'string' ? data.message.trim() : ''
+      steps.push({
+        type: 'user_input',
+        label: 'User Message',
+        content: msg || '(message content not captured)',
+        contentMuted: !msg,
+      })
+    }
+
+    // ── Installed plugin: LLM response ────────────────────────────────────────
+    else if (e.hook_name === 'llm_output') {
+      consumed.add(i)
+      if (!runInfo.model) runInfo.model = e.model || data.model || null
+      const resp = typeof data.response === 'string' ? data.response.trim() : ''
+      steps.push({
+        type: 'llm_response',
+        label: 'LLM Response',
+        content: resp || '(response content not captured)',
+        contentMuted: !resp,
+      })
+    }
+
+    // ── Installed plugin: tool call (paired by sequential order) ─────────────
+    else if (e.hook_name === 'before_tool_call') {
+      consumed.add(i)
+      const blocked  = e.hook_decision === 'block'
+      const toolName = e.tool_name || data.tool_name || '—'
+      const args     = (data.args && typeof data.args === 'object' && Object.keys(data.args).length > 0) ? data.args : null
+      let hasResult = false, resultError = null, result = null
+      while (afterToolCursor < afterTools.length) {
+        const idx = afterTools[afterToolCursor++]
+        if (!consumed.has(idx)) {
+          consumed.add(idx)
+          hasResult = true
+          const pd = parseEvtData(events[idx])
+          resultError = pd.error || null
+          result = pd.result ?? null
+          break
+        }
+      }
+      steps.push({
+        type: 'tool_call', label: blocked ? 'Tool Blocked' : 'Tool Called',
+        content: toolName, blocked, params: args, hasResult, resultError, result, duration: null,
+      })
+    }
+
+    // ── Dev plugin: user turn ────────────────────────────────────────────────
+    else if (e.hook_name === 'pre_llm_call') {
+      consumed.add(i)
+      if (!runInfo.model)    runInfo.model    = e.model    || data.model    || null
+      if (!runInfo.provider) runInfo.provider = e.provider || data.provider || null
+      // Absorb next pre_api_request for approx token count
+      let approxTokens = null
+      for (let j = i + 1; j < events.length; j++) {
+        if (consumed.has(j)) continue
+        if (events[j].hook_name === 'pre_api_request') {
+          approxTokens = parseEvtData(events[j]).approx_input_tokens ?? null
+          consumed.add(j)
+          break
+        }
+        if (events[j].hook_name === 'pre_llm_call') break
+      }
+      const userMsg = typeof data.user_message === 'string' ? data.user_message.trim() : ''
+      steps.push({
+        type: 'user_input', label: 'User Message',
+        content: userMsg || null,
+        contentMuted: !userMsg,
+        tokens: approxTokens != null ? `~${fmtTokens(approxTokens)} tokens` : null,
+      })
+    }
+
+    // ── Dev plugin: API response — stash token counts for post_llm_call ────────
+    // post_api_request always arrives before post_llm_call; stash so we don't
+    // push a standalone empty step and post_llm_call picks it up.
+    else if (e.hook_name === 'post_api_request') {
+      consumed.add(i)
+      const usage = data.usage ?? {}
+      const parts = [
+        usage.input_tokens  != null ? `${fmtTokens(usage.input_tokens)} in`  : null,
+        usage.output_tokens != null ? `${fmtTokens(usage.output_tokens)} out` : null,
+        (usage.cache_read_input_tokens > 0) ? `${fmtTokens(usage.cache_read_input_tokens)} cached` : null,
+      ].filter(Boolean)
+      if (data.api_duration != null) parts.push(`${Math.round(data.api_duration * 1000)} ms`)
+      stashedApiTokens = parts.length > 0 ? parts.join(' · ') : null
+    }
+
+    // ── Dev plugin: LLM response text from assistant_response ────────────────
+    else if (e.hook_name === 'post_llm_call') {
+      consumed.add(i)
+      const assistantMsg = typeof data.assistant_response === 'string' ? data.assistant_response.trim() : ''
+      const tokens = stashedApiTokens
+      stashedApiTokens = null
+      steps.push({
+        type: 'llm_response', label: 'LLM Response',
+        content: assistantMsg || null,
+        contentMuted: !assistantMsg,
+        tokens,
+      })
+    }
+
+    // ── Dev plugin: tool call (paired by tool_call_id) ────────────────────────
+    else if (e.hook_name === 'pre_tool_call') {
+      consumed.add(i)
+      const blocked = e.hook_decision === 'block'
+      const tcID    = data.tool_call_id || null
+      const args    = (data.args && typeof data.args === 'object' && Object.keys(data.args).length > 0) ? data.args : null
+      let hasResult = false, resultError = null, result = null
+      if (tcID != null && postToolByTcID[tcID] != null && !consumed.has(postToolByTcID[tcID])) {
+        const postIdx = postToolByTcID[tcID]
+        consumed.add(postIdx)
+        hasResult = true
+        const pd = parseEvtData(events[postIdx])
+        resultError = pd.error || null
+        result      = pd.result ?? null
+      }
+      steps.push({
+        type: 'tool_call', label: blocked ? 'Tool Blocked' : 'Tool Called',
+        content: e.tool_name || data.tool_name || '—', blocked, params: args,
+        hasResult, resultError, result, duration: null,
+      })
+    }
+
+    // after_tool_call (consumed by before_tool_call), post_llm_call,
+    // conversation_end, session_start/end: silently skip.
+  }
+
+  return { runInfo, steps }
+}
+
 // ── JsonValue ─────────────────────────────────────────────────────────────────
 // Recursive collapsible JSON tree. Nested objects/arrays start collapsed.
 
@@ -345,13 +531,23 @@ function JsonValue({ value, depth }) {
 // ── RunEventCard ──────────────────────────────────────────────────────────────
 
 const hookBadgeColor = {
-  llm_input:           'text-[#ffb0cf] bg-[#ffb0cf]/10',
-  llm_output:          'text-[#ffb0cf] bg-[#ffb0cf]/10',
-  before_tool_call:    'text-[#93c5fd] bg-[#93c5fd]/10',
-  after_tool_call:     'text-[#93c5fd] bg-[#93c5fd]/10',
-  tool_result_persist: 'text-[#93c5fd] bg-[#93c5fd]/10',
-  session_start:       'text-zinc-400  bg-zinc-700/30',
-  session_end:         'text-zinc-400  bg-zinc-700/30',
+  llm_input:            'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  llm_output:           'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  pre_llm_call:         'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  post_llm_call:        'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  pre_api_request:      'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  post_api_request:     'text-[#ffb0cf] bg-[#ffb0cf]/10',
+  before_tool_call:     'text-[#93c5fd] bg-[#93c5fd]/10',
+  after_tool_call:      'text-[#93c5fd] bg-[#93c5fd]/10',
+  tool_result_persist:  'text-[#93c5fd] bg-[#93c5fd]/10',
+  pre_tool_call:        'text-[#93c5fd] bg-[#93c5fd]/10',
+  post_tool_call:       'text-[#93c5fd] bg-[#93c5fd]/10',
+  session_start:        'text-zinc-400  bg-zinc-700/30',
+  session_end:          'text-zinc-400  bg-zinc-700/30',
+  on_session_start:     'text-zinc-400  bg-zinc-700/30',
+  on_session_end:       'text-zinc-400  bg-zinc-700/30',
+  on_session_finalize:  'text-zinc-400  bg-zinc-700/30',
+  on_session_reset:     'text-zinc-400  bg-zinc-700/30',
 }
 
 function RunEventCard({ event }) {
@@ -1016,7 +1212,9 @@ function RunTimeline({ runIndex, run, events }) {
 
                 {/* Main content: tool name or prompt text or response text */}
                 {step.content && (
-                  <p className="text-xs text-[#e7dff0] mt-0.5 break-words leading-relaxed whitespace-pre-wrap">
+                  <p className={`text-xs mt-0.5 break-words leading-relaxed whitespace-pre-wrap ${
+                    step.contentMuted ? 'text-zinc-600 italic' : 'text-[#e7dff0]'
+                  }`}>
                     {step.content}
                   </p>
                 )}
@@ -1048,6 +1246,22 @@ function RunTimeline({ runIndex, run, events }) {
                         <span className="material-symbols-outlined text-[13px]">check_circle</span>
                         Success{step.duration != null ? ` · ${step.duration} ms` : ''}
                       </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Tool result content */}
+                {step.type === 'tool_call' && step.result != null && !step.resultError && (
+                  <div className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5">
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-wide block mb-1">Result</span>
+                    {typeof step.result === 'string' ? (
+                      <p className="text-[10px] font-mono text-zinc-300 break-all whitespace-pre-wrap">
+                        {step.result.length > 600 ? step.result.slice(0, 600) + '…' : step.result}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] font-mono text-zinc-300 break-all whitespace-pre-wrap">
+                        {(() => { const s = JSON.stringify(step.result, null, 2); return s.length > 600 ? s.slice(0, 600) + '…' : s })()}
+                      </p>
                     )}
                   </div>
                 )}
@@ -1266,6 +1480,9 @@ export default function AgentDetail() {
           )}
           {agentType === 'openclaw' && (
             <img src="/static/icons/openclaw-dark.svg" alt="OpenClaw" title="OpenClaw" className="h-5 w-5 shrink-0" />
+          )}
+          {agentType === 'hermes' && (
+            <img src="/static/icons/nousresearch-dark.png" alt="Hermes" title="Hermes" className="h-5 w-5 shrink-0" />
           )}
           <span className="font-medium tracking-tight text-lg text-[#e7dff0]">{agentName}</span>
           {deploymentName && (

@@ -41,6 +41,16 @@ function AgentTypeLogo({ agentType }) {
       />
     )
   }
+  if (agentType === 'hermes') {
+    return (
+      <img
+        src="/static/icons/nousresearch-dark.png"
+        alt="Hermes"
+        title="Hermes"
+        className="h-4 w-4 shrink-0"
+      />
+    )
+  }
   return null
 }
 

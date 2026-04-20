@@ -1,6 +1,6 @@
 # AgentGuard — Common Information Model (CIM)
 
-AgentGuard ingests telemetry from heterogeneous AI coding agents — currently OpenClaw and Claude Code — each with its own hook vocabulary, event payloads, and observability integrations. The **Common Information Model (CIM)** is the normalization layer that abstracts these differences away so that security rules, metrics, and dashboards can be written once and work across all agent types without modification.
+AgentGuard ingests telemetry from heterogeneous AI coding agents — currently OpenClaw, Claude Code, and Hermes Agent — each with its own hook vocabulary, event payloads, and observability integrations. The **Common Information Model (CIM)** is the normalization layer that abstracts these differences away so that security rules, metrics, and dashboards can be written once and work across all agent types without modification.
 
 The CIM consists of two layers:
 
@@ -34,15 +34,17 @@ The CIM consists of two layers:
 
 Without CIM, every consumer (security rule, metric query, dashboard widget) would need to handle agent-specific differences:
 
-| Concern | OpenClaw | Claude Code |
-|---------|----------|-------------|
-| LLM call event name | `llm_output` hook | OTel `api_request` log |
-| Token field path | `event_data.lastAssistant.usage.input` | `log_attributes['input_tokens']` |
-| LLM call latency source | `agent_end` hook (`durationMs`) | OTel `log_attributes['duration_ms']` |
-| Agent identity in LLM data | `agent_id` column (always hostname) | OTel `user.id` (SHA hash, not hostname) |
-| Session identity | `session_id` column | `log_attributes['session.id']` |
-| Tool call duration | `after_tool_call` → `durationMs` | Not available |
-| Prompt text | `llm_input` hook → `event_data.prompt` | Virtual `prompt_context` event → `messages[]` |
+| Concern | OpenClaw | Claude Code | Hermes |
+|---------|----------|-------------|--------|
+| LLM call event name | `llm_output` hook | OTel `api_request` log | `post_llm_call` hook |
+| Token field path | `event_data.lastAssistant.usage.input` | `log_attributes['input_tokens']` | `event_data.usage.input_tokens` |
+| LLM call latency source | `agent_end` hook (`durationMs`) | OTel `log_attributes['duration_ms']` | `post_api_request` hook (`api_duration` in seconds × 1000) |
+| Agent identity in LLM data | `agent_id` column (always hostname) | OTel `user.id` (SHA hash, not hostname) | `agent_id` column (configured hostname) |
+| Session identity | `session_id` column | `log_attributes['session.id']` | `session_id` column |
+| Tool call duration | `after_tool_call` → `durationMs` | Not available | Not available |
+| Prompt text | `llm_input` hook → `event_data.prompt` | Virtual `prompt_context` event → `messages[]` | `pre_llm_call` hook → `event_data.messages[]` |
+| Session end event | `session_end` | `session_end` | `on_session_finalize` (sent as `on_session_end`) |
+| Per-turn end event | — | — | `on_session_end` (sent as `conversation_end`) |
 
 CIM resolves all of this upstream, in materialized views, once. Downstream consumers always see the same schema regardless of which agent produced the data.
 
@@ -93,18 +95,18 @@ CREATE STREAM agentguard_cim_event
 
 The `event_type` field collapses each agent's hook vocabulary into a shared set of lifecycle concepts:
 
-| `event_type` | Meaning | Claude Code source hooks | OpenClaw source hooks |
-|--------------|---------|-------------------------|-----------------------|
-| `session_start` | Session or sub-agent started | `session_start`, `subagent_spawning` | `session_start` |
-| `session_end` | Session ended | — (no event emitted) | `session_end` |
-| `user_input` | User message submitted | `user_prompt_submit` | `message_received` |
-| `llm_request` | Assembled prompt sent to LLM | — (not available) | `llm_input` |
-| `llm_response` | LLM response received | `llm_output` | `llm_output` |
-| `tool_invoke` | Tool call initiated | `before_tool_call` | `before_tool_call` |
-| `tool_complete` | Tool call completed | `after_tool_call` | `after_tool_call` |
-| `prompt_context` | Full conversation context before LLM turn | `prompt_context` (virtual) | — |
-| `llm_context` | Full conversation + tool results after turn | `llm_context` (virtual) | — |
-| `other` | Any hook not matched above | — | — |
+| `event_type` | Meaning | Claude Code source hooks | OpenClaw source hooks | Hermes source hooks |
+|--------------|---------|-------------------------|----------------------|---------------------|
+| `session_start` | Session or sub-agent started | `session_start`, `subagent_spawning` | `session_start` | `on_session_start`, `on_session_reset` |
+| `session_end` | Session ended | — (no event emitted) | `session_end` | `on_session_end`, `on_session_finalize` |
+| `user_input` | User message submitted | `user_prompt_submit` | `message_received` | `pre_llm_call` |
+| `llm_request` | Assembled prompt sent to LLM | — (not available) | `llm_input` | `pre_api_request` |
+| `llm_response` | LLM response received | `llm_output` | `llm_output` | `post_llm_call` |
+| `tool_invoke` | Tool call initiated | `before_tool_call` | `before_tool_call` | `pre_tool_call` |
+| `tool_complete` | Tool call completed | `after_tool_call` | `after_tool_call` | `post_tool_call` |
+| `prompt_context` | Full conversation context before LLM turn | `prompt_context` (virtual) | — | — |
+| `llm_context` | Full conversation + tool results after turn | `llm_context` (virtual) | — | — |
+| `other` | Any hook not matched above | — | — | — |
 
 > **Virtual events (`prompt_context` / `llm_context`):** The Claude Code plugin synthesizes these by reading the `transcript_path` JSONL file embedded in every hook payload. They are not fired by Claude Code itself. They carry the full conversation in `raw_event_data.messages[]` and are the primary source for full-prompt security analysis (e.g., prompt injection rule `rp-001`).
 
@@ -117,7 +119,9 @@ agentguard_hook_events
         │
         ├─── [WHERE agent_type = 'claudecode'] ──► mv_cim_claudecode
         │                                                │
-        └─── [WHERE agent_type = 'openclaw']  ──► mv_cim_openclaw
+        ├─── [WHERE agent_type = 'openclaw']  ──► mv_cim_openclaw
+        │                                                │
+        └─── [WHERE agent_type = 'hermes']   ──► mv_cim_hermes
                                                          │
                                                ──────────┘
                                                ▼
@@ -130,7 +134,7 @@ agentguard_hook_events
                     (mv_rule_rp001 …)    (mv_cim_metrics_*)
 ```
 
-Both `mv_cim_claudecode` and `mv_cim_openclaw` are **dropped and recreated on every server startup**, so DDL fixes (field extraction changes, new hook name mappings) take effect immediately without manual view drops.
+`mv_cim_claudecode`, `mv_cim_openclaw`, and `mv_cim_hermes` are created on startup via `execIfNotExists` — they are **only created if they do not already exist**. To apply DDL changes (field extraction fixes, new hook mappings), drop the affected view in Timeplus and restart the server so it is recreated with the updated DDL.
 
 ### 2.4 Field Mapping by Agent
 
@@ -184,6 +188,38 @@ Included hooks: `session_start`, `session_end`, `message_received`, `llm_input`,
 | `assistant_message` | `json_value(event_data, '$.assistantTexts[0]')` |
 | `raw_event_data` | `event_data` (full original JSON) |
 
+#### Hermes (`mv_cim_hermes`)
+
+Source: `agentguard_hook_events WHERE agent_type = 'hermes'`
+
+Included hooks: `on_session_start`, `on_session_end`, `on_session_finalize`, `on_session_reset`, `pre_llm_call`, `post_llm_call`, `pre_api_request`, `pre_tool_call`, `post_tool_call`
+
+> **Hook name remapping:** The Hermes plugin remaps hook names before ingestion. Hermes `on_session_end` (fires after each chat turn) is sent to AgentGuard as `conversation_end`. Hermes `on_session_finalize` (true session teardown) is sent as `on_session_end`. This ensures session lifetime is tracked correctly.
+
+> **`run_id` for Hermes:** Hermes has no explicit run concept. `run_id` is always set to `session_id` for all Hermes events.
+
+> **`post_api_request` not in CIM events:** `post_api_request` carries token counts and latency but is excluded from `mv_cim_hermes` to avoid a duplicate `llm_response` event per LLM call. It is consumed directly by `mv_cim_metrics_hermes_llm` from `agentguard_hook_events`.
+
+> **`provider` gap:** `post_llm_call` (the `llm_response` source) does not carry `provider` in its Hermes kwargs. Provider is only populated for `llm_request` events (from `pre_api_request`). `llm_response` CIM events for Hermes will have an empty `provider` field.
+
+| CIM field | Mapping |
+|-----------|---------|
+| `event_type` | `pre_llm_call` → `user_input`; `post_llm_call` → `llm_response`; `pre_api_request` → `llm_request`; `pre_tool_call` → `tool_invoke`; `post_tool_call` → `tool_complete`; `on_session_start`/`on_session_reset` → `session_start`; `on_session_end`/`on_session_finalize` → `session_end` |
+| `agent_type` | `'hermes'` (passthrough) |
+| `agent_id` | `agent_id` column (configured hostname) |
+| `session_id` | `session_id` column |
+| `run_id` | `run_id` column (equals `session_id` for Hermes) |
+| `provider` | `if(provider != '', provider, json_value(event_data, '$.provider'))` — populated only for `llm_request` events |
+| `model` | `model` column |
+| `tool_name` | `if(tool_name != '', tool_name, json_value(event_data, '$.tool_name'))` |
+| `tool_input` | `json_query(event_data, '$.args')` (Hermes uses `args` as the kwarg name) |
+| `tool_result` | `json_query(event_data, '$.result')` |
+| `tool_success` | `true` (hardcoded — Hermes `post_tool_call` does not emit an explicit success/error boolean) |
+| `tool_duration_ms` | `0` (not available) |
+| `user_message` | `json_value(event_data, '$.user_message')` — populated on both `pre_llm_call` (`user_input`) and `post_llm_call` (`llm_response`) events |
+| `assistant_message` | `json_value(event_data, '$.assistant_response')` — populated on `post_llm_call` (`llm_response`) events |
+| `raw_event_data` | `event_data` (full original JSON) |
+
 ---
 
 ## 3. CIM Metrics Layer
@@ -214,76 +250,78 @@ The **fan-out pattern** is key: a single LLM call event (one row in `agentguard_
 
 Tags for all LLM metrics: `model`, `stop_reason`, `run_id`
 
-| `metric_name` | Value | OpenClaw source | Claude Code source |
-|---------------|-------|-----------------|-------------------|
-| `llm.call` | `1.0` per call | `agentguard_cim_event` WHERE `event_type = 'llm_response'` | `otel_logs` WHERE `log_attributes['event.name'] = 'api_request'` |
-| `llm.input_tokens` | prompt token count | `json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'input')` | `log_attributes['input_tokens']` |
-| `llm.output_tokens` | completion token count | `json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'output')` | `log_attributes['output_tokens']` |
-| `llm.total_tokens` | input + output | `json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'totalTokens')` | `input_tokens + output_tokens` (computed) |
-| `llm.cache_read_tokens` | prompt-cache hit tokens | `json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'cacheRead')` | `log_attributes['cache_read_tokens']` |
-| `llm.cache_write_tokens` | prompt-cache write tokens | `json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'cacheWrite')` | `log_attributes['cache_creation_tokens']` |
-| `llm.latency_ms` | LLM wall-clock time (ms) | `agentguard_run_latency.latency_ms` (from `agent_end` hook, same `run_id`) | `log_attributes['duration_ms']` |
+| `metric_name` | Value | OpenClaw source | Claude Code source | Hermes source |
+|---------------|-------|-----------------|-------------------|----|
+| `llm.call` | `1.0` per call | `agentguard_cim_event` WHERE `event_type = 'llm_response'` | `otel_logs` WHERE `log_attributes['event.name'] = 'api_request'` | `agentguard_hook_events` WHERE `hook_name = 'post_api_request'` |
+| `llm.input_tokens` | prompt token count | `json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'input')` | `log_attributes['input_tokens']` | `json_extract_string(event_data, 'usage', 'input_tokens')` |
+| `llm.output_tokens` | completion token count | `json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'output')` | `log_attributes['output_tokens']` | `json_extract_string(event_data, 'usage', 'output_tokens')` |
+| `llm.total_tokens` | input + output | `json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'totalTokens')` | `input_tokens + output_tokens` (computed) | `input_tokens + output_tokens` (computed) |
+| `llm.cache_read_tokens` | prompt-cache hit tokens | `json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'cacheRead')` | `log_attributes['cache_read_tokens']` | `json_extract_string(event_data, 'usage', 'cache_read_input_tokens')` |
+| `llm.cache_write_tokens` | prompt-cache write tokens | `json_extract_string(raw_event_data, 'lastAssistant', 'usage', 'cacheWrite')` | `log_attributes['cache_creation_tokens']` | `json_extract_string(event_data, 'usage', 'cache_creation_input_tokens')` |
+| `llm.latency_ms` | LLM wall-clock time (ms) | `agentguard_run_latency.latency_ms` (from `agent_end` hook, same `run_id`) | `log_attributes['duration_ms']` | `json_extract_string(event_data, 'api_duration') * 1000` (seconds → ms, from `post_api_request`) |
 
-> **`stop_reason` tag:** Only populated for OpenClaw (extracted from `raw_event_data.lastAssistant.stopReason`). Always empty for Claude Code — OTel logs do not carry a stop reason field.
+> **`stop_reason` tag:** Only populated for OpenClaw (extracted from `raw_event_data.lastAssistant.stopReason`). Always empty for Claude Code and Hermes — OTel logs and Hermes hooks do not carry a stop reason field.
 
 #### Tool Metrics
 
 Tags for all tool metrics: `tool_name`, `run_id`
 
-| `metric_name` | Value | OpenClaw source | Claude Code source |
-|---------------|-------|-----------------|-------------------|
-| `tool.call` | `1.0` per call | `agentguard_cim_event` WHERE `event_type = 'tool_complete'` | same |
-| `tool.success` | `1.0` if success, `0.0` if failed | `tool_success` field | `tool_success` field |
-| `tool.duration_ms` | tool wall-clock time (ms) | `tool_duration_ms` field (from `durationMs` in `after_tool_call` payload) | **not emitted** |
+| `metric_name` | Value | OpenClaw source | Claude Code source | Hermes source |
+|---------------|-------|-----------------|-------------------|----|
+| `tool.call` | `1.0` per call | `agentguard_cim_event` WHERE `event_type = 'tool_complete'` | same | same |
+| `tool.success` | `1.0` if success, `0.0` if failed | `tool_success` field | `tool_success` field | `tool_success` field |
+| `tool.duration_ms` | tool wall-clock time (ms) | `tool_duration_ms` field (from `durationMs` in `after_tool_call` payload) | **not emitted** | **not emitted** |
 
 ### 3.3 Metrics Normalization Pipeline
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Raw Sources                                                              │
-│                                                                           │
-│  agentguard_hook_events          otel_logs                              │
-│  (all agents, all hooks)          (Claude Code OTel plugin)              │
-└────────────────┬──────────────────────────┬─────────────────────────────┘
-                 │                          │
-       ┌─────────┴──────────┐               │
-       │                    │               │
-       ▼                    ▼               │
- mv_session_agents    mv_run_latency        │
-       │                    │               │
-       ▼                    ▼               │
- agentguard_        agentguard_           │
- session_agents      run_latency            │
- (mutable lookup:    (mutable lookup:       │
-  session→agent_id)   run→latency_ms)       │
-       │                    │               │
-       └──────────┬─────────┘               │
-                  │                         │
-       ┌──────────┴──────────────────────┐  │
-       │ agentguard_cim_event           │  │
-       │ (from mv_cim_claudecode +       │  │
-       │        mv_cim_openclaw)         │  │
-       └──────────┬──────────────────────┘  │
-                  │                         │
-    ┌─────────────┼─────────────────────────┤
-    │             │                         │
-    ▼             ▼                         ▼
-mv_cim_       mv_cim_              mv_cim_metrics_
-metrics_      metrics_             claudecode_otel
-openclaw_llm  openclaw_tools       (JOINs session_agents)
-(JOINs        (no JOIN)
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│  Raw Sources                                                                            │
+│                                                                                         │
+│  agentguard_hook_events                          otel_logs                             │
+│  (all agents, all hooks)                          (Claude Code OTel plugin)            │
+└────────────────┬─────────────────────────────────────────┬──────────────────────────────┘
+                 │                                         │
+       ┌─────────┴──────────┐                              │
+       │                    │                              │
+       ▼                    ▼                              │
+ mv_session_agents    mv_run_latency                       │
+       │                    │                              │
+       ▼                    ▼                              │
+ agentguard_        agentguard_                           │
+ session_agents      run_latency                           │
+ (mutable lookup:    (mutable lookup:                      │
+  session→agent_id)   run→latency_ms)                      │
+       │                    │                              │
+       └──────────┬─────────┘                              │
+                  │                                        │
+       ┌──────────┴──────────────────────┐                 │
+       │ agentguard_cim_event           │                 │
+       │ (from mv_cim_claudecode +       │                 │
+       │        mv_cim_openclaw  +       │                 │
+       │        mv_cim_hermes)           │                 │
+       └──────────┬──────────────────────┘                 │
+                  │                                        │
+    ┌─────────────┼──────────────────────────┐             │
+    │             │                          │             │
+    ▼             ▼                          ▼             ▼
+mv_cim_       mv_cim_              mv_cim_metrics_  mv_cim_metrics_
+metrics_      metrics_             claudecode_otel  hermes_tools
+openclaw_llm  openclaw_tools       (JOINs           (from cim_event)
+(JOINs        (no JOIN)            session_agents)
 run_latency)
-    │             │                         │
-    │             ▼                         │
-    │    mv_cim_metrics_                    │
-    │    claudecode_tools                   │
-    │    (no JOIN)                          │
-    │             │                         │
-    └─────────────┴─────────────────────────┘
-                  │
-                  ▼
-         agentguard_cim_metrics
-         (unified, agent-agnostic metrics stream)
+    │             │                          │
+    │             ▼                          │
+    │    mv_cim_metrics_                     │    mv_cim_metrics_
+    │    claudecode_tools                    │    hermes_llm
+    │    (no JOIN)                           │    (reads hook_events
+    │             │                          │     WHERE post_api_request
+    │             │                          │     directly — not cim_event)
+    └─────────────┴──────────────────────────┴──────────┐
+                                                         │
+                                                         ▼
+                                              agentguard_cim_metrics
+                                              (unified, agent-agnostic metrics stream)
 ```
 
 ### 3.4 Lookup Streams
@@ -422,6 +460,39 @@ tool_complete CIM event
       └─ tool.success = 1.0 if tool_success else 0.0
 ```
 
+#### Hermes LLM (`mv_cim_metrics_hermes_llm`)
+
+Source: `agentguard_hook_events WHERE agent_type = 'hermes' AND hook_name = 'post_api_request'`
+
+Reads **directly from `agentguard_hook_events`**, not from `agentguard_cim_event`. `post_api_request` is excluded from `mv_cim_hermes` to avoid a duplicate `llm_response` CIM event per LLM call; the metrics MV bypasses CIM and reads the raw hook directly.
+
+```
+post_api_request hook event (agentguard_hook_events)
+      │
+      ├─ llm.call              = 1.0
+      ├─ llm.input_tokens      = event_data.usage.input_tokens
+      ├─ llm.output_tokens     = event_data.usage.output_tokens
+      ├─ llm.total_tokens      = input_tokens + output_tokens (computed)
+      ├─ llm.cache_read_tokens = event_data.usage.cache_read_input_tokens
+      ├─ llm.cache_write_tokens= event_data.usage.cache_creation_input_tokens
+      └─ llm.latency_ms        = event_data.api_duration × 1000  (seconds → ms)
+```
+
+#### Hermes Tools (`mv_cim_metrics_hermes_tools`)
+
+Source: `agentguard_cim_event WHERE agent_type = 'hermes' AND event_type = 'tool_complete'`
+
+Produces 2 rows per tool call (no duration — not available from Hermes hooks):
+
+```
+tool_complete CIM event
+      │
+      ├─ tool.call    = 1.0
+      └─ tool.success = 1.0 if tool_success else 0.0
+```
+
+> **Note:** `tool_success` is hardcoded `true` for Hermes — `post_tool_call` does not emit an explicit success/error boolean. Rules that filter `tool_success = false` will not fire for Hermes tool failures.
+
 ---
 
 ## 4. End-to-End Data Flow
@@ -446,23 +517,36 @@ Agent Action
      │           └── mv_cim_metrics_claudecode_otel                        │
      │                   (JOIN session_agents for agent_id) ───────────────┤
      │                                                                      │
-     └── OpenClaw ───────────────────────────────────────────────────────  │
+     ├── OpenClaw ───────────────────────────────────────────────────────  │
+     │   │                                                                  │
+     │   ├── Hook plugin → POST :3218 → agentguard_hook_events            │
+     │   │       │                                                          │
+     │   │       ├── mv_cim_openclaw ────────────► agentguard_cim_event   │
+     │   │       │       (hook_name → event_type mapping)                  │
+     │   │       │                                                          │
+     │   │       ├── mv_run_latency ─────────────► agentguard_run_latency │
+     │   │       │       (agent_end hook → durationMs)                     │
+     │   │       │                                                          │
+     │   │       ├── mv_cim_metrics_openclaw_llm                           │
+     │   │       │       (JOIN run_latency for latency_ms) ────────────────┤
+     │   │       │                                                          │
+     │   │       └── mv_cim_metrics_openclaw_tools ──────────────────────  │
+     │   │                                                                  │
+     │   └── OTel plugin → OTLP/HTTP :4318 → otel_traces / otel_metrics_* │
+     │           (used for tracing, not CIM metrics)                       │
+     │                                                                      │
+     └── Hermes ──────────────────────────────────────────────────────────  │
          │                                                                  │
-         ├── Hook plugin → POST :3218 → agentguard_hook_events            │
-         │       │                                                          │
-         │       ├── mv_cim_openclaw ────────────► agentguard_cim_event   │
-         │       │       (hook_name → event_type mapping)                  │
-         │       │                                                          │
-         │       ├── mv_run_latency ─────────────► agentguard_run_latency │
-         │       │       (agent_end hook → durationMs)                     │
-         │       │                                                          │
-         │       ├── mv_cim_metrics_openclaw_llm                           │
-         │       │       (JOIN run_latency for latency_ms) ────────────────┤
-         │       │                                                          │
-         │       └── mv_cim_metrics_openclaw_tools ──────────────────────  │
-         │                                                                  │
-         └── OTel plugin → OTLP/HTTP :4318 → otel_traces / otel_metrics_* │
-                 (used for tracing, not CIM metrics)                       │
+         └── Hook plugin → POST :3218 → agentguard_hook_events            │
+                 │                                                          │
+                 ├── mv_cim_hermes ───────────────► agentguard_cim_event   │
+                 │       (pre_llm_call/post_llm_call/pre_api_request/       │
+                 │        pre_tool_call/post_tool_call → event_type)       │
+                 │                                                          │
+                 ├── mv_cim_metrics_hermes_llm (reads hook_events directly)│
+                 │       (post_api_request → token counts + latency) ───────┤
+                 │                                                          │
+                 └── mv_cim_metrics_hermes_tools ─────────────────────────  │
                                                                            │
                     ┌──────────────────────────────────────────────────────┘
                     │

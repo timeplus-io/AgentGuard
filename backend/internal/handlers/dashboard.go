@@ -17,7 +17,7 @@ func GetDashboard(cfg *config.Config) gin.HandlerFunc {
 		cfg := auth.RequestCfg(c, cfg)
 		// Total distinct agents ever seen (exclude rows with empty agent_id).
 		agentRows, err := tp.Query(&cfg.Timeplus,
-			`SELECT count(distinct agent_id) AS total FROM table(agentguard_hook_events) WHERE agent_id != ''`)
+			`SELECT count() AS total FROM (SELECT agent_id, deployment_id FROM table(agentguard_hook_events) WHERE agent_id != '' GROUP BY agent_id, deployment_id)`)
 		if err != nil {
 			log.Printf("[dashboard] agent count query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
@@ -58,19 +58,16 @@ func GetDashboard(cfg *config.Config) gin.HandlerFunc {
 		costRows, err := tp.Query(&cfg.Timeplus, `
 SELECT
   (
-    sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'input')))
-      * any(p.input_cost_per_million)
-    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'usage', 'output')))
-      * any(p.output_cost_per_million)
-    + sum(to_int64_or_zero(json_extract_string(e.event_data, 'lastAssistant', 'usage', 'cacheRead')))
-      * any(p.cache_read_cost_per_million)
+    sum_if(m.metric_value, m.metric_name = 'llm.input_tokens')      * any(p.input_cost_per_million)
+    + sum_if(m.metric_value, m.metric_name = 'llm.output_tokens')   * any(p.output_cost_per_million)
+    + sum_if(m.metric_value, m.metric_name = 'llm.cache_read_tokens') * any(p.cache_read_cost_per_million)
   ) / 1000000.0 AS cost
-FROM table(agentguard_hook_events) AS e
+FROM table(agentguard_cim_metrics) AS m
 LEFT JOIN table(agentguard_pricing) AS p
-  ON e.provider = p.provider AND e.model = p.model
-WHERE e.hook_name = 'llm_output'
-  AND e.event_time >= now() - interval 1 day
-GROUP BY e.provider, e.model`)
+  ON m.tags['provider'] = p.provider AND m.tags['model'] = p.model
+WHERE m.metric_name IN ('llm.input_tokens', 'llm.output_tokens', 'llm.cache_read_tokens')
+  AND m.event_time >= now() - interval 1 day
+GROUP BY m.tags['provider'], m.tags['model']`)
 		if err != nil {
 			log.Printf("[dashboard] cost query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
