@@ -1,6 +1,6 @@
 id: rp-038
 name: "Agentic Tool Extraction — Multi-Turn Schema Reconnaissance Detector"
-version: "0.2.1"
+version: "0.3.0"
 description: >
   Detects Agentic Tool Extraction (ATE), a multi-turn reconnaissance attack where an
   adversary gradually extracts complete tool schemas, function signatures, parameter types,
@@ -126,5 +126,43 @@ query_sql: |
       OR match(lower(assistant_message), '"type"\s*:\s*"(object|array)".{0,200}"properties"\s*:\s*\{')
 
       -- Tool return value schema disclosure
+      OR match(lower(assistant_message), 'returns?\s*[:\-]\s*(dict|list|json|object|string|int|bool).{0,60}(key|field|property|value|schema)')
+    )
+  UNION ALL
+  -- v0.3.0: Sequential lag() branch — catches the multi-turn ATE sequence as an immediate
+  -- event pair: a schema recon probe in user_input directly followed by a schema disclosure
+  -- in the next llm_response event in the same session. This pinpoints the exact exchange
+  -- rather than detecting either event in isolation.
+  -- SQL validated: count=0 (test corpus; fires only on true sequential ATE turns).
+  WITH enriched AS (
+    SELECT *,
+      lag(event_type)   OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(user_message) OVER (PARTITION BY session_id) AS prev_user_message
+    FROM agentguard_cim_event
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-038' AS rule_id,
+    'Agentic Tool Extraction — Multi-Turn Schema Reconnaissance Detector' AS rule_name,
+    'warning' AS severity,
+    agent_id, deployment_id, session_id, run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('Sequential ATE: schema recon probe (user_input) → schema disclosure (llm_response) in session ', session_id, ' by agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'llm_response'
+    AND prev_event_type = 'user_input'
+    AND (
+      match(lower(prev_user_message), 'what (tools?|functions?|capabilities|methods?|apis?|endpoints?) (do you have|can you (use|call|access|invoke)|are (available|accessible))')
+      OR match(lower(prev_user_message), '(list|enumerate|show me|give me|tell me) (all |the |your |)(tools?|functions?|capabilities|methods?|available (actions?|commands?))')
+      OR match(lower(prev_user_message), '(exact|precise|full|complete).{0,30}(parameter|param|schema|signature|json schema|function (call|signature)|api spec|return (type|value|format))')
+      OR match(lower(prev_user_message), 'full.{0,20}(json schema|api schema|openapi|swagger|function definition|tool definition).{0,40}(all|every|complete|available|list)')
+      OR match(lower(prev_user_message), '(how (would|do|should|can) (you|i|one) (call|invoke|use)|how to (invoke|call|use)).{0,60}(your (tool|function|method|api|endpoint)|agent.{0,15}(tool|function)|available (tool|function|method|api))')
+    )
+    AND (
+      match(lower(assistant_message), '(i have access to|available tools?|my tools?|tools? i can use|the following tools?)\s*[:\n].{0,10}([\n\-\*]|\d+\.)')
+      OR match(lower(assistant_message), '\b[a-z_][a-z0-9_]{2,}\s*\(\s*[a-z_][a-z0-9_]*\s*:\s*(int|str|bool|float|list|dict|optional)\b')
+      OR match(lower(assistant_message), '"type"\s*:\s*"(object|array)".{0,200}"properties"\s*:\s*\{')
       OR match(lower(assistant_message), 'returns?\s*[:\-]\s*(dict|list|json|object|string|int|bool).{0,60}(key|field|property|value|schema)')
     )

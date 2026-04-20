@@ -16,6 +16,16 @@ import (
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
+// escapeSQLStr escapes a string for embedding in a Proton/ClickHouse single-quoted
+// string literal. Backslashes must be escaped first because Proton's
+// ValuesBlockInputFormat interprets \' as an escaped single-quote, which would
+// cause premature string termination if we only escaped the quote character.
+func escapeSQLStr(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "'", "''")
+	return s
+}
+
 const sqlDeletedRules = `
 SELECT
   rule_id,
@@ -202,7 +212,8 @@ GROUP BY rule_id`, id)
 					return
 				}
 			} else {
-				if err := tp.CreateRuleMV(&cfg.Timeplus, id, current.QuerySQL); err != nil {
+				catalogEntry, _ := mgr.Lookup(id)
+				if err := tp.CreateRuleMV(&cfg.Timeplus, id, current.QuerySQL, catalogEntry.UDFs); err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 					return
 				}
@@ -267,29 +278,32 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 
-		escapedSQL := strings.ReplaceAll(targetSQL, "'", "''")
+		escapedSQL := escapeSQLStr(targetSQL)
 		insertSQL := fmt.Sprintf(`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES
 ('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s',now64(3))`,
 			id,
-			strings.ReplaceAll(current.Name, "'", "''"),
+			escapeSQLStr(current.Name),
 			targetVersion,
-			strings.ReplaceAll(current.Description, "'", "''"),
+			escapeSQLStr(current.Description),
 			escapedSQL,
 			current.Enabled,
 			current.Severity, current.Category,
 			current.RequiredTelemetry, current.FPRate, current.HookSources,
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "upgrade insert failed"})
+			log.Printf("rules: upgrade %s insert: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("upgrade insert failed: %v", err)})
 			return
 		}
 
 		if err := tp.DropRuleMV(&cfg.Timeplus, id); err != nil {
+			log.Printf("rules: upgrade %s drop MV: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV drop failed: %v", err)})
 			return
 		}
 		if current.Enabled {
-			if err := tp.CreateRuleMV(&cfg.Timeplus, id, targetSQL); err != nil {
+			if err := tp.CreateRuleMV(&cfg.Timeplus, id, targetSQL, catalogEntry.UDFs); err != nil {
+				log.Printf("rules: upgrade %s create MV: %v", id, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 				return
 			}
@@ -449,13 +463,13 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 
-		escapedSQL := strings.ReplaceAll(entry.QuerySQL, "'", "''")
+		escapedSQL := escapeSQLStr(entry.QuerySQL)
 		insertSQL := fmt.Sprintf(
 			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s',now64(3))`,
 			id,
-			strings.ReplaceAll(entry.Name, "'", "''"),
+			escapeSQLStr(entry.Name),
 			entry.Version,
-			strings.ReplaceAll(entry.Description, "'", "''"),
+			escapeSQLStr(entry.Description),
 			escapedSQL,
 			entry.Severity, entry.Category,
 			entry.RequiredTelemetry, entry.FPRate, entry.HookSources,
@@ -464,7 +478,7 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "install insert failed"})
 			return
 		}
-		if err := tp.CreateRuleMV(&cfg.Timeplus, id, entry.QuerySQL); err != nil {
+		if err := tp.CreateRuleMV(&cfg.Timeplus, id, entry.QuerySQL, entry.UDFs); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 			return
 		}
@@ -559,7 +573,8 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 			if p.Enabled {
 				if !exists {
-					if err := tp.CreateRuleMV(&cfg.Timeplus, p.ID, p.QuerySQL); err != nil {
+					catalogEntry, _ := mgr.Lookup(p.ID)
+					if err := tp.CreateRuleMV(&cfg.Timeplus, p.ID, p.QuerySQL, catalogEntry.UDFs); err != nil {
 						res.Action = "create_failed"
 						res.Error = err.Error()
 					} else {
@@ -654,14 +669,15 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := auth.RequestCfg(c, cfg)
 		var body struct {
-			ID          string `json:"id"`
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			QuerySQL    string `json:"query_sql"`
-			Severity    string `json:"severity"`
-			Category    string `json:"category"`
-			FPRate      string `json:"fp_rate"`
-			HookSources string `json:"hook_sources"`
+			ID          string   `json:"id"`
+			Name        string   `json:"name"`
+			Description string   `json:"description"`
+			QuerySQL    string   `json:"query_sql"`
+			Severity    string   `json:"severity"`
+			Category    string   `json:"category"`
+			FPRate      string   `json:"fp_rate"`
+			HookSources string   `json:"hook_sources"`
+			UDFs        []string `json:"udfs"`
 		}
 		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -702,6 +718,7 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			HookSources: body.HookSources,
 			Author:      "custom",
 			Tags:        []string{},
+			UDFs:        body.UDFs,
 		}
 
 		// Persist to catalog first.
@@ -710,17 +727,17 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			// Non-fatal — continue to insert into Proton.
 		}
 
-		escapedSQL := strings.ReplaceAll(finalSQL, "'", "''")
+		escapedSQL := escapeSQLStr(finalSQL)
 		insertSQL := fmt.Sprintf(
 			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
 			ruleID,
-			escapedName,
-			strings.ReplaceAll(body.Description, "'", "''"),
+			escapeSQLStr(body.Name),
+			escapeSQLStr(body.Description),
 			escapedSQL,
-			strings.ReplaceAll(body.Severity, "'", "''"),
-			strings.ReplaceAll(body.Category, "'", "''"),
-			strings.ReplaceAll(body.FPRate, "'", "''"),
-			strings.ReplaceAll(body.HookSources, "'", "''"),
+			escapeSQLStr(body.Severity),
+			escapeSQLStr(body.Category),
+			escapeSQLStr(body.FPRate),
+			escapeSQLStr(body.HookSources),
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
 			log.Printf("rules: create rule insert: %v", err)
@@ -728,7 +745,7 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 
-		if err := tp.CreateRuleMV(&cfg.Timeplus, ruleID, finalSQL); err != nil {
+		if err := tp.CreateRuleMV(&cfg.Timeplus, ruleID, finalSQL, body.UDFs); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 			return
 		}
@@ -772,11 +789,12 @@ func queryCurrentRulePacks(cfg *config.TimeplusConfig, mgr *catalog.Manager) ([]
 			FPRate:            parseStr(row["fp_rate"]),
 			HookSources:       parseStr(row["hook_sources"]),
 		}
-		// Check catalog for a newer version.
+		// Enrich from catalog: newer version and UDFs.
 		if catalogEntry, ok := mgr.Lookup(id); ok {
 			if versionGreater(catalogEntry.Version, pack.Version) {
 				pack.LatestVersion = catalogEntry.Version
 			}
+			pack.UDFs = catalogEntry.UDFs
 		}
 		packs = append(packs, pack)
 	}

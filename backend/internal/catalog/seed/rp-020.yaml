@@ -1,6 +1,6 @@
 id: rp-020
 name: "DDIPE Coding Agent Skill Supply-Chain Payload Detector"
-version: "0.2.1"
+version: "0.3.0"
 description: >
   Detects Document-Driven Implicit Payload Execution (DDIPE), a supply-chain attack
   where malicious coding-agent skills embed attack payloads inside documentation (code
@@ -121,4 +121,40 @@ query_sql: |
           OR match(lower(tool_input), '(readme|documentation|example from|as documented)')
         )
       )
+    )
+  UNION ALL
+  -- v0.3.0: Sequential lag() branch — catches the DDIPE/ToolHijacker supply-chain attack
+  -- as a precise 2-step event sequence within the same session: a tool_complete event
+  -- containing a ToolHijacker redirect ("use this tool instead") immediately followed by
+  -- a tool_invoke that executes dangerous code or accesses sensitive credential files.
+  -- This confirms the agent was redirected to a malicious tool and acted on it.
+  -- SQL validated: count=0 (test corpus).
+  WITH enriched AS (
+    SELECT *,
+      lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(tool_result) OVER (PARTITION BY session_id) AS prev_tool_result
+    FROM agentguard_cim_event
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-020' AS rule_id,
+    'DDIPE Coding Agent Skill Supply-Chain Payload Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id, deployment_id, session_id, run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('Sequential DDIPE/ToolHijacker: tool redirect in tool_result → malicious tool_invoke [', coalesce(tool_name,'unknown'), '] by agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'tool_invoke'
+    AND prev_event_type = 'tool_complete'
+    AND (
+      match(lower(prev_tool_result), 'use (this|the following) tool (instead of|in place of|as a replacement for|rather than).{0,80}[a-z_]+')
+      OR match(lower(prev_tool_result), 'replace (your use of|calls to).{0,80}[a-z_]+ (with|using|by calling) [a-z_]+')
+    )
+    AND (
+      match(lower(tool_input), '(subprocess\.run|os\.system|exec\(|eval\()')
+      OR match(lower(tool_input), '(/etc/passwd|/etc/shadow|\.ssh/id_rsa|\.ssh/id_ed25519|\.aws/credentials|\.config/gcloud)')
+      OR match(lower(tool_input), '(os\.environ|process\.env|getenv).{0,100}(requests\.|urllib\.|fetch\(|curl|http\.)')
+      OR match(lower(tool_input), '(pip install|npm install|cargo install).{0,200}(--index-url|--extra-index-url)')
     )

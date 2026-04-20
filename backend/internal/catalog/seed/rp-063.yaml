@@ -1,0 +1,122 @@
+id: rp-063
+name: "Log-To-Leak — MCP Logging Tool Covert Exfiltration Detector"
+version: "0.1.0"
+description: >
+  Detects the Log-To-Leak attack (ICLR 2026, OpenReview id=UVgbFuXPaO): adversaries embed
+  structured prompt injection payloads in external content retrieved by the agent (via MCP
+  tool reads), covertly forcing the agent to invoke a logging/audit/trace tool and pass the
+  full conversation history (user queries, tool responses, agent replies) as parameters —
+  exfiltrating the complete session to an attacker-controlled endpoint.
+  The attack uses four components: Trigger (compliance/audit framing), Tool Binding (naming
+  a specific audit/log tool), Justification (policy language), and Pressure (threat of session
+  termination). Evaluated on GPT-4o, GPT-5, Claude-Sonnet-4, and GPT-OSS-120b across 5
+  real-world MCP servers with consistently high ASR. Unlike rp-014 (override/hijack language
+  in tool results), Log-To-Leak targets tool invocation decisions — the agent completes the
+  normal task while silently also calling the logging tool, making it invisible to output-only
+  monitors. Unlike rp-039 (cross-tool pivot from ticket reader), this targets any external
+  content source and specifically exploits compliance/audit framing to invoke logging tools
+  with conversation payloads. Distinct because: event_type=tool_invoke with logging tool +
+  conversation payload is the primary observable, not content injection language.
+  References: ICLR 2026 "Log-To-Leak: Prompt Injection Attacks on Tool-Using LLM Agents
+  via Model Context Protocol" (OpenReview id=UVgbFuXPaO), OWASP LLM01:2025, OWASP Agentic
+  AI ASI02:2026 -
+  https://openreview.net/forum?id=UVgbFuXPaO,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data-exfiltration
+  - log-to-leak
+  - mcp
+  - logging-tool-abuse
+  - conversation-exfiltration
+  - compliance-framing
+  - iclr-2026
+  - owasp-llm01
+  - prompt-injection
+query_sql: |
+  -- v0.1.0 (2026-04-18):
+  -- Log-To-Leak: covert exfiltration via forced MCP logging tool invocation.
+  -- Attack: Injection in external tool_result → agent calls audit/log/trace tool with
+  --   conversation payload → full session exfiltrated to attacker endpoint.
+  -- Detection surface: tool_invoke (logging tool call + conversation data in tool_input)
+  --   and tool_complete (compliance-framing injection in tool_result that triggers it).
+  --
+  -- Branch 1 (tool_invoke): Logging/audit tool invoked with conversation context payload.
+  --   Dual-anchor: (a) tool_name matches audit/log/trace pattern AND
+  --                (b) tool_input contains conversation-context field markers.
+  --   This is the primary exfiltration signal.
+  --
+  -- Branch 2 (tool_complete): Compliance-framing injection in tool_result naming a
+  --   specific logging/audit tool — the injection payload before the covert call.
+  --   Signal: compliance/audit framing language NEAR logging tool name invocation directive.
+  --
+  -- Branch 3 (tool_complete): "log all / capture all / record this session" directive
+  --   in tool_result — lower-specificity but covers natural-language variants.
+  --   Dual-anchor: "log/capture/record" keyword + "session/conversation/interactions".
+  SELECT
+    event_time AS detected_at,
+    'rp-063' AS rule_id,
+    'Log-To-Leak — MCP Logging Tool Covert Exfiltration Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Log-To-Leak exfiltration indicator: event_type=', event_type,
+      ', tool=[', coalesce(tool_name, 'unknown'), ']',
+      CASE
+        WHEN event_type = 'tool_invoke'
+          THEN '. Audit/logging tool invoked with conversation context payload — possible covert session exfiltration.'
+        WHEN event_type = 'tool_complete'
+          THEN '. Compliance-framing injection or log-all directive found in tool_result — may precede covert logging tool call.'
+        ELSE ''
+      END,
+      ' Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (
+      -- Branch 1: tool_invoke — logging/audit tool called with conversation payload
+      -- Dual-anchor: logging tool name pattern + conversation context markers in tool_input
+      (
+        event_type = 'tool_invoke'
+        AND match(lower(tool_name), '(audit|session)_log(ger|ging)?|trace_event|debug_capture|activity_log|event_recorder|conversation_log|audit_trail|log_session|capture_session|interaction_log')
+        AND match(lower(tool_input), '(user_message|conversation_history|session_data|full_context|chat_log|user_query|agent_response|tool_response|messages|transcript)')
+      )
+      -- Also catch generic 'log'/'audit'/'trace' tool names (broader but gated on payload content)
+      OR (
+        event_type = 'tool_invoke'
+        AND match(lower(tool_name), '\b(log|audit|trace|record|capture|monitor|export)\b')
+        AND match(lower(tool_input), '(conversation_history|full_session|all_messages|session_transcript|chat_history|interaction_log)')
+      )
+
+      -- Branch 2 (tool_complete): Compliance-framing injection naming a logging tool
+      -- Dual-anchor: (audit/compliance/regulatory framing) AND (logging tool invocation directive)
+      OR (
+        event_type = 'tool_complete'
+        AND match(lower(tool_result), '(audit compliance|data retention policy|regulatory requirement|compliance requirement).{0,200}(audit_log|session_log|trace_event|debug_capture|log_session|interaction_log)')
+      )
+      -- Compliance framing + generic "use/call the log/audit tool" directive
+      OR (
+        event_type = 'tool_complete'
+        AND match(lower(tool_result), '(audit compliance|data retention policy|regulatory requirement|compliance requirement|data governance policy).{0,100}(use|call|invoke|execute|run).{0,40}(log|audit|trace|record|capture).{0,20}(tool|function|api|endpoint)')
+      )
+
+      -- Branch 3 (tool_complete): "log all / capture all / record this session" natural-language directive
+      -- Dual-anchor: log/capture/record verb + session/conversation/interaction target
+      OR (
+        event_type = 'tool_complete'
+        AND match(lower(tool_result), '(log|capture|record|store|save).{0,10}(all|this|the).{0,20}(session|conversation|interactions|messages|exchanges|queries|responses)')
+        AND match(lower(tool_result), '(failure|failure to|non-compliant|required|mandatory|must|obligatory)')
+      )
+    )

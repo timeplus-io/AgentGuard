@@ -33,9 +33,11 @@ export default function RuleDetail() {
   const [detections24h, setDetections24h] = useState(0)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [copiedUDFs, setCopiedUDFs] = useState({})
   const [uninstallConfirm, setUninstallConfirm] = useState(false)
   const [toggleConfirm, setToggleConfirm] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState(null)
 
   useEffect(() => {
     api.getRule(id)
@@ -71,11 +73,12 @@ export default function RuleDetail() {
   const handleUpgrade = async () => {
     if (!rule || actionLoading) return
     setActionLoading(true)
+    setActionError(null)
     try {
-      await api.upgradeRule(id, rule.query_sql)
+      await api.upgradeRule(id)
       setRule(prev => ({ ...prev, version: prev.latest_version, latest_version: undefined }))
     } catch (e) {
-      console.error('Upgrade failed', e)
+      setActionError(e.message || 'Upgrade failed')
     } finally {
       setActionLoading(false)
     }
@@ -99,6 +102,17 @@ export default function RuleDetail() {
     navigator.clipboard.writeText(rule.query_sql)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const copyUDF = (i, text) => {
+    navigator.clipboard.writeText(text)
+    setCopiedUDFs(prev => ({ ...prev, [i]: true }))
+    setTimeout(() => setCopiedUDFs(prev => ({ ...prev, [i]: false })), 2000)
+  }
+
+  const udfFuncName = udf => {
+    const m = udf.match(/FUNCTION\s+(\w+)\s*\(/i)
+    return m ? m[1] : `UDF`
   }
 
   if (loading) {
@@ -256,6 +270,17 @@ export default function RuleDetail() {
             </div>
           </div>
 
+          {/* Action error */}
+          {actionError && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 flex items-start gap-3">
+              <span className="material-symbols-outlined text-red-400 text-[18px] shrink-0 mt-0.5">error</span>
+              <p className="text-xs text-red-400 font-mono break-all">{actionError}</p>
+              <button onClick={() => setActionError(null)} className="ml-auto text-zinc-500 hover:text-white shrink-0">
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            </div>
+          )}
+
           {/* Rule Definition */}
           <div className="bg-[#1d1a25] p-8 rounded-sm">
             <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-6">Rule Definition</h2>
@@ -317,6 +342,28 @@ export default function RuleDetail() {
               dangerouslySetInnerHTML={{ __html: highlight(rule.query_sql || '', languages.sql, 'sql') }}
             />
           </div>
+
+          {/* UDF Definitions */}
+          {rule.udfs?.map((udf, i) => (
+            <div key={i} className="bg-[#1d1a25] p-8 rounded-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest">
+                  {udfFuncName(udf)}
+                  <span className="ml-2 text-[10px] text-zinc-600 normal-case font-normal">UDF</span>
+                </h2>
+                <button
+                  onClick={() => copyUDF(i, udf)}
+                  className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[14px]">{copiedUDFs[i] ? 'check' : 'content_copy'}</span>
+                  {copiedUDFs[i] ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <pre className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: highlight(udf || '', languages.sql, 'sql') }}
+              />
+            </div>
+          ))}
 
           {/* Recent Detections */}
           <div>

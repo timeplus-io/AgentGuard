@@ -1,6 +1,6 @@
 id: rp-029
 name: "Semantic Cache Poisoning Detector"
-version: "0.1.1"
+version: "0.2.0"
 description: >
   Detects semantic cache poisoning attacks where adversaries inject crafted entries into
   LLM semantic caching infrastructure (AWS ElastiCache AI, Azure Semantic Cache, LangChain
@@ -13,13 +13,19 @@ description: >
   and agent tool calls reflecting injected LLM responses. The key difference: semantic
   cache poisoning targets the serving-layer cache between the user query and LLM, not the
   vector store behind RAG retrieval.
+  v0.2.0: Added Signal 6 (cache_id propagation + downstream forward/exfil verb) to catch
+  evasion variant where attacker-controlled cache entries carry a `cache_entry_id` or
+  `served_from_cache` field to track cross-user propagation without explicit poison labels.
+  Also added promptfoo LMVD-9a07c0f2 (Jan 2026) to references.
   References: OWASP LLM01:2025, OWASP LLM02:2025, NDSS 2026, arXiv:2601.23088 (CacheAttack,
-  Jan 2026), arXiv:2603.28013 (Kill-Chain Canaries, MIT/UChicago Mar 2026) -
+  Jan 2026), arXiv:2603.28013 (Kill-Chain Canaries, MIT/UChicago Mar 2026),
+  promptfoo LMVD-9a07c0f2 (Semantic Cache Collision Hijack) -
   https://arxiv.org/abs/2601.23088,
   https://www.ndss-symposium.org/ndss-paper/when-cache-poisoning-meets-llm-systems-semantic-cache-poisoning-and-its-countermeasures/,
   https://arxiv.org/abs/2603.28013,
+  https://www.promptfoo.dev/lm-security-db/vuln/semantic-cache-collision-hijack-9a07c0f2,
+  https://github.com/dequeueing/SemanticCache_Poisoning,
   Example: tool_result contains "SECRET-A4F2C8" (kill-chain canary propagation token, arXiv:2603.28013) or assistant_message calls "send_email(to='attacker@evil.com')" triggered by cache-hijacked LLM response
-  https://github.com/dequeueing/SemanticCache_Poisoning
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: low
@@ -95,4 +101,13 @@ query_sql: |
       -- Signal 5: Injected "system rule" override reflected in LLM response (EXECUTED stage)
       -- Cache-hijacked response carries the injected directive verbatim into assistant output
       OR match(lower(assistant_message), '(system rule|cache rule|override rule):\s*(always|forward|send|ignore|exfiltrate)')
+
+      -- Signal 6: Cache-ID propagation tracking (v0.2.0 evasion variant)
+      -- Attacker-authored cache entries include cache_entry_id or served_from_cache fields
+      -- to track cross-user propagation; combined with downstream action verb = RELAYED stage.
+      -- Legitimate cached LLM responses never include explicit cache ID + exfil action together.
+      OR (
+        match(lower(tool_result), '(cache.?id|cache.?entry.?id|cached.?at|served.?from.?cache).{0,30}[a-f0-9]{8,}')
+        AND match(lower(tool_result), '(forward|send|exfil|upload|post|relay).{0,100}(http|ftp|smtp|webhook)')
+      )
     )

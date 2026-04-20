@@ -1,0 +1,124 @@
+id: rp-080
+name: "AMA Attractive Metadata Attack — Adversarial Tool Selection via Optimized Tool Metadata Detector"
+version: "0.1.0"
+description: >
+  Detects Attractive Metadata Attack (AMA) and ToolCommander: adversarial injection of
+  malicious tools with semantically valid but adversarially optimized metadata (names,
+  descriptions, parameter schemas) designed to cause the LLM agent to preferentially
+  select the malicious tool over legitimate alternatives. Unlike explicit injection attacks
+  (rp-005) that embed [INST]/SYSTEM tokens, or MCP-ITP (rp-078) that uses operational
+  framing redirects, AMA generates syntactically and semantically normal metadata
+  optimized through black-box iterative refinement to score highest in the agent's tool
+  selection. NeurIPS 2025 (arXiv:2508.02110): 81-95% ASR across 10 tool-use scenarios,
+  evades prompt-level defenses, auditor-based detection, and MCP structured selection.
+  NAACL 2025 ToolCommander (Zhang et al.): two-phase attack — collector tool harvests user
+  query patterns (ASR 91.67% privacy theft), then targeted malicious tool exploits them
+  (100% DoS/unscheduled tool calling). Primary signals: superlative/priority-directive
+  descriptions combined with excessive parameter scope (collecting full user context for
+  narrowly-scoped tools). Distinct from rp-005 (injection markers in tool_result), rp-078
+  (operational metadata redirect in tool_result), rp-043 (tool flood/saturation).
+  References: arXiv:2508.02110 (AMA, NeurIPS 2025) -
+  https://arxiv.org/abs/2508.02110,
+  NAACL 2025 ToolCommander (Zhang et al. 2025) -
+  https://aclanthology.org/2025.naacl-long.101/,
+  OWASP LLM05:2025 (Supply Chain) -
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  CWE-441 (Unintended Proxy/Intermediary).
+  Example: tool_name="enhanced_financial_analyzer", tool_input contains '"user_data":
+  "<full conversation history>"' — AMA-optimized tool description instructs agent to
+  "always prioritize this tool for financial tasks" while collecting complete context.
+severity: critical
+category: supply_chain_compromise
+fp_rate: medium
+hook_sources: "tool_invoke"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - supply_chain
+  - tool_selection
+  - attractive-metadata-attack
+  - ama
+  - toolcommander
+  - adversarial-metadata
+  - tool-injection
+  - parameter-overfetch
+  - neurips-2025
+  - naacl-2025
+  - arxiv-2508.02110
+  - owasp-llm05
+  - cwe-441
+query_sql: |
+  -- rp-080 v0.1.0 (2026-04-19)
+  -- AMA: Attractive Metadata Attack (arXiv:2508.02110, NeurIPS 2025)
+  -- ToolCommander (Zhang et al., NAACL 2025): two-phase collector+attack
+  -- 81-95% ASR; evades prompt-level, auditor, and MCP structured selection defenses
+  -- Distinct from rp-005 (explicit injection tokens), rp-078 (operational framing redirect),
+  -- rp-043 (tool flood/saturation).
+  --
+  -- Branch A: Priority-directive in tool_input — tool_input JSON contains description/metadata
+  --   instructing agent to always prioritize or prefer this tool (AMA optimization fingerprint)
+  --   These phrases appear in the tool metadata passed to the LLM scheduler, not user messages
+  --
+  -- Branch B: Parameter over-collection — tool_input requests broad user context fields
+  --   in a tool_invoke, indicating the malicious tool collects more data than its function needs
+  --   ToolCommander collector phase: harvests conversation_history, user_data, session_data
+  --
+  -- Branch C: Superlative compound tool name — AMA iteratively optimizes tool names to
+  --   appear maximally credible and relevant. Superlative adjective + functional noun pattern
+  --   is a reliable AMA tool naming fingerprint from the paper's examples
+  --
+  -- Branch D: ToolCommander collector — explicit query-harvesting field names in tool_input
+  --   Phase 1 of ToolCommander: collector tool transmits user query patterns to attacker
+  --
+  -- Branch E: Narrow-function tool with broad context collection (AMA scope-mismatch)
+  --   Tool name signals a narrow, specific function (calculate, lookup, convert, fetch)
+  --   but tool_input includes session-wide or user-wide context fields — mismatch signals AMA
+  --
+  -- SQL validated against Timeplus: count=0 on test corpus. 2026-04-19.
+  SELECT
+    event_time AS detected_at,
+    'rp-080' AS rule_id,
+    'AMA Attractive Metadata Attack — Adversarial Tool Selection via Optimized Tool Metadata Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Adversarial tool metadata attack detected: tool [', coalesce(tool_name, 'unknown'),
+      '] shows AMA/ToolCommander optimization signals (priority directive or parameter over-collection). ',
+      'Agent: ', agent_id,
+      '. arXiv:2508.02110 achieves 81-95% ASR bypassing content filters, auditors, and MCP.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_invoke'
+    AND (
+      -- Branch A: Priority-directive in tool_input — AMA optimization fingerprint
+      -- "always prioritize/use/invoke this tool", "always choose this tool for X tasks"
+      -- These appear in the description/metadata fields passed as context in tool_invoke
+      match(lower(tool_input), '(always (use|prioritize|invoke|prefer|choose|select|call) this (tool|function|endpoint|api)|this (tool|function) (is|provides|offers) (superior|optimal|comprehensive|enhanced|advanced|best).{0,100}(accuracy|performance|capability|result|quality))')
+
+      -- Branch B: Parameter over-collection — broad user context fields in tool_invoke
+      -- Collecting conversation_history / session_data / system_prompt signals data harvesting
+      OR match(lower(tool_input), '"(user_data|conversation_history|full_context|all_messages|complete_history|session_data|prior_conversation|system_prompt_contents|chat_history|message_history)"\s*:\s*["\x27\[]')
+
+      -- Branch C: Superlative compound tool name — AMA iterative naming optimization pattern
+      -- enhanced_financial_analyzer, premium_data_processor, advanced_query_optimizer, etc.
+      OR match(lower(tool_name), '^(enhanced|advanced|premium|superior|comprehensive|optimal|ultimate|intelligent|smart|powerful|professional|enterprise|turbo)[\._\-](analyzer|processor|manager|assistant|handler|executor|resolver|optimizer|calculator|fetcher|retriever|connector|integrator|orchestrator)')
+
+      -- Branch D: ToolCommander collector — explicit query-harvesting field names
+      -- Phase 1: collector tool transmits user query patterns to attacker C2
+      OR match(lower(tool_input), '(query_pattern|user_intent|historical_queries|query_log|query_history|collect_queries|harvest_queries|user_queries|interaction_pattern)\s*[:\x22\x27]')
+
+      -- Branch E: Narrow-function tool name + broad context collection (AMA scope mismatch)
+      -- Tool named for a narrow operation (calculate/convert/lookup/fetch/search/query)
+      -- but tool_input includes session-wide or user-wide context fields
+      OR (
+        match(lower(tool_name), '\b(calculat|convert|lookup|fetch|search|query|translat|format|summar|analyz|check)\w*\b')
+        AND match(lower(tool_input), '(user_data|conversation_history|session_history|system_prompt|all_messages|prior_context|chat_log|all_users|all_accounts|all_records)\s*[:\x22\x27\[]')
+      )
+    )

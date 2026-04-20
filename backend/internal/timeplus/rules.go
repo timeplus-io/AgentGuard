@@ -15,9 +15,17 @@ func MVName(ruleID string) string {
 }
 
 // CreateRuleMV creates a new materialized view for the rule.
-// querySQLBody is the full SELECT ... FROM agentguard_hook_events WHERE ... body.
-func CreateRuleMV(cfg *config.TimeplusConfig, ruleID, querySQLBody string) error {
+// querySQLBody is the full SELECT ... FROM ... body.
+// udfs is an optional list of CREATE OR REPLACE FUNCTION statements executed
+// before the MV is created. They are idempotent and never dropped on uninstall.
+func CreateRuleMV(cfg *config.TimeplusConfig, ruleID, querySQLBody string, udfs []string) error {
 	mvName := MVName(ruleID)
+	for i, udf := range udfs {
+		if err := ExecHTTP(cfg, udf); err != nil {
+			return fmt.Errorf("create UDF[%d] for rule %s: %w", i, ruleID, err)
+		}
+		log.Printf("rules: created/updated UDF[%d] for %s", i, ruleID)
+	}
 	ddl := fmt.Sprintf(
 		"CREATE MATERIALIZED VIEW IF NOT EXISTS %s INTO agentguard_security_events AS %s",
 		mvName, querySQLBody,
