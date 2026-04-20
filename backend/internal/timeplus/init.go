@@ -854,7 +854,6 @@ SELECT
     hook_name = 'pre_llm_call',        'user_input',
     hook_name = 'post_llm_call',       'llm_response',
     hook_name = 'pre_api_request',     'llm_request',
-    hook_name = 'post_api_request',    'llm_response',
     hook_name = 'pre_tool_call',       'tool_invoke',
     hook_name = 'post_tool_call',      'tool_complete',
     'other'
@@ -864,7 +863,8 @@ SELECT
   deployment_id,
   session_id,
   run_id,
-  provider,
+  if(provider != '', provider,
+     json_value(event_data, '$.provider'))                             AS provider,
   model,
   if(tool_name != '', tool_name,
      json_value(event_data, '$.tool_name'))                            AS tool_name,
@@ -884,13 +884,14 @@ WHERE _tp_time > earliest_ts()
   AND hook_name IN (
     'on_session_start', 'on_session_end', 'on_session_finalize', 'on_session_reset',
     'pre_llm_call', 'post_llm_call',
-    'pre_api_request', 'post_api_request',
+    'pre_api_request',
     'pre_tool_call', 'post_tool_call'
   )`
 
 // ddlCIMMetricsHermesLlmMV extracts LLM token and latency metrics from
-// post_api_request events (raw_hook_name = 'post_api_request'), which carry the
-// actual usage dict with token counts and api_duration in seconds.
+// post_api_request events, which carry the usage dict with token counts and
+// api_duration in seconds. Reads directly from agentguard_hook_events so that
+// post_api_request does not need to appear in agentguard_cim_event.
 const ddlCIMMetricsHermesLlmMV = `
 CREATE MATERIALIZED VIEW mv_cim_metrics_hermes_llm
 INTO agentguard_cim_metrics AS
@@ -906,24 +907,23 @@ SELECT
     ['model', 'provider', 'run_id'],
     [model, provider, run_id]
   )                                                                     AS tags
-FROM agentguard_cim_event
+FROM agentguard_hook_events
 ARRAY JOIN
   ['llm.call', 'llm.input_tokens', 'llm.output_tokens', 'llm.total_tokens',
    'llm.cache_read_tokens', 'llm.cache_write_tokens', 'llm.latency_ms']  AS metric_name,
   [
     to_float64(1),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'usage', 'input_tokens')),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'usage', 'output_tokens')),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'usage', 'input_tokens'))
-      + to_float64_or_zero(json_extract_string(raw_event_data, 'usage', 'output_tokens')),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'usage', 'cache_read_input_tokens')),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'usage', 'cache_creation_input_tokens')),
-    to_float64_or_zero(json_extract_string(raw_event_data, 'api_duration')) * 1000
+    to_float64_or_zero(json_extract_string(event_data, 'usage', 'input_tokens')),
+    to_float64_or_zero(json_extract_string(event_data, 'usage', 'output_tokens')),
+    to_float64_or_zero(json_extract_string(event_data, 'usage', 'input_tokens'))
+      + to_float64_or_zero(json_extract_string(event_data, 'usage', 'output_tokens')),
+    to_float64_or_zero(json_extract_string(event_data, 'usage', 'cache_read_input_tokens')),
+    to_float64_or_zero(json_extract_string(event_data, 'usage', 'cache_creation_input_tokens')),
+    to_float64_or_zero(json_extract_string(event_data, 'api_duration')) * 1000
   ]                                                                     AS metric_value
 WHERE _tp_time > earliest_ts()
   AND agent_type = 'hermes'
-  AND event_type = 'llm_response'
-  AND raw_hook_name = 'post_api_request'`
+  AND hook_name = 'post_api_request'`
 
 const ddlCIMMetricsHermesToolsMV = `
 CREATE MATERIALIZED VIEW mv_cim_metrics_hermes_tools

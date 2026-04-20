@@ -193,8 +193,16 @@ function parseEvtData(evt) {
 }
 
 function buildRunData(events) {
-  // Detect Hermes by presence of its plugin hook names
-  const isHermes = events.some(e => e.hook_name === 'pre_llm_call' || e.hook_name === 'post_llm_call')
+  // Detect Hermes by agent_type (primary) or by hook names unique to Hermes plugins:
+  //   installed plugin: session_start / session_end / user_prompt_submit / llm_output (with response field)
+  //   dev plugin:       pre_llm_call / post_llm_call
+  const isHermes = events.some(e =>
+    e.agent_type === 'hermes' ||
+    e.hook_name === 'pre_llm_call' ||
+    e.hook_name === 'post_llm_call' ||
+    e.hook_name === 'session_start' ||
+    e.hook_name === 'session_end'
+  )
   if (isHermes) return buildRunDataHermes(events)
 
   const llmIn       = events.find(e => e.hook_name === 'llm_input')
@@ -289,91 +297,174 @@ function buildRunData(events) {
 }
 
 function buildRunDataHermes(events) {
-  const preLlm    = events.find(e => e.hook_name === 'pre_llm_call')
-  const postLlm   = events.find(e => e.hook_name === 'post_llm_call')
-  const postApi   = events.find(e => e.hook_name === 'post_api_request')
-  const preTools  = events.filter(e => e.hook_name === 'pre_tool_call')
-  const postTools = events.filter(e => e.hook_name === 'post_tool_call')
+  // Handles two Hermes plugin formats in a single pass (time-ordered):
+  //
+  // Installed plugin (~/.hermes/plugins/agentguard/plugin.py):
+  //   user_prompt_submit  → event_data.message  = user message text
+  //   llm_output          → event_data.response = assistant response text
+  //   before_tool_call    → event_data.args (params), paired with after_tool_call by index
+  //   after_tool_call     → event_data.result
+  //
+  // Dev/package plugin (agentguard-plugin/):
+  //   pre_llm_call        → token count from paired pre_api_request
+  //   post_api_request    → usage tokens + latency
+  //   pre_tool_call       → event_data.args, paired with post_tool_call by tool_call_id
+  //   post_tool_call      → event_data.result
 
-  const preLlmData  = preLlm  ? parseEvtData(preLlm)  : {}
-  const postApiData = postApi  ? parseEvtData(postApi)  : {}
-
-  const runInfo = {
-    model:        preLlm?.model    || postApiData.model    || null,
-    provider:     preLlm?.provider || postApiData.provider || null,
-    systemPrompt: null,
-    historyCount: null,
-    imagesCount:  null,
-  }
-
+  const runInfo = { model: null, provider: null, systemPrompt: null, historyCount: null, imagesCount: null }
   const steps = []
+  const consumed = new Set()
+  let stashedApiTokens = null  // set by post_api_request, consumed by post_llm_call
 
-  // ── User Input ────────────────────────────────────────────────────────────
-  const userMsg = preLlmData.user_message
-  if (userMsg && String(userMsg).trim()) {
-    const t = String(userMsg).trim()
-    steps.push({
-      type:    'user_input',
-      label:   'User Input',
-      content: t.slice(0, 400) + (t.length > 400 ? '…' : ''),
-    })
+  // Pre-index after_tool_call (installed plugin) by position for sequential pairing.
+  const afterTools = events.reduce((acc, e, i) => {
+    if (e.hook_name === 'after_tool_call') acc.push(i)
+    return acc
+  }, [])
+  let afterToolCursor = 0
+
+  // Pre-index post_tool_call (dev plugin) by tool_call_id.
+  const postToolByTcID = {}
+  for (let i = 0; i < events.length; i++) {
+    if (events[i].hook_name === 'post_tool_call') {
+      const d = parseEvtData(events[i])
+      if (d.tool_call_id) postToolByTcID[d.tool_call_id] = i
+    }
   }
 
-  // ── Tool Calls (pre + post paired by tool_call_id) ────────────────────────
-  for (let i = 0; i < preTools.length; i++) {
-    const pre     = preTools[i]
-    const preData = parseEvtData(pre)
-    const blocked = pre.hook_decision === 'block'
-    const tcID    = preData.tool_call_id || null
+  for (let i = 0; i < events.length; i++) {
+    if (consumed.has(i)) continue
+    const e = events[i]
+    const data = parseEvtData(e)
 
-    const args = (preData.args && typeof preData.args === 'object' && Object.keys(preData.args).length > 0)
-      ? preData.args : null
-
-    const post = tcID
-      ? postTools.find(p => parseEvtData(p).tool_call_id === tcID)
-      : postTools[i]
-
-    let resultError = null
-    if (post) {
-      const postData = parseEvtData(post)
-      // Hermes post_tool_call has no error field; treat non-null result as success
-      resultError = postData.error || null
+    // ── Installed plugin: user message ────────────────────────────────────────
+    if (e.hook_name === 'user_prompt_submit') {
+      consumed.add(i)
+      if (!runInfo.model) runInfo.model = e.model || data.model || null
+      const msg = typeof data.message === 'string' ? data.message.trim() : ''
+      steps.push({
+        type: 'user_input',
+        label: 'User Message',
+        content: msg || '(message content not captured)',
+        contentMuted: !msg,
+      })
     }
 
-    steps.push({
-      type:      'tool_call',
-      label:     blocked ? 'Tool Blocked' : 'Tool Called',
-      content:   pre.tool_name || preData.tool_name || '—',
-      blocked,
-      params:    args,
-      hasResult: post != null,
-      resultError,
-      duration:  null,
-    })
-  }
+    // ── Installed plugin: LLM response ────────────────────────────────────────
+    else if (e.hook_name === 'llm_output') {
+      consumed.add(i)
+      if (!runInfo.model) runInfo.model = e.model || data.model || null
+      const resp = typeof data.response === 'string' ? data.response.trim() : ''
+      steps.push({
+        type: 'llm_response',
+        label: 'LLM Response',
+        content: resp || '(response content not captured)',
+        contentMuted: !resp,
+      })
+    }
 
-  // ── LLM Response ─────────────────────────────────────────────────────────
-  const postLlmData = postLlm ? parseEvtData(postLlm) : {}
-  const usage       = postApiData.usage ?? {}
-  const tokenParts  = [
-    usage.input_tokens  != null ? `${fmtTokens(usage.input_tokens)} in`   : null,
-    usage.output_tokens != null ? `${fmtTokens(usage.output_tokens)} out`  : null,
-    (usage.cache_read_input_tokens > 0) ? `${fmtTokens(usage.cache_read_input_tokens)} cached` : null,
-  ].filter(Boolean)
+    // ── Installed plugin: tool call (paired by sequential order) ─────────────
+    else if (e.hook_name === 'before_tool_call') {
+      consumed.add(i)
+      const blocked  = e.hook_decision === 'block'
+      const toolName = e.tool_name || data.tool_name || '—'
+      const args     = (data.args && typeof data.args === 'object' && Object.keys(data.args).length > 0) ? data.args : null
+      let hasResult = false, resultError = null, result = null
+      while (afterToolCursor < afterTools.length) {
+        const idx = afterTools[afterToolCursor++]
+        if (!consumed.has(idx)) {
+          consumed.add(idx)
+          hasResult = true
+          const pd = parseEvtData(events[idx])
+          resultError = pd.error || null
+          result = pd.result ?? null
+          break
+        }
+      }
+      steps.push({
+        type: 'tool_call', label: blocked ? 'Tool Blocked' : 'Tool Called',
+        content: toolName, blocked, params: args, hasResult, resultError, result, duration: null,
+      })
+    }
 
-  if (postApiData.api_duration != null) {
-    tokenParts.push(`${Math.round(postApiData.api_duration * 1000)} ms`)
-  }
+    // ── Dev plugin: user turn ────────────────────────────────────────────────
+    else if (e.hook_name === 'pre_llm_call') {
+      consumed.add(i)
+      if (!runInfo.model)    runInfo.model    = e.model    || data.model    || null
+      if (!runInfo.provider) runInfo.provider = e.provider || data.provider || null
+      // Absorb next pre_api_request for approx token count
+      let approxTokens = null
+      for (let j = i + 1; j < events.length; j++) {
+        if (consumed.has(j)) continue
+        if (events[j].hook_name === 'pre_api_request') {
+          approxTokens = parseEvtData(events[j]).approx_input_tokens ?? null
+          consumed.add(j)
+          break
+        }
+        if (events[j].hook_name === 'pre_llm_call') break
+      }
+      const userMsg = typeof data.user_message === 'string' ? data.user_message.trim() : ''
+      steps.push({
+        type: 'user_input', label: 'User Message',
+        content: userMsg || null,
+        contentMuted: !userMsg,
+        tokens: approxTokens != null ? `~${fmtTokens(approxTokens)} tokens` : null,
+      })
+    }
 
-  const responseText = postLlmData.assistant_response || ''
+    // ── Dev plugin: API response — stash token counts for post_llm_call ────────
+    // post_api_request always arrives before post_llm_call; stash so we don't
+    // push a standalone empty step and post_llm_call picks it up.
+    else if (e.hook_name === 'post_api_request') {
+      consumed.add(i)
+      const usage = data.usage ?? {}
+      const parts = [
+        usage.input_tokens  != null ? `${fmtTokens(usage.input_tokens)} in`  : null,
+        usage.output_tokens != null ? `${fmtTokens(usage.output_tokens)} out` : null,
+        (usage.cache_read_input_tokens > 0) ? `${fmtTokens(usage.cache_read_input_tokens)} cached` : null,
+      ].filter(Boolean)
+      if (data.api_duration != null) parts.push(`${Math.round(data.api_duration * 1000)} ms`)
+      stashedApiTokens = parts.length > 0 ? parts.join(' · ') : null
+    }
 
-  if (postLlm || postApi) {
-    steps.push({
-      type:    'llm_response',
-      label:   'Response',
-      tokens:  tokenParts.length > 0 ? tokenParts.join(' · ') : null,
-      content: responseText ? responseText.slice(0, 500) + (responseText.length > 500 ? '…' : '') : null,
-    })
+    // ── Dev plugin: LLM response text from assistant_response ────────────────
+    else if (e.hook_name === 'post_llm_call') {
+      consumed.add(i)
+      const assistantMsg = typeof data.assistant_response === 'string' ? data.assistant_response.trim() : ''
+      const tokens = stashedApiTokens
+      stashedApiTokens = null
+      steps.push({
+        type: 'llm_response', label: 'LLM Response',
+        content: assistantMsg || null,
+        contentMuted: !assistantMsg,
+        tokens,
+      })
+    }
+
+    // ── Dev plugin: tool call (paired by tool_call_id) ────────────────────────
+    else if (e.hook_name === 'pre_tool_call') {
+      consumed.add(i)
+      const blocked = e.hook_decision === 'block'
+      const tcID    = data.tool_call_id || null
+      const args    = (data.args && typeof data.args === 'object' && Object.keys(data.args).length > 0) ? data.args : null
+      let hasResult = false, resultError = null, result = null
+      if (tcID != null && postToolByTcID[tcID] != null && !consumed.has(postToolByTcID[tcID])) {
+        const postIdx = postToolByTcID[tcID]
+        consumed.add(postIdx)
+        hasResult = true
+        const pd = parseEvtData(events[postIdx])
+        resultError = pd.error || null
+        result      = pd.result ?? null
+      }
+      steps.push({
+        type: 'tool_call', label: blocked ? 'Tool Blocked' : 'Tool Called',
+        content: e.tool_name || data.tool_name || '—', blocked, params: args,
+        hasResult, resultError, result, duration: null,
+      })
+    }
+
+    // after_tool_call (consumed by before_tool_call), post_llm_call,
+    // conversation_end, session_start/end: silently skip.
   }
 
   return { runInfo, steps }
@@ -1121,7 +1212,9 @@ function RunTimeline({ runIndex, run, events }) {
 
                 {/* Main content: tool name or prompt text or response text */}
                 {step.content && (
-                  <p className="text-xs text-[#e7dff0] mt-0.5 break-words leading-relaxed whitespace-pre-wrap">
+                  <p className={`text-xs mt-0.5 break-words leading-relaxed whitespace-pre-wrap ${
+                    step.contentMuted ? 'text-zinc-600 italic' : 'text-[#e7dff0]'
+                  }`}>
                     {step.content}
                   </p>
                 )}
@@ -1153,6 +1246,22 @@ function RunTimeline({ runIndex, run, events }) {
                         <span className="material-symbols-outlined text-[13px]">check_circle</span>
                         Success{step.duration != null ? ` · ${step.duration} ms` : ''}
                       </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Tool result content */}
+                {step.type === 'tool_call' && step.result != null && !step.resultError && (
+                  <div className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5">
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-wide block mb-1">Result</span>
+                    {typeof step.result === 'string' ? (
+                      <p className="text-[10px] font-mono text-zinc-300 break-all whitespace-pre-wrap">
+                        {step.result.length > 600 ? step.result.slice(0, 600) + '…' : step.result}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] font-mono text-zinc-300 break-all whitespace-pre-wrap">
+                        {(() => { const s = JSON.stringify(step.result, null, 2); return s.length > 600 ? s.slice(0, 600) + '…' : s })()}
+                      </p>
                     )}
                   </div>
                 )}
@@ -1373,7 +1482,7 @@ export default function AgentDetail() {
             <img src="/static/icons/openclaw-dark.svg" alt="OpenClaw" title="OpenClaw" className="h-5 w-5 shrink-0" />
           )}
           {agentType === 'hermes' && (
-            <img src="/static/icons/hermes-logo.png" alt="Hermes" title="Hermes" className="h-5 w-5 shrink-0" />
+            <img src="/static/icons/nousresearch-dark.png" alt="Hermes" title="Hermes" className="h-5 w-5 shrink-0" />
           )}
           <span className="font-medium tracking-tight text-lg text-[#e7dff0]">{agentName}</span>
           {deploymentName && (

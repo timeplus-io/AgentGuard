@@ -11,7 +11,7 @@ function AgentTypeLogo({ agentType }) {
     return <img src="/static/icons/openclaw-dark.svg" alt="OpenClaw" title="OpenClaw" className="h-4 w-4 shrink-0" />
   }
   if (agentType === 'hermes') {
-    return <img src="/static/icons/hermes-logo.png" alt="Hermes" title="Hermes" className="h-4 w-4 shrink-0" />
+    return <img src="/static/icons/nousresearch-dark.png" alt="Hermes" title="Hermes" className="h-4 w-4 shrink-0" />
   }
   return null
 }

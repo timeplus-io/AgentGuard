@@ -218,6 +218,7 @@ type HookEvent struct {
 	HookDecision string    `json:"hook_decision"`
 	BlockReason  string    `json:"block_reason"`
 	EventData    string    `json:"event_data"`
+	AgentType    string    `json:"agent_type"`
 }
 
 // EventsResponse is returned by GET /agents/:id/events.
