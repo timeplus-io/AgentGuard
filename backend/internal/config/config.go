@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,12 +32,20 @@ type ServerConfig struct {
 	Port int
 }
 
+type HoldsConfig struct {
+	MVWaitMs       int    `mapstructure:"mv_wait_ms"`
+	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
+	FailPolicy     string `mapstructure:"fail_policy"`
+	Disabled       bool   `mapstructure:"disabled"`
+}
+
 type Config struct {
 	Server        ServerConfig
 	Timeplus      TimeplusConfig
 	CatalogDir    string
 	AgentGuardURL string
 	SetupComplete bool
+	Holds         HoldsConfig `mapstructure:"holds"`
 	// ConfigPath is the file path this config was loaded from (or will be written to).
 	// Populated by the caller after Load(); not read from the config file itself.
 	ConfigPath string
@@ -75,6 +84,10 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("timeplus.port", 3218)
 	v.SetDefault("timeplus.native-port", 8463)
 	v.SetDefault("setup.complete", false)
+	v.SetDefault("holds.mv_wait_ms", 500)
+	v.SetDefault("holds.timeout_seconds", 300)
+	v.SetDefault("holds.fail_policy", "deny")
+	v.SetDefault("holds.disabled", false)
 
 	if searchPaths {
 		v.SetConfigName("config")
@@ -95,6 +108,11 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 		v.AutomaticEnv()
 	}
 
+	_ = v.BindEnv("holds.mv_wait_ms", "AGENTGUARD_HOLD_MV_WAIT_MS")
+	_ = v.BindEnv("holds.timeout_seconds", "AGENTGUARD_HOLD_TIMEOUT_SECONDS")
+	_ = v.BindEnv("holds.fail_policy", "AGENTGUARD_HOLD_FAIL_POLICY")
+	_ = v.BindEnv("holds.disabled", "AGENTGUARD_HOLDS_DISABLED")
+
 	cfg := &Config{}
 	cfg.Server.Port = v.GetInt("server.port")
 	cfg.CatalogDir = v.GetString("catalog.dir")
@@ -103,7 +121,18 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.Timeplus.Port = v.GetInt("timeplus.port")
 	cfg.Timeplus.NativePort = v.GetInt("timeplus.native-port")
 	cfg.SetupComplete = v.GetBool("setup.complete")
+	cfg.Holds.MVWaitMs = v.GetInt("holds.mv_wait_ms")
+	cfg.Holds.TimeoutSeconds = v.GetInt("holds.timeout_seconds")
+	cfg.Holds.FailPolicy = v.GetString("holds.fail_policy")
+	cfg.Holds.Disabled = v.GetBool("holds.disabled")
 	// Credentials are NOT loaded — always empty in the file-based config.
+
+	const holdTimeoutCeilingSec = 540
+	if cfg.Holds.TimeoutSeconds > holdTimeoutCeilingSec {
+		log.Printf("config: holds.timeout_seconds=%d exceeds ceiling %d; clamping",
+			cfg.Holds.TimeoutSeconds, holdTimeoutCeilingSec)
+		cfg.Holds.TimeoutSeconds = holdTimeoutCeilingSec
+	}
 
 	return cfg, nil
 }
