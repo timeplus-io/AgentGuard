@@ -10,10 +10,10 @@
 | Agent | Tool Call Blocking | LLM Call Blocking | Pre-Prompt Blocking |
 |---|---|---|---|
 | **Claude Code** | ✅ Rich, multi-modal | ❌ No direct API gate | ✅ `UserPromptSubmit` blocks the prompt before LLM sees it |
-| **OpenClaw** | ✅ With approval/UI flow | ❌ `llm_input` is observe-only | ✅ Partial (`before_prompt_build`, `before_agent_start`) |
+| **OpenClaw** | ✅ With approval/UI flow | ❌ `llm_input` is observe-only | ❌ `before_prompt_build` / `before_agent_start` are mutation-only (no `block` field, fail-open on throw) |
 | **Hermes** | ✅ Supported in code (undocumented) | ❌ Not supported | ❌ Not supported |
 
-**All three agents support tool-call blocking via their existing hook mechanisms.** None expose a native pre-LLM-API gate. The closest substitute is blocking the user prompt before it reaches the LLM (Claude Code only).
+**All three agents support tool-call blocking via their existing hook mechanisms.** None expose a native pre-LLM-API gate. The closest substitute is blocking the user prompt before it reaches the LLM (Claude Code only). Crucially, **returning `block` from a tool hook does not halt the agent loop** — the model receives the block reason as a tool error and can keep retrying (see [Post-Block Behavior](#post-block-behavior-why-return-block-isnt-enough)). AgentGuard's design — [Synchronous Hold-and-Wait](#proposed-design-synchronous-hold-and-wait) — exploits the fact that hooks run in the agent's hot path: the hook simply does not return until a human resolves the hold in AgentGuard, truly pausing the agent.
 
 ---
 
@@ -110,22 +110,50 @@ If the hook itself throws an exception, the tool is blocked with reason `"Tool c
 
 `llm_input` (`hook-types.ts:595`) signature is `=> Promise<void> | void` — **return value ignored, observation only**. No way to block an LLM call.
 
-### Other Hooks With Result Returns (Potentially Blocking)
+### Pre-Prompt Hooks Are Mutation-Only (Cannot Block)
 
-These return `Result | void` types that may control flow — worth investigating for AgentGuard's purposes:
+A natural question: can the pre-prompt-phase hooks (`before_prompt_build`, `before_agent_start`, `before_model_resolve`) gate the LLM call? **No.** Reading the result type definitions in `src/plugins/hook-before-agent-start.types.ts`:
 
-- `before_model_resolve`
-- `before_prompt_build`
-- `before_agent_start`
-- `before_agent_reply`
-- `inbound_claim`
-- `before_dispatch`
-- `reply_dispatch`
-- `message_sending`
-- `subagent_spawning`
-- `subagent_delivery_target`
-- `tool_result_persist`
-- `before_message_write`
+```typescript
+// before_model_resolve — model selection only, no block field
+export type PluginHookBeforeModelResolveResult = {
+  modelOverride?: string;
+  providerOverride?: string;
+};
+
+// before_prompt_build — prompt mutation only, no block field
+export type PluginHookBeforePromptBuildResult = {
+  systemPrompt?: string;
+  prependContext?: string;
+  prependSystemContext?: string;
+  appendSystemContext?: string;
+};
+
+// before_agent_start — combines both, still no block field
+export type PluginHookBeforeAgentStartResult =
+  PluginHookBeforePromptBuildResult & PluginHookBeforeModelResolveResult;
+```
+
+These hooks are designed for **prompt enrichment** (RAG injection, system prompt customization) and **model routing** — not security gating.
+
+**Throwing an exception doesn't help either.** The hook runner (`src/plugins/hook-runner-global.ts:43-46`) sets `fail-closed` only for `before_tool_call`:
+
+```typescript
+state.hookRunner = createHookRunner(registry, {
+  catchErrors: true,
+  failurePolicyByHook: {
+    before_tool_call: "fail-closed",
+  },
+});
+```
+
+All other hooks fail-open — a thrown exception is logged and the agent continues. There is no fail-closed path for any pre-LLM hook.
+
+### Other Hooks With Result Returns
+
+These return `Result | void` types that *may* control flow but were not investigated in detail (none are pre-LLM-call):
+
+- `before_agent_reply`, `inbound_claim`, `before_dispatch`, `reply_dispatch`, `message_sending`, `subagent_spawning`, `subagent_delivery_target`, `tool_result_persist`, `before_message_write`
 
 ---
 
@@ -198,47 +226,151 @@ All three deliver the block reason back to the LLM as the tool result so the mod
 
 ---
 
-## Implications for AgentGuard
+## Post-Block Behavior (Why "Return Block" Isn't Enough)
 
-The existing AgentGuard plugins all set `hook_decision = "observe"` and `block_reason = ""`. To move from observation to prevention, the following components need to exist:
+When the hook *returns* a block decision, the agent loop **continues**. The block reason becomes the tool result fed back to the LLM, which then decides what to do next:
 
-### 1. Synchronous Rule Evaluation Path
+| Agent | What happens after `block` is returned | Where in code |
+|---|---|---|
+| **Claude Code** | `permissionDecisionReason` is shown to Claude (the model). The agent loop continues. The model can retry a different tool, give up, or escalate. | Doc: *"For `"deny"`, [the reason is] shown to Claude"* |
+| **OpenClaw** | Hook throws `new Error(outcome.reason)`. The agent runner catches it, converts to a tool error result, appends to conversation history, loop continues. | `pi-tool-definition-adapter.ts:332-334` |
+| **Hermes** | Returns `json.dumps({"error": block_message})` as tool result, appended as `{"role": "tool", "content": ..., "tool_call_id": ...}`. Loop continues. | `model_tools.py:496-497` + `run_agent.py:8602-8607` |
 
-Hook callbacks are invoked synchronously in the agent's hot path. AgentGuard rules currently evaluate via Timeplus materialized views (asynchronous, eventually consistent). For blocking we need either:
+**No tool-blocking hook can terminate the entire turn** in any of the three agents (Claude Code's `{"continue": false, "stopReason": "..."}` works only for `Stop`/`SubagentStop`/`TeammateIdle`/`TaskCreated`/`TaskCompleted` — not `PreToolUse`).
 
-- **Local sync evaluation**: Run a subset of fast/critical rules (regex, allowlist/denylist, tool-arg patterns) in-process inside the plugin. No network round-trip.
-- **Sync AgentGuard API**: Plugin POSTs the event to AgentGuard and waits for a `block`/`allow` decision. Latency budget probably <100ms; longer would degrade agent responsiveness.
+### Iteration Caps and Worst-Case Cost
 
-A hybrid is likely best: small set of pre-cached "deny-list" rules in the plugin for instant decisions, with optional escalation to the backend for complex cases.
+The loop will eventually halt on its own — but the cap is high:
 
-### 2. Decision Persistence
+| Agent | Iteration cap per turn | Per-call timeout | Loop circuit breaker |
+|---|---|---|---|
+| **Hermes** | **90 LLM calls** (`run_agent.py:782`, `max_iterations: int = 90`); subagents capped at 50 | Per-provider request + stale-stream timeout | None — model just keeps calling |
+| **OpenClaw** | Configurable (`tools.loopDetection`: `warningThreshold`, `criticalThreshold`, `globalCircuitBreakerThreshold`) | Per-provider timeout | **YES** — `tool-loop-detection.ts:520` halts on consecutive-call patterns: *"Session execution blocked to prevent resource waste"* |
+| **Claude Code** | Internal cap (~25–50 in practice; not exposed via hooks) | Per-handler `timeout` (defaults: 600s command, 30s prompt, 60s agent) | None hook-visible |
 
-When a hook blocks, the plugin must also send the event to `agentguard_hook_events` with `hook_decision = "block"` and `block_reason = "..."` so the UI shows what was prevented. The schema already has these columns — just need to actually populate them.
+A "stickily blocked" Hermes session worst-case = up to 90 LLM calls × tokens-per-call burned before the iteration budget runs out. **This is what motivates the design below.**
 
-### 3. Per-Agent Adapters
+---
 
-Each plugin translates the AgentGuard decision into the agent's native block contract:
+## Proposed Design: Synchronous Hold-and-Wait
 
-| Adapter | Output |
+**Don't return from the hook until the human resolves the block in AgentGuard.** Hooks run synchronously in the agent's hot path — if the hook never returns, the agent loop is paused. This is a *true* hard block (not a "block this call and let the model try the next one").
+
+### The Insight
+
+OpenClaw already ships this exact pattern as a first-class feature: `requireApproval` from `before_tool_call` long-polls `plugin.approval.waitDecision` for up to 120s, surfaces the question in the UI, and resumes when the user picks `allow_once` / `allow_always` / `deny`. We adopt the same model uniformly across all three agents.
+
+### Flow
+
+```
+Hook fires (PreToolUse / pre_tool_call / before_tool_call)
+         │
+         ▼
+Plugin sends event to agentguard_hook_events     (existing async POST)
+         │
+         ▼
+Plugin calls AgentGuard backend:
+   POST /api/holds   { session_id, agent_id, tool_name, args, ... }
+         │
+         ▼
+Backend opens a HOLD record and:
+   • If a recent open threat exists for this session → respond immediately with "block"
+   • Else → wait briefly for the just-emitted event to flow through MVs (≤ N ms)
+   • Else → respond "allow"
+         │
+   ┌─────┴─────┐
+   │           │
+ ALLOW       BLOCK
+   │           │
+   │           ▼
+   │     Backend HOLDS the HTTP response open (long-poll, up to T seconds)
+   │     UI displays the pending hold in the Threats panel + SSE notification
+   │     Human clicks "Approve" or "Deny" in the UI
+   │           │
+   │           ▼
+   │     Backend responds:
+   │       • approve → "allow"  (tool runs)
+   │       • deny    → "block"  (tool blocked, agent loop continues normally)
+   │       • timeout → fail policy (recommended: "block")
+   │           │
+   ▼           ▼
+Hook returns the decision to the agent
+```
+
+### Why This Is Better Than Returning Block Immediately
+
+| Aspect | Return block immediately | Hold-and-wait (this design) |
+|---|---|---|
+| First risky call | Slips through (MV race) | **Blocked** — the hold pauses the call until backend can decide |
+| Subsequent calls | Each blocked individually; LLM keeps retrying | None — the agent is paused, no retries possible |
+| Token burn during hold | Up to 90 LLM calls (Hermes worst case) | Zero — agent is waiting, not generating |
+| Human unblock UX | Poll → eventually next call sees cleared threat | Immediate — backend returns "allow" → exact tool resumes |
+| Backend complexity | New `/api/threats/check` + cache + SSE for unblock | Long-poll endpoint, hold table |
+| Per-agent contract | Each plugin's native block shape | Same — but the plugin holds the hook open |
+
+### Per-Agent Hold Mechanics
+
+The viability of hold-and-wait depends on how each agent treats a non-returning hook. **All three hang the loop**, but the timeout boundary differs:
+
+| Agent | Hangs the loop? | Hook timeout (default) | Behavior at timeout |
+|---|---|---|---|
+| **Claude Code** | YES while the hook runs | 600s (command), 30s (prompt), 60s (agent) — per-handler `timeout` field | HTTP hooks: timeout = non-blocking error → execution continues (fail-open). Recommend setting `timeout: 600`. |
+| **OpenClaw** | YES — natively designed for it | `approval.timeoutMs ?? 120_000` (2 min) | `timeoutBehavior`: `"deny"` (default) or `"allow"`. Also respects `signal.aborted` for run cancellation. |
+| **Hermes** | YES — **indefinitely** | **None.** `for cb in callbacks: ret = cb(**kwargs)` — synchronous, no timeout, no abort signal | Hangs forever until process killed. **Plugin must self-impose a timeout.** |
+
+### Per-Plugin Implementation Sketch
+
+| Plugin | Approach |
 |---|---|
-| `claudecode` plugin | Print JSON with `permissionDecision: "deny"` to stdout |
-| `openclaw` plugin | Return `{block: true, blockReason: ...}` from the hook |
-| `hermes` plugin | Return `{"action": "block", "message": ...}` from the callback |
+| **OpenClaw** | Return `{ requireApproval: { pluginId: "agentguard", title: "AgentGuard hold", description: "...", severity: "warning", timeoutMs: 120_000, timeoutBehavior: "deny" } }` from `before_tool_call`. AgentGuard backend implements gateway-side `plugin.approval.request` and `plugin.approval.waitDecision`. |
+| **Claude Code** | Hook (preferably `type: "http"` with `timeout: 600`) long-polls AgentGuard. Returns `{permissionDecision: "allow"}` or `{permissionDecision: "deny", permissionDecisionReason: "..."}` once decision arrives. |
+| **Hermes** | `pre_tool_call` callback long-polls AgentGuard via `httpx.post(..., timeout=120)` (self-imposed timeout — Hermes provides none). Returns `{"action": "block", "message": ...}` if denied; returns `None` if approved. |
 
-### 4. UI Surface
+### Required Backend Work
 
-Threats page should distinguish blocked-and-prevented vs detected-after-the-fact. The existing `hook_decision` column makes this trivial — just filter on `block` to show the prevention timeline.
+| Component | Status | Notes |
+|---|---|---|
+| `POST /api/holds` long-poll endpoint | NEW | Opens a hold, returns when human decides or timeout. Long-poll up to ~120s server-side. |
+| Hold table (or stream) | NEW | `(hold_id, session_id, agent_id, tool_name, args_summary, created_at, status, decided_by, decided_at)` |
+| Threats UI surfaces holds | EXTEND | New "Pending Holds" section showing pending holds with Approve / Deny buttons. SSE push for new holds. |
+| Auto-decide based on existing threats | NEW | If a related open threat already exists for this `(session, rule)` → decide immediately without long-poll. |
+| Block-decision event | EXISTS | `agentguard_hook_events.hook_decision` + `block_reason` populated when the hook ultimately returns block. |
+| Notification on hold | NEW | Extend SSE `/api/notifications/stream` to push `hold_pending` events so the UI updates in real time. |
 
-### What's NOT Possible
+### Required Plugin Work
 
-- **Pre-LLM-API blocking** is unavailable in OpenClaw and Hermes. Claude Code's `UserPromptSubmit` is the closest substitute but only catches user-initiated turns, not mid-loop LLM calls.
-- **Mid-turn LLM call interception** (e.g., to enforce "don't call this provider for this prompt") cannot be done via hooks in any of the three agents. Would require a network-layer proxy (LiteLLM) instead.
+All three plugins:
+1. Send the `pre*` event to `agentguard_hook_events` (already done).
+2. Issue the synchronous long-poll `POST /api/holds`. Wait for response.
+3. Translate response into the agent's native block/allow shape.
+4. After blocking, also POST a second event with `hook_decision="block"` and `block_reason=<reason>` so the audit trail is complete.
+
+### Failure Modes
+
+- **Backend unreachable**: hook must decide fail-open or fail-closed. **Recommendation: fail-closed** (deny) for explicit security holds — if the backend is the source of truth and unreachable, refusing the action is safer than allowing it. The existing event-ingest path stays fail-open (don't block on telemetry ingestion errors), but the hold endpoint is fail-closed. Make this configurable per-deployment.
+- **Backend slow / busy**: long-poll naturally handles this; the hook simply waits. Up to the hook timeout boundary.
+- **Hook timeout reached before human responds**: each agent's behavior differs (table above). For Hermes the plugin's self-imposed `httpx` timeout fires; for OpenClaw the `timeoutBehavior` fires; for Claude Code HTTP timeout means execution continues (fail-open) — we should override by returning `permissionDecision: "deny"` from the hook just before our self-imposed timeout window expires.
+- **User session ends while held**: backend must mark the hold abandoned (no decision possible). Surfaces in audit log as `hold_abandoned`.
+- **Human accidentally approves a malicious action**: not a system failure, but worth surfacing the full args + LLM context in the UI so the human has enough information to decide.
+
+### UX Considerations
+
+- Agent appears frozen during a hold. **Each plugin should signal this clearly.** Claude Code has `statusMessage` in hook config; OpenClaw `requireApproval` has `title`/`description`; Hermes has no built-in mechanism — would need to print to stderr or rely on the AgentGuard UI being open.
+- Holds should be configurable per rule severity: `critical` → always hold; `warning` → log only (no hold); `info` → never hold.
+- Long-poll connection cost is modest at our scale (handful of holds per session).
+
+### What's NOT Possible (Recap)
+
+- **Pre-LLM-API blocking** for OpenClaw and Hermes — confirmed unavailable. Hold-and-wait works for tool calls only. The closest LLM-call gate is Claude Code's `UserPromptSubmit` (user-initiated turns only).
+- **Mid-turn LLM call interception** — would require a network-layer proxy (LiteLLM) instead of hooks.
 
 ---
 
 ## Open Questions
 
-1. **Latency budget** — what's the maximum time the hook can hang before degrading agent UX? Need to measure per-agent.
-2. **Fail-open vs fail-closed** — if the AgentGuard backend is unreachable, should the plugin allow or deny? OpenClaw's `before_tool_call` defaults to fail-closed; we should match that default for consistency.
-3. **Rule scope for sync eval** — which existing seed rules (rp-001 … rp-084) can be evaluated in-process without Timeplus? Most are SQL with lookups against historical context — those won't translate. Pure regex/pattern rules are good candidates.
-4. **Provider gap for Hermes `llm_response`** — already known limitation. Doesn't affect blocking design.
+1. **Hold timeout default** — 120s matches OpenClaw's existing approval default. Reasonable as a starting point.
+2. **Auto-decide window** — when the hook fires, how long should the backend wait for MVs to process the just-emitted event before responding "allow" if no threat materializes? Probably 300–500ms — long enough for typical Proton MV latency, short enough to not feel laggy when no threat exists.
+3. **Per-rule hold policy** — config to map rule severity → hold/log/ignore. Start with `critical → hold, warning → log, info → ignore`.
+4. **Hermes self-timeout boundary** — what should the plugin do if `httpx` times out? Return `{"action": "block", "message": "AgentGuard hold timed out, denying for safety"}` is the safe default.
+5. **Approve-with-edit** — should the human be able to modify the tool args before approval? OpenClaw's `requireApproval` already supports this via `params` on the approval response. Worth adopting cross-agent.
+6. **Provider gap for Hermes `llm_response`** — already known limitation, doesn't affect blocking design.
