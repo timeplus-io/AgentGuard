@@ -1,7 +1,17 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { api } from '../api/client'
 
 const NotificationsContext = createContext(null)
+
+function parseField(message, key) {
+  for (const part of (message ?? '').split('|')) {
+    const idx = part.indexOf(':')
+    if (idx < 0) continue
+    if (part.slice(0, idx) === key) return part.slice(idx + 1)
+  }
+  return ''
+}
 
 export function useNotifications() {
   return useContext(NotificationsContext)
@@ -65,6 +75,7 @@ function Toast({ n, onDismiss }) {
 
 export function NotificationsProvider({ children }) {
   const [toasts, setToasts] = useState([])
+  const [pendingHolds, setPendingHolds] = useState(new Map())
   const timersRef = useRef({})
 
   const dismiss = useCallback((id) => {
@@ -79,12 +90,52 @@ export function NotificationsProvider({ children }) {
     timersRef.current[notification.id] = setTimeout(() => dismiss(notification.id), 6000)
   }, [dismiss])
 
+  const reconcileHolds = useCallback(async () => {
+    try {
+      const r = await api.listHolds('pending')
+      const next = new Map()
+      for (const h of r.holds ?? []) next.set(h.hold_id, h)
+      setPendingHolds(next)
+    } catch { /* best-effort */ }
+  }, [])
+
   useEffect(() => {
     const es = new EventSource('/api/notifications/stream', { withCredentials: true })
+    let cancelled = false
+
+    es.onopen = () => { if (!cancelled) reconcileHolds() }
 
     es.addEventListener('alert', (e) => {
       try {
         const n = JSON.parse(e.data)
+        if (n.rule_name === 'hold_pending') {
+          const holdId = parseField(n.message, 'hold')
+          const tool = parseField(n.message, 'tool')
+          const reason = parseField(n.message, 'reason')
+          setPendingHolds(prev => {
+            const next = new Map(prev)
+            next.set(holdId, {
+              hold_id: holdId,
+              severity: n.severity,
+              agent_id: n.agent_id,
+              tool_name: tool,
+              message: reason,
+              created_at: n.detected_at,
+            })
+            return next
+          })
+          return
+        }
+        if (n.rule_name === 'hold_decided') {
+          const holdId = parseField(n.message, 'hold')
+          setPendingHolds(prev => {
+            if (!prev.has(holdId)) return prev
+            const next = new Map(prev)
+            next.delete(holdId)
+            return next
+          })
+          return
+        }
         push(n)
       } catch { /* ignore malformed events */ }
     })
@@ -94,13 +145,14 @@ export function NotificationsProvider({ children }) {
     }
 
     return () => {
+      cancelled = true
       es.close()
       Object.values(timersRef.current).forEach(clearTimeout)
     }
-  }, [push])
+  }, [push, reconcileHolds])
 
   return (
-    <NotificationsContext.Provider value={{ push }}>
+    <NotificationsContext.Provider value={{ push, pendingHolds, reconcileHolds }}>
       {children}
       {/* Fixed toast stack — rendered outside the page layout so it appears on every page */}
       {toasts.length > 0 && (
