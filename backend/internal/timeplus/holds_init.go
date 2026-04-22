@@ -87,7 +87,7 @@ SELECT
   now64(3)    AS decided_at,
   'orphaned by backend restart' AS decided_reason,
   now64(3)    AS updated_at
-FROM mv_holds_current
+FROM table(mv_holds_current)
 WHERE status = 'pending'`
 	if err := conn.Exec(ctx, sql); err != nil {
 		return fmt.Errorf("abandon stale pending holds: %w", err)

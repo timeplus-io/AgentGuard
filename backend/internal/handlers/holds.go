@@ -325,7 +325,7 @@ SELECT
   '%s' AS decided_at,
   '%s' AS decided_reason,
   '%s' AS updated_at
-FROM mv_holds_current
+FROM table(mv_holds_current)
 WHERE hold_id = '%s'
 LIMIT 1`,
 		status, escapeSQLStr(decidedBy), now, escapeSQLStr(decidedReason), now,
