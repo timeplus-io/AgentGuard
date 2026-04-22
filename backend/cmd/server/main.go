@@ -142,9 +142,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 		// so it must be reachable without a session cookie.
 		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg, store))
 		// /holds is called by agent plugins (server-to-server) — no session cookie.
-		api.POST("/holds", handlers.CreateHold(cfg, holdReg, handlers.GlobalAlertBroadcaster))
+		api.POST("/holds", handlers.CreateHold(cfg, store, holdReg, handlers.GlobalAlertBroadcaster))
 		// /holds/_abandon-session/:session_id — unauthenticated (plugin calls fire-and-forget on SessionEnd).
-		api.POST("/holds/_abandon-session/:session_id", handlers.AbandonSession(cfg, holdReg))
+		api.POST("/holds/_abandon-session/:session_id", handlers.AbandonSession(cfg, store, holdReg))
 
 		// All existing routes — require a valid session cookie.
 		protected := api.Group("/", auth.AuthRequired(store))
@@ -182,7 +182,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.GET("/holds", handlers.ListHolds(cfg))
 			protected.GET("/holds/:hold_id", handlers.GetHold(cfg))
 			protected.POST("/holds/:hold_id/decide", handlers.DecideHold(cfg, holdReg, handlers.GlobalAlertBroadcaster))
-			protected.POST("/holds/_drain", handlers.DrainHolds(cfg, holdReg))
+			protected.POST("/holds/_drain", handlers.DrainHolds(cfg, store, holdReg))
 			protected.GET("/notifications/stream", handlers.NotificationsSSEHandler())
 			protected.GET("/investigate/tables", handlers.ListTables(cfg))
 			protected.POST("/onboarding/generate", handlers.GenerateConfig)

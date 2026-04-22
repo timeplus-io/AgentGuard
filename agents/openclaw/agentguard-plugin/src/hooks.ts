@@ -133,6 +133,14 @@ export function registerAllHooks(
       tool_name: ctx.toolName,
       event_data: safeStringify(event),
     };
+
+    // If holds are disabled, fall back to observation-only mode: async enqueue, no block.
+    if (!config.holdsEnabled) {
+      client.enqueue(evt);
+      return;
+    }
+
+    // Holds enabled: synchronous /api/holds path.
     // /api/holds will ingest this event itself — do NOT also enqueue here.
     const decision = await requestHold(evt, event?.params, config);
     if (decision.decision === "block") {

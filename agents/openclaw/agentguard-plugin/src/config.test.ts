@@ -9,6 +9,7 @@ describe("resolveConfig", () => {
     "AGENTGUARD_BATCH_SIZE",
     "AGENTGUARD_URL",
     "AGENTGUARD_HOLD_FAIL_POLICY",
+    "AGENTGUARD_HOLDS_ENABLED",
   ];
 
   beforeEach(() => {
@@ -91,9 +92,9 @@ describe("resolveConfig", () => {
     expect(cfg.deploymentName).toBe("Production");
   });
 
-  it("agentguardUrl defaults to http://host.docker.internal:8080", () => {
+  it("agentguardUrl defaults to http://localhost:8080", () => {
     delete process.env.AGENTGUARD_URL;
-    expect(resolveConfig().agentguardUrl).toBe("http://host.docker.internal:8080");
+    expect(resolveConfig().agentguardUrl).toBe("http://localhost:8080");
   });
 
   it("holdFailPolicy defaults to deny and reads env override to allow", () => {
@@ -101,5 +102,21 @@ describe("resolveConfig", () => {
     expect(resolveConfig().holdFailPolicy).toBe("deny");
     process.env.AGENTGUARD_HOLD_FAIL_POLICY = "allow";
     expect(resolveConfig().holdFailPolicy).toBe("allow");
+  });
+
+  it("holdsEnabled defaults to true", () => {
+    delete process.env.AGENTGUARD_HOLDS_ENABLED;
+    expect(resolveConfig().holdsEnabled).toBe(true);
+  });
+
+  it("holdsEnabled reads AGENTGUARD_HOLDS_ENABLED=false to disable", () => {
+    process.env.AGENTGUARD_HOLDS_ENABLED = "false";
+    expect(resolveConfig().holdsEnabled).toBe(false);
+  });
+
+  it("holdsEnabled reads pluginConfig.holdsEnabled boolean", () => {
+    delete process.env.AGENTGUARD_HOLDS_ENABLED;
+    expect(resolveConfig({ holdsEnabled: false }).holdsEnabled).toBe(false);
+    expect(resolveConfig({ holdsEnabled: true }).holdsEnabled).toBe(true);
   });
 });

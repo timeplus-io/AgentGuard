@@ -21,9 +21,12 @@ type TimeplusConfig struct {
 	Host       string
 	Port       int
 	NativePort int
-	// User and Password are NOT loaded from config file or env vars.
-	// They are populated at runtime: by auth.RequestCfg (from the session)
-	// or by handlers that receive them directly (setup/provision).
+	// User and Password may be loaded from TIMEPLUS_USER / TIMEPLUS_PASSWORD env
+	// vars (typically in production / docker compose) — they form the canonical
+	// service account used by server-to-server endpoints (plugin → /api/holds,
+	// Timeplus → /api/alerts/webhook). When unset, handlers fall back to
+	// per-request credentials populated by auth.RequestCfg from the session
+	// cookie, or to SessionStore.AnyCredentials() for plugin endpoints.
 	User     string
 	Password string
 }
@@ -57,7 +60,10 @@ type Config struct {
 //  3. Environment variables prefixed with TIMEPLUS_ or SERVER_
 //  4. CLI flags (bound by the caller via viper.BindPFlag)
 //
-// Credentials (TIMEPLUS_USER, TIMEPLUS_PASSWORD) are intentionally not loaded.
+// User-facing UI handlers always require an authenticated session cookie.
+// Server-to-server handlers (plugin → /api/holds, Timeplus → /api/alerts/webhook)
+// use TIMEPLUS_USER + TIMEPLUS_PASSWORD env vars when set as a stable service
+// account, falling back to any active user session if those env vars are absent.
 func Load() (*Config, error) {
 	return load(viper.GetViper(), true)
 }
@@ -83,6 +89,8 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("timeplus.host", "localhost")
 	v.SetDefault("timeplus.port", 3218)
 	v.SetDefault("timeplus.native-port", 8463)
+	v.SetDefault("timeplus.user", "")
+	v.SetDefault("timeplus.password", "")
 	v.SetDefault("setup.complete", false)
 	v.SetDefault("holds.mv_wait_ms", 500)
 	v.SetDefault("holds.timeout_seconds", 300)
@@ -112,6 +120,8 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	_ = v.BindEnv("holds.timeout_seconds", "AGENTGUARD_HOLD_TIMEOUT_SECONDS")
 	_ = v.BindEnv("holds.fail_policy", "AGENTGUARD_HOLD_FAIL_POLICY")
 	_ = v.BindEnv("holds.disabled", "AGENTGUARD_HOLDS_DISABLED")
+	_ = v.BindEnv("timeplus.user", "TIMEPLUS_USER")
+	_ = v.BindEnv("timeplus.password", "TIMEPLUS_PASSWORD")
 
 	cfg := &Config{}
 	cfg.Server.Port = v.GetInt("server.port")
@@ -125,7 +135,10 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.Holds.TimeoutSeconds = v.GetInt("holds.timeout_seconds")
 	cfg.Holds.FailPolicy = v.GetString("holds.fail_policy")
 	cfg.Holds.Disabled = v.GetBool("holds.disabled")
-	// Credentials are NOT loaded — always empty in the file-based config.
+	// TIMEPLUS_USER / TIMEPLUS_PASSWORD: optional canonical service account
+	// for server-to-server endpoints. Never written to the config file.
+	cfg.Timeplus.User = v.GetString("timeplus.user")
+	cfg.Timeplus.Password = v.GetString("timeplus.password")
 
 	const holdTimeoutCeilingSec = 540
 	if cfg.Holds.TimeoutSeconds > holdTimeoutCeilingSec {

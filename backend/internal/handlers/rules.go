@@ -667,13 +667,12 @@ func AlertWebhook(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc 
 
 		// Deduplicate: suppress the SSE notification when an open threat already
 		// exists for this (agent, deployment, rule) — the MV occasionally fires
-		// multiple times for the same active threat. Use any live session for
-		// credentials; if none exists, fail open and allow the notification.
-		queryCfg := *cfg
-		if user, pass := store.AnyCredentials(); user != "" {
-			queryCfg.Timeplus.User = user
-			queryCfg.Timeplus.Password = pass
-			if isThreatAlreadyOpen(&queryCfg, payload.AgentID, payload.DeploymentID, payload.RuleID) {
+		// multiple times for the same active threat. Use the canonical service
+		// account (TIMEPLUS_USER) when set, falling back to any live session.
+		// If neither is available, fail open and allow the notification.
+		queryCfg := pluginCfg(cfg, store)
+		if queryCfg.Timeplus.User != "" {
+			if isThreatAlreadyOpen(queryCfg, payload.AgentID, payload.DeploymentID, payload.RuleID) {
 				log.Printf("alert: suppressed duplicate notification for rule=%s agent=%s (threat already open)",
 					payload.RuleID, payload.AgentID)
 				c.JSON(http.StatusOK, gin.H{"received": true, "suppressed": true})
