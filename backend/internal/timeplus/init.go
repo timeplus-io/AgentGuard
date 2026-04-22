@@ -142,6 +142,17 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	if err := startupSyncMVs(ctx, conn, udfsByRuleID); err != nil {
 		log.Printf("timeplus init: warning syncing MVs: %v", err)
 	}
+
+	// Setup holds storage (stream + MV + ALTER rules.block_policy).
+	if err := SetupHoldsStorage(&timeplusCfg); err != nil {
+		log.Printf("timeplus: holds storage setup failed: %v (continuing — /api/holds will return 503)", err)
+	}
+
+	// Abandon any stale pending holds left over from a previous process.
+	if err := AbandonStalePendingHolds(&timeplusCfg); err != nil {
+		log.Printf("timeplus: abandon stale pending holds: %v (continuing)", err)
+	}
+
 	emit("ok", "  ✓ All resources provisioned")
 	return nil
 }
