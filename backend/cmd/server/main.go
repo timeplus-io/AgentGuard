@@ -17,6 +17,7 @@ import (
 	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
+	"github.com/timeplus/agentguard/internal/holdregistry"
 	"github.com/timeplus/agentguard/internal/web"
 )
 
@@ -109,6 +110,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// All Timeplus resources are provisioned during the one-time /api/setup/provision flow.
 
 	store := auth.NewSessionStore()
+	holdReg := holdregistry.New()
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
@@ -134,6 +136,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 		// /alerts/webhook is called by Timeplus (server-to-server), not by the browser,
 		// so it must be reachable without a session cookie.
 		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg, store))
+		// /holds is called by agent plugins (server-to-server) — no session cookie.
+		api.POST("/holds", handlers.CreateHold(cfg, holdReg, handlers.GlobalAlertBroadcaster))
 
 		// All existing routes — require a valid session cookie.
 		protected := api.Group("/", auth.AuthRequired(store))
