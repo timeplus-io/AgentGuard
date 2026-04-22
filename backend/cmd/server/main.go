@@ -166,6 +166,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.POST("/rules/:id/install", handlers.InstallRule(cfg, mgr))
 			protected.POST("/rules/:id/toggle", handlers.ToggleRule(cfg, mgr))
 			protected.POST("/rules/:id/upgrade", handlers.UpgradeRule(cfg, mgr))
+			protected.POST("/rules/:id/policy", handlers.SetRuleBlockPolicy(cfg, mgr))
 			protected.DELETE("/rules/:id", handlers.UninstallRule(cfg, mgr))
 			protected.GET("/notifications/stream", handlers.NotificationsSSEHandler())
 			protected.GET("/investigate/tables", handlers.ListTables(cfg))

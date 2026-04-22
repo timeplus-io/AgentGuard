@@ -176,7 +176,7 @@ func ToggleRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		sql := fmt.Sprintf(`
-INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
+INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
 SELECT
   rule_id,
   arg_max(name,               updated_at) AS name,
@@ -190,6 +190,7 @@ SELECT
   arg_max(required_telemetry, updated_at) AS required_telemetry,
   arg_max(fp_rate,            updated_at) AS fp_rate,
   arg_max(hook_sources,       updated_at) AS hook_sources,
+  arg_max(block_policy,       updated_at) AS block_policy,
   now64(3)                                AS updated_at
 FROM table(agentguard_rules)
 WHERE rule_id = '%s'
@@ -280,8 +281,8 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		escapedSQL := escapeSQLStr(targetSQL)
-		insertSQL := fmt.Sprintf(`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES
-('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s',now64(3))`,
+		insertSQL := fmt.Sprintf(`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at) VALUES
+('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s','%s',now64(3))`,
 			id,
 			escapeSQLStr(current.Name),
 			targetVersion,
@@ -290,6 +291,7 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			current.Enabled,
 			current.Severity, current.Category,
 			current.RequiredTelemetry, current.FPRate, current.HookSources,
+			current.BlockPolicy,
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
 			log.Printf("rules: upgrade %s insert: %v", id, err)
@@ -337,7 +339,7 @@ func UninstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		sql := fmt.Sprintf(`
-INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
+INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
 SELECT
   rule_id,
   arg_max(name,               updated_at) AS name,
@@ -351,6 +353,7 @@ SELECT
   arg_max(required_telemetry, updated_at) AS required_telemetry,
   arg_max(fp_rate,            updated_at) AS fp_rate,
   arg_max(hook_sources,       updated_at) AS hook_sources,
+  arg_max(block_policy,       updated_at) AS block_policy,
   now64(3)                                AS updated_at
 FROM table(agentguard_rules)
 WHERE rule_id = '%s'
@@ -466,7 +469,7 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		escapedSQL := escapeSQLStr(entry.QuerySQL)
 		insertSQL := fmt.Sprintf(
-			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s',now64(3))`,
+			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s','log_only',now64(3))`,
 			id,
 			escapeSQLStr(entry.Name),
 			entry.Version,
@@ -730,7 +733,7 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		escapedSQL := escapeSQLStr(finalSQL)
 		insertSQL := fmt.Sprintf(
-			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
+			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s','log_only',now64(3))`,
 			ruleID,
 			escapeSQLStr(body.Name),
 			escapeSQLStr(body.Description),
@@ -874,6 +877,75 @@ func mvExists(cfg *config.TimeplusConfig, ruleID string) (bool, error) {
 		return cnt > 0, nil
 	}
 	return false, nil
+}
+
+// SetRuleBlockPolicy handles POST /api/rules/:id/policy
+// Body: {"block_policy": "hold" | "auto_block" | "log_only"}
+func SetRuleBlockPolicy(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		id := c.Param("id")
+		var body struct {
+			BlockPolicy string `json:"block_policy"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+		switch body.BlockPolicy {
+		case "hold", "auto_block", "log_only":
+			// ok
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "block_policy must be hold|auto_block|log_only"})
+			return
+		}
+
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			return
+		}
+		var current *models.RulePack
+		for i := range packs {
+			if packs[i].ID == id {
+				current = &packs[i]
+				break
+			}
+		}
+		if current == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "rule not found"})
+			return
+		}
+
+		sql := fmt.Sprintf(`
+INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
+SELECT
+  rule_id,
+  arg_max(name,               updated_at) AS name,
+  arg_max(version,            updated_at) AS version,
+  arg_max(description,        updated_at) AS description,
+  arg_max(query_sql,          updated_at) AS query_sql,
+  arg_max(enabled,            updated_at) AS enabled,
+  false                                   AS deleted,
+  arg_max(severity,           updated_at) AS severity,
+  arg_max(category,           updated_at) AS category,
+  arg_max(required_telemetry, updated_at) AS required_telemetry,
+  arg_max(fp_rate,            updated_at) AS fp_rate,
+  arg_max(hook_sources,       updated_at) AS hook_sources,
+  '%s'                                    AS block_policy,
+  now64(3)                                AS updated_at
+FROM table(agentguard_rules)
+WHERE rule_id = '%s'
+GROUP BY rule_id`, escapeSQLStr(body.BlockPolicy), escapeSQLStr(id))
+
+		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("set policy failed: %v", err)})
+			return
+		}
+
+		current.BlockPolicy = body.BlockPolicy
+		c.JSON(http.StatusOK, current)
+	}
 }
 
 // versionGreater returns true if version string a is strictly greater than b.
