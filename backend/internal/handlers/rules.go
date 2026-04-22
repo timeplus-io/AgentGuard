@@ -194,7 +194,7 @@ SELECT
   now64(3)                                AS updated_at
 FROM table(agentguard_rules)
 WHERE rule_id = '%s'
-GROUP BY rule_id`, id)
+GROUP BY rule_id`, escapeSQLStr(id))
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "toggle failed"})
