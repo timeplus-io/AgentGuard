@@ -18,6 +18,7 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
+	"github.com/timeplus/agentguard/internal/timeplus"
 	"github.com/timeplus/agentguard/internal/web"
 )
 
@@ -108,6 +109,13 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
 	// Note: timeplus.Init() is no longer called at startup.
 	// All Timeplus resources are provisioned during the one-time /api/setup/provision flow.
+	//
+	// However, schema additions made AFTER provision (like the holds feature) need to
+	// be applied to existing deployments. MigrateOnStartup runs only the new idempotent
+	// DDLs — safe on both fresh and pre-existing installs.
+	if cfg.SetupComplete {
+		timeplus.MigrateOnStartup(cfg.Timeplus)
+	}
 
 	store := auth.NewSessionStore()
 	holdReg := holdregistry.New()
