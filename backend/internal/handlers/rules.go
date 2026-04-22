@@ -175,6 +175,41 @@ func ToggleRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 
+		// Run the MV operation FIRST. If it fails, we return 500 without touching
+		// the agentguard_rules row — so the frontend's revert-on-error reflects
+		// reality, and the rule's enabled state stays consistent with whether
+		// the MV is actually running.
+		newEnabled := !current.Enabled
+		if newEnabled {
+			exists, err := mvExists(&cfg.Timeplus, id)
+			if err != nil {
+				log.Printf("rules: toggle %s mvExists: %v", id, err)
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "MV status check failed"})
+				return
+			}
+			if exists {
+				if err := tp.ResumeRuleMV(&cfg.Timeplus, id); err != nil {
+					log.Printf("rules: toggle %s resume MV: %v", id, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV resume failed: %v", err)})
+					return
+				}
+			} else {
+				catalogEntry, _ := mgr.Lookup(id)
+				if err := tp.CreateRuleMV(&cfg.Timeplus, id, current.QuerySQL, catalogEntry.UDFs); err != nil {
+					log.Printf("rules: toggle %s create MV: %v", id, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
+					return
+				}
+			}
+		} else {
+			if err := tp.PauseRuleMV(&cfg.Timeplus, id); err != nil {
+				log.Printf("rules: toggle %s pause MV: %v", id, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV pause failed: %v", err)})
+				return
+			}
+		}
+
+		// MV op succeeded — now flip the enabled column.
 		sql := fmt.Sprintf(`
 INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
 SELECT
@@ -197,34 +232,9 @@ WHERE rule_id = '%s'
 GROUP BY rule_id`, escapeSQLStr(id))
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
+			log.Printf("rules: toggle %s db update: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "toggle failed"})
 			return
-		}
-
-		newEnabled := !current.Enabled
-		if newEnabled {
-			exists, err := mvExists(&cfg.Timeplus, id)
-			if err != nil {
-				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "MV status check failed"})
-				return
-			}
-			if exists {
-				if err := tp.ResumeRuleMV(&cfg.Timeplus, id); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV resume failed: %v", err)})
-					return
-				}
-			} else {
-				catalogEntry, _ := mgr.Lookup(id)
-				if err := tp.CreateRuleMV(&cfg.Timeplus, id, current.QuerySQL, catalogEntry.UDFs); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
-					return
-				}
-			}
-		} else {
-			if err := tp.PauseRuleMV(&cfg.Timeplus, id); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV pause failed: %v", err)})
-				return
-			}
 		}
 
 		current.Enabled = newEnabled
