@@ -161,14 +161,16 @@ type Hold struct {
 
 // HoldRequest is the JSON body the plugin sends to POST /api/holds.
 type HoldRequest struct {
-	DeploymentID string                 `json:"deployment_id"`
-	AgentID      string                 `json:"agent_id"`
-	SessionID    string                 `json:"session_id"`
-	RunID        string                 `json:"run_id"`
-	ToolName     string                 `json:"tool_name"`
-	ToolInput    map[string]interface{} `json:"tool_input"`
-	EventTime    time.Time              `json:"event_time"`
-	HookPayload  map[string]interface{} `json:"hook_payload"`
+	DeploymentID   string                 `json:"deployment_id"`
+	AgentID        string                 `json:"agent_id"`
+	SessionID      string                 `json:"session_id"`
+	RunID          string                 `json:"run_id"`
+	ToolName       string                 `json:"tool_name"`
+	ToolInput      map[string]interface{} `json:"tool_input"`
+	EventTime      time.Time              `json:"event_time"`
+	HookPayload    map[string]interface{} `json:"hook_payload"`
+	AgentType      string                 `json:"agent_type"`      // "claudecode" | "openclaw" — defaults to "claudecode" if empty for backward compat
+	DeploymentName string                 `json:"deployment_name"` // optional, populated when known
 }
 
 // HoldResponse is what the plugin receives from POST /api/holds.

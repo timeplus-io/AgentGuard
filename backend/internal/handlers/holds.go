@@ -174,6 +174,10 @@ func ingestHookEvent(cfg *config.Config, req *models.HoldRequest) error {
 	if err != nil {
 		return fmt.Errorf("marshal hook payload: %w", err)
 	}
+	agentType := req.AgentType
+	if agentType == "" {
+		agentType = "claudecode" // backward compat
+	}
 	sql := fmt.Sprintf(`
 INSERT INTO agentguard_hook_events
   (hook_name, event_time, session_id, run_id, agent_id, deployment_id,
@@ -181,15 +185,17 @@ INSERT INTO agentguard_hook_events
    hook_decision, block_reason, event_data, agent_type)
 VALUES
   ('before_tool_call', '%s', '%s', '%s', '%s', '%s',
-   '', '', '%s', '', '',
-   'observe', '', '%s', 'claudecode')`,
+   '%s', '', '%s', '', '',
+   'observe', '', '%s', '%s')`,
 		req.EventTime.UTC().Format("2006-01-02 15:04:05.999"),
 		escapeSQLStr(req.SessionID),
 		escapeSQLStr(req.RunID),
 		escapeSQLStr(req.AgentID),
 		escapeSQLStr(req.DeploymentID),
+		escapeSQLStr(req.DeploymentName),
 		escapeSQLStr(req.ToolName),
 		escapeSQLStr(string(payloadJSON)),
+		escapeSQLStr(agentType),
 	)
 	return tp.ExecHTTP(&cfg.Timeplus, sql)
 }
