@@ -1,6 +1,7 @@
 package holdregistry
 
 import (
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -54,7 +55,7 @@ func TestConcurrentRegisterSignal(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(N)
 	for i := 0; i < N; i++ {
-		id := "h" + itoa(i)
+		id := "h" + strconv.Itoa(i)
 		ch := r.Register(id)
 		go func() {
 			defer wg.Done()
@@ -69,16 +70,3 @@ func TestConcurrentRegisterSignal(t *testing.T) {
 	wg.Wait()
 }
 
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	var b [16]byte
-	pos := len(b)
-	for i > 0 {
-		pos--
-		b[pos] = byte('0' + i%10)
-		i /= 10
-	}
-	return string(b[pos:])
-}

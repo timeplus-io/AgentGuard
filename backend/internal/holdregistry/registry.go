@@ -23,7 +23,20 @@ func New() *Registry {
 
 // Register reserves a slot for the given hold_id and returns the receive end
 // of the channel. The channel is buffered (size 1) so Signal never blocks.
-// The caller must Cancel(id) when done (use defer).
+//
+// CONTRACT: callers MUST receive with a timeout, e.g.:
+//
+//	ch := r.Register(id)
+//	defer r.Cancel(id)
+//	select {
+//	case d := <-ch:
+//	    // decision received
+//	case <-time.After(timeout):
+//	    // give up on this hold
+//	}
+//
+// The channel is never closed by Cancel — receiving without a timeout would
+// block forever if no Signal arrives (e.g., backend restart, signal lost).
 func (r *Registry) Register(holdID string) <-chan Decision {
 	ch := make(chan Decision, 1)
 	r.m.Store(holdID, ch)
