@@ -144,12 +144,12 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	}
 
 	// Setup holds storage (stream + MV + ALTER rules.block_policy).
-	if err := SetupHoldsStorage(&timeplusCfg); err != nil {
+	if err := SetupHoldsStorage(ctx, conn, emit); err != nil {
 		log.Printf("timeplus: holds storage setup failed: %v (continuing — /api/holds will return 503)", err)
 	}
 
 	// Abandon any stale pending holds left over from a previous process.
-	if err := AbandonStalePendingHolds(&timeplusCfg); err != nil {
+	if err := AbandonStalePendingHolds(ctx, conn, emit); err != nil {
 		log.Printf("timeplus: abandon stale pending holds: %v (continuing)", err)
 	}
 

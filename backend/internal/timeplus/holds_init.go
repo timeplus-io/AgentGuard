@@ -1,10 +1,10 @@
 package timeplus
 
 import (
+	"context"
 	"fmt"
-	"log"
 
-	"github.com/timeplus/agentguard/internal/config"
+	proton "github.com/timeplus-io/proton-go-driver/v2"
 )
 
 const ddlHoldsStream = `
@@ -55,22 +55,17 @@ ALTER STREAM agentguard_rules ADD COLUMN IF NOT EXISTS block_policy string DEFAU
 // adds the block_policy column to agentguard_rules. All operations are
 // idempotent. Errors are logged and returned but the caller may choose to
 // continue (matching the existing init.go pattern).
-func SetupHoldsStorage(cfg *config.TimeplusConfig) error {
-	if err := ExecHTTP(cfg, ddlHoldsStream); err != nil {
-		return fmt.Errorf("create agentguard_holds stream: %w", err)
+func SetupHoldsStorage(ctx context.Context, conn proton.Conn, emit func(status, msg string)) error {
+	if err := execIfNotExists(ctx, conn, "stream", "agentguard_holds", ddlHoldsStream, emit); err != nil {
+		return err
 	}
-	log.Printf("timeplus: agentguard_holds stream ready")
-
-	if err := ExecHTTP(cfg, ddlHoldsCurrentMV); err != nil {
-		return fmt.Errorf("create mv_holds_current: %w", err)
+	if err := execIfNotExists(ctx, conn, "view", "mv_holds_current", ddlHoldsCurrentMV, emit); err != nil {
+		return err
 	}
-	log.Printf("timeplus: mv_holds_current ready")
-
-	if err := ExecHTTP(cfg, ddlAlterRulesAddBlockPolicy); err != nil {
+	if err := conn.Exec(ctx, ddlAlterRulesAddBlockPolicy); err != nil {
 		return fmt.Errorf("alter agentguard_rules add block_policy: %w", err)
 	}
-	log.Printf("timeplus: agentguard_rules.block_policy column ready")
-
+	emit("ok", "  ✓ agentguard_rules.block_policy column")
 	return nil
 }
 
@@ -78,7 +73,7 @@ func SetupHoldsStorage(cfg *config.TimeplusConfig) error {
 // are still 'pending' at server startup. These are leftovers from a prior
 // process that crashed mid-hold; the in-memory channels are gone, so the UI
 // would otherwise show stale entries forever.
-func AbandonStalePendingHolds(cfg *config.TimeplusConfig) error {
+func AbandonStalePendingHolds(ctx context.Context, conn proton.Conn, emit func(status, msg string)) error {
 	sql := `
 INSERT INTO agentguard_holds
   (hold_id, deployment_id, agent_id, session_id, run_id, tool_name, rule_id,
@@ -94,8 +89,9 @@ SELECT
   now64(3)    AS updated_at
 FROM mv_holds_current
 WHERE status = 'pending'`
-	if err := ExecHTTP(cfg, sql); err != nil {
+	if err := conn.Exec(ctx, sql); err != nil {
 		return fmt.Errorf("abandon stale pending holds: %w", err)
 	}
+	emit("ok", "  ✓ abandoned stale pending holds")
 	return nil
 }
