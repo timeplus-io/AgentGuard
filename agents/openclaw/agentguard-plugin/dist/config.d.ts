@@ -7,6 +7,8 @@ export type AgentGuardConfig = {
     password: string;
     deploymentId: string;
     deploymentName: string;
+    agentguardUrl: string;
+    holdFailPolicy: "deny" | "allow";
 };
 export declare function resolveConfig(pluginConfig?: Record<string, unknown>): AgentGuardConfig;
 //# sourceMappingURL=config.d.ts.map

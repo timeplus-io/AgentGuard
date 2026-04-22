@@ -1,6 +1,7 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { AgentGuardConfig } from "./config.js";
 import type { HookEvent, TimeplusClient } from "./timeplus-client.js";
+import { requestHold } from "./holds.js";
 
 // Minimal structural type covering the optional identity fields common across
 // most hook contexts. Contexts that don't share these fields are cast via toBase().
@@ -125,13 +126,22 @@ export function registerAllHooks(
 
   // ── Tool hooks ───────────────────────────────────────────────────────────
 
-  api.on("before_tool_call", (event, ctx) => {
+  api.on("before_tool_call", async (event, ctx) => {
     const base = baseEvent("before_tool_call", ctx, config);
-    client.enqueue({
+    const evt: HookEvent = {
       ...base,
       tool_name: ctx.toolName,
       event_data: safeStringify(event),
-    });
+    };
+    // /api/holds will ingest this event itself — do NOT also enqueue here.
+    const decision = await requestHold(evt, event?.params, config);
+    if (decision.decision === "block") {
+      return {
+        block: true,
+        blockReason: decision.reason || "Blocked by AgentGuard",
+      };
+    }
+    // No return = no block
   });
 
   api.on("after_tool_call", (event, ctx) => {
