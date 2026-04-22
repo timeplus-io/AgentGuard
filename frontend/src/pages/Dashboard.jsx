@@ -87,7 +87,8 @@ export default function Dashboard() {
         th.rule_id === t.rule_id && th.session_id === t.session_id
       )
       navigate(match ? `/threats/${match.threat_id}` : '/threats')
-    } catch {
+    } catch (err) {
+      console.error('dashboard: getThreats failed, falling back:', err)
       navigate('/threats')
     }
   }, [navigate])

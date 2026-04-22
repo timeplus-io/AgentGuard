@@ -147,8 +147,10 @@ export default function ThreatDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState('')
   // Hold decision state: null | 'pending' | 'approved' | 'denied' | 'error'
   const [decideStatus, setDecideStatus] = useState(null)
+  const [decideError, setDecideError] = useState('')
   const [decideReason, setDecideReason] = useState('')
 
   // Support /threats/by-hold/:holdId — resolve hold to underlying threat and redirect.
@@ -194,13 +196,16 @@ export default function ThreatDetail() {
   async function decide(decision) {
     if (!threat?.pending_hold) return
     setDecideStatus('pending')
+    setDecideError('')
     try {
       await api.decideHold(threat.pending_hold.hold_id, decision, decideReason)
       setDecideStatus(decision)
       const fresh = await api.getThreatDetail(id)
       setThreat(fresh)
-    } catch {
+    } catch (err) {
+      console.error('threat: decide hold failed:', err)
       setDecideStatus('error')
+      setDecideError(err?.message ?? String(err))
     }
   }
 
@@ -208,6 +213,7 @@ export default function ThreatDetail() {
     if (actionLoading) return
     const prev = threat.status
     setActionLoading(true)
+    setActionError('')
     setThreat(t => ({ ...t, status: 'acknowledged' }))
     try {
       await api.acknowledgeThreat(threat.threat_id, {
@@ -216,8 +222,10 @@ export default function ThreatDetail() {
         session_id: threat.session_id,
         rule_id: threat.rule_id,
       })
-    } catch {
+    } catch (err) {
+      console.error('threat: acknowledge failed:', err)
       setThreat(t => ({ ...t, status: prev }))
+      setActionError(`Acknowledge failed: ${err?.message ?? String(err)}`)
     } finally {
       setActionLoading(false)
     }
@@ -227,6 +235,7 @@ export default function ThreatDetail() {
     if (actionLoading) return
     const prev = threat.status
     setActionLoading(true)
+    setActionError('')
     setThreat(t => ({ ...t, status: 'cleared' }))
     try {
       await api.clearThreat(threat.threat_id, {
@@ -235,8 +244,10 @@ export default function ThreatDetail() {
         session_id: threat.session_id,
         rule_id: threat.rule_id,
       })
-    } catch {
+    } catch (err) {
+      console.error('threat: clear failed:', err)
       setThreat(t => ({ ...t, status: prev }))
+      setActionError(`Clear failed: ${err?.message ?? String(err)}`)
     } finally {
       setActionLoading(false)
     }
@@ -351,6 +362,20 @@ export default function ThreatDetail() {
         ) : threat ? (
           <div className="p-8 space-y-8">
 
+            {actionError && (
+              <div className="flex items-start gap-2 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs">
+                <span className="material-symbols-outlined text-base shrink-0">error</span>
+                <span className="flex-1">{actionError}</span>
+                <button
+                  onClick={() => setActionError('')}
+                  className="text-[#ffb4ab]/70 hover:text-[#ffb4ab] shrink-0"
+                  aria-label="Dismiss"
+                >
+                  <span className="material-symbols-outlined text-[14px]">close</span>
+                </button>
+              </div>
+            )}
+
             {/* Pending Hold banner — Approve / Deny */}
             {threat.pending_hold && decideStatus !== 'approved' && decideStatus !== 'denied' && (
               <section className="bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm p-5">
@@ -388,7 +413,9 @@ export default function ThreatDetail() {
                   </button>
                 </div>
                 {decideStatus === 'error' && (
-                  <p className="text-[11px] text-[#ffb4ab] mt-2">Failed to submit decision. Try again.</p>
+                  <p className="text-[11px] text-[#ffb4ab] mt-2">
+                    Failed to submit decision{decideError ? `: ${decideError}` : '. Try again.'}
+                  </p>
                 )}
               </section>
             )}

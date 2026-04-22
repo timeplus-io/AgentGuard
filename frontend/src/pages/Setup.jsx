@@ -59,8 +59,9 @@ export default function Setup() {
             localStorage.setItem('agentguard_username', data.username)
             setAuth(prev => ({ ...prev, setupComplete: true, loggedIn: true, username: data.username }))
             setDone(true)
-          } catch {
-            setProvisionError('Provisioning succeeded but login failed — please reload and log in.')
+          } catch (err) {
+            console.error('setup: auto-login after provision failed:', err)
+            setProvisionError(`Provisioning succeeded but login failed: ${err?.message ?? String(err)} — please reload and log in.`)
           }
         }
         if (event.status === 'error') {

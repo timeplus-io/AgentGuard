@@ -136,8 +136,10 @@ export default function RulePacks() {
     setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: newVal, active: newVal, version: newVal ? (r.version || '') : null } : r))
     try {
       await api.toggleRule(id)
-    } catch {
+    } catch (err) {
+      console.error('rules: toggle failed:', err)
       setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !newVal, active: !newVal } : r))
+      setLoadError(`Failed to ${newVal ? 'enable' : 'disable'} rule: ${err?.message ?? String(err)}`)
     }
   }
 
