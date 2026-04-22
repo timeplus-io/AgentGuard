@@ -52,7 +52,8 @@ SELECT
   arg_max(category,           updated_at) AS category,
   arg_max(required_telemetry, updated_at) AS required_telemetry,
   arg_max(fp_rate,            updated_at) AS fp_rate,
-  arg_max(hook_sources,       updated_at) AS hook_sources
+  arg_max(hook_sources,       updated_at) AS hook_sources,
+  arg_max(block_policy,       updated_at) AS block_policy
 FROM table(agentguard_rules)
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = false`
@@ -788,6 +789,10 @@ func queryCurrentRulePacks(cfg *config.TimeplusConfig, mgr *catalog.Manager) ([]
 			RequiredTelemetry: parseStr(row["required_telemetry"]),
 			FPRate:            parseStr(row["fp_rate"]),
 			HookSources:       parseStr(row["hook_sources"]),
+			BlockPolicy:       parseStr(row["block_policy"]),
+		}
+		if pack.BlockPolicy == "" {
+			pack.BlockPolicy = "log_only"
 		}
 		// Enrich from catalog: newer version and UDFs.
 		if catalogEntry, ok := mgr.Lookup(id); ok {
