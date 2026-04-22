@@ -42,6 +42,7 @@ export default function App() {
             <Route path="/agents/:id" element={<AgentDetail />} />
             <Route path="/threats" element={<Threats />} />
             <Route path="/threats/:id" element={<ThreatDetail />} />
+            <Route path="/threats/by-hold/:id" element={<ThreatDetail />} />
             <Route path="/cost" element={<CostGovernance />} />
             <Route path="/rules" element={<RulePacks />} />
             <Route path="/rules/new" element={<RuleCreate />} />
