@@ -29,37 +29,31 @@ func failPolicyToDecision(policy string) string {
 	return "block"
 }
 
-// pluginCfg returns a Config with Timeplus credentials populated for handlers
-// called server-to-server (no session cookie). Hierarchy:
-//  1. cfg.Timeplus.User from TIMEPLUS_USER env var (the canonical service account)
-//  2. SessionStore.AnyCredentials() from any active user session (dev fallback)
-//  3. Bare cfg — downstream queries will 503 with auth error
+// pluginCfg validates that service credentials are configured for handlers
+// called server-to-server (no session cookie). Plugin/Timeplus → AgentGuard
+// endpoints must have TIMEPLUS_USER + TIMEPLUS_PASSWORD set as env vars on
+// the AgentGuard process — there is no fallback.
 //
-// UI-facing handlers should keep using auth.RequestCfg directly to enforce
-// per-user session auth.
-func pluginCfg(cfg *config.Config, store *auth.SessionStore) *config.Config {
-	if cfg.Timeplus.User != "" {
-		// TIMEPLUS_USER is set in env / config — use it.
-		return cfg
+// Returns (cfg, "") on success or (nil, "<actionable msg>") if creds missing.
+// Callers should respond with 503 + the message and a log line.
+func pluginCfg(cfg *config.Config) (*config.Config, string) {
+	if cfg.Timeplus.User == "" {
+		return nil, "service credentials not configured: set TIMEPLUS_USER and TIMEPLUS_PASSWORD env vars on the AgentGuard server"
 	}
-	// No service-account creds configured — try borrowing from any active session.
-	user, password := store.AnyCredentials()
-	if user == "" {
-		// Nothing — return as-is; the caller's downstream Timeplus call will 503.
-		return cfg
-	}
-	out := *cfg
-	out.Timeplus.User = user
-	out.Timeplus.Password = password
-	return &out
+	return cfg, ""
 }
 
 // CreateHold handles POST /api/holds.
 // Synchronous endpoint — does not return until backend has decided
 // (allow / block / hold + human decision / hold timeout).
-func CreateHold(cfg *config.Config, store *auth.SessionStore, registry *holdregistry.Registry, broadcaster *alertBroadcaster) gin.HandlerFunc {
+func CreateHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster *alertBroadcaster) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cfg := pluginCfg(cfg, store)
+		cfg, errMsg := pluginCfg(cfg)
+		if errMsg != "" {
+			log.Printf("holds: CreateHold: %s", errMsg)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
+			return
+		}
 		var req models.HoldRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -496,9 +490,14 @@ ORDER BY updated_at ASC`, escapeSQLStr(holdID))
 // AbandonSession handles POST /api/holds/_abandon-session/:session_id.
 // Plugin's SessionEnd hook fires this fire-and-forget to clean up holds for
 // the ending session.
-func AbandonSession(cfg *config.Config, store *auth.SessionStore, registry *holdregistry.Registry) gin.HandlerFunc {
+func AbandonSession(cfg *config.Config, registry *holdregistry.Registry) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cfg := pluginCfg(cfg, store)
+		cfg, errMsg := pluginCfg(cfg)
+		if errMsg != "" {
+			log.Printf("holds: AbandonSession: %s", errMsg)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
+			return
+		}
 		sessionID := c.Param("session_id")
 
 		sql := fmt.Sprintf(`
@@ -530,9 +529,14 @@ WHERE session_id = '%s' AND status = 'pending'`, escapeSQLStr(sessionID))
 }
 
 // DrainHolds handles POST /api/holds/_drain. Operator-only: marks all pending holds as 'abandoned'.
-func DrainHolds(cfg *config.Config, store *auth.SessionStore, registry *holdregistry.Registry) gin.HandlerFunc {
+func DrainHolds(cfg *config.Config, registry *holdregistry.Registry) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cfg := pluginCfg(cfg, store)
+		cfg, errMsg := pluginCfg(cfg)
+		if errMsg != "" {
+			log.Printf("holds: DrainHolds: %s", errMsg)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
+			return
+		}
 		sql := `SELECT hold_id FROM table(mv_holds_current) WHERE status = 'pending'`
 		rows, err := tp.Query(&cfg.Timeplus, sql)
 		if err != nil {

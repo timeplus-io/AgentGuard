@@ -84,21 +84,6 @@ func (s *SessionStore) Delete(id string) {
 	s.mu.Unlock()
 }
 
-// AnyCredentials returns the user and password from any valid (non-expired) session.
-// Used by server-to-server handlers (e.g. alert webhook) that have no session cookie
-// but still need Timeplus credentials for background queries. Returns empty strings
-// when no live session exists — callers must handle that gracefully.
-func (s *SessionStore) AnyCredentials() (user, password string) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, sess := range s.sessions {
-		if time.Since(sess.Created) <= SessionMaxAge {
-			return sess.User, sess.Password
-		}
-	}
-	return "", ""
-}
-
 func randomID() string {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {

@@ -21,12 +21,11 @@ type TimeplusConfig struct {
 	Host       string
 	Port       int
 	NativePort int
-	// User and Password may be loaded from TIMEPLUS_USER / TIMEPLUS_PASSWORD env
-	// vars (typically in production / docker compose) — they form the canonical
-	// service account used by server-to-server endpoints (plugin → /api/holds,
-	// Timeplus → /api/alerts/webhook). When unset, handlers fall back to
-	// per-request credentials populated by auth.RequestCfg from the session
-	// cookie, or to SessionStore.AnyCredentials() for plugin endpoints.
+	// User and Password come from TIMEPLUS_USER / TIMEPLUS_PASSWORD env vars on
+	// the AgentGuard process — service credentials used for server-to-server
+	// endpoints (plugin → /api/holds, Timeplus → /api/alerts/webhook). UI-facing
+	// handlers use credentials from the user's session cookie (auth.RequestCfg)
+	// instead.
 	User     string
 	Password string
 }
@@ -62,8 +61,8 @@ type Config struct {
 //
 // User-facing UI handlers always require an authenticated session cookie.
 // Server-to-server handlers (plugin → /api/holds, Timeplus → /api/alerts/webhook)
-// use TIMEPLUS_USER + TIMEPLUS_PASSWORD env vars when set as a stable service
-// account, falling back to any active user session if those env vars are absent.
+// require TIMEPLUS_USER + TIMEPLUS_PASSWORD env vars; if those are unset the
+// handlers return 503 with an actionable message — there is no fallback.
 func Load() (*Config, error) {
 	return load(viper.GetViper(), true)
 }

@@ -655,8 +655,15 @@ func isThreatAlreadyOpen(cfg *config.Config, agentID, deploymentID, ruleID strin
 	return parseInt64(rows[0]["cnt"]) > 0
 }
 
-func AlertWebhook(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
+func AlertWebhook(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		queryCfg, errMsg := pluginCfg(cfg)
+		if errMsg != "" {
+			log.Printf("alert: AlertWebhook: %s", errMsg)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
+			return
+		}
+
 		var payload models.AlertWebhookPayload
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
@@ -667,17 +674,12 @@ func AlertWebhook(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc 
 
 		// Deduplicate: suppress the SSE notification when an open threat already
 		// exists for this (agent, deployment, rule) — the MV occasionally fires
-		// multiple times for the same active threat. Use the canonical service
-		// account (TIMEPLUS_USER) when set, falling back to any live session.
-		// If neither is available, fail open and allow the notification.
-		queryCfg := pluginCfg(cfg, store)
-		if queryCfg.Timeplus.User != "" {
-			if isThreatAlreadyOpen(queryCfg, payload.AgentID, payload.DeploymentID, payload.RuleID) {
-				log.Printf("alert: suppressed duplicate notification for rule=%s agent=%s (threat already open)",
-					payload.RuleID, payload.AgentID)
-				c.JSON(http.StatusOK, gin.H{"received": true, "suppressed": true})
-				return
-			}
+		// multiple times for the same active threat.
+		if isThreatAlreadyOpen(queryCfg, payload.AgentID, payload.DeploymentID, payload.RuleID) {
+			log.Printf("alert: suppressed duplicate notification for rule=%s agent=%s (threat already open)",
+				payload.RuleID, payload.AgentID)
+			c.JSON(http.StatusOK, gin.H{"received": true, "suppressed": true})
+			return
 		}
 
 		GlobalAlertBroadcaster.Publish(payload)
