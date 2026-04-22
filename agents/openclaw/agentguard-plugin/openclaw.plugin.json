@@ -28,6 +28,19 @@
       },
       "deploymentName": {
         "type": "string"
+      },
+      "agentguardUrl": {
+        "type": "string",
+        "description": "Base URL of the AgentGuard server reachable from this OpenClaw process. Defaults to http://localhost:8080; the Docker make-configure setup writes http://host.docker.internal:8080."
+      },
+      "holdFailPolicy": {
+        "type": "string",
+        "enum": ["deny", "allow"],
+        "description": "What to return when /api/holds is unreachable or errors. 'deny' (default) blocks the tool call; 'allow' lets it proceed."
+      },
+      "holdsEnabled": {
+        "type": "boolean",
+        "description": "When true (default), before_tool_call synchronously calls /api/holds and may block. When false, hook reverts to async observation-only mode (events still ingested, no blocking)."
       }
     }
   }
