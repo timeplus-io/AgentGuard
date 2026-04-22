@@ -119,5 +119,5 @@ query_sql: |
       -- v1.2.0: CC-643 compound command complexity evasion (Claude Code deny-rule bypass)
       -- 15+ occurrences of '&&' detected via string length diff (RE2 lacks {N,} open quantifier)
       -- (length - length_without_&&) >= 30 means at least 15 '&&' pairs present
-      OR (length(tool_input) - length(replaceAll(tool_input, '&&', ''))) >= 30
+      OR (length(tool_input) - length(replace_all(tool_input, '&&', ''))) >= 30
     )
