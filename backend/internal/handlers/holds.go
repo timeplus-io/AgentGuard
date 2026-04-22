@@ -18,6 +18,16 @@ import (
 
 const argsSummaryMaxBytes = 2048
 
+// failPolicyToDecision maps the config FailPolicy ("deny"|"allow") to the
+// HoldResponse Decision contract ("block"|"allow"). Returns "block" by default
+// for any unknown value (fail-closed).
+func failPolicyToDecision(policy string) string {
+	if policy == "allow" {
+		return "allow"
+	}
+	return "block"
+}
+
 // CreateHold handles POST /api/holds.
 // Synchronous endpoint — does not return until backend has decided
 // (allow / block / hold + human decision / hold timeout).
@@ -131,7 +141,7 @@ func CreateHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster
 				// Timeout — apply fail-policy and write timeout row.
 				_ = writeHoldStatus(cfg, holdID, "timeout", "system", "hold timeout")
 				c.JSON(http.StatusOK, models.HoldResponse{
-					Decision: cfg.Holds.FailPolicy,
+					Decision: failPolicyToDecision(cfg.Holds.FailPolicy),
 					Reason:   "AgentGuard hold timed out",
 					HoldID:   holdID,
 				})
