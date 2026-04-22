@@ -7,6 +7,8 @@ export type AgentGuardConfig = {
   password: string;
   deploymentId: string;
   deploymentName: string;
+  agentguardUrl: string;
+  holdFailPolicy: "deny" | "allow";
 };
 
 const DEFAULTS: AgentGuardConfig = {
@@ -18,6 +20,10 @@ const DEFAULTS: AgentGuardConfig = {
   password: "",
   deploymentId: "default",
   deploymentName: "Default",
+  // OpenClaw runs in Docker (per agents/openclaw/Makefile) while AgentGuard
+  // typically runs on the host, so default to the magic Docker host alias.
+  agentguardUrl: "http://host.docker.internal:8080",
+  holdFailPolicy: "deny",
 };
 
 export function resolveConfig(
@@ -70,5 +76,27 @@ export function resolveConfig(
     (pluginConfig?.deploymentName as string | undefined) ??
     DEFAULTS.deploymentName;
 
-  return { timeplusUrl, stream, flushMs, batchSize, username, password, deploymentId, deploymentName };
+  const agentguardUrl =
+    (process.env.AGENTGUARD_URL || undefined) ??
+    (pluginConfig?.agentguardUrl as string | undefined) ??
+    DEFAULTS.agentguardUrl;
+
+  const holdFailPolicy: "deny" | "allow" =
+    process.env.AGENTGUARD_HOLD_FAIL_POLICY === "allow" ||
+    (pluginConfig?.holdFailPolicy as string | undefined) === "allow"
+      ? "allow"
+      : "deny";
+
+  return {
+    timeplusUrl,
+    stream,
+    flushMs,
+    batchSize,
+    username,
+    password,
+    deploymentId,
+    deploymentName,
+    agentguardUrl,
+    holdFailPolicy,
+  };
 }

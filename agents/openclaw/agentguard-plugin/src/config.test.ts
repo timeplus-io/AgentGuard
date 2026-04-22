@@ -7,6 +7,8 @@ describe("resolveConfig", () => {
     "AGENTGUARD_STREAM",
     "AGENTGUARD_FLUSH_MS",
     "AGENTGUARD_BATCH_SIZE",
+    "AGENTGUARD_URL",
+    "AGENTGUARD_HOLD_FAIL_POLICY",
   ];
 
   beforeEach(() => {
@@ -87,5 +89,17 @@ describe("resolveConfig", () => {
     const cfg = resolveConfig({ deploymentId: "prod", deploymentName: "Production" });
     expect(cfg.deploymentId).toBe("prod");
     expect(cfg.deploymentName).toBe("Production");
+  });
+
+  it("agentguardUrl defaults to http://host.docker.internal:8080", () => {
+    delete process.env.AGENTGUARD_URL;
+    expect(resolveConfig().agentguardUrl).toBe("http://host.docker.internal:8080");
+  });
+
+  it("holdFailPolicy defaults to deny and reads env override to allow", () => {
+    delete process.env.AGENTGUARD_HOLD_FAIL_POLICY;
+    expect(resolveConfig().holdFailPolicy).toBe("deny");
+    process.env.AGENTGUARD_HOLD_FAIL_POLICY = "allow";
+    expect(resolveConfig().holdFailPolicy).toBe("allow");
   });
 });
