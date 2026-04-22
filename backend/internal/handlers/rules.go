@@ -142,6 +142,7 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			LIMIT 50
 		`, escapeSQL(id)))
 		if err != nil {
+			log.Printf("rules: GetRule recent detections query: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -251,6 +252,7 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
+			log.Printf("rules: UpgradeRule queryCurrentRulePacks: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
 			return
 		}
@@ -370,11 +372,13 @@ WHERE rule_id = '%s'
 GROUP BY rule_id`, escapeSQL(id))
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
+			log.Printf("rules: UninstallRule db update: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "uninstall failed"})
 			return
 		}
 
 		if err := tp.DropRuleMV(&cfg.Timeplus, id); err != nil {
+			log.Printf("rules: UninstallRule DropRuleMV: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV drop failed: %v", err)})
 			return
 		}
@@ -389,6 +393,7 @@ func ListCatalog(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		cfg := auth.RequestCfg(c, cfg)
 		installed, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
+			log.Printf("rules: ListCatalog queryCurrentRulePacks: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("catalog query failed: %v", err)})
 			return
 		}
@@ -489,10 +494,12 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			entry.RequiredTelemetry, entry.FPRate, entry.HookSources,
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
+			log.Printf("rules: InstallRule insert: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "install insert failed"})
 			return
 		}
 		if err := tp.CreateRuleMV(&cfg.Timeplus, id, entry.QuerySQL, entry.UDFs); err != nil {
+			log.Printf("rules: InstallRule CreateRuleMV: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 			return
 		}
@@ -515,6 +522,7 @@ func MVStatus(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			WHERE name LIKE 'mv_rule_%' AND database = current_database()
 		`)
 		if err != nil {
+			log.Printf("rules: MVStatus system.tables query: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -563,6 +571,7 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			WHERE name LIKE 'mv_rule_%' AND database = current_database()
 		`)
 		if err != nil {
+			log.Printf("rules: SyncMVs system.tables query: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -912,6 +921,7 @@ func SetRuleBlockPolicy(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFun
 
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
+			log.Printf("rules: SetRuleBlockPolicy queryCurrentRulePacks: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
 			return
 		}
@@ -949,6 +959,7 @@ WHERE rule_id = '%s'
 GROUP BY rule_id`, escapeSQLStr(body.BlockPolicy), escapeSQLStr(id))
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
+			log.Printf("rules: SetRuleBlockPolicy ExecHTTP: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("set policy failed: %v", err)})
 			return
 		}

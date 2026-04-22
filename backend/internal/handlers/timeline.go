@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +38,7 @@ func GetRunTrace(cfg *config.Config) gin.HandlerFunc {
 
 		rows, err := fetchHookEvents(cfg, deploymentID, agentID, sessionID, runID)
 		if err != nil {
+			log.Printf("timeline: GetRunTrace fetchHookEvents: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}

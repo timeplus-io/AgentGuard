@@ -351,6 +351,7 @@ func DecideHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster
 
 		existing, err := getHoldByID(cfg, holdID)
 		if err != nil {
+			log.Printf("holds: DecideHold getHoldByID: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("query hold: %v", err)})
 			return
 		}
@@ -366,6 +367,7 @@ func DecideHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster
 
 		newStatus := body.Decision // "approved" | "denied"
 		if err := writeHoldStatus(cfg, holdID, newStatus, body.DecidedBy, body.DecidedReason); err != nil {
+			log.Printf("holds: DecideHold writeHoldStatus: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("write decision: %v", err)})
 			return
 		}
@@ -411,6 +413,7 @@ ORDER BY created_at DESC
 LIMIT %d`, escapeSQLStr(status), limit)
 		rows, err := tp.Query(&cfg.Timeplus, sql)
 		if err != nil {
+			log.Printf("holds: ListHolds query: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -430,6 +433,7 @@ func GetHold(cfg *config.Config) gin.HandlerFunc {
 
 		current, err := getHoldByID(cfg, holdID)
 		if err != nil {
+			log.Printf("holds: GetHold getHoldByID: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -445,6 +449,7 @@ WHERE hold_id = '%s'
 ORDER BY updated_at ASC`, escapeSQLStr(holdID))
 		rows, err := tp.Query(&cfg.Timeplus, timelineSQL)
 		if err != nil {
+			log.Printf("holds: GetHold timeline query: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -475,6 +480,7 @@ SELECT hold_id FROM table(mv_holds_current)
 WHERE session_id = '%s' AND status = 'pending'`, escapeSQLStr(sessionID))
 		rows, err := tp.Query(&cfg.Timeplus, sql)
 		if err != nil {
+			log.Printf("holds: AbandonSession query: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -504,6 +510,7 @@ func DrainHolds(cfg *config.Config, registry *holdregistry.Registry) gin.Handler
 		sql := `SELECT hold_id FROM table(mv_holds_current) WHERE status = 'pending'`
 		rows, err := tp.Query(&cfg.Timeplus, sql)
 		if err != nil {
+			log.Printf("holds: DrainHolds query: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}

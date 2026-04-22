@@ -42,6 +42,7 @@ func ProtonQueryHandler(cfg *config.Config) gin.HandlerFunc {
 			strings.NewReader(req.SQL),
 		)
 		if err != nil {
+			log.Printf("proton: ProtonQueryHandler NewRequestWithContext: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

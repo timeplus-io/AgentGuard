@@ -24,6 +24,7 @@ func ImportCatalog(mgr *catalog.Manager) gin.HandlerFunc {
 
 		f, err := fh.Open()
 		if err != nil {
+			log.Printf("catalog: ImportCatalog open uploaded file: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot open uploaded file"})
 			return
 		}
@@ -31,6 +32,7 @@ func ImportCatalog(mgr *catalog.Manager) gin.HandlerFunc {
 
 		data, err := io.ReadAll(f)
 		if err != nil {
+			log.Printf("catalog: ImportCatalog read uploaded file: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot read uploaded file"})
 			return
 		}
