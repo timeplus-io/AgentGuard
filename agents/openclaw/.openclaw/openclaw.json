@@ -326,7 +326,10 @@
           "username": "proton",
           "password": "timeplus@t+",
           "deploymentId": "local",
-          "deploymentName": "Local Dev"
+          "deploymentName": "Local Dev",
+          "agentguardUrl": "http://host.docker.internal:8080",
+          "holdFailPolicy": "deny",
+          "holdsEnabled": true
         }
       },
       "anthropic-vertex": {

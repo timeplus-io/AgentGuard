@@ -1,0 +1,146 @@
+id: rp-119
+name: "LogicPoison — GraphRAG Knowledge Graph Topology Corruption Detector"
+version: "0.1.1"
+description: >
+  Detects LogicPoison attacks (arXiv:2604.02954, The Hong Kong Polytechnic University /
+  Southwestern University of Finance and Economics, Apr 2026): a novel attack against
+  Graph-based Retrieval-Augmented Generation (GraphRAG) that corrupts the topological
+  integrity of the underlying knowledge graph without altering surface-level text semantics.
+  Unlike text-based RAG poisoning (rp-009, which requires explicit injection keywords),
+  LogicPoison employs type-preserving entity swapping: entities are replaced with
+  type-compatible alternatives (person→person, company→company) to destroy reasoning paths
+  while maintaining textual plausibility. The attack targets (1) global logic hubs —
+  high-centrality graph nodes that many reasoning paths pass through — and (2) query-specific
+  reasoning bridges — edges essential for multi-hop inference. GraphRAG's own community
+  detection and relation filtering defenses are bypassed because the graph topology is
+  corrupted at the source corpus level before ingestion.
+  Observable runtime signal: GraphRAG query tool_result containing contradictory entity-role
+  pairs — the same entity simultaneously holding mutually exclusive relations (employed AND
+  fired from same org), two distinct entities claiming identical roles for the same target
+  (two different people both listed as CEO of same company), or entity-type mismatches in
+  multi-hop reasoning paths. These contradictions are invisible at the document level but
+  exposed when the agent queries the corrupted subgraph.
+  Distinct from rp-009 (text injection markers in tool_result), rp-026 (embedding vector
+  exfiltration), rp-034 (backdoored retrieval tool), rp-070 (CIPL oracle probing): this
+  rule detects structural graph topology inconsistencies in graph query results, not text
+  patterns or behavioral anomalies.
+  References: arXiv:2604.02954 (LogicPoison, ACL 2026 Main, HKPolyU/SWUFE),
+  OWASP LLM08:2025 (Vector and Embedding Weaknesses), OWASP LLM01:2025 (Prompt Injection) -
+  https://arxiv.org/abs/2604.02954,
+  https://arxiv.org/html/2604.02954v1,
+  https://github.com/Jord8061/logicPoison,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  Example: tool_result from graph_query returns subgraph where entity "Alice Chen" has
+  both "ceo_of" and "resigned_from" relations to "TechCorp" simultaneously, AND "Bob Smith"
+  also has "ceo_of" relation to "TechCorp" — two entities claiming the same role is a
+  LogicPoison topology corruption signal.
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: medium
+hook_sources: "tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - rag
+  - graphrag
+  - knowledge-graph
+  - prompt-injection
+  - topology-corruption
+  - entity-swapping
+  - owasp-llm08
+  - logicpoison
+  - arxiv-2604.02954
+query_sql: |
+  -- rp-119: LogicPoison — GraphRAG Knowledge Graph Topology Corruption Detector v0.1.1
+  -- CHANGELOG v0.1.1 (2026-04-22):
+  --   Paper confirmed at ACL 2026 Main (was "Apr 2026" from arXiv date). Updated reference.
+  --   Branch C extended: added snake_case key pattern (role_name:, position_name:, title_label:)
+  --   to cover Python dict outputs from graph engines alongside JSON quote format.
+  --   Branch A span reduced .{0,500} → .{0,300} to reduce FP on long company history
+  --   narratives where legitimate role transitions appear across long text spans.
+  --   fp_rate: medium (unchanged).
+  -- arXiv:2604.02954 (LogicPoison, HKPolyU/SWUFE, Apr 2026)
+  -- Type-preserving entity swapping corrupts graph reasoning paths while maintaining
+  -- surface text plausibility. Bypasses GraphRAG community detection and relation filtering.
+  --
+  -- Detection branches:
+  -- Branch A: Affirmative role + simultaneous negation of same role (employed + fired/resigned)
+  --   → A single entity appearing in both an affirmative professional relation AND its logical
+  --   negation in the same tool_result from a graph/knowledge query tool.
+  --   Signal: "ceo_of/founder_of/leads/manages" + "resigned/fired/former/left/ex-"
+  --   anchored to same entity context within 500 chars.
+  --
+  -- Branch B: Entity type mismatch in multi-hop reasoning path exposed in tool_result
+  --   → Tool result from graph tool contains explicit entity type contradiction indicators:
+  --   person entity appearing where organization expected, or relation type incompatibility
+  --   logged as an error/conflict in the graph output.
+  --   Signal: "entity_type: person/individual/human" adjacent to relation that expects org
+  --   type (acquired, merged_with, subsidiary_of, parent_company_of).
+  --
+  -- Branch C: Competing entities claiming identical exclusive roles (duplicate role assignment)
+  --   → Tool result contains two different named entity patterns both linked to the same
+  --   organizational role for the same target — the hallmark of type-preserving entity swap.
+  --   Signal: role_name (CEO/CFO/CTO/Founder/Chairman/President/Director) appearing 2+ times
+  --   for the same target entity within 300 chars, with different holder names.
+  --   Gated to graph/knowledge/entity-query tool_name patterns.
+  --
+  -- Branch D: Graph reasoning failure disclosure — tool reports "conflicting paths" or
+  --   "contradictory relations" in its structured output (some GraphRAG impls log these)
+  --   Signal: "conflicting_path", "contradictory_relation", "topology_error" in tool_result
+  --
+  -- Gate: All branches require tool_name matching graph/knowledge/entity retrieval tools.
+  --   LogicPoison only manifests in graph query results, not in text retrieval responses.
+  --
+  -- fp_rate: medium — corporate knowledge graphs contain legitimate complex histories
+  --   (former CEOs, acquisitions, role transitions). Requires multiple contradictory
+  --   relations for same entity in a single response, not across time.
+  SELECT
+    event_time AS detected_at,
+    'rp-119' AS rule_id,
+    'LogicPoison — GraphRAG Knowledge Graph Topology Corruption Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'GraphRAG topology corruption detected in [', coalesce(tool_name, 'unknown'),
+      ']: contradictory entity-relation pairs in knowledge graph query result.',
+      ' Session: ', coalesce(session_id, 'unknown')
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_complete')
+    AND match(lower(tool_name), '(graph|knowledge|entity|subgraph|relation|triplet|gremlin|neo4j|sparql|community|graphrag|kg_query|graph_query|graph_search)')
+
+    AND (
+
+      -- Branch A: Affirmative role + logical negation of same role for same entity
+      -- E.g.: entity has "ceo_of" + "resigned_from" same target, or "employed_by" + "fired_from"
+      -- Pattern: positive organizational role within 500 chars of resignation/firing of same type
+      -- Both relation types must appear within the same tool_result response
+      match(lower(tool_result), '(ceo_of|founder_of|owner_of|led_by|managed_by|employed_by|head_of|directs|reports_to|president_of|chair(man_of|person_of|of)).{0,300}(resigned_from|fired_from|dismissed_from|terminated_from|former .{0,20}(ceo|cfo|cto|founder|president|chairman|director)|left .{0,20}(company|organization|corp|inc)|ex.{0,5}(ceo|cfo|cto|founder|president))')
+      OR match(lower(tool_result), '(resigned_from|fired_from|dismissed_from|terminated_from|former .{0,20}(ceo|cfo|cto|founder|president)|ex.{0,5}(ceo|cfo|cto|founder|president)).{0,300}(ceo_of|founder_of|owner_of|led_by|managed_by|employed_by|head_of|directs|president_of|chair(man_of|person_of|of))')
+
+      -- Branch B: Entity type mismatch indicator in graph subgraph result
+      -- GraphRAG implementations often include entity type metadata; person appearing where
+      -- organization expected in an acquisition/subsidiary relation is a topology corruption signal
+      OR match(lower(tool_result), '(entity_type|node_type|type).{0,30}(person|individual|human).{0,200}(acquired|merged.with|subsidiary.of|parent.company|spinoff.from|divested.from)')
+      OR match(lower(tool_result), '(entity_type|node_type|type).{0,30}(organization|company|corp|enterprise|business).{0,200}(born|died|married|graduated|employed|hired|fired|promoted)')
+
+      -- Branch C: Duplicate exclusive role assignment (two entities → same role → same org)
+      -- The hallmark of type-preserving entity swap in LogicPoison:
+      -- Two different name-like patterns both linked to CEO/CFO/CTO/Founder for same target
+      -- Pattern: role_label appears within 300 chars with different entity references
+      -- Uses structured output signals (JSON-style "role":, "position":, "title": etc.)
+      OR match(lower(tool_result), '"(role|position|title|relation)"\s*:\s*"(ceo|cfo|cto|founder|chairman|president|director)".{0,300}"(role|position|title|relation)"\s*:\s*"(ceo|cfo|cto|founder|chairman|president|director)"')
+      -- Branch C (snake_case variant): Python dict output from graph engines (role_name: ceo)
+      OR match(lower(tool_result), '(role_name|position_name|title_label|relation_type)\s*:\s*(ceo|cfo|cto|founder|chairman|president|director).{0,300}(role_name|position_name|title_label|relation_type)\s*:\s*(ceo|cfo|cto|founder|chairman|president|director)')
+
+      -- Branch D: Graph engine disclosing contradictory paths or topology errors
+      -- Some GraphRAG / knowledge graph query engines explicitly report path conflicts
+      OR match(lower(tool_result), '(conflicting.{0,20}(path|relation|edge|node)|contradictory.{0,20}(relation|triple|assertion|fact)|topology.{0,20}(error|inconsistency|conflict|violation)|duplicate.{0,20}(relation|role|entity).{0,50}(same|identical|conflict))')
+    )

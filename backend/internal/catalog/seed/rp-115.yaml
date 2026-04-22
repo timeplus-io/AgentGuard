@@ -1,0 +1,139 @@
+id: rp-115
+name: "Fill & Squeeze KV-Cache Exhaustion Latency DoS Detector"
+version: "0.1.1"
+description: >
+  Detects the Fill & Squeeze KV-cache exhaustion attack (arXiv:2602.07878, Zhejiang
+  University Feb 2026): adversaries send high-input-token requests to saturate the
+  shared KV-cache of LLM serving frameworks (vLLM, SGLang, Orca), inducing Head-of-
+  Line blocking (Fill phase) and preemption cascades (Squeeze phase) that cause 20-280x
+  TTFT degradation for all co-located users. Operates at the system layer, bypassing
+  continuous batching isolation that defeats output-length attacks. Validated against
+  vLLM/SGLang at 30-40% lower attack cost than prior algorithmic latency attacks.
+  Two detection branches via agentguard_cim_metrics:
+  Branch A — per-session input token accumulation: sum(llm.input_tokens) > 150,000
+  in 5 minutes (3+ fill requests each ~50K tokens, matching the F&S attack cost profile).
+  Branch B — individual request TTFT collapse: llm.latency_ms > 30,000ms combined with
+  per-session llm.input_tokens sum > 40,000 in same window (latency spike attributable
+  to KV-cache pressure rather than model capability limit).
+  Distinct from rp-018 (output-side token drain via tool_result continuation protocols),
+  rp-064 (input-side sponge reasoning inflation — single request), and rp-006 (recursive
+  tool loop — tool.call count). This rule exclusively targets input-side KV saturation
+  producing infrastructure-level latency impact.
+  Note: NDSS 2026 "Cache Me, Catch You" (arXiv:2508.09442 / XingTuLab) documents a
+  related but distinct attack: KV-cache prefix hash collision to trigger cross-session
+  context leakage. That rule is better suited for rp-027 (cross-session leakage). This
+  rule remains focused exclusively on the input-side resource exhaustion (latency) class.
+  References: arXiv:2602.07878 (Fill & Squeeze, Zhejiang University Feb 2026),
+  NDSS 2026 Cache Me Catch You (KV-cache collision context leak, distinct),
+  OWASP LLM04:2025 -
+  https://arxiv.org/abs/2602.07878,
+  https://arxiv.org/html/2602.07878v1,
+  https://github.com/XingTuLab/Cache_Me_Catch_You,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  Example: session sends 3 requests each with 50,000+ input tokens in 3 minutes,
+  causing TTFT to jump from 800ms baseline to 45,000ms for legitimate co-located sessions.
+severity: warning
+category: resource_exhaustion_and_dos
+fp_rate: medium
+hook_sources: "llm_request,llm_response"
+required_telemetry: "agentguard_cim_metrics:llm.input_tokens,llm.latency_ms,llm.call"
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - denial-of-service
+  - resource-exhaustion
+  - kv-cache
+  - latency-attack
+  - fill-and-squeeze
+  - serving-framework
+  - owasp-llm04
+  - arxiv-2602.07878
+  - metrics
+query_sql: |
+  -- rp-115 v0.1.1 (2026-04-22)
+  -- Fill & Squeeze KV-Cache Exhaustion Latency DoS Detector
+  -- arXiv:2602.07878 (Zhejiang University, Feb 2026): 20-280x TTFT slowdown
+  -- CHANGELOG v0.1.1:
+  --   Added reference to NDSS 2026 "Cache Me, Catch You" (arXiv:2508.09442).
+  --   Scoped to latency-class exhaustion only (NOT hash-collision context leak).
+  --   SQL unchanged — patterns and thresholds remain as in v0.1.0.
+  --
+  -- Branch A: Per-session input token accumulation anomaly
+  -- Detects a single session sending high-input-token requests to saturate KV cache.
+  -- Threshold: sum(llm.input_tokens) > 150,000 per session in 5 minutes
+  -- Rationale: Fill phase sends multiple 50K-token requests; legitimate sessions rarely
+  -- accumulate 150K input tokens in 5 minutes (this requires 3+ long-context requests).
+  -- fp_rate reduction: GROUP BY session_id limits this to per-actor analysis;
+  -- benign long-document summarization is typically a single large request, not 3+.
+  SELECT
+    max(event_time) AS detected_at,
+    'rp-115' AS rule_id,
+    'Fill & Squeeze KV-Cache Exhaustion Latency DoS Detector' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    '' AS run_id,
+    '' AS hook_name,
+    '' AS tool_name,
+    concat(
+      'KV-cache fill attack detected: session=', session_id,
+      ' accumulated ', to_string(to_int64(sum(metric_value))),
+      ' input tokens in 5 min (threshold: 150,000)',
+      '. This saturates shared KV cache causing HOL blocking for co-located sessions.',
+      ' Agent: ', agent_id
+    ) AS message,
+    concat(
+      'input_tokens_5min=', to_string(to_int64(sum(metric_value))),
+      ' llm_calls=', to_string(count())
+    ) AS event_data
+  FROM agentguard_cim_metrics
+  WHERE metric_name = 'llm.input_tokens'
+    AND event_time > now() - INTERVAL 5 MINUTE
+  GROUP BY session_id, agent_id, deployment_id
+  HAVING sum(metric_value) > 150000
+
+  UNION ALL
+
+  -- Branch B: Individual request latency collapse co-occurring with high input tokens
+  -- Detects the TTFT collapse symptom: single request > 30 seconds latency
+  -- gated by per-session input volume > 40,000 (excludes slow model responses on short inputs)
+  -- This fires on the victim's perspective: sessions experiencing KV-cache starvation
+  -- report extremely high latency alongside high input token usage.
+  SELECT
+    max(event_time) AS detected_at,
+    'rp-115' AS rule_id,
+    'Fill & Squeeze KV-Cache Exhaustion Latency DoS Detector' AS rule_name,
+    'warning' AS severity,
+    latency.agent_id,
+    latency.deployment_id,
+    latency.session_id,
+    '' AS run_id,
+    '' AS hook_name,
+    '' AS tool_name,
+    concat(
+      'KV-cache latency collapse detected: session=', latency.session_id,
+      ' experienced max latency=', to_string(to_int64(max(latency.metric_value))),
+      'ms (threshold: 30,000ms) with concurrent high input token load.',
+      ' Consistent with Fill & Squeeze preemption cascade.',
+      ' Agent: ', latency.agent_id
+    ) AS message,
+    concat(
+      'max_latency_ms=', to_string(to_int64(max(latency.metric_value))),
+      ' input_tokens_5min=', to_string(to_int64(max(input_load.total_input)))
+    ) AS event_data
+  FROM agentguard_cim_metrics AS latency
+  INNER JOIN (
+    SELECT
+      session_id,
+      sum(metric_value) AS total_input
+    FROM agentguard_cim_metrics
+    WHERE metric_name = 'llm.input_tokens'
+      AND event_time > now() - INTERVAL 5 MINUTE
+    GROUP BY session_id
+    HAVING sum(metric_value) > 40000
+  ) AS input_load ON latency.session_id = input_load.session_id
+  WHERE latency.metric_name = 'llm.latency_ms'
+    AND latency.event_time > now() - INTERVAL 5 MINUTE
+  GROUP BY latency.agent_id, latency.deployment_id, latency.session_id
+  HAVING max(latency.metric_value) > 30000

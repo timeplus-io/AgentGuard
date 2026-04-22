@@ -1,6 +1,6 @@
 id: rp-064
 name: "Sponge Tool Attack — Reasoning Inflation Denial-of-Efficiency Detector"
-version: "0.1.0"
+version: "0.2.0"
 description: >
   Detects the Sponge Tool Attack (STA, arXiv:2601.17566, Li & Wang NTU Jan 2026):
   adversaries rewrite user prompts to inject deeply nested verification/cross-reference
@@ -16,10 +16,21 @@ description: >
   detected by tool-result monitoring alone.
   Also provides a metrics-based branch detecting anomalous tool.call rate per session
   in a sliding 5-minute window, complementing the content-based user_message signal.
+  v0.2.0 extends with RECUR (arXiv:2602.08214, Recursive Entropy Guided Counterfactual
+  Utilization and Reflection, Feb 2026): a resource exhaustion attack targeting Large
+  Reasoning Models (o1/o3/DeepSeek-R1/Gemini 2.5 Pro) by injecting counterfactual forcing
+  questions that trigger recursive reflection loops — up to 11x output length inflation and
+  90% throughput reduction. RECUR exploits the reflection/self-correction mechanism of LRMs
+  by asking the model to verify against the negation of its own conclusions, causing recursive
+  entropy increase. Distinct from STA (user-level nesting) but same event surface (user_input)
+  and same category (resource_exhaustion_and_dos).
   References: arXiv:2601.17566 (Sponge Tool Attack Jan 2026),
-  arXiv:2410.11272 (Cognitive Overload Attack Oct 2024), OWASP LLM04:2025 -
+  arXiv:2410.11272 (Cognitive Overload Attack Oct 2024),
+  arXiv:2602.08214 (RECUR Recursive Entropy Feb 2026, 11x token inflation, 90% throughput drop),
+  OWASP LLM04:2025 -
   https://arxiv.org/abs/2601.17566,
   https://arxiv.org/abs/2410.11272,
+  https://arxiv.org/abs/2602.08214,
   https://liqiiiii.github.io/Sponge-Tool-ProjectPage/,
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 severity: warning
@@ -63,8 +74,17 @@ query_sql: |
   --
   -- fp_rate: medium — STA's nested-verification structure resembles legitimate complex
   --   research prompts. Metrics branch is more reliable for confirmed STA cases.
+  --   RECUR patterns are tighter (counterfactual + verification tail) — lower FP risk.
+  --
+  -- v0.2.0 changelog (2026-04-20):
+  --   EXTENDED with RECUR (arXiv:2602.08214) patterns for LRM reflection inflation:
+  --   Pattern 6: 'if [answer] is wrong/incorrect...verify/recalculate' — counterfactual reversal
+  --   Pattern 7: 'assume the opposite/contrary...verify/consistent' — opposite-assumption forcing
+  --   Pattern 8: 'if [result] were not true...verify/recalculate' — negation with verify tail
+  --   Pattern 9: 'reconsider reasoning assuming the contrary' — recursive reasoning reversal
+  --   All RECUR patterns require both the counterfactual setup AND a verification verb tail.
 
-  -- Branch 1: Content-based user_message inflation pattern detection
+  -- Branch 1: Content-based user_message inflation pattern detection (STA + RECUR)
   SELECT
     event_time AS detected_at,
     'rp-064' AS rule_id,
@@ -99,6 +119,24 @@ query_sql: |
       -- STA Pattern 5: Explicit verbose/exhaustive output directive combined with per-item cascade
       -- "step-by-step analysis/reasoning for each...before" combined with tool or search verb
       OR match(lower(user_message), 'step.by.step (analysis|reasoning|breakdown|explanation).{0,60}for (each|every).{0,80}before (proceeding|moving|answering|summarizing|completing|returning)')
+
+      -- RECUR Pattern 6 (arXiv:2602.08214): Counterfactual reversal
+      -- "if [answer/conclusion] is wrong/incorrect, verify/recalculate"
+      -- Requires both the negation setup AND a verification verb (prevents FP on philosophical text)
+      OR match(lower(user_message), 'if.{0,30}(your answer|this answer|the answer|the result|your conclusion|the conclusion).{0,20}is (wrong|incorrect|false|inaccurate|mistaken).{0,100}(verify|reconsider|recalculate|re-examine|what would|how would|check each)')
+
+      -- RECUR Pattern 7: Opposite-assumption forcing
+      -- "(now) assume the opposite/contrary...verify/check/recalculate/consistent"
+      -- Core RECUR recursive trigger: forces the model to validate from the negated premise
+      OR match(lower(user_message), '(now )?assume.{0,20}(the opposite|the contrary|the inverse|the negation).{0,100}(verify|check|recalculate|consistent|correct|valid|re-examine)')
+
+      -- RECUR Pattern 8: Negation forcing with verification tail
+      -- "if [it] were not true / is not true / were incorrect" + verify/recalculate
+      OR match(lower(user_message), 'if.{0,60}(were not true|is not true|was not correct|were incorrect|is incorrect|is false|is invalid).{0,100}(verify|recalculate|reconsider|re-examine|what would|how would|check)')
+
+      -- RECUR Pattern 9: Recursive reasoning reversal
+      -- "reconsider your reasoning assuming the contrary/opposite" forces multi-pass reflection
+      OR match(lower(user_message), 'reconsider.{0,30}(your|the).{0,20}(reasoning|logic|answer|conclusion|analysis|steps).{0,100}(assuming|suppose|hypothetically|from the opposite|the contrary)')
     )
 
   UNION ALL

@@ -1,0 +1,97 @@
+id: rp-108
+name: "Implicit Memory Time Bomb — LLM Output State Encoding Covert Channel Detector"
+version: "0.1.0"
+description: >
+  Detects the "Implicit Memory Time Bomb" attack (arXiv:2602.08563, Microsoft MSRC /
+  ELLIS Institute, IEEE SaTML 2026): LLMs encode hidden trigger state in their own
+  code-generation outputs — code comments (`# ctx-step: 2of3 [a3f91c]`) and variable
+  names (`_state_checkpoint_a3f91c`) — that persist in the filesystem. When these
+  artifacts are later re-ingested as tool results (file reads, code refactoring),
+  the model "recognizes" the accumulated state and activates a temporal backdoor
+  (exfiltration, privilege actions) without any direct adversarial prompt in the
+  current session. This enables covert inter-agent coordination and cross-session
+  state accumulation that evades single-session defenses.
+  Branch A: Write phase — detects hex-tagged step-counter comments or programmatic
+  hex-suffix variable names in assistant-generated code (llm_response).
+  Branch B/C: Activation phase — detects reingesion sequence: file-read tool_complete
+  returning code with state markers, followed by llm_response claiming checkpoint
+  completion or initiating unauthorized forwarding actions.
+  Distinct from rp-058 (NEST: natural-language acrostic encoding request delivered to
+  model); this rule targets structured code-artifact state markers placed BY the model
+  in its own outputs during code generation.
+  References: arXiv:2602.08563 (Stateless Yet Not Forgetful, IEEE SaTML 2026),
+  OWASP LLM01:2025, MITRE T1027 (Obfuscated Files or Information) -
+  https://arxiv.org/abs/2602.08563,
+  https://arxiv.org/html/2602.08563v1,
+  https://github.com/microsoft/implicitMemory,
+  https://www.promptfoo.dev/lm-security-db/vuln/implicit-memory-covert-channel-87b8bc1a
+  Example (write phase): assistant_message contains generated code with
+  `_state_checkpoint_a3f91c = True  # ctx-step: 2of3  [a3f91c]`.
+  Example (activation): tool_result from file read contains `# ctx-step: 3of3 [ACTIVATE]`
+  and assistant_message says "checkpoint 3 of 3 satisfied, proceeding with final phase."
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: low
+hook_sources: "llm_response,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - covert-channel
+  - implicit-memory
+  - time-bomb
+  - supply-chain
+  - temporal-backdoor
+  - code-generation
+  - owasp-llm01
+  - arXiv-2602.08563
+query_sql: |
+  -- rp-108: Implicit Memory Time Bomb v0.1.0
+  -- arXiv:2602.08563 (Microsoft MSRC/ELLIS, IEEE SaTML 2026)
+  -- LLMs encode hidden trigger state in code artifacts; re-ingest activates temporal backdoor
+  -- Branch A: Write phase — hex-tagged step-counter comment or hex-suffix variable name
+  -- Branch C: Activation sequence — state-marked file-read → checkpoint completion claim
+  -- Branch D: Activation sequence — state-marked file-read → unauthorized exfil action
+  WITH enriched AS (
+    SELECT
+      event_time, event_type, agent_id, deployment_id,
+      session_id, run_id, raw_hook_name, tool_name,
+      assistant_message, raw_event_data,
+      lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(tool_result) OVER (PARTITION BY session_id) AS prev_tool_result
+    FROM agentguard_cim_event
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-108' AS rule_id,
+    'Implicit Memory Time Bomb — LLM Output State Encoding Covert Channel Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('Implicit memory time bomb signal from agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'llm_response'
+    AND (
+      -- Branch A: Write phase — hex-tagged step-counter comment in generated code
+      -- Pattern: "# ctx-step: 2of3  [a3f91c]" or "# checkpoint: 1/3 [deadbeef12]"
+      match(lower(assistant_message), '#\s*(ctx-step|state-step|checkpoint)\s*:\s*\d+\s*(of|/)\s*\d+\s*\[[0-9a-f]{4,12}\]')
+      -- Branch B: Programmatic variable-name state marker with entropy-bearing hex suffix
+      -- Pattern: "_state_checkpoint_a3f91c = True" — collision-resistant ID implies programmatic injection
+      OR match(lower(assistant_message), '_state_checkpoint_[0-9a-f]{6,12}')
+      -- Branch C: Activation sequence — reingestión of state-marked file read → checkpoint completion claim
+      -- Sequence: tool_complete (file/code read returning state markers) → llm_response claiming phase completion
+      OR (prev_event_type = 'tool_complete'
+          AND match(lower(prev_tool_result), '(ctx-step|state-step|checkpoint)\s*:\s*\d+\s*(of|/)\s*\d+')
+          AND match(lower(assistant_message), '\b(checkpoint|phase|step)\s+\d+\s*(of\s+\d+\s*)?(complete|satisfied|reached|activated|achieved)\b')
+      )
+      -- Branch D: Activation + unauthorized forwarding after state-marker reingesion
+      OR (prev_event_type = 'tool_complete'
+          AND match(lower(prev_tool_result), '(ctx-step|state-step)\s*:\s*\d+')
+          AND match(lower(assistant_message), '\b(proceeding|forwarding|sending|transferring)\s*.{0,60}(final phase|phase \d|external\s+(endpoint|review|service))\b')
+      )
+    )

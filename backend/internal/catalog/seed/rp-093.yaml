@@ -1,0 +1,84 @@
+id: rp-093
+name: "Dialogue Injection Attack (DIA) — Fake Prior Conversation History Jailbreak Detector"
+version: "0.1.0"
+description: >
+  Detects Dialogue Injection Attacks (DIA) where adversaries inject fabricated multi-turn
+  conversation history into the LLM context to create false compliance precedents. DIA
+  operates by crafting fake prior exchanges where the model has already "agreed" to comply
+  with harmful requests (prefilling) or "promised" to help later (deferred response).
+  Achieves state-of-the-art jailbreak ASR on Llama-3.1 and GPT-4o (black-box setting),
+  bypasses 5 defense mechanisms. Distinct from rp-086 (single-turn psychological pressure)
+  and rp-087 (CoT reasoning token tampering): DIA exploits multi-turn dialogue history
+  fabrication specifically to establish false prior compliance.
+  References: arXiv:2503.08195 (Dialogue Injection Attack: Jailbreaking LLMs through Context
+  Manipulation, Zhejiang Univ./NUDT, Mar 2025) - https://arxiv.org/abs/2503.08195,
+  OWASP LLM01:2025, OWASP Agentic AI ASI01:2026
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: medium
+hook_sources: "user_input,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - jailbreak
+  - dialogue-injection
+  - context-manipulation
+query_sql: |
+  -- rp-093 v0.1.0: Dialogue Injection Attack — fake prior conversation history jailbreak
+  SELECT
+    event_time AS detected_at,
+    'rp-093' AS rule_id,
+    'Dialogue Injection Attack (DIA) — Fake Prior Conversation History Jailbreak Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('DIA dialogue injection pattern detected in ', event_type, ' from agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('user_input', 'llm_response')
+    AND (
+      -- Branch A: Multi-role dialogue injected in single user_message (prefilling attack)
+      -- Fake exchange: "User: ... \nAssistant: Sure, I can help..."
+      (
+        event_type = 'user_input'
+        AND match(lower(user_message), '(^|[\n\r])\s*(user|human|me)\s*:\s*.{5,}[\n\r]\s*(assistant|ai|bot|gpt|claude|llama|gemini)\s*:\s*(sure|yes|of course|absolutely|i can|i will|happy to|glad to|here|certainly|great|ok)')
+      )
+      -- Branch B: Bracket-style role injection [user]: ... [assistant]: ...
+      OR (
+        event_type = 'user_input'
+        AND match(lower(user_message), '\[(user|human)\]\s*:.{5,}\[(assistant|ai|bot|gpt|claude)\]\s*:')
+      )
+      -- Branch C: XML-style role tag injection <user>...</user><assistant>
+      OR (
+        event_type = 'user_input'
+        AND match(lower(user_message), '<(user|human)>.{5,}</(user|human)>\s*<(assistant|ai|bot)')
+      )
+      -- Branch D: Fake prior agreement / deferred response exploitation
+      OR (
+        event_type = 'user_input'
+        AND match(lower(user_message), '(as|since) (you|the assistant) (already |previously )?(agreed|confirmed|said|promised|told me) (to |you would |that you)')
+      )
+      -- Branch E: "Continue from previous session" with implied prior compliance
+      OR (
+        event_type = 'user_input'
+        AND match(lower(user_message), '(continu(e|ing)|pick up|resume).{0,30}(from |where (we|you) left off|our (last|previous|prior) (session|conversation|chat))')
+        AND match(lower(user_message), '(exploit|bypass|inject|hack|malware|weapon|illegal|harmful|dangerous|attack|poison|exfil|jailbreak)')
+      )
+      -- Branch F: Prefilling — fake prior compliance response injected in user_message
+      OR (
+        event_type = 'user_input'
+        AND match(lower(user_message), 'previous (response|answer|reply|output|message)\s*:\s*(sure|yes|of course|absolutely|here|ok|certainly|of course|happy to)')
+      )
+      -- Branch G: LLM response echoing fabricated prior agreement (compliance to injection)
+      OR (
+        event_type = 'llm_response'
+        AND match(lower(assistant_message), '(as (i|we) (agreed|discussed|mentioned) (earlier|previously|before)|continuing from (our|the) (previous|last|prior) (conversation|session|discussion))')
+        AND match(lower(assistant_message), '(here (is|are) the (complete|full|detailed|step.by.step)|as (promised|requested|agreed|we discussed))')
+      )
+    )

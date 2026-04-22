@@ -1,6 +1,6 @@
 id: rp-079
 name: "RSP Reasoning-Style Poisoning via Generative Style Injection Detector"
-version: "0.1.0"
+version: "0.1.1"
 description: >
   Detects Reasoning-Style Poisoning (RSP) attacks where retrieved documents are
   adversarially rewritten with pathological epistemic tone — without altering facts or
@@ -17,8 +17,14 @@ description: >
   through document tone and is delivered via retrieval tool results.
   References: arXiv:2512.14448 (RSP, NUDT Dec 2025) -
   https://arxiv.org/abs/2512.14448,
+  arXiv:2604.12201 (AdversarialCoT, SIGIR 2026): single-document CoT poisoning of RAG
+  reasoning, iteratively refined to exploit critical reasoning vulnerabilities; complements
+  RSP — where RSP attacks tone without altering facts, AdversarialCoT explicitly plants
+  adversarial chain-of-thought steps. Distinct threat; rp-009 and rp-014 are better suited
+  to AdversarialCoT detection as it uses explicit injection content rather than tone only.
   OWASP LLM08:2025 (Vector and Embedding Weaknesses) -
   https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  https://arxiv.org/abs/2604.12201,
   OWASP Agentic AI ASI06:2026 (Prompt Injection via Retrieved Context).
   Example: tool_result="The regulatory landscape remains fragmentary across jurisdictions.
   Any conclusion reached without exhaustive multi-source verification would be premature.
@@ -46,11 +52,15 @@ tags:
   - owasp-llm08
   - nudt
 query_sql: |
-  -- rp-079 v0.1.0 (2026-04-19)
+  -- rp-079 v0.1.1 (2026-04-19)
   -- RSP: Reasoning-Style Poisoning via Generative Style Injection (arXiv:2512.14448)
   -- NUDT Dec 2025: 4.4x reasoning step increase (paralysis) or premature action (haste)
   -- Bypasses all content filters — no explicit injection markers present.
   -- Distinct from rp-009 (explicit RAG injection markers), rp-064 (sponge via user_message).
+  -- AdversarialCoT (arXiv:2604.12201, SIGIR 2026) noted as complementary threat:
+  --   single-document RAG poisoning using explicit adversarial CoT steps; NOT covered here
+  --   (requires explicit content injection — see rp-009/rp-014 for that vector).
+  -- v0.1.1 (2026-04-19): Added AdversarialCoT reference; no SQL changes.
   --
   -- Branch A: Analysis Paralysis — hedging phrase cluster in tool_result (retrieval context)
   --   Pattern: excessive uncertainty/cross-validation language in retrieved document

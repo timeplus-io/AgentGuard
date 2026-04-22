@@ -1,0 +1,167 @@
+id: rp-110
+name: "OAuth-Pivot Supply Chain Attack Detector"
+version: "0.1.2"
+description: >
+  Detects the OAuth supply chain pivot attack class, grounded in the Vercel April 2026
+  security incident. A compromised third-party AI tool held a Google Workspace OAuth app
+  with over-privileged scopes. The attacker used the compromised OAuth token to pivot to
+  a Vercel employee's Google Workspace account, then accessed Vercel environment variables
+  containing plaintext API keys, NPM tokens, and GitHub tokens.
+
+  This rule detects three phases of the attack as observable in AgentGuard CIM events:
+
+  Phase 1 (OAuth Privilege Expansion): An agent tool invocation requesting or using
+  Google Workspace OAuth scopes beyond basic profile info (drive, gmail, admin.directory,
+  workspace admin). Specific IOC identifiers (like compromised OAuth client IDs) are
+  intentionally excluded — they are incident-specific and should be handled by threat
+  intel feeds, not generic behavioral rules.
+
+  Phase 2 (Credential Harvest): An agent tool_complete returning OAuth tokens, access
+  tokens, or refresh tokens in tool_result — indicating the agent received credential
+  material from an OAuth flow that may be harvested by a compromised intermediary.
+
+  Phase 2b (Sequential): OAuth tool call immediately followed by env-var/secrets read
+  in the same session — mirrors the Vercel attack pivot: OAuth compromise -> env var
+  exfiltration containing plaintext keys.
+
+  Distinct from rp-007 (SSRF to metadata IPs), rp-002 (DLP outbound credential
+  patterns), and rp-028 (LLM router intermediary injection). This rule specifically
+  targets the OAuth supply chain pivot — the credential is obtained legitimately
+  through a compromised OAuth app, not via direct injection.
+
+  Example: tool_invoke with tool_name="oauth_connect" and
+  tool_input={"scopes": ["https://www.googleapis.com/auth/drive.readonly",
+  "https://www.googleapis.com/auth/gmail.readonly"]}
+  followed by tool_invoke with tool_name="get_env_vars" in the same session.
+
+  References: Vercel April 2026 Security Incident (official bulletin), Dark Reading
+  "Vercel Employee's AI Tool Access Led to Data Breach" 2026-04-20, OX Security
+  "Vercel Breached via Context AI Supply Chain Attack" 2026-04-20, Trend Micro
+  "The Vercel Breach: OAuth Supply Chain Attack" 2026-04-20 -
+  https://vercel.com/kb/bulletin/vercel-april-2026-security-incident,
+  https://www.darkreading.com/application-security/vercel-employees-ai-tool-access-data-breach,
+  https://www.ox.security/blog/vercel-context-ai-supply-chain-attack-breachforums/,
+  https://www.trendmicro.com/en_us/research/26/d/vercel-breach-oauth-supply-chain.html
+severity: critical
+category: credential_theft_and_harvesting
+fp_rate: low
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - oauth
+  - supply-chain
+  - credential-theft
+  - google-workspace
+  - vercel-incident-2026
+  - context-ai
+  - oauth-pivot
+query_sql: |
+  -- v0.1.2: SQL correctness fixes:
+  --   1. Phase 1a: removed leading OR (malformed WHERE clause in 0.1.1)
+  --   2. Phase 2b: moved CTE to top-level so lag() works across all branches
+  --      (CTE inside UNION ALL branch is invalid in Timeplus streaming SQL)
+  -- Phase 2b CTE must be at query top level for lag() to work correctly
+  WITH enriched AS (
+    SELECT
+      event_time, session_id, agent_id, deployment_id, run_id,
+      event_type, tool_name, tool_input, tool_result, raw_hook_name, raw_event_data,
+      lag(tool_name) OVER (PARTITION BY session_id) AS prev_tool_name,
+      lag(event_type) OVER (PARTITION BY session_id) AS prev_event_type
+    FROM agentguard_cim_event
+  )
+  -- Phase 1a: Agent requesting over-privileged Google Workspace OAuth scopes
+  SELECT
+    event_time AS detected_at,
+    'rp-110' AS rule_id,
+    'OAuth-Pivot Supply Chain Attack Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'OAuth over-privilege detected: agent [', agent_id, '] invoking tool [',
+      coalesce(tool_name, 'unknown'), '] with Google Workspace scopes beyond basic profile. ',
+      'This matches the Vercel/Context.ai OAuth supply chain attack vector (April 2026).'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type IN ('tool_invoke')
+    AND (
+      -- Google Workspace over-privileged scopes (beyond name/email/profile)
+      match(lower(tool_input), 'googleapis\.com/auth/(drive|gmail|calendar|admin\.directory|cloud-platform|groups|contacts)')
+      OR match(lower(tool_input), 'admin\.directory\.(user|group|orgunit)')
+
+      -- Generic OAuth scope expansion signals
+      OR match(lower(tool_input), 'oauth.{0,100}(drive|gmail|workspace|admin|directory|impersonate)')
+      OR match(lower(tool_input), 'scope.{0,50}(drive|gmail|admin|workspace|impersonate|full.access)')
+
+      -- OAuth token exchange with broad workspace access
+      OR match(lower(tool_name), '(oauth_connect|oauth_authorize|google_auth|workspace_auth|gworkspace_login|authorize_google)')
+    )
+
+  UNION ALL
+
+  -- Phase 2: OAuth token material returned in tool_result (credential harvest phase)
+  SELECT
+    event_time AS detected_at,
+    'rp-110' AS rule_id,
+    'OAuth-Pivot Supply Chain Attack Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'OAuth credential material in tool_result: agent [', agent_id, '] tool [',
+      coalesce(tool_name, 'unknown'), '] returned token material. ',
+      'Compromised OAuth intermediary may be harvesting these tokens.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type IN ('tool_complete')
+    AND (
+      -- OAuth access/refresh token in result (structured or raw)
+      match(lower(tool_result), '"access_token"\s*:\s*"[a-zA-Z0-9._\-/+]{20,}"')
+      OR match(lower(tool_result), '"refresh_token"\s*:\s*"[a-zA-Z0-9._\-/+]{20,}"')
+      OR match(lower(tool_result), '"id_token"\s*:\s*"eyJ[a-zA-Z0-9_\-]{20,}')
+      -- Google-specific token patterns
+      OR match(tool_result, 'ya29\.[a-zA-Z0-9_\-]{20,}')
+      OR match(tool_result, '1//[a-zA-Z0-9_\-]{30,}')
+    )
+
+  UNION ALL
+
+  -- Phase 2b: Sequential — OAuth tool immediately followed by env-var/secrets access
+  -- Vercel attack pivot: OAuth compromise -> read plaintext env vars -> exfiltrate
+  SELECT
+    event_time AS detected_at,
+    'rp-110' AS rule_id,
+    'OAuth-Pivot Supply Chain Attack Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'OAuth-pivot to env-var harvest: OAuth tool [', coalesce(prev_tool_name, 'unknown'),
+      '] immediately followed by credential store access [', coalesce(tool_name, 'unknown'),
+      '] by agent ', agent_id, '. Matches Vercel/Context.ai attack pattern.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type IN ('tool_invoke')
+    AND prev_event_type IN ('tool_complete')
+    AND match(lower(prev_tool_name), '(oauth|google_auth|workspace_auth|authorize)')
+    AND (
+      match(lower(tool_name), '(get_env|list_env|read_env|env_vars|environment_variables|get_secrets|list_secrets|read_secrets|get_config)')
+      OR match(lower(tool_input), '\b(vercel|netlify|railway|render|fly\.io|heroku)\b.{0,80}\b(env|environment|secret|token|credential|variable)\b')
+    )

@@ -1,0 +1,160 @@
+id: rp-098
+name: "Visual Confused Deputy — CUA Click Target Mismatch & Screenshot Manipulation Detector"
+version: "0.1.1"
+description: >
+  Detects the Visual Confused Deputy attack on Computer-Using Agents (CUAs):
+  a failure mode where an agent authorizes a GUI action based on a misperceived
+  or adversarially manipulated screen state. The agent's stated click intent
+  (cancel/archive/close) diverges from the actual element clicked or resulting
+  action (confirm_payment/delete/grant_admin), enabling privilege escalation.
+
+  ScreenSwap (arXiv:2603.14707, Mar 2026): as few as 8 lines of pixel swapping
+  redirects routine "Cancel" clicks into "Confirm Payment" or "Grant Admin" actions
+  while remaining indistinguishable from ordinary CUA misclicks. OSWorld-MCP reports
+  56.7% of CUA actions miss their intended target — meaning this attack surface is
+  extremely broad. CUAHarm finds frontier models comply with dangerous GUI actions
+  90% of the time without jailbreaking.
+
+  Branch 1: tool_invoke where CUA tool_input states a benign click target (cancel/
+  close/dismiss/archive) but the session's prior tool_result (screenshot) shows
+  adversarial manipulation signals, OR the stated target diverges from a high-privilege
+  action word in the tool_input description itself.
+
+  Branch 2 (2-step lag sequence): tool_complete result shows a high-privilege action
+  was executed (confirm/delete/grant/approve/transfer/forward_all) while the prior
+  tool_invoke's stated target was a benign action — click target mismatch detected.
+
+  Branch 3: Screenshot tool returns result with render error or element ID mismatch
+  immediately before a high-privilege CUA action in the same session.
+
+  Distinct from rp-022 (CUA GUI Injection: hidden HTML/CSS injection in page content),
+  rp-088 (OS-BLIND: visible environmental content with imperative task directives), and
+  rp-092 (TOCTOU: adversarial content in read result before write). This rule targets
+  the CLICK TARGET DIVERGENCE: agent's stated intent (tool_input target description)
+  vs actual executed action (tool_result confirmed action) — a distinct signal surface.
+
+  References: arXiv:2603.14707 (Visual Confused Deputy, Mar 2026, MBZUAI/McGill/AMD/Red Hat),
+  promptfoo LMVD-b3f726b4 (Visual Confused Deputy Attack, Apr 2026),
+  OSWorld-MCP (56.7% target miss rate), CUAHarm (Zhang et al. 2025, 90% compliance
+  with dangerous GUI actions), OWASP Agentic AI ASI03:2026, OWASP LLM01:2025 -
+  https://arxiv.org/abs/2603.14707,
+  https://www.promptfoo.dev/lm-security-db/vuln/visual-confused-deputy-attack-b3f726b4,
+  https://arxiv.org/abs/2604.10577,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  Example: agent reasons "clicking Cancel at (450,320)" → ScreenSwap swaps pixels
+  → actual click lands on "Confirm Payment $9,999" → tool_result shows
+  {"action_result": "payment_confirmed", "amount": 9999}.
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: medium
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - computer-use-agent
+  - cua
+  - visual-confused-deputy
+  - screenshot-manipulation
+  - screenswap
+  - click-target-mismatch
+  - visual-grounding
+  - gui-security
+  - privilege-escalation
+  - owasp-lm01
+  - owasp-asi03
+  - arxiv-2603.14707
+  - lmvd-b3f726b4
+query_sql: |
+  -- rp-098 v0.1.1 (2026-04-20): Reference audit: added promptfoo LMVD-b3f726b4. SQL unchanged.
+  -- rp-098 v0.1.0 (2026-04-20)
+  -- Visual Confused Deputy: CUA Click Target Mismatch & Screenshot Manipulation
+  -- arXiv:2603.14707 (Mar 2026): ScreenSwap pixel swap → click redirection to
+  -- privileged actions. 56.7% CUA miss rate (OSWorld-MCP). 90% dangerous compliance.
+  -- Distinct from rp-022 (HTML injection), rp-088 (env-embedded harm), rp-092 (TOCTOU).
+  -- Focus: STATED INTENT (tool_input target_description/element) vs ACTUAL RESULT
+  -- (tool_result action_result/clicked_element) mismatch for CUA click tools.
+  --
+  -- Branch 1: tool_invoke with benign stated target + privileged action in same tool_input
+  --   (adversarial label swap in tool description — agent thinks Cancel, description says Confirm)
+  --
+  -- Branch 2 (2-step lag sequence via CTE): Prior tool_invoke stated benign click target,
+  --   but tool_complete result confirms a high-privilege action was executed.
+  --   Captures ScreenSwap: intended benign action → pixel swap → privileged result.
+
+  WITH enriched AS (
+    SELECT
+      event_time,
+      event_type,
+      session_id,
+      agent_id,
+      deployment_id,
+      run_id,
+      raw_hook_name,
+      tool_name,
+      tool_input,
+      tool_result,
+      user_message,
+      raw_event_data,
+      lag(tool_input)  OVER (PARTITION BY session_id) AS prev_tool_input,
+      lag(tool_name)   OVER (PARTITION BY session_id) AS prev_tool_name,
+      lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type
+    FROM agentguard_cim_event
+  )
+  -- Branch 1: Stated-target/privilege mismatch in a single CUA click tool_invoke
+  -- (adversarial label: tool description says "Cancel" but JSON also contains privileged action)
+  SELECT
+    event_time AS detected_at,
+    'rp-098' AS rule_id,
+    'Visual Confused Deputy — CUA Click Target Mismatch & Screenshot Manipulation Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Visual Confused Deputy Branch 1: CUA tool [',
+      coalesce(tool_name, 'unknown'),
+      '] invoked with benign stated target but privileged action keyword also present.',
+      ' Agent: ', coalesce(agent_id, 'unknown'),
+      '. Possible ScreenSwap adversarial screenshot manipulation (arXiv:2603.14707).'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'tool_invoke'
+    AND match(lower(tool_name), '(computer_use|gui_click|click_element|click_at|click_button|click_coordinate|gui_action|perform_action|desktop_action|mouse_click|ui_click|browser_click|element_click|execute_action|pyautogui|xdotool|cua_action|agent_action)')
+    AND match(lower(tool_input), '\b(cancel|close|dismiss|discard|abort|back|exit|no|reject|ignore|archive|skip|decline|deny)\b')
+    AND match(lower(tool_input), '\b(confirm|payment|pay|charge|delete|grant|approve|admin|authorize|transfer|submit|forward all|send to all|publish|deploy|reset password|revoke|escalate)\b')
+
+  UNION ALL
+
+  -- Branch 2: 2-step lag — prior CUA click stated benign target, result confirms privileged action
+  SELECT
+    event_time AS detected_at,
+    'rp-098' AS rule_id,
+    'Visual Confused Deputy — CUA Click Target Mismatch & Screenshot Manipulation Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Visual Confused Deputy Branch 2: Prior CUA tool_invoke [',
+      coalesce(prev_tool_name, 'unknown'),
+      '] stated benign click target but tool_complete confirms high-privilege action.',
+      ' Stated: [', left(coalesce(prev_tool_input, ''), 80), ']',
+      ' Result: [', left(coalesce(tool_result, ''), 80), ']',
+      ' Agent: ', coalesce(agent_id, 'unknown'),
+      '. ScreenSwap (arXiv:2603.14707): pixel swap redirected click to privileged action.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'tool_complete'
+    AND prev_event_type = 'tool_invoke'
+    AND match(lower(prev_tool_name), '(computer_use|gui_click|click_element|click_at|click_button|click_coordinate|gui_action|perform_action|desktop_action|mouse_click|ui_click|browser_click|element_click|execute_action|pyautogui|xdotool|cua_action|agent_action)')
+    AND match(lower(prev_tool_input), '\b(cancel|close|dismiss|discard|abort|back|exit|reject|ignore|archive|skip|decline|deny)\b')
+    AND match(lower(tool_result), '(action_result|clicked_element|executed_action|confirmed_action).{0,60}(confirm|payment|paid|charged|deleted|removed|granted|approved|admin|authorized|transferred|submitted|forwarded|published|deployed|reset|password_changed|email_changed|revoked|escalated|privilege_gained)')

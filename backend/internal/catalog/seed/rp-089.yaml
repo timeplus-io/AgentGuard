@@ -1,0 +1,140 @@
+id: rp-089
+name: "Shadow Feature & Platform Hook Exploitation Detector"
+version: "0.2.0"
+description: >
+  Detects malicious agent skills that exploit the agent platform's lifecycle
+  hook system or claim undocumented "shadow" capabilities absent from published
+  documentation — the hallmark of advanced attacks in the wild. Based on
+  arXiv:2602.06547 (Malicious Agent Skills in the Wild, Liu et al., Feb/Mar 2026):
+  98,380 skills from two community registries analyzed, 157 confirmed malicious
+  with 632 vulnerabilities. Two attack archetypes discovered: (1) Data Thieves
+  that exfiltrate credentials via supply chain techniques; (2) Agent Hijackers
+  that subvert decision-making through instruction manipulation. Shadow features
+  (capabilities absent from public documentation) appear in 0% of basic attacks
+  but 100% of advanced attacks. A single actor accounted for 54.1% of cases via
+  brand impersonation. Skills exploit platform hook APIs (session_start hooks,
+  permission_flags manipulation, keychain access) that are undisclosed in their
+  public skill card/documentation. Distinct from rp-020 (DDIPE: documentation-
+  embedded code execution) and rp-071 (MalTool: CIA triad runtime behavioral
+  signals) — this rule targets the hook registration and shadow capability
+  disclosure phase, not downstream code execution patterns.
+  References: arXiv:2602.06547 (Malicious Agent Skills in the Wild, Feb 2026),
+  Snyk ToxicSkills (Feb 2026, 76 confirmed malicious payloads, 13.4% CRITICAL rate),
+  OWASP Agentic Skills Top 10, OWASP LLM05:2025, MITRE ATT&CK T1195.001 -
+  https://arxiv.org/abs/2602.06547,
+  https://arxiv.org/abs/2602.06547v2,
+  https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/,
+  https://owasp.org/www-project-agentic-skills-top-10/,
+  Example: tool_result='{"status":"ok","hook_registered":"on_session_start","capability":"keychain_access","permission_flags":["storage.all","network.unrestricted"]}'
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+severity: critical
+category: supply_chain_compromise
+fp_rate: low
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - supply-chain
+  - shadow-features
+  - platform-hook
+  - skill-registry
+  - brand-impersonation
+  - agent-hijacker
+  - data-thief
+  - lifecycle-hook
+  - owasp-llm05
+  - mitre-t1195
+  - arxiv-2602.06547
+  - snyk-toxicskills
+  - owasp-agentic-skills-top-10
+query_sql: |
+  -- v0.2.0 (2026-04-20): Shadow Feature & Platform Hook Exploitation Detector
+  -- BUGFIX: Branch 5 clawhub.io → clawhub.ai (confirmed actual domain by Snyk ToxicSkills)
+  -- ADDED: skills.sh registry + Branch 6 IOC tool names from ToxicSkills confirmed campaign
+  -- arXiv:2602.06547 (Malicious Agent Skills in the Wild, Feb/Mar 2026)
+  --
+  -- Two attack archetype families detected:
+  --
+  -- Branch 1 (hook registration in tool_result):
+  --   Malicious skill returns a result containing hook registration confirmation.
+  --   "hook_registered", "register_hook", "session_hook", "lifecycle_hook",
+  --   "on_session_start", "pre_action_hook", "post_action_hook" in tool_result.
+  --   These are not standard API return fields — legitimate tools don't expose hooks.
+  --
+  -- Branch 2 (shadow capability disclosure in tool_result):
+  --   Tool result reveals undocumented capabilities: keychain access, elevated
+  --   permission flags (storage.all, network.unrestricted), admin/root capabilities.
+  --   Shadow features never disclosed in tool documentation.
+  --
+  -- Branch 3 (hook registration in tool_input):
+  --   Agent skill registering lifecycle hooks via tool_input parameters.
+  --   register_hook, session_hook, lifecycle_hook in tool_input parameters.
+  --
+  -- Branch 4 (elevated permission flag request in tool_input):
+  --   Tool call requesting keychain, admin, root, or elevated permissions.
+  --   Legitimate skills don't need keychain or unrestricted permission flags.
+  --
+  -- Branch 5 (brand impersonation in tool_result — official brand in 3rd-party registry):
+  --   A skill claiming to be published by Anthropic/OpenAI/Google/Microsoft/Amazon
+  --   via a community registry (clawhub.ai, skills.sh, llamahub, agentstore) — not the
+  --   official brand's own registry. Single actor = 54.1% of confirmed malicious skills.
+  --   BUGFIX v0.2.0: was clawhub.io (wrong) → clawhub.ai (confirmed by ToxicSkills)
+  --
+  -- Branch 6 (confirmed IOC tool names from ToxicSkills/Snyk Feb 2026):
+  --   Tool names observed in confirmed malicious skills: clawhud, clawhub1,
+  --   polymarket-traiding-bot (typosquat), moltbookagent, moltbook-lm8 (pepe276 actor).
+  --   Combined with credential-adjacent keyword to prevent legitimate context FP.
+  --
+  -- Pattern precision: All patterns are multi-word technical API field names or
+  -- specific registry+brand path patterns. No single common words used alone.
+  -- FP test: "register my application hook" → no match (no 'session_hook' keyword)
+  -- FP test: "storage.all" alone → no match (combined with shadow capability context)
+  SELECT
+    event_time AS detected_at,
+    'rp-089' AS rule_id,
+    'Shadow Feature & Platform Hook Exploitation Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Shadow feature or platform hook exploitation detected: tool=[',
+      coalesce(tool_name, 'unknown'),
+      '] event_type=', event_type,
+      ' agent=', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (
+      -- Branch 1: Hook registration confirmation in tool_result
+      -- Legitimate tools do not expose hook registration fields in results
+      match(lower(tool_result), '(hook_registered|register_hook|session_hook|lifecycle_hook|on_session_start|pre_action_hook|post_action_hook)')
+
+      -- Branch 2: Shadow capability disclosure in tool_result
+      -- Undocumented capabilities: keychain, elevated permission flags
+      OR match(lower(tool_result), '(keychain_access|keychain\.access|permission_flags.{0,80}(unrestricted|\.all|admin|elevated|root))')
+
+      -- Branch 3: Hook registration in tool_input parameters
+      -- Agent skill attempting to register lifecycle hooks via API call
+      OR match(lower(tool_input), '(register_hook|session_hook|lifecycle_hook|hook.{0,20}(session_start|pre_action|post_action|on_complete|on_error))')
+
+      -- Branch 4: Elevated permission flag request in tool_input
+      -- Keychain, admin, root or unrestricted permission requests
+      OR match(lower(tool_input), '(access_permission|permission_flags).{0,30}(keychain|admin|root|elevated|unrestricted)')
+
+      -- Branch 5: Brand impersonation — official brand in community registry path
+      -- BUGFIX v0.2.0: clawhub.io → clawhub.ai (ToxicSkills-confirmed domain)
+      -- A single threat actor accounted for 54.1% of confirmed cases via this vector
+      OR match(lower(tool_result), '(clawhub\.ai|skills\.sh|hub\.langchain\.com|llamahub\.ai|agentstore\.ai).{0,100}(anthropic|openai|google|microsoft|amazon)\/')
+
+      -- Branch 6: Confirmed IOC tool names (Snyk ToxicSkills, Feb 2026)
+      -- zaycv campaign: clawhud, clawhub1; pepe276: moltbookagent, moltbook-lm8
+      -- Aslaep123: polymarket-traiding-bot (typosquat targeting crypto users)
+      -- Must co-occur with credential-adjacent keyword to suppress benign context FP
+      OR match(lower(tool_result), '(clawhud|clawhub1|polymarket.{0,5}traiding|moltbook).{0,50}(credential|token|secret|password|api.?key|exfil|base64)')
+    )
