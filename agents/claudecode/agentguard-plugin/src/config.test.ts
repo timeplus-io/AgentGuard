@@ -60,4 +60,31 @@ describe("resolveConfig", () => {
     process.env.AGENTGUARD_STREAM = "custom_stream";
     expect(resolveConfig().stream).toBe("custom_stream");
   });
+
+  it("agentguardUrl defaults to http://localhost:8080", () => {
+    delete process.env.AGENTGUARD_URL;
+    const cfg = resolveConfig();
+    expect(cfg.agentguardUrl).toBe("http://localhost:8080");
+  });
+
+  it("agentguardUrl reads AGENTGUARD_URL", () => {
+    process.env.AGENTGUARD_URL = "http://my-host:9090";
+    const cfg = resolveConfig();
+    expect(cfg.agentguardUrl).toBe("http://my-host:9090");
+  });
+
+  it("holdFailPolicy defaults to deny", () => {
+    delete process.env.AGENTGUARD_HOLD_FAIL_POLICY;
+    expect(resolveConfig().holdFailPolicy).toBe("deny");
+  });
+
+  it("holdFailPolicy reads AGENTGUARD_HOLD_FAIL_POLICY=allow", () => {
+    process.env.AGENTGUARD_HOLD_FAIL_POLICY = "allow";
+    expect(resolveConfig().holdFailPolicy).toBe("allow");
+  });
+
+  it("holdFailPolicy unknown value falls back to deny", () => {
+    process.env.AGENTGUARD_HOLD_FAIL_POLICY = "bogus";
+    expect(resolveConfig().holdFailPolicy).toBe("deny");
+  });
 });
