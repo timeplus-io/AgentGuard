@@ -5,6 +5,7 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import Toggle from '../components/Toggle'
+import BlockPolicySelect from '../components/BlockPolicySelect'
 import { api } from '../api/client'
 
 const CATEGORY_ICONS = {
@@ -65,6 +66,7 @@ export default function RulePacks() {
           version: r.enabled ? (r.version || null) : null,
           active: r.enabled,
           detections24h: r.detections_24h || 0,
+          block_policy: r.block_policy || 'log_only',
         })))
       }
       if (data.total_detections_24h !== undefined) setTotalDetections(data.total_detections_24h)
@@ -359,7 +361,27 @@ export default function RulePacks() {
                     <div className={`w-12 h-12 bg-[#0f0c17] flex items-center justify-center rounded-sm ${rule.active ? 'text-[#ffb0cf]' : 'text-zinc-500'}`}>
                       <span className="material-symbols-outlined" style={rule.active ? { fontVariationSettings: "'FILL' 1" } : {}}>{rule.icon}</span>
                     </div>
-                    <Toggle checked={rule.enabled} onChange={val => handleToggle(rule.id, val)} />
+                    <div className="flex flex-col items-end gap-2">
+                      <Toggle checked={rule.enabled} onChange={val => handleToggle(rule.id, val)} />
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wide">Policy:</span>
+                        <BlockPolicySelect
+                          value={rule.block_policy}
+                          disabled={!rule.enabled}
+                          onChange={async (newPolicy) => {
+                            const prevPolicy = rule.block_policy
+                            // Optimistic update
+                            setRules(prev => prev.map(r => r.id === rule.id ? { ...r, block_policy: newPolicy } : r))
+                            try {
+                              await api.setRuleBlockPolicy(rule.id, newPolicy)
+                            } catch (e) {
+                              setRules(prev => prev.map(r => r.id === rule.id ? { ...r, block_policy: prevPolicy } : r))
+                              alert(`Failed to update policy: ${e.message}`)
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="z-10">
                     <h3 className="text-lg font-semibold tracking-tight text-white mb-2">{rule.name}</h3>

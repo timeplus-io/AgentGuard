@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import BlockPolicySelect from '../components/BlockPolicySelect'
+import { api } from '../api/client'
 
 const STEPS = [
   { label: 'Select Agent', icon: 'smart_toy' },
@@ -186,10 +188,53 @@ export default function Onboarding() {
     },
   }, null, 2)
 
+  // Step 4 (Activate Rules) — catalog + per-rule policy selection
+  const [catalog, setCatalog] = useState([])
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogError, setCatalogError] = useState(null)
+  const [selectedRules, setSelectedRules] = useState({}) // { ruleId: true }
+  const [policies, setPolicies] = useState({})           // { ruleId: 'log_only' | 'auto_block' | 'hold' }
+  const [activating, setActivating] = useState(false)
+  const [activateError, setActivateError] = useState(null)
+
+  useEffect(() => {
+    if (step !== 3 || catalog.length > 0 || catalogLoading) return
+    setCatalogLoading(true)
+    setCatalogError(null)
+    api.getRulesCatalog()
+      .then(data => setCatalog(data.catalog || []))
+      .catch(err => setCatalogError(err?.message || 'Failed to load catalog'))
+      .finally(() => setCatalogLoading(false))
+  }, [step, catalog.length, catalogLoading])
+
   const handleNext = () => setStep(s => Math.min(3, s + 1))
   const handleBack = () => setStep(s => Math.max(0, s - 1))
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
+    // If any rules are selected on Step 4, install them with their chosen policies.
+    const ruleIds = Object.entries(selectedRules).filter(([, v]) => v).map(([k]) => k)
+    if (ruleIds.length > 0) {
+      setActivating(true)
+      setActivateError(null)
+      try {
+        for (const ruleId of ruleIds) {
+          const entry = catalog.find(c => c.id === ruleId)
+          // Install only if not already installed; ignore install errors so re-running doesn't block.
+          if (entry && !entry.installed) {
+            try { await api.installRule(ruleId) } catch (e) { console.warn('Install failed for', ruleId, e) }
+          }
+          const policy = policies[ruleId]
+          if (policy && policy !== 'log_only') {
+            try { await api.setRuleBlockPolicy(ruleId, policy) } catch (e) { console.warn('Set policy failed for', ruleId, e) }
+          }
+        }
+      } catch (e) {
+        setActivateError(e?.message || 'Activation failed')
+        setActivating(false)
+        return
+      }
+      setActivating(false)
+    }
     localStorage.setItem('agentguard_onboarded', '1')
     navigate('/rules')
   }
@@ -544,30 +589,67 @@ export default function Onboarding() {
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Activate Security Rules</h2>
                     <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
-                      AgentGuard ships with 80+ pre-built security rules. Browse and enable them from the Rules page.
+                      Select the rules to enable now and pick a block policy for each. You can refine these any time from the Rules page.
                     </p>
                   </div>
 
-                  <div className="flex flex-col gap-4">
-                    {[
-                      { icon: 'shield', title: 'Rule Packs', desc: 'Pre-built detection rules grouped by threat category — prompt injection, data exfiltration, policy violations, and more.' },
-                      { icon: 'toggle_on', title: 'One-click enable', desc: 'Install and enable individual rules or entire packs with a single click. Changes take effect immediately.' },
-                      { icon: 'tune', title: 'Custom rules', desc: 'Write your own SQL-based detection rules tailored to your agent\'s specific tools and workflows.' },
-                    ].map(({ icon, title, desc }) => (
-                      <div key={title} className="flex items-start gap-4 p-4 bg-[#1d1a25] rounded-sm">
-                        <div className="w-9 h-9 shrink-0 rounded-sm bg-[#ffb0cf]/10 flex items-center justify-center text-[#ffb0cf]">
-                          <span className="material-symbols-outlined text-base">{icon}</span>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold text-[#e7dff0] mb-0.5">{title}</p>
-                          <p className="text-[11px] text-zinc-400 leading-relaxed">{desc}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  {catalogLoading && (
+                    <div className="text-xs text-zinc-500">Loading rules…</div>
+                  )}
+                  {catalogError && (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 text-xs text-red-400">{catalogError}</div>
+                  )}
+
+                  {!catalogLoading && !catalogError && (
+                    <div className="flex flex-col gap-2 max-h-[420px] overflow-y-auto pr-2">
+                      {catalog.length === 0 ? (
+                        <p className="text-xs text-zinc-500">No rules available in the catalog.</p>
+                      ) : catalog.map(entry => {
+                        const isSelected = !!selectedRules[entry.id]
+                        return (
+                          <div
+                            key={entry.id}
+                            className={`flex items-center justify-between gap-4 p-3 rounded-sm border transition-colors ${
+                              isSelected ? 'bg-[#1d1a25] border-[#ffb0cf]/30' : 'bg-[#1d1a25] border-[#574149]/20'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isSelected || entry.installed}
+                                disabled={entry.installed}
+                                onChange={e => setSelectedRules(prev => ({ ...prev, [entry.id]: e.target.checked }))}
+                                className="mt-1 accent-[#ffb0cf] shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-[#e7dff0] truncate">
+                                  {entry.name}
+                                  {entry.installed && (
+                                    <span className="ml-2 text-[9px] uppercase tracking-wide text-zinc-500">Already enabled</span>
+                                  )}
+                                </p>
+                                <p className="text-[11px] text-zinc-500 leading-relaxed line-clamp-2">{entry.description}</p>
+                              </div>
+                            </div>
+                            <div className="shrink-0">
+                              <BlockPolicySelect
+                                value={policies[entry.id] ?? 'log_only'}
+                                disabled={entry.installed || !isSelected}
+                                onChange={(p) => setPolicies(prev => ({ ...prev, [entry.id]: p }))}
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {activateError && (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 text-xs text-red-400">{activateError}</div>
+                  )}
 
                   <p className="text-xs text-zinc-500 leading-relaxed">
-                    Click <span className="text-zinc-300 font-medium">Go to Rules</span> to open the Rules page where you can browse the full catalog and enable the rules that fit your security policy.
+                    Selected rules will be installed when you click <span className="text-zinc-300 font-medium">Go to Rules</span>. You can browse the full catalog and adjust policies on the Rules page.
                   </p>
                 </>
               )}
@@ -595,10 +677,11 @@ export default function Onboarding() {
                 ) : (
                   <button
                     onClick={handleFinish}
-                    className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
+                    disabled={activating}
+                    className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="material-symbols-outlined text-xs">rule</span>
-                    Go to Rules
+                    {activating ? 'Activating…' : 'Go to Rules'}
                   </button>
                 )}
               </div>
