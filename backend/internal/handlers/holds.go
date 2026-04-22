@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -324,4 +325,234 @@ LIMIT 1`,
 		status, escapeSQLStr(decidedBy), now, escapeSQLStr(decidedReason), now,
 		escapeSQLStr(holdID))
 	return tp.ExecHTTP(&cfg.Timeplus, sql)
+}
+
+// DecideHold handles POST /api/holds/:hold_id/decide.
+// Body: HoldDecideRequest. Idempotent: if already decided, returns existing decision.
+func DecideHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster *alertBroadcaster) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		holdID := c.Param("hold_id")
+		var body models.HoldDecideRequest
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+		if body.Decision != "approved" && body.Decision != "denied" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "decision must be approved|denied"})
+			return
+		}
+
+		existing, err := getHoldByID(cfg, holdID)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("query hold: %v", err)})
+			return
+		}
+		if existing == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "hold not found"})
+			return
+		}
+		if existing.Status != "pending" {
+			// Already terminal — idempotent: return existing decision without writing a new row.
+			c.JSON(http.StatusOK, gin.H{"ok": true, "already_decided_as": existing.Status})
+			return
+		}
+
+		newStatus := body.Decision // "approved" | "denied"
+		if err := writeHoldStatus(cfg, holdID, newStatus, body.DecidedBy, body.DecidedReason); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("write decision: %v", err)})
+			return
+		}
+
+		// Wake the long-poll goroutine.
+		registry.Signal(holdID, holdregistry.Decision{
+			Allow:  newStatus == "approved",
+			Reason: body.DecidedReason,
+		})
+
+		// Push SSE so toasts/list refresh.
+		broadcaster.Publish(models.AlertWebhookPayload{
+			RuleID:     existing.RuleID,
+			RuleName:   "hold_decided",
+			Severity:   existing.Severity,
+			AgentID:    existing.AgentID,
+			Message:    fmt.Sprintf("hold:%s|decision:%s", holdID, newStatus),
+			DetectedAt: time.Now().UTC().Format(time.RFC3339),
+		})
+
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// ListHolds handles GET /api/holds. Query params: ?status=pending (default), ?limit=N (default 100, max 500).
+func ListHolds(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		status := c.DefaultQuery("status", "pending")
+		limit := 100
+		if v := c.Query("limit"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
+				limit = n
+			}
+		}
+		sql := fmt.Sprintf(`
+SELECT hold_id, deployment_id, agent_id, session_id, run_id, tool_name,
+       rule_id, severity, args_summary, message, created_at, status,
+       decided_by, decided_at, decided_reason
+FROM table(mv_holds_current)
+WHERE status = '%s'
+ORDER BY created_at DESC
+LIMIT %d`, escapeSQLStr(status), limit)
+		rows, err := tp.Query(&cfg.Timeplus, sql)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		holds := make([]models.Hold, 0, len(rows))
+		for _, row := range rows {
+			holds = append(holds, rowToHold(row))
+		}
+		c.JSON(http.StatusOK, gin.H{"holds": holds, "total": len(holds)})
+	}
+}
+
+// GetHold handles GET /api/holds/:hold_id. Returns current state + full timeline.
+func GetHold(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		holdID := c.Param("hold_id")
+
+		current, err := getHoldByID(cfg, holdID)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		if current == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "hold not found"})
+			return
+		}
+
+		timelineSQL := fmt.Sprintf(`
+SELECT status, decided_by, decided_at, decided_reason, updated_at
+FROM table(agentguard_holds)
+WHERE hold_id = '%s'
+ORDER BY updated_at ASC`, escapeSQLStr(holdID))
+		rows, err := tp.Query(&cfg.Timeplus, timelineSQL)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		timeline := make([]gin.H, 0, len(rows))
+		for _, row := range rows {
+			timeline = append(timeline, gin.H{
+				"status":         parseStr(row["status"]),
+				"decided_by":     parseStr(row["decided_by"]),
+				"decided_at":     parseTime(row["decided_at"]),
+				"decided_reason": parseStr(row["decided_reason"]),
+				"updated_at":     parseTime(row["updated_at"]),
+			})
+		}
+
+		c.JSON(http.StatusOK, gin.H{"hold": current, "timeline": timeline})
+	}
+}
+
+// AbandonSession handles POST /api/holds/_abandon-session/:session_id.
+// Plugin's SessionEnd hook fires this fire-and-forget to clean up holds for
+// the ending session.
+func AbandonSession(cfg *config.Config, registry *holdregistry.Registry) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sessionID := c.Param("session_id")
+
+		sql := fmt.Sprintf(`
+SELECT hold_id FROM table(mv_holds_current)
+WHERE session_id = '%s' AND status = 'pending'`, escapeSQLStr(sessionID))
+		rows, err := tp.Query(&cfg.Timeplus, sql)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		holdIDs := make([]string, 0, len(rows))
+		for _, row := range rows {
+			if id := parseStr(row["hold_id"]); id != "" {
+				holdIDs = append(holdIDs, id)
+			}
+		}
+
+		failAllow := cfg.Holds.FailPolicy == "allow"
+		for _, id := range holdIDs {
+			_ = writeHoldStatus(cfg, id, "abandoned", "system", "session ended")
+			registry.Signal(id, holdregistry.Decision{
+				Allow:  failAllow,
+				Reason: "session ended",
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"abandoned": len(holdIDs)})
+	}
+}
+
+// DrainHolds handles POST /api/holds/_drain. Operator-only: marks all pending holds as 'abandoned'.
+func DrainHolds(cfg *config.Config, registry *holdregistry.Registry) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		sql := `SELECT hold_id FROM table(mv_holds_current) WHERE status = 'pending'`
+		rows, err := tp.Query(&cfg.Timeplus, sql)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		holdIDs := make([]string, 0, len(rows))
+		for _, row := range rows {
+			if id := parseStr(row["hold_id"]); id != "" {
+				holdIDs = append(holdIDs, id)
+			}
+		}
+		failAllow := cfg.Holds.FailPolicy == "allow"
+		for _, id := range holdIDs {
+			_ = writeHoldStatus(cfg, id, "abandoned", "operator", "drained")
+			registry.Signal(id, holdregistry.Decision{Allow: failAllow, Reason: "drained"})
+		}
+		c.JSON(http.StatusOK, gin.H{"drained": len(holdIDs)})
+	}
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+func getHoldByID(cfg *config.Config, holdID string) (*models.Hold, error) {
+	sql := fmt.Sprintf(`
+SELECT hold_id, deployment_id, agent_id, session_id, run_id, tool_name,
+       rule_id, severity, args_summary, message, created_at, status,
+       decided_by, decided_at, decided_reason
+FROM table(mv_holds_current)
+WHERE hold_id = '%s'
+LIMIT 1`, escapeSQLStr(holdID))
+	rows, err := tp.Query(&cfg.Timeplus, sql)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	h := rowToHold(rows[0])
+	return &h, nil
+}
+
+func rowToHold(row map[string]interface{}) models.Hold {
+	return models.Hold{
+		HoldID:        parseStr(row["hold_id"]),
+		DeploymentID:  parseStr(row["deployment_id"]),
+		AgentID:       parseStr(row["agent_id"]),
+		SessionID:     parseStr(row["session_id"]),
+		RunID:         parseStr(row["run_id"]),
+		ToolName:      parseStr(row["tool_name"]),
+		RuleID:        parseStr(row["rule_id"]),
+		Severity:      parseStr(row["severity"]),
+		ArgsSummary:   parseStr(row["args_summary"]),
+		Message:       parseStr(row["message"]),
+		CreatedAt:     parseTime(row["created_at"]),
+		Status:        parseStr(row["status"]),
+		DecidedBy:     parseStr(row["decided_by"]),
+		DecidedAt:     parseTime(row["decided_at"]),
+		DecidedReason: parseStr(row["decided_reason"]),
+	}
 }
