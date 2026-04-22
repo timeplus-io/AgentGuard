@@ -3,12 +3,8 @@ package timeplus
 import (
 	"context"
 	"fmt"
-	"log"
-	"sync"
 
 	proton "github.com/timeplus-io/proton-go-driver/v2"
-
-	"github.com/timeplus/agentguard/internal/config"
 )
 
 const ddlHoldsStream = `
@@ -71,45 +67,6 @@ func SetupHoldsStorage(ctx context.Context, conn proton.Conn, emit func(status, 
 	}
 	emit("ok", "  ✓ agentguard_rules.block_policy column")
 	return nil
-}
-
-// migrateOnce ensures MigrateHoldsSchema runs at most once per server lifetime.
-var migrateOnce sync.Once
-
-// MigrateHoldsSchema runs the holds-related schema additions against an existing
-// AgentGuard deployment that was provisioned before the holds feature existed.
-//
-// The full Init() flow only runs once via the /api/setup/provision wizard. To
-// pick up new schema bits without forcing a re-provision, the server calls this
-// after the FIRST successful login (when Timeplus credentials become available
-// — they are deliberately not persisted to the config file). The sync.Once
-// guarantees a single attempt per process, so subsequent logins are no-op.
-//
-// All operations are idempotent (CREATE ... IF NOT EXISTS, ADD COLUMN IF NOT
-// EXISTS), so it is safe to call on fresh installs too.
-//
-// Failures are logged but do not abort startup — the holds endpoints will
-// return 503 until the schema is completed, but the rest of the server stays up.
-func MigrateHoldsSchema(timeplusCfg config.TimeplusConfig) {
-	migrateOnce.Do(func() {
-		conn, err := connectOnce(&timeplusCfg)
-		if err != nil {
-			log.Printf("timeplus migrate: connect failed: %v (skipping holds migration)", err)
-			return
-		}
-		defer conn.Close()
-
-		ctx := context.Background()
-		emit := func(status, msg string) { log.Printf("[migrate:%s] %s", status, msg) }
-
-		if err := SetupHoldsStorage(ctx, conn, emit); err != nil {
-			log.Printf("timeplus migrate: holds storage setup failed: %v (continuing — /api/holds will return 503)", err)
-			return
-		}
-		if err := AbandonStalePendingHolds(ctx, conn, emit); err != nil {
-			log.Printf("timeplus migrate: abandon stale pending holds: %v (continuing)", err)
-		}
-	})
 }
 
 // AbandonStalePendingHolds writes status='abandoned' for any holds rows that
