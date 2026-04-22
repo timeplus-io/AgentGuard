@@ -56,6 +56,12 @@ func Login(cfg *config.Config, store *SessionStore) gin.HandlerFunc {
 			return
 		}
 
+		// Apply any post-provision schema migrations (idempotent + sync.Once).
+		// Runs in a goroutine so login latency is unaffected. Currently this
+		// installs the holds schema for deployments provisioned before that
+		// feature existed.
+		go tp.MigrateHoldsSchema(testCfg)
+
 		sess := store.Create(body.Username, body.Password)
 		// httpOnly=true keeps the cookie out of JavaScript; SameSite=Strict prevents CSRF.
 		// Secure is set only when the connection is TLS or behind an HTTPS proxy so that

@@ -18,7 +18,6 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
-	"github.com/timeplus/agentguard/internal/timeplus"
 	"github.com/timeplus/agentguard/internal/web"
 )
 
@@ -107,15 +106,13 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Catalog directory: %s (%d entries)\n", cfg.CatalogDir, len(mgr.All()))
 	fmt.Printf("AgentGuard webhook URL: %s\n", cfg.AgentGuardURL)
 	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
-	// Note: timeplus.Init() is no longer called at startup.
-	// All Timeplus resources are provisioned during the one-time /api/setup/provision flow.
+	// Note: timeplus.Init() is no longer called at startup. All Timeplus resources
+	// are provisioned during the one-time /api/setup/provision flow.
 	//
-	// However, schema additions made AFTER provision (like the holds feature) need to
-	// be applied to existing deployments. MigrateOnStartup runs only the new idempotent
-	// DDLs — safe on both fresh and pre-existing installs.
-	if cfg.SetupComplete {
-		timeplus.MigrateOnStartup(cfg.Timeplus)
-	}
+	// Schema additions made AFTER the original provision (like the holds feature)
+	// are applied lazily by timeplus.MigrateHoldsSchema, called from the auth
+	// Login handler on first successful login (when credentials become available
+	// — they are deliberately not persisted to the config file).
 
 	store := auth.NewSessionStore()
 	holdReg := holdregistry.New()
