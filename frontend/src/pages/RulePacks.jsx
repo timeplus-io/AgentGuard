@@ -149,13 +149,33 @@ export default function RulePacks() {
 
   const handleInstall = async (id) => {
     setInstalling(id)
+    // Optimistic update — same pattern as the toggle handler. A re-fetch
+    // immediately after the INSERT races with Proton's table() commit lag and
+    // returns stale "not installed" data, snapping the UI back.
+    const entry = catalog.find(e => e.id === id)
+    if (!entry) {
+      setInstalling(null)
+      return
+    }
+    const newRule = {
+      id: entry.id,
+      icon: CATEGORY_ICONS[entry.category] || 'shield',
+      name: entry.name,
+      desc: entry.description,
+      enabled: true,
+      version: entry.version || '',
+      active: true,
+      detections24h: 0,
+      block_policy: entry.block_policy || 'log_only',
+    }
+    setCatalog(prev => prev.map(e => e.id === id ? { ...e, installed: true } : e))
+    setRules(prev => [newRule, ...prev])
     try {
       await api.installRule(id)
-      await Promise.all([
-        loadRules(),
-        api.getRulesCatalog().then(data => setCatalog(data.catalog || [])),
-      ])
     } catch (err) {
+      // Revert
+      setCatalog(prev => prev.map(e => e.id === id ? { ...e, installed: false } : e))
+      setRules(prev => prev.filter(r => r.id !== id))
       setLoadError(err?.message || 'Install failed — please try again')
     } finally {
       setInstalling(null)
