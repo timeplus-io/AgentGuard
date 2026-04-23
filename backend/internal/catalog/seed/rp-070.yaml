@@ -1,28 +1,15 @@
 id: rp-070
 name: "CIPL Channel-Inversion Privacy Leakage via Tool Retrieval Oracle Detector"
 version: "0.1.0"
-description: >
-  Detects Channel-Inversion Privacy Leakage (CIPL) attacks where adversaries extract
-  private information from LLM agent pipelines by observing tool invocation patterns —
-  rather than directly reading memory stores. arXiv:2603.22751 (CIPL, Mar 2026)
-  presents a unified measurement framework showing that tool-mediated leakage is
-  strongly shaped by the "exposed observation surface": adversaries craft queries that
-  cause agents to make retrieval calls whose parameters mirror private stored context,
-  turning the tool invocation itself into an extraction oracle.
-  Three attack surfaces: (1) Retrieval-mediated leakage — user query causes agent to
-  call memory/vector-search tools with verbatim sensitive terms from stored context,
-  leaking private data in tool_input; (2) Boolean oracle — yes/no queries cause
-  observable presence/absence of retrieval calls revealing private record existence;
-  (3) High-frequency enumeration — rapid succession of varied-topic retrieval calls
-  maps private memory contents without direct read access.
-  Distinct from rp-033 (ADAM/MEXTRA — direct memory dump extraction via explicit "dump
-  all memory" directives) and rp-038 (ATE — tool schema/API recon). CIPL targets
-  side-channel inference through retrieval call observable patterns, not bulk extraction
-  commands or schema probing.
-  References: arXiv:2603.22751 (CIPL Mar 2026),
-  OWASP LLM02:2025, OWASP Agentic AI ASI05:2026 -
-  https://arxiv.org/abs/2603.22751,
-  https://arxiv.org/html/2603.22751v2
+description: |
+  Detects Channel-Inversion Privacy Leakage (CIPL) attacks where adversaries extract private information from LLM agent pipelines by observing tool invocation patterns — rather than directly reading memory stores. arXiv:2603.22751 (CIPL, Mar 2026) presents a unified measurement framework showing that tool-mediated leakage is strongly shaped by the "exposed observation surface": adversaries craft queries that cause agents to make retrieval calls whose parameters mirror private stored context, turning the tool invocation itself into an extraction oracle. Three attack surfaces: (1) Retrieval-mediated leakage — user query causes agent to call memory/vector-search tools with verbatim sensitive terms from stored context, leaking private data in tool_input; (2) Boolean oracle — yes/no queries cause observable presence/absence of retrieval calls revealing private record existence; (3) High-frequency enumeration — rapid succession of varied-topic retrieval calls maps private memory contents without direct read access.
+
+  Distinct from rp-033 (ADAM/MEXTRA — direct memory dump extraction via explicit "dump all memory" directives) and rp-038 (ATE — tool schema/API recon). CIPL targets side-channel inference through retrieval call observable patterns, not bulk extraction commands or schema probing.
+
+  References: arXiv:2603.22751 (CIPL Mar 2026), OWASP LLM02:2025, OWASP Agentic AI ASI05:2026 -
+  - https://arxiv.org/abs/2603.22751,
+  - https://arxiv.org/html/2603.22751v2
+
 severity: warning
 category: data_exfiltration_and_leakage
 fp_rate: medium

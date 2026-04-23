@@ -1,31 +1,18 @@
 id: rp-003
 name: "Privilege Guard"
 version: "1.3.1"
-description: >
-  Monitors privilege escalation attempts through tool abuse, shell escapes, and
-  dangerous system commands in tool_invoke events. v1.1.0 adds shell metacharacter
-  injection patterns (backtick execution, $() subshell, semicolon chaining —
-  ATR-2026-00111), Python/Node code execution via tool arguments, environment
-  variable exfiltration commands (printenv, env | curl), container escape attempts
-  (nsenter, chroot, docker run --privileged), and crontab persistence.
-  v1.2.0 adds Cursor CVE-2026-22708 shell built-in environment variable poisoning:
-  attackers use export/typeset/declare to silently set interpreter hook variables
-  (PAGER, BROWSER, PERL5OPT, PYTHONWARNINGS, NODE_OPTIONS, LD_PRELOAD) that convert
-  approved commands (git, python, npm) into arbitrary RCE vectors without triggering
-  the IDE allowlist — zero user interaction required. Also adds Claude Code CC-643
-  compound command deny-rule bypass: 15+ &&-separated subcommands used to exceed the
-  50-subcommand complexity threshold where per-subcommand security analysis is skipped,
-  allowing a final malicious subcommand (credential exfil curl) to execute past deny
-  rules. AIShellJack (arXiv:2509.22040) demonstrated 84% ASR against Cursor/Copilot.
-  References: OWASP LLM08:2025, ATR-2026-00111, CVE-2026-2256, CVE-2026-22708,
-  adversa.ai CC-643, arXiv:2509.22040 (AIShellJack) -
-  https://agentthreatrule.org/en/rules/ATR-2026-00111,
-  https://security.snyk.io/vuln/SNYK-PYTHON-MSAGENT-15440541,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
-  https://danusminimus.github.io/posts/The-Agent-Security-Paradox-When-Trusted-Commands-In-Cursor-Become-Attack-Vectors/,
-  https://adversa.ai/blog/claude-code-security-bypass-deny-rules-disabled/,
+description: |
+  Monitors privilege escalation attempts through tool abuse, shell escapes, and dangerous system commands in tool_invoke events. v1.1.0 adds shell metacharacter injection patterns (backtick execution, $() subshell, semicolon chaining — ATR-2026-00111), Python/Node code execution via tool arguments, environment variable exfiltration commands (printenv, env | curl), container escape attempts (nsenter, chroot, docker run --privileged), and crontab persistence. v1.2.0 adds Cursor CVE-2026-22708 shell built-in environment variable poisoning: attackers use export/typeset/declare to silently set interpreter hook variables (PAGER, BROWSER, PERL5OPT, PYTHONWARNINGS, NODE_OPTIONS, LD_PRELOAD) that convert approved commands (git, python, npm) into arbitrary RCE vectors without triggering the IDE allowlist — zero user interaction required. Also adds Claude Code CC-643 compound command deny-rule bypass: 15+ &&-separated subcommands used to exceed the 50-subcommand complexity threshold where per-subcommand security analysis is skipped, allowing a final malicious subcommand (credential exfil curl) to execute past deny rules. AIShellJack (arXiv:2509.22040) demonstrated 84% ASR against Cursor/Copilot.
+
+  References: OWASP LLM08:2025, ATR-2026-00111, CVE-2026-2256, CVE-2026-22708, adversa.ai CC-643, arXiv:2509.22040 (AIShellJack) -
+  - https://agentthreatrule.org/en/rules/ATR-2026-00111,
+  - https://security.snyk.io/vuln/SNYK-PYTHON-MSAGENT-15440541,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  - https://danusminimus.github.io/posts/The-Agent-Security-Paradox-When-Trusted-Commands-In-Cursor-Become-Attack-Vectors/,
+  - https://adversa.ai/blog/claude-code-security-bypass-deny-rules-disabled/,
   Example: tool_input="export NODE_OPTIONS='--require /tmp/evil.js' && npm run build" (CVE-2026-22708 env var poisoning converting npm into RCE vector)
-  https://arxiv.org/abs/2509.22040
+  - https://arxiv.org/abs/2509.22040
+
 severity: warning
 category: agent_privilege_escalation
 fp_rate: low

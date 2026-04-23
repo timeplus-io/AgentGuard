@@ -1,37 +1,20 @@
 id: rp-115
 name: "Fill & Squeeze KV-Cache Exhaustion Latency DoS Detector"
-version: "0.1.1"
-description: >
-  Detects the Fill & Squeeze KV-cache exhaustion attack (arXiv:2602.07878, Zhejiang
-  University Feb 2026): adversaries send high-input-token requests to saturate the
-  shared KV-cache of LLM serving frameworks (vLLM, SGLang, Orca), inducing Head-of-
-  Line blocking (Fill phase) and preemption cascades (Squeeze phase) that cause 20-280x
-  TTFT degradation for all co-located users. Operates at the system layer, bypassing
-  continuous batching isolation that defeats output-length attacks. Validated against
-  vLLM/SGLang at 30-40% lower attack cost than prior algorithmic latency attacks.
-  Two detection branches via agentguard_cim_metrics:
-  Branch A — per-session input token accumulation: sum(llm.input_tokens) > 150,000
-  in 5 minutes (3+ fill requests each ~50K tokens, matching the F&S attack cost profile).
-  Branch B — individual request TTFT collapse: llm.latency_ms > 30,000ms combined with
-  per-session llm.input_tokens sum > 40,000 in same window (latency spike attributable
-  to KV-cache pressure rather than model capability limit).
-  Distinct from rp-018 (output-side token drain via tool_result continuation protocols),
-  rp-064 (input-side sponge reasoning inflation — single request), and rp-006 (recursive
-  tool loop — tool.call count). This rule exclusively targets input-side KV saturation
-  producing infrastructure-level latency impact.
-  Note: NDSS 2026 "Cache Me, Catch You" (arXiv:2508.09442 / XingTuLab) documents a
-  related but distinct attack: KV-cache prefix hash collision to trigger cross-session
-  context leakage. That rule is better suited for rp-027 (cross-session leakage). This
-  rule remains focused exclusively on the input-side resource exhaustion (latency) class.
-  References: arXiv:2602.07878 (Fill & Squeeze, Zhejiang University Feb 2026),
-  NDSS 2026 Cache Me Catch You (KV-cache collision context leak, distinct),
-  OWASP LLM04:2025 -
-  https://arxiv.org/abs/2602.07878,
-  https://arxiv.org/html/2602.07878v1,
-  https://github.com/XingTuLab/Cache_Me_Catch_You,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
-  Example: session sends 3 requests each with 50,000+ input tokens in 3 minutes,
-  causing TTFT to jump from 800ms baseline to 45,000ms for legitimate co-located sessions.
+version: "0.1.2"
+description: |
+  Detects the Fill & Squeeze KV-cache exhaustion attack (arXiv:2602.07878, Zhejiang University Feb 2026): adversaries send high-input-token requests to saturate the shared KV-cache of LLM serving frameworks (vLLM, SGLang, Orca), inducing Head-of- Line blocking (Fill phase) and preemption cascades (Squeeze phase) that cause 20-280x TTFT degradation for all co-located users. Operates at the system layer, bypassing continuous batching isolation that defeats output-length attacks. Validated against vLLM/SGLang at 30-40% lower attack cost than prior algorithmic latency attacks. Two detection branches via agentguard_cim_metrics: Branch A — per-session input token accumulation: sum(llm.input_tokens) > 150,000 in 5 minutes (3+ fill requests each ~50K tokens, matching the F&S attack cost profile). Branch B — individual request TTFT collapse: llm.latency_ms > 30,000ms combined with per-session llm.input_tokens sum > 40,000 in same window (latency spike attributable to KV-cache pressure rather than model capability limit).
+
+  Distinct from rp-018 (output-side token drain via tool_result continuation protocols), rp-064 (input-side sponge reasoning inflation — single request), and rp-006 (recursive tool loop — tool.call count). This rule exclusively targets input-side KV saturation producing infrastructure-level latency impact.
+
+  Note: NDSS 2026 "Cache Me, Catch You" (arXiv:2508.09442 / XingTuLab) documents a related but distinct attack: KV-cache prefix hash collision to trigger cross-session context leakage. That rule is better suited for rp-027 (cross-session leakage). This rule remains focused exclusively on the input-side resource exhaustion (latency) class.
+
+  References: arXiv:2602.07878 (Fill & Squeeze, Zhejiang University Feb 2026), NDSS 2026 Cache Me Catch You (KV-cache collision context leak, distinct), OWASP LLM04:2025 -
+  - https://arxiv.org/abs/2602.07878,
+  - https://arxiv.org/html/2602.07878v1,
+  - https://github.com/XingTuLab/Cache_Me_Catch_You,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  Example: session sends 3 requests each with 50,000+ input tokens in 3 minutes, causing TTFT to jump from 800ms baseline to 45,000ms for legitimate co-located sessions.
+
 severity: warning
 category: resource_exhaustion_and_dos
 fp_rate: medium
@@ -50,9 +33,14 @@ tags:
   - arxiv-2602.07878
   - metrics
 query_sql: |
-  -- rp-115 v0.1.1 (2026-04-22)
+  -- rp-115 v0.1.2 (2026-04-23)
   -- Fill & Squeeze KV-Cache Exhaustion Latency DoS Detector
   -- arXiv:2602.07878 (Zhejiang University, Feb 2026): 20-280x TTFT slowdown
+  -- CHANGELOG v0.1.2 (2026-04-23):
+  --   BUGFIX: Added table() wrapper to all FROM agentguard_cim_metrics clauses
+  --   (Branch A and Branch B inner join subquery) to prevent streaming mode hang
+  --   on port 3218. SQL validated, count=8 (Branch A) and count=1 (Branch B join).
+  --
   -- CHANGELOG v0.1.1:
   --   Added reference to NDSS 2026 "Cache Me, Catch You" (arXiv:2508.09442).
   --   Scoped to latency-class exhaustion only (NOT hash-collision context leak).
@@ -87,7 +75,7 @@ query_sql: |
       'input_tokens_5min=', to_string(to_int64(sum(metric_value))),
       ' llm_calls=', to_string(count())
     ) AS event_data
-  FROM agentguard_cim_metrics
+  FROM table(agentguard_cim_metrics)
   WHERE metric_name = 'llm.input_tokens'
     AND event_time > now() - INTERVAL 5 MINUTE
   GROUP BY session_id, agent_id, deployment_id
@@ -122,12 +110,12 @@ query_sql: |
       'max_latency_ms=', to_string(to_int64(max(latency.metric_value))),
       ' input_tokens_5min=', to_string(to_int64(max(input_load.total_input)))
     ) AS event_data
-  FROM agentguard_cim_metrics AS latency
+  FROM table(agentguard_cim_metrics) AS latency
   INNER JOIN (
     SELECT
       session_id,
       sum(metric_value) AS total_input
-    FROM agentguard_cim_metrics
+    FROM table(agentguard_cim_metrics)
     WHERE metric_name = 'llm.input_tokens'
       AND event_time > now() - INTERVAL 5 MINUTE
     GROUP BY session_id

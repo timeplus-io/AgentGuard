@@ -1,47 +1,27 @@
 id: rp-110
 name: "OAuth-Pivot Supply Chain Attack Detector"
 version: "0.1.2"
-description: >
-  Detects the OAuth supply chain pivot attack class, grounded in the Vercel April 2026
-  security incident. A compromised third-party AI tool held a Google Workspace OAuth app
-  with over-privileged scopes. The attacker used the compromised OAuth token to pivot to
-  a Vercel employee's Google Workspace account, then accessed Vercel environment variables
-  containing plaintext API keys, NPM tokens, and GitHub tokens.
+description: |
+  Detects the OAuth supply chain pivot attack class, grounded in the Vercel April 2026 security incident. A compromised third-party AI tool held a Google Workspace OAuth app with over-privileged scopes. The attacker used the compromised OAuth token to pivot to a Vercel employee's Google Workspace account, then accessed Vercel environment variables containing plaintext API keys, NPM tokens, and GitHub tokens.
 
   This rule detects three phases of the attack as observable in AgentGuard CIM events:
 
-  Phase 1 (OAuth Privilege Expansion): An agent tool invocation requesting or using
-  Google Workspace OAuth scopes beyond basic profile info (drive, gmail, admin.directory,
-  workspace admin). Specific IOC identifiers (like compromised OAuth client IDs) are
-  intentionally excluded — they are incident-specific and should be handled by threat
-  intel feeds, not generic behavioral rules.
+  Phase 1 (OAuth Privilege Expansion): An agent tool invocation requesting or using Google Workspace OAuth scopes beyond basic profile info (drive, gmail, admin.directory, workspace admin). Specific IOC identifiers (like compromised OAuth client IDs) are intentionally excluded — they are incident-specific and should be handled by threat intel feeds, not generic behavioral rules.
 
-  Phase 2 (Credential Harvest): An agent tool_complete returning OAuth tokens, access
-  tokens, or refresh tokens in tool_result — indicating the agent received credential
-  material from an OAuth flow that may be harvested by a compromised intermediary.
+  Phase 2 (Credential Harvest): An agent tool_complete returning OAuth tokens, access tokens, or refresh tokens in tool_result — indicating the agent received credential material from an OAuth flow that may be harvested by a compromised intermediary.
 
-  Phase 2b (Sequential): OAuth tool call immediately followed by env-var/secrets read
-  in the same session — mirrors the Vercel attack pivot: OAuth compromise -> env var
-  exfiltration containing plaintext keys.
+  Phase 2b (Sequential): OAuth tool call immediately followed by env-var/secrets read in the same session — mirrors the Vercel attack pivot: OAuth compromise -> env var exfiltration containing plaintext keys.
 
-  Distinct from rp-007 (SSRF to metadata IPs), rp-002 (DLP outbound credential
-  patterns), and rp-028 (LLM router intermediary injection). This rule specifically
-  targets the OAuth supply chain pivot — the credential is obtained legitimately
-  through a compromised OAuth app, not via direct injection.
+  Distinct from rp-007 (SSRF to metadata IPs), rp-002 (DLP outbound credential patterns), and rp-028 (LLM router intermediary injection). This rule specifically targets the OAuth supply chain pivot — the credential is obtained legitimately through a compromised OAuth app, not via direct injection.
 
-  Example: tool_invoke with tool_name="oauth_connect" and
-  tool_input={"scopes": ["https://www.googleapis.com/auth/drive.readonly",
-  "https://www.googleapis.com/auth/gmail.readonly"]}
-  followed by tool_invoke with tool_name="get_env_vars" in the same session.
+  Example: tool_invoke with tool_name="oauth_connect" and tool_input={"scopes": ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/gmail.readonly"]} followed by tool_invoke with tool_name="get_env_vars" in the same session.
 
-  References: Vercel April 2026 Security Incident (official bulletin), Dark Reading
-  "Vercel Employee's AI Tool Access Led to Data Breach" 2026-04-20, OX Security
-  "Vercel Breached via Context AI Supply Chain Attack" 2026-04-20, Trend Micro
-  "The Vercel Breach: OAuth Supply Chain Attack" 2026-04-20 -
-  https://vercel.com/kb/bulletin/vercel-april-2026-security-incident,
-  https://www.darkreading.com/application-security/vercel-employees-ai-tool-access-data-breach,
-  https://www.ox.security/blog/vercel-context-ai-supply-chain-attack-breachforums/,
-  https://www.trendmicro.com/en_us/research/26/d/vercel-breach-oauth-supply-chain.html
+  References: Vercel April 2026 Security Incident (official bulletin), Dark Reading "Vercel Employee's AI Tool Access Led to Data Breach" 2026-04-20, OX Security "Vercel Breached via Context AI Supply Chain Attack" 2026-04-20, Trend Micro "The Vercel Breach: OAuth Supply Chain Attack" 2026-04-20 -
+  - https://vercel.com/kb/bulletin/vercel-april-2026-security-incident,
+  - https://www.darkreading.com/application-security/vercel-employees-ai-tool-access-data-breach,
+  - https://www.ox.security/blog/vercel-context-ai-supply-chain-attack-breachforums/,
+  - https://www.trendmicro.com/en_us/research/26/d/vercel-breach-oauth-supply-chain.html
+
 severity: critical
 category: credential_theft_and_harvesting
 fp_rate: low

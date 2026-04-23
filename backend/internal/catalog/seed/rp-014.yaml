@@ -1,114 +1,26 @@
 id: rp-014
 name: "Indirect Prompt Injection via Tool Result"
 version: "1.3.1"
-description: >
-  Detects indirect prompt injection attacks (OWASP LLM01:2025) where malicious
-  instructions are embedded in external content returned by agent tools — web page
-  fetches, emails, files, database records, GitHub issues, or CRM entries.
-  Monitors tool_complete events for extraction-override language in tool_result.
-  Documented in the wild by Palo Alto Unit 42 (2025), Microsoft MSRC (2026), and
-  extended by AdapTools adaptive IPI framework (arXiv:2602.20720, ICML 2026).
-  v1.2.0 adds Branch 3: AdapTools Stealthy Benign Tool Exfiltration Pivot
-  (arXiv:2602.20720, ICML 2026, 2.13x ASR vs Branch 2's dangerous-tool gate).
-  AdapTools selects semantically task-relevant non-dangerous tools (send_email,
-  http_request, slack, webhook, calendar, publish) to exfiltrate context after
-  IPI delivery — bypassing task-relevance defenses that only block shell/exec
-  pivots covered by Branch 2. The sequential signal: injection in tool_result
-  (Branch 2 check) immediately followed by benign exfil-capable tool invocation.
-  Also covers QueryIPI query-agnostic injection patterns (arXiv:2510.23675).
-  v0.3.0 adds ChatInject (arXiv:2509.22830, ICLR 2026): chat-template token injection
-  where malicious payloads are formatted to mimic native LLM chat template tokens
-  (im_start, INST, SYS, Phi/Falcon tokens) embedded in tool results. ChatInject
-  achieves 6x higher ASR than plain-text injection (45.90% on InjecAgent) with
-  strong cross-model transferability including against closed-source models.
-  v0.4.0 adds web-based IDPI evasion techniques observed in production telemetry by
-  Palo Alto Unit 42 (March 3, 2026): CSS visual concealment injection (display:none,
-  font-size:0, visibility:hidden, opacity:0 hiding malicious instructions in web
-  content fetched by browser/HTTP agents), fork-bomb DoS payloads embedded in HTML,
-  SQL data destruction commands hidden in web pages, unauthorized transaction
-  directives, and SEO poisoning instructions. The Unit 42 report documents 22 distinct
-  in-the-wild delivery techniques including the first confirmed AI ad review bypass
-  (Dec 2025). Note: fp_rate elevated to medium for v0.4.0 due to CSS patterns;
-  combined signal with override text remains low FP.
-  v0.5.0 adds webhook/event-driven injection patterns: Cisco Talos "n8n n8mare" (Apr 15
-  2026) documented 686% increase in malicious n8n webhook URLs in emails (Jan 2025 to
-  Mar 2026); attacker webhooks serve dynamic payloads based on User-Agent fingerprinting.
-  Security Boulevard (Apr 2026) documented supervisor blind-spot attacks where injection
-  payloads in profile fields (Name, bio, account tier) bypass supervisor agents that
-  only watch direct user chat input. Adds ## Markdown header injection (common in GitHub
-  PR titles, Jira descriptions, n8n/Zapier webhook bodies), supervisor-blind-spot user
-  profile injection pattern, and webhook tool_name-gated new-task directive.
-  Also covers CVE-2026-21858 (n8n unauthenticated RCE) and CVE-2025-68613 (CISA KEV).
-  v0.7.0 adds CoT Forgery — Fabricated Chain-of-Thought Role Confusion Attack
-  (arXiv:2603.12277, MIT/WUSTL, Feb 2026, 60% ASR StrongREJECT across frontier models
-  including GPT-4, Gemini, Claude with near-0% baseline). Models infer "who is speaking"
-  from syntactic patterns rather than actual provenance. Injecting <think>/<thinking>
-  reasoning-block tokens into retrieved content (tool_result) or user_message causes
-  the model to mistake attacker-injected fabricated reasoning for its own internal
-  thoughts — bypassing safety training. Distinct from v0.3.0 ChatInject (role-boundary
-  template tokens) and v0.6.0 Phantom STI (Llama/Mistral structural tokens) — CoT
-  Forgery targets the thinking/reasoning modality standardized by DeepSeek-R1, Claude
-  extended thinking, Gemini Flash Thinking, and QwQ models.
-  v0.9.0 adds ObliInjection — Order-Oblivious Multi-Source Prompt Injection
-  (arXiv:2512.09321, NDSS 2026, Duke University): first injection attack designed
-  specifically for multi-source LLM input aggregation. Attacker controls only 1 of
-  N input segments and the adversarial payload activates regardless of segment
-  ordering in the aggregated prompt. Effective at 1/6-100 segment contamination.
-  Tested across 3 datasets and 12 LLMs. Covers RAG multi-chunk poisoning,
-  tool result aggregation, and review summarization workflows. Hallmarks:
-  blended clean+dirty content (length > 200), cross-source override directives
-  ("ignore other summaries"), mandatory audit/compliance exfil framing, and
-  "content of all prior tool results" extraction targeting aggregated context.
-  v0.8.0 adds Hidden-Comment Skill Injection (arXiv:2602.10498, Shandong Univ. Feb 2026):
-  LLM agents load Markdown Skill documentation verbatim into model context. HTML comment blocks
-  (<!-- ... -->) are invisible to humans reviewing rendered documentation but fully visible to
-  the LLM reading the raw text. An attacker who can modify a Skill file (supply chain, project
-  repo, MCP server) embeds high-priority malicious instructions in HTML comments, steering the
-  agent to call credential-harvesting or data-exfiltration tools without any visible indication.
-  Confirmed against DeepSeek-V3.2 and GLM-4.5-Air. Distinct from v0.4.0 (CSS display:none in
-  fetched web content) — this targets raw Skill files loaded by IDE/coding agents.
-  v0.6.0 adds Phantom Structural Template Injection (arXiv:2602.16958, Feb 2026):
-  automated agent hijacking using optimized structural LLM role-boundary tokens
-  injected into retrieved content. Unlike ChatInject (v0.3.0), Phantom targets
-  Llama-3 header tokens (<|start_header_id|>tool/assistant<|end_header_id|>,
-  <|eot_id|>), Mistral function-calling tags (<|python_tag|>), and XML fabricated
-  tool-call blocks (<tool_call>...</tool_call>) that are distinct from Qwen/Mistral
-  <|im_start|> tokens already covered. The paper confirmed 70+ vulnerabilities in
-  real-world commercial products across GPT-4, Gemini, and Qwen. Additionally adds
-  fabricated nested tool-result JSON ("tool_name":..."result":...exfil action) which
-  exploits role confusion by masquerading attacker instructions as prior agent outputs.
-  v1.3.0 adds Branch 4: Document-Font/Phantom-Token Natural-Language Directive Injection
-  (arXiv:2506.00089 TrapDoc EMNLP 2025, arXiv:2505.16957 Malicious Font Injection
-  May 2025, ePrint 2026/278 PDF Obfuscation Purdue 2026). Attackers embed malicious
-  instructions in PDFs/HTML using font glyph remapping or phantom Unicode tokens that
-  are invisible to human reviewers but visible to LLM text extractors. The extracted
-  tool_result contains natural-language behavioral directives (approve/send/deploy/bypass)
-  WITHOUT injection markers — bypassing Branch 1 (ag_tool_inject_check) and rp-056
-  (zero-width Unicode). The ePrint 2026/278 paper confirmed this attack pattern is
-  effective against 6 major PDF parsing platforms using only standard-compliant PDF
-  features. Two sub-branches: 4a detects immediate behavioral override in document
-  tool_result; 4b detects sequential document-read → high-impact tool_invoke pattern.
-  References: OWASP LLM01:2025, OWASP Agentic AI ASI02:2026, Unit42/MSRC incidents,
-  arXiv:2602.20720 (AdapTools), arXiv:2510.23675 (QueryIPI), arXiv:2509.22830
-  (ChatInject ICLR 2026), Unit42 Web-IDPI Mar 2026, Cisco Talos n8n n8mare Apr 2026,
-  Security Boulevard Supervisor Blind Spot Apr 2026, arXiv:2602.16958 (Phantom STI
-  Feb 2026), arXiv:2506.00089 (TrapDoc), arXiv:2505.16957 (Font Injection),
-  ePrint 2026/278 (PDF Obfuscation) -
-  https://arxiv.org/abs/2509.22830,
-  https://arxiv.org/abs/2602.16958,
-  https://unit42.paloaltonetworks.com/ai-agent-prompt-injection/,
-  https://unit42.paloaltonetworks.com/indirect-prompt-injection,
-  https://blog.talosintelligence.com/the-n8n-n8mare/,
-  https://securityboulevard.com/2026/04/bypassing-llm-supervisor-agents-through-indirect-prompt-injection/,
-  https://arxiv.org/abs/2603.12277,
-  https://arxiv.org/abs/2602.10498,
-  https://arxiv.org/abs/2512.09321,
-  https://www.ndss-symposium.org/ndss-paper/obliinjection-order-oblivious-prompt-injection-attack-to-llm-agents-with-multi-source-data/,
-  https://github.com/ReachalWang/ObliInjection,
-  https://arxiv.org/abs/2506.00089,
-  https://arxiv.org/abs/2505.16957,
-  https://eprint.iacr.org/2026/278,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+description: |
+  Detects indirect prompt injection attacks (OWASP LLM01:2025) where malicious instructions are embedded in external content returned by agent tools — web page fetches, emails, files, database records, GitHub issues, or CRM entries. Monitors tool_complete events for extraction-override language in tool_result. Documented in the wild by Palo Alto Unit 42 (2025), Microsoft MSRC (2026), and extended by AdapTools adaptive IPI framework (arXiv:2602.20720, ICML 2026). v1.2.0 adds Branch 3: AdapTools Stealthy Benign Tool Exfiltration Pivot (arXiv:2602.20720, ICML 2026, 2.13x ASR vs Branch 2's dangerous-tool gate). AdapTools selects semantically task-relevant non-dangerous tools (send_email, http_request, slack, webhook, calendar, publish) to exfiltrate context after IPI delivery — bypassing task-relevance defenses that only block shell/exec pivots covered by Branch 2. The sequential signal: injection in tool_result (Branch 2 check) immediately followed by benign exfil-capable tool invocation. Also covers QueryIPI query-agnostic injection patterns (arXiv:2510.23675). v0.3.0 adds ChatInject (arXiv:2509.22830, ICLR 2026): chat-template token injection where malicious payloads are formatted to mimic native LLM chat template tokens (im_start, INST, SYS, Phi/Falcon tokens) embedded in tool results. ChatInject achieves 6x higher ASR than plain-text injection (45.90% on InjecAgent) with strong cross-model transferability including against closed-source models. v0.4.0 adds web-based IDPI evasion techniques observed in production telemetry by Palo Alto Unit 42 (March 3, 2026): CSS visual concealment injection (display:none, font-size:0, visibility:hidden, opacity:0 hiding malicious instructions in web content fetched by browser/HTTP agents), fork-bomb DoS payloads embedded in HTML, SQL data destruction commands hidden in web pages, unauthorized transaction directives, and SEO poisoning instructions. The Unit 42 report documents 22 distinct in-the-wild delivery techniques including the first confirmed AI ad review bypass (Dec 2025). Note: fp_rate elevated to medium for v0.4.0 due to CSS patterns; combined signal with override text remains low FP. v0.5.0 adds webhook/event-driven injection patterns: Cisco Talos "n8n n8mare" (Apr 15 2026) documented 686% increase in malicious n8n webhook URLs in emails (Jan 2025 to Mar 2026); attacker webhooks serve dynamic payloads based on User-Agent fingerprinting. Security Boulevard (Apr 2026) documented supervisor blind-spot attacks where injection payloads in profile fields (Name, bio, account tier) bypass supervisor agents that only watch direct user chat input. Adds ## Markdown header injection (common in GitHub PR titles, Jira descriptions, n8n/Zapier webhook bodies), supervisor-blind-spot user profile injection pattern, and webhook tool_name-gated new-task directive. Also covers CVE-2026-21858 (n8n unauthenticated RCE) and CVE-2025-68613 (CISA KEV). v0.7.0 adds CoT Forgery — Fabricated Chain-of-Thought Role Confusion Attack (arXiv:2603.12277, MIT/WUSTL, Feb 2026, 60% ASR StrongREJECT across frontier models including GPT-4, Gemini, Claude with near-0% baseline). Models infer "who is speaking" from syntactic patterns rather than actual provenance. Injecting <think>/<thinking> reasoning-block tokens into retrieved content (tool_result) or user_message causes the model to mistake attacker-injected fabricated reasoning for its own internal thoughts — bypassing safety training. Distinct from v0.3.0 ChatInject (role-boundary template tokens) and v0.6.0 Phantom STI (Llama/Mistral structural tokens) — CoT Forgery targets the thinking/reasoning modality standardized by DeepSeek-R1, Claude extended thinking, Gemini Flash Thinking, and QwQ models. v0.9.0 adds ObliInjection — Order-Oblivious Multi-Source Prompt Injection (arXiv:2512.09321, NDSS 2026, Duke University): first injection attack designed specifically for multi-source LLM input aggregation. Attacker controls only 1 of N input segments and the adversarial payload activates regardless of segment ordering in the aggregated prompt. Effective at 1/6-100 segment contamination. Tested across 3 datasets and 12 LLMs. Covers RAG multi-chunk poisoning, tool result aggregation, and review summarization workflows. Hallmarks: blended clean+dirty content (length > 200), cross-source override directives ("ignore other summaries"), mandatory audit/compliance exfil framing, and "content of all prior tool results" extraction targeting aggregated context. v0.8.0 adds Hidden-Comment Skill Injection (arXiv:2602.10498, Shandong Univ. Feb 2026): LLM agents load Markdown Skill documentation verbatim into model context. HTML comment blocks (<!-- ... -->) are invisible to humans reviewing rendered documentation but fully visible to the LLM reading the raw text. An attacker who can modify a Skill file (supply chain, project repo, MCP server) embeds high-priority malicious instructions in HTML comments, steering the agent to call credential-harvesting or data-exfiltration tools without any visible indication. Confirmed against DeepSeek-V3.2 and GLM-4.5-Air. Distinct from v0.4.0 (CSS display:none in fetched web content) — this targets raw Skill files loaded by IDE/coding agents. v0.6.0 adds Phantom Structural Template Injection (arXiv:2602.16958, Feb 2026): automated agent hijacking using optimized structural LLM role-boundary tokens injected into retrieved content. Unlike ChatInject (v0.3.0), Phantom targets Llama-3 header tokens (<|start_header_id|>tool/assistant<|end_header_id|>, <|eot_id|>), Mistral function-calling tags (<|python_tag|>), and XML fabricated tool-call blocks (<tool_call>...</tool_call>) that are distinct from Qwen/Mistral <|im_start|> tokens already covered. The paper confirmed 70+ vulnerabilities in real-world commercial products across GPT-4, Gemini, and Qwen. Additionally adds fabricated nested tool-result JSON ("tool_name":..."result":...exfil action) which exploits role confusion by masquerading attacker instructions as prior agent outputs. v1.3.0 adds Branch 4: Document-Font/Phantom-Token Natural-Language Directive Injection (arXiv:2506.00089 TrapDoc EMNLP 2025, arXiv:2505.16957 Malicious Font Injection May 2025, ePrint 2026/278 PDF Obfuscation Purdue 2026). Attackers embed malicious instructions in PDFs/HTML using font glyph remapping or phantom Unicode tokens that are invisible to human reviewers but visible to LLM text extractors. The extracted tool_result contains natural-language behavioral directives (approve/send/deploy/bypass) WITHOUT injection markers — bypassing Branch 1 (ag_tool_inject_check) and rp-056 (zero-width Unicode). The ePrint 2026/278 paper confirmed this attack pattern is effective against 6 major PDF parsing platforms using only standard-compliant PDF features. Two sub-branches: 4a detects immediate behavioral override in document tool_result; 4b detects sequential document-read → high-impact tool_invoke pattern.
+
+  References: OWASP LLM01:2025, OWASP Agentic AI ASI02:2026, Unit42/MSRC incidents, arXiv:2602.20720 (AdapTools), arXiv:2510.23675 (QueryIPI), arXiv:2509.22830 (ChatInject ICLR 2026), Unit42 Web-IDPI Mar 2026, Cisco Talos n8n n8mare Apr 2026, Security Boulevard Supervisor Blind Spot Apr 2026, arXiv:2602.16958 (Phantom STI Feb 2026), arXiv:2506.00089 (TrapDoc), arXiv:2505.16957 (Font Injection), ePrint 2026/278 (PDF Obfuscation) -
+  - https://arxiv.org/abs/2509.22830,
+  - https://arxiv.org/abs/2602.16958,
+  - https://unit42.paloaltonetworks.com/ai-agent-prompt-injection/,
+  - https://unit42.paloaltonetworks.com/indirect-prompt-injection,
+  - https://blog.talosintelligence.com/the-n8n-n8mare/,
+  - https://securityboulevard.com/2026/04/bypassing-llm-supervisor-agents-through-indirect-prompt-injection/,
+  - https://arxiv.org/abs/2603.12277,
+  - https://arxiv.org/abs/2602.10498,
+  - https://arxiv.org/abs/2512.09321,
+  - https://www.ndss-symposium.org/ndss-paper/obliinjection-order-oblivious-prompt-injection-attack-to-llm-agents-with-multi-source-data/,
+  - https://github.com/ReachalWang/ObliInjection,
+  - https://arxiv.org/abs/2506.00089,
+  - https://arxiv.org/abs/2505.16957,
+  - https://eprint.iacr.org/2026/278,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: medium

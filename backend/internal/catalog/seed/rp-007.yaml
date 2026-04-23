@@ -1,33 +1,19 @@
 id: rp-007
 name: "SSRF via HTTP Tools"
 version: "0.4.0"
-description: >
-  Detects Server-Side Request Forgery (SSRF) attempts via agent HTTP fetch tools.
-  Matches tool_invoke events where an HTTP-class tool is called with cloud
-  metadata endpoints, private RFC1918 addresses, or internal Kubernetes/GCP/Azure
-  API paths in tool_input. v0.2.0 expands RFC1918 coverage to the full
-  172.16.0.0/12 range (172.16–172.31), adds IMDSv1-specific credential paths
-  (/iam/security-credentials, /user-data), Azure IMDS endpoint, Oracle Cloud IMDS,
-  and additional HTTP tool name aliases seen in agent frameworks. References:
-  OWASP LLM02 (Insecure Plugin Design), OWASP SSRF -
-  https://dev.to/kai_security_ai/when-your-ai-agent-becomes-a-network-scanner-ssrf-via-mcp-tools-1amk,
-  https://ravenio.org/blog/ssrf-attacks-cloud-metadata.html,
-  Example: tool_input={"url": "http://169.254.169.254/latest/meta-data/iam/security-credentials/"} (AWS IMDSv1 credential endpoint via fetch tool)
-  v0.4.0: MCP SSRF Epidemic (36.7% of public MCP servers carry SSRF, Endor Labs/BlueRock 2026).
-  Adds MCP-specific crawl/scrape tool aliases seen in real CVEs: firecrawl scrape/crawl/map,
-  PraisonAI web_crawl, MCP puppeteer navigate, document_query (YLChen-007 GHSA, Mar 2026),
-  browsermcp browse, mcp_fetch fetch_url. Also adds GCP IMDSv2 service account token path
-  (/computeMetadata/v1/instance/service-accounts/default/token) and EKS pod identity endpoint
-  (169.254.170.23). DNS rebinding attack vector: tool_input containing non-enterprise external
-  URL that rebinds to internal IP via short TTL. GHSA-qq9r-63f6-v542 PraisonAI web_crawl SSRF.
-  References: arunbaby.com MCP SSRF Epidemic 2026, GHSA-qq9r-63f6-v542 PraisonAI web_crawl,
-  firecrawl-mcp-server#194, modelcontextprotocol/servers#3662 (puppeteer SSRF+IPI),
-  OWASP LLM02 (Insecure Plugin Design), OWASP SSRF -
-  https://www.arunbaby.com/ai-security/0023-the-mcp-ssrf-epidemic/,
-  https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-qq9r-63f6-v542,
-  https://github.com/firecrawl/firecrawl-mcp-server/issues/194,
-  https://github.com/modelcontextprotocol/servers/issues/3662,
-  https://gist.github.com/YLChen-007/c99c44aa019266a72636757308d43989
+description: |
+  Detects Server-Side Request Forgery (SSRF) attempts via agent HTTP fetch tools. Matches tool_invoke events where an HTTP-class tool is called with cloud metadata endpoints, private RFC1918 addresses, or internal Kubernetes/GCP/Azure API paths in tool_input. v0.2.0 expands RFC1918 coverage to the full 172.16.0.0/12 range (172.16–172.31), adds IMDSv1-specific credential paths (/iam/security-credentials, /user-data), Azure IMDS endpoint, Oracle Cloud IMDS, and additional HTTP tool name aliases seen in agent frameworks. References: OWASP LLM02 (Insecure Plugin Design), OWASP SSRF -
+  - https://dev.to/kai_security_ai/when-your-ai-agent-becomes-a-network-scanner-ssrf-via-mcp-tools-1amk,
+  - https://ravenio.org/blog/ssrf-attacks-cloud-metadata.html,
+  Example: tool_input={"url": "http://169.254.169.254/latest/meta-data/iam/security-credentials/"} (AWS IMDSv1 credential endpoint via fetch tool) v0.4.0: MCP SSRF Epidemic (36.7% of public MCP servers carry SSRF, Endor Labs/BlueRock 2026). Adds MCP-specific crawl/scrape tool aliases seen in real CVEs: firecrawl scrape/crawl/map, PraisonAI web_crawl, MCP puppeteer navigate, document_query (YLChen-007 GHSA, Mar 2026), browsermcp browse, mcp_fetch fetch_url. Also adds GCP IMDSv2 service account token path (/computeMetadata/v1/instance/service-accounts/default/token) and EKS pod identity endpoint (169.254.170.23). DNS rebinding attack vector: tool_input containing non-enterprise external URL that rebinds to internal IP via short TTL. GHSA-qq9r-63f6-v542 PraisonAI web_crawl SSRF.
+
+  References: arunbaby.com MCP SSRF Epidemic 2026, GHSA-qq9r-63f6-v542 PraisonAI web_crawl, firecrawl-mcp-server#194, modelcontextprotocol/servers#3662 (puppeteer SSRF+IPI), OWASP LLM02 (Insecure Plugin Design), OWASP SSRF -
+  - https://www.arunbaby.com/ai-security/0023-the-mcp-ssrf-epidemic/,
+  - https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-qq9r-63f6-v542,
+  - https://github.com/firecrawl/firecrawl-mcp-server/issues/194,
+  - https://github.com/modelcontextprotocol/servers/issues/3662,
+  - https://gist.github.com/YLChen-007/c99c44aa019266a72636757308d43989
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: low

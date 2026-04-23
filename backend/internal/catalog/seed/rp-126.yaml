@@ -1,0 +1,115 @@
+id: rp-126
+name: "GrantBox Cloud Privilege Chain Exploitation Detector"
+version: "0.1.1"
+description: |
+  Detects cloud privilege chain exploitation attacks (arXiv:2603.28166, GrantBox, FSE Companion 2026, ACM): agent is coerced via prompt injection or direct instruction into invoking legitimate but over-privileged real-world MCP tools to execute destructive or escalating operations on cloud infrastructure, databases, and access-management systems. GrantBox (Zhang et al., Zhongnan University of Economics and Law, FSE 2026) integrated 10 real-world MCP servers with 122 privilege-sensitive tools and demonstrated 90.55% ASR for ReAct agents and 79.05% for Plan-and-Execute agents across 50 sophisticated privilege hijacking scenarios — 5 attack categories: cloud infra destruction, database DML injection, IAM privilege escalation, cross-service lateral movement, and personal data exfiltration. Current LLMs block simple direct attacks but remain highly vulnerable to sophisticated indirect manipulation (avg 84.80% ASR across 4 LLMs). 122 privilege- sensitive tools span cloud compute (EC2/GKE/AKS), storage (S3/GCS/Azure Blob), database (RDS/BigQuery/Spanner), and IAM/RBAC systems. The attack succeeds because agents receive genuine tool privileges at invocation time — once an agent is manipulated into invoking a cloud termination or IAM grant tool, damage is immediate and often irreversible.
+
+  Distinct from rp-023 (agent self-permission escalation: chmod/sudo on the local system) and rp-111 (YOLO permission bypass: skipPermissions flag injection). rp-126 detects the CLOUD layer: legitimate cloud API tools being coerced into destructive operations.
+
+  References: arXiv:2603.28166 (GrantBox FSE 2026, 84.80% ASR, 122 cloud MCP tools), OWASP Agentic AI ASI02:2026, OWASP LLM01:2025, MITRE ATT&CK T1485 (Data Destruction), T1531 (Account Access Removal), T1578 (Modify Cloud Compute Infrastructure) -
+  - https://arxiv.org/abs/2603.28166,
+  - https://github.com/ZQ-Struggle/Agent-GrantBox,
+  - https://dl.acm.org/doi/10.1145/3803437.3805554,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  Example: tool_invoke {tool_name: "ec2_management", tool_input: {action: "terminate_all", region: "us-east-1", reason: "cleanup requested by audit system"}} after IPI injection in email tool_result claiming infra is unused.
+
+severity: critical
+category: agent_privilege_escalation
+fp_rate: medium
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - cloud-privilege
+  - infrastructure-destruction
+  - privilege-chain
+  - iam-escalation
+  - database-destruction
+  - grantbox
+  - mcp-tools
+  - prompt-injection
+  - owasp-asi02
+  - mitre-t1485
+  - arxiv-2603.28166
+query_sql: |
+  -- rp-126 v0.1.1 (2026-04-23)
+  -- GrantBox Cloud Privilege Chain Exploitation Detector
+  -- arXiv:2603.28166 (FSE Companion 2026, 84.80% ASR): 122 privilege-sensitive MCP tools
+  -- ReAct: 90.55% ASR | Plan-and-Execute: 79.05% ASR across 4 LLMs
+  --
+  -- CHANGELOG v0.1.1 (2026-04-23):
+  --   GENERALIZATION: Branch A tool_name pattern removed specific vendor cloud service
+  --   codenames (ec2, s3, rds, ecs, eks, gke, gcs, lambda, dynamo, cosmos.db, bigquery,
+  --   spanner, blob.storage, aks, sqs.queue, sns.topic, eventbridge, step.function).
+  --   Per generalization policy: rules must detect attack CLASS regardless of cloud vendor.
+  --   Replaced with behavioral/generic patterns (cloud.instance, vm.instance, cluster,
+  --   kubernetes, k8s, cloud.function, cloud.bucket, cloud.storage, cloud.database, vpc,
+  --   subnet, security.group, load.balancer, cloud.queue, message.queue, event.bus).
+  --   SQL validated on port 3218, count=0 on test corpus. fp_rate unchanged (medium).
+  --
+  -- Five detection branches covering the 5 GrantBox attack categories:
+  --   Branch A: Cloud infra termination/destruction via cloud-category tool name
+  --   Branch B: Destructive SQL DML via database tool input (database destruction category)
+  --   Branch C: IAM/RBAC privilege escalation via access management tool (admin grant)
+  --   Branch D: Non-destructor tool reports successful infra destruction (covert chain)
+  --   Branch E: Explicit privilege chain / injection success signal in tool_result
+  --
+  -- fp_rate: medium — cloud infra and database tools are used legitimately for maintenance.
+  --   Branch A+B require both tool_name AND tool_input patterns to fire; Branch C is
+  --   tightly anchored on wildcard/admin scope grants. Branch D+E are low FP.
+  --   Operators should tune tool_name allowlist for scheduled maintenance windows.
+  SELECT
+    event_time AS detected_at,
+    'rp-126' AS rule_id,
+    'GrantBox Cloud Privilege Chain Exploitation Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Cloud privilege chain exploitation: [', coalesce(tool_name,'unknown'),
+      '] used to execute destructive/escalating action on cloud infra by agent ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM table(agentguard_cim_event)
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (
+      -- Branch A: Destructive cloud infra operation via cloud-category tool name
+      -- Cloud resource (EC2/S3/RDS/GKE/etc.) tool called with destructive verb in input
+      -- Injected IPI directive overrides agent's safety check and invokes termination/deletion
+      (
+        match(lower(tool_name), '(cloud.instance|cloud.compute|vm.instance|cloud.function|cloud.bucket|cloud.storage|cloud.database|cloud.cluster|compute.instance|server.instance|container.cluster|cluster.management|kubernetes|k8s|cluster.node|cloud.network|vpc|subnet|security.group|firewall.rule|load.balancer|cdn.endpoint|cloud.queue|message.queue|cloud.topic|message.topic|event.bus|workflow.step|step.function|cloud.resource|infra.manage|cloud.manage|cloud.admin)')
+        AND match(lower(tool_input), '(terminate|destroy|delete|drop|purge|deprovision|deallocate|decommission|remove.all|shutdown.all|wipe|truncate|stop.all|force.delete|hard.delete)')
+      )
+
+      -- Branch B: Destructive SQL DML injected via database tool input
+      -- Database tool called with DROP/DELETE/TRUNCATE/GRANT ALL — classic privilege chain
+      -- GrantBox paper §3.1: "database destruction" was the hardest agent-defense case
+      OR (
+        match(lower(tool_name), '(query|execute|run_sql|sql_query|execute_query|run_query|execute_statement|run_statement|db_query|database.execute|query_database|database.run)')
+        AND match(lower(tool_input), '(drop\s+table|drop\s+database|drop\s+schema|drop\s+index|delete\s+from\s+\w|truncate\s+table|alter\s+table.{0,50}drop\s+column|grant\s+all|revoke\s+all|grant\s+select.{0,50}on\s+\*\.?\*|truncate\s+schema)')
+      )
+
+      -- Branch C: IAM / RBAC privilege escalation via access-management tool
+      -- Granting admin/wildcard roles — GrantBox paper §3.2: "access escalation" 84.8% ASR
+      OR (
+        match(lower(tool_name), '(iam|rbac|role.management|policy.management|permission.management|access.control|acl.management|grant.access|user.admin|group.admin|workspace.admin|org.admin|admin.api|entitlement)')
+        AND match(lower(tool_input), '(grant|attach|assign|add|bind).{0,80}(admin|superuser|root|owner|full.access|all.permissions|\.\*|administrator|poweruser|global.admin|privileged.user|unrestricted)')
+      )
+
+      -- Branch D: Tool result confirms destruction of infra resources from non-destructor tool
+      -- Agent tool that should NOT destroy resources reports successful deletion/termination
+      -- Indicates injected privilege chain executed the destructive step covertly
+      OR (
+        match(lower(tool_result), '(deleted|terminated|destroyed|purged|deprovisioned|dropped|wiped|truncated).{0,150}(instance|cluster|database|bucket|table|schema|namespace|resource|service|stack|deployment|volume|disk|snapshot|queue|topic|function|endpoint|server)')
+        AND NOT match(lower(tool_name), '(delete|destroy|terminate|purge|remove|drop|deprovision|decommission|cleanup|clean.up|force.delete|hard.delete)')
+      )
+
+      -- Branch E: Agent announces successful privilege chain completion in tool_result
+      -- Prompt injection attack reports the full privilege chain attack succeeded
+      OR match(lower(tool_result), '(privilege.chain|privilege.escalation.path|tool.privilege.hijack).{0,300}(executed|completed|success|done)')
+    )

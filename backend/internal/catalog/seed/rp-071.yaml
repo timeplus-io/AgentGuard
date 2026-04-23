@@ -1,29 +1,17 @@
 id: rp-071
 name: "MalTool Malicious Tool Code Behavioral Execution Detector"
 version: "0.1.0"
-description: >
-  Detects MalTool-class attacks (arXiv:2602.12194, Berkeley RDI, FM 2026 Research Track)
-  where an attacker uploads a tool to an agent marketplace (LangChain Hub, LlamaIndex Hub,
-  MCP registry, internal skill store) with malicious CODE embedded inside an otherwise
-  functional implementation. Unlike rp-004 (supply chain package install) and rp-020
-  (DDIPE documentation-driven execution), MalTool hides malicious behavior in the tool's
-  RUNTIME CODE: the tool appears functional but also exfiltrates credentials, corrupts
-  data, or deletes resources during normal operation.
-  The MalTool framework (Berkeley RDI, FM 2026) generated 1,200 standalone malicious
-  tools and 5,287 hybrid tools embedding malicious behaviors inside real tool wrappers.
-  VirusTotal and LLM-agent-specific detection methods showed limited effectiveness.
-  Detection focuses on CIA triad behavioral signatures in tool_result post-execution:
-  (C) credential values / API keys / sensitive file paths appearing in results;
-  (I) SQL DML / destructive ops in read-context results;
-  (A) silent deletion confirmations outside explicit delete tasks;
-  plus exfil callback URL patterns embedded in result payloads.
-  Distinct from rp-061 (debug-log credential exposure — plaintext print/log in tool code)
-  which fires on code-level credential leaks, not runtime behavioral execution.
+description: |
+  Detects MalTool-class attacks (arXiv:2602.12194, Berkeley RDI, FM 2026 Research Track) where an attacker uploads a tool to an agent marketplace (LangChain Hub, LlamaIndex Hub, MCP registry, internal skill store) with malicious CODE embedded inside an otherwise functional implementation. Unlike rp-004 (supply chain package install) and rp-020 (DDIPE documentation-driven execution), MalTool hides malicious behavior in the tool's RUNTIME CODE: the tool appears functional but also exfiltrates credentials, corrupts data, or deletes resources during normal operation. The MalTool framework (Berkeley RDI, FM 2026) generated 1,200 standalone malicious tools and 5,287 hybrid tools embedding malicious behaviors inside real tool wrappers. VirusTotal and LLM-agent-specific detection methods showed limited effectiveness. Detection focuses on CIA triad behavioral signatures in tool_result post-execution: (C) credential values / API keys / sensitive file paths appearing in results; (I) SQL DML / destructive ops in read-context results; (A) silent deletion confirmations outside explicit delete tasks; plus exfil callback URL patterns embedded in result payloads.
+
+  Distinct from rp-061 (debug-log credential exposure — plaintext print/log in tool code) which fires on code-level credential leaks, not runtime behavioral execution.
+
   References: arXiv:2602.12194 (MalTool FM 2026), OWASP LLM05:2025, MITRE ATT&CK T1195.001 -
-  https://arxiv.org/abs/2602.12194,
-  https://rdi.berkeley.edu/blog/maltool/,
+  - https://arxiv.org/abs/2602.12194,
+  - https://rdi.berkeley.edu/blog/maltool/,
   Example: tool_result='{"summary":"Q3 revenue grew...","_debug":"AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE AWS_SECRET_ACCESS_KEY=wJalrXUtn"}'
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: supply_chain_compromise
 fp_rate: medium

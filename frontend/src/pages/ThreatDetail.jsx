@@ -168,16 +168,56 @@ export default function ThreatDetail() {
         if (isByHold) {
           const holdResp = await api.getHold(id)
           const h = holdResp.hold
-          const list = await api.getThreats({ agent_id: h.agent_id, limit: 200 })
-          const matched = (list.threats ?? []).find(
-            t => t.agent_id === h.agent_id
-              && t.deployment_id === h.deployment_id
-              && t.session_id === h.session_id
-              && t.rule_id === h.rule_id
-          )
-          if (!matched) throw new Error('threat for this hold not found')
-          if (!cancelled) {
+          // Try to find a matching threat row so we can show full context.
+          // The match can fail for legitimate reasons: the alert webhook
+          // hasn't yet upserted to agentguard_threats; the hold's rule was
+          // disabled before a threat row was written; etc. In all those cases
+          // we still need to let the user approve/deny — so fall back to a
+          // synthetic threat object built from the hold and render the approval
+          // UI directly. This page is the operator's only way out of a stuck hold.
+          let matched = null
+          try {
+            const list = await api.getThreats({ agent_id: h.agent_id, limit: 200 })
+            matched = (list.threats ?? []).find(
+              t => t.agent_id === h.agent_id
+                && t.deployment_id === h.deployment_id
+                && t.session_id === h.session_id
+                && t.rule_id === h.rule_id
+            )
+          } catch (e) {
+            // listThreats failure is non-fatal here — render hold-only fallback below.
+            console.warn('threat lookup failed for by-hold path; rendering hold-only UI:', e)
+          }
+          if (matched && !cancelled) {
             navigate(`/threats/${encodeURIComponent(matched.threat_id)}`, { replace: true })
+            return
+          }
+          // Hold-only fallback: synthesize a threat-shaped object so the existing
+          // render path works. threat_id is empty — the render branches below
+          // suppress acknowledge/clear (which need a real threat_id) but keep
+          // approve/deny enabled (which only need the hold_id).
+          if (!cancelled) {
+            setThreat({
+              threat_id: '',
+              agent_id: h.agent_id,
+              deployment_id: h.deployment_id,
+              session_id: h.session_id,
+              rule_id: h.rule_id,
+              rule_name: h.rule_id || 'Pending Hold',
+              severity: h.severity,
+              status: 'open',
+              status_updated_at: h.created_at,
+              first_seen: h.created_at,
+              last_seen: h.created_at,
+              event_count: 1,
+              events: [],
+              pending_hold: {
+                hold_id: h.hold_id,
+                tool_name: h.tool_name,
+                args_summary: h.args_summary,
+                created_at: h.created_at,
+              },
+            })
           }
           return
         }
@@ -301,8 +341,11 @@ export default function ThreatDetail() {
           ) : null}
         </div>
 
-        {/* Right side — action buttons */}
-        {!loading && threat && (
+        {/* Right side — action buttons. Acknowledge/Clear require a real
+            threat_id (they upsert into agentguard_threats); the by-hold fallback
+            renders without one, so suppress those controls there. The hold's
+            Approve/Deny controls in the body still work via hold_id. */}
+        {!loading && threat && threat.threat_id && (
           <div className="flex items-center gap-2 shrink-0">
             {threat.status === 'open' && (
               <>

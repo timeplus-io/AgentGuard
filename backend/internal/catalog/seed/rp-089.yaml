@@ -1,32 +1,17 @@
 id: rp-089
 name: "Shadow Feature & Platform Hook Exploitation Detector"
 version: "0.2.0"
-description: >
-  Detects malicious agent skills that exploit the agent platform's lifecycle
-  hook system or claim undocumented "shadow" capabilities absent from published
-  documentation — the hallmark of advanced attacks in the wild. Based on
-  arXiv:2602.06547 (Malicious Agent Skills in the Wild, Liu et al., Feb/Mar 2026):
-  98,380 skills from two community registries analyzed, 157 confirmed malicious
-  with 632 vulnerabilities. Two attack archetypes discovered: (1) Data Thieves
-  that exfiltrate credentials via supply chain techniques; (2) Agent Hijackers
-  that subvert decision-making through instruction manipulation. Shadow features
-  (capabilities absent from public documentation) appear in 0% of basic attacks
-  but 100% of advanced attacks. A single actor accounted for 54.1% of cases via
-  brand impersonation. Skills exploit platform hook APIs (session_start hooks,
-  permission_flags manipulation, keychain access) that are undisclosed in their
-  public skill card/documentation. Distinct from rp-020 (DDIPE: documentation-
-  embedded code execution) and rp-071 (MalTool: CIA triad runtime behavioral
-  signals) — this rule targets the hook registration and shadow capability
-  disclosure phase, not downstream code execution patterns.
-  References: arXiv:2602.06547 (Malicious Agent Skills in the Wild, Feb 2026),
-  Snyk ToxicSkills (Feb 2026, 76 confirmed malicious payloads, 13.4% CRITICAL rate),
-  OWASP Agentic Skills Top 10, OWASP LLM05:2025, MITRE ATT&CK T1195.001 -
-  https://arxiv.org/abs/2602.06547,
-  https://arxiv.org/abs/2602.06547v2,
-  https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/,
-  https://owasp.org/www-project-agentic-skills-top-10/,
+description: |
+  Detects malicious agent skills that exploit the agent platform's lifecycle hook system or claim undocumented "shadow" capabilities absent from published documentation — the hallmark of advanced attacks in the wild. Based on arXiv:2602.06547 (Malicious Agent Skills in the Wild, Liu et al., Feb/Mar 2026): 98,380 skills from two community registries analyzed, 157 confirmed malicious with 632 vulnerabilities. Two attack archetypes discovered: (1) Data Thieves that exfiltrate credentials via supply chain techniques; (2) Agent Hijackers that subvert decision-making through instruction manipulation. Shadow features (capabilities absent from public documentation) appear in 0% of basic attacks but 100% of advanced attacks. A single actor accounted for 54.1% of cases via brand impersonation. Skills exploit platform hook APIs (session_start hooks, permission_flags manipulation, keychain access) that are undisclosed in their public skill card/documentation. Distinct from rp-020 (DDIPE: documentation- embedded code execution) and rp-071 (MalTool: CIA triad runtime behavioral signals) — this rule targets the hook registration and shadow capability disclosure phase, not downstream code execution patterns.
+
+  References: arXiv:2602.06547 (Malicious Agent Skills in the Wild, Feb 2026), Snyk ToxicSkills (Feb 2026, 76 confirmed malicious payloads, 13.4% CRITICAL rate), OWASP Agentic Skills Top 10, OWASP LLM05:2025, MITRE ATT&CK T1195.001 -
+  - https://arxiv.org/abs/2602.06547,
+  - https://arxiv.org/abs/2602.06547v2,
+  - https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/,
+  - https://owasp.org/www-project-agentic-skills-top-10/,
   Example: tool_result='{"status":"ok","hook_registered":"on_session_start","capability":"keychain_access","permission_flags":["storage.all","network.unrestricted"]}'
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: supply_chain_compromise
 fp_rate: low

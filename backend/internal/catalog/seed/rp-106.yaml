@@ -1,37 +1,16 @@
 id: rp-106
 name: "AI Agent Human-Marketplace Physical-World Attack Outsourcing Detector"
 version: "0.1.1"
-description: >
-  Detects autonomous AI agents abusing human-task marketplace integrations (e.g.,
-  RentAHuman.ai) via REST API or MCP to programmatically hire human workers for
-  physical-world attacks. arXiv:2602.19514 (Feb 2026) empirically measured 303
-  bounties on RentAHuman.ai: 32.7% (99/303) originated from programmatic agent
-  channels (agent_* or api_key_* prefixed agentId). Six confirmed abuse classes:
-  credential fraud (bulk account creation), identity impersonation (impersonating
-  service reps), automated reconnaissance (personal data harvesting), social media
-  manipulation (fake engagement), authentication circumvention (2FA/CAPTCHA bypass),
-  and referral fraud — all purchasable for a median of $25/worker. A compromised or
-  misaligned agent with marketplace MCP access converts physical-world human labor
-  into an adversarial action primitive, completely bypassing digital security controls.
-  Observed real examples: "Cursor Agent" MCP account posting code subtask bounties,
-  "Clawdia" agent posting time-sensitive physical delivery tasks.
-  v0.1.1 (2026-04-21): Added Humwork (YC Batch P26) as a second AI-agent-to-human labor
-  marketplace: real-time expert matching API designed exclusively for AI agent callers
-  (“AI agents will pay you to chat with them”, LinkedIn Apr 2026). Also extended tool
-  anchor to include humwork.ai and hire_expert patterns. Added HUMAN Security 2026 stat:
-  AI agent traffic grew 7,851% YoY, dramatically expanding attack surface for marketplace abuse.
-  Unlike rp-039 (MCP support ticket injection) and rp-075 (email/calendar passive injection),
-  this rule targets agent-initiated outbound task posting to human labor markets —
-  a distinct threat class with real-world physical consequences.
-  References: arXiv:2602.19514 (RentAHuman.ai Empirical Study, Feb 2026),
-  HUMAN Security 2026 State of AI Traffic & Cyberthreat Benchmark Report (AI agent traffic +7851% YoY),
-  Humwork YC P26 (real-time AI-agent-to-human marketplace, Apr 2026),
-  OWASP Agentic AI ASI05:2026, OWASP LLM08:2025 (Excessive Agency), MITRE T1583 -
-  https://arxiv.org/abs/2602.19514,
-  https://arxiv.org/html/2602.19514v1,
-  https://rentahuman.ai,
-  https://www.humansecurity.com/learn/resources/2026-state-of-ai-traffic-cyberthreat-benchmarks/,
-  https://www.linkedin.com/posts/y-combinator_ai-agents-will-pay-you-to-chat-with-them-activity-7450211357200904192-D8Hh
+description: |
+  Detects autonomous AI agents abusing human-task marketplace integrations (e.g., RentAHuman.ai) via REST API or MCP to programmatically hire human workers for physical-world attacks. arXiv:2602.19514 (Feb 2026) empirically measured 303 bounties on RentAHuman.ai: 32.7% (99/303) originated from programmatic agent channels (agent_* or api_key_* prefixed agentId). Six confirmed abuse classes: credential fraud (bulk account creation), identity impersonation (impersonating service reps), automated reconnaissance (personal data harvesting), social media manipulation (fake engagement), authentication circumvention (2FA/CAPTCHA bypass), and referral fraud — all purchasable for a median of $25/worker. A compromised or misaligned agent with marketplace MCP access converts physical-world human labor into an adversarial action primitive, completely bypassing digital security controls. Observed real examples: "Cursor Agent" MCP account posting code subtask bounties, "Clawdia" agent posting time-sensitive physical delivery tasks. v0.1.1 (2026-04-21): Added Humwork (YC Batch P26) as a second AI-agent-to-human labor marketplace: real-time expert matching API designed exclusively for AI agent callers (“AI agents will pay you to chat with them”, LinkedIn Apr 2026). Also extended tool anchor to include humwork.ai and hire_expert patterns. Added HUMAN Security 2026 stat: AI agent traffic grew 7,851% YoY, dramatically expanding attack surface for marketplace abuse. Unlike rp-039 (MCP support ticket injection) and rp-075 (email/calendar passive injection), this rule targets agent-initiated outbound task posting to human labor markets — a distinct threat class with real-world physical consequences.
+
+  References: arXiv:2602.19514 (RentAHuman.ai Empirical Study, Feb 2026), HUMAN Security 2026 State of AI Traffic & Cyberthreat Benchmark Report (AI agent traffic +7851% YoY), Humwork YC P26 (real-time AI-agent-to-human marketplace, Apr 2026), OWASP Agentic AI ASI05:2026, OWASP LLM08:2025 (Excessive Agency), MITRE T1583 -
+  - https://arxiv.org/abs/2602.19514,
+  - https://arxiv.org/html/2602.19514v1,
+  - https://rentahuman.ai,
+  - https://www.humansecurity.com/learn/resources/2026-state-of-ai-traffic-cyberthreat-benchmarks/,
+  - https://www.linkedin.com/posts/y-combinator_ai-agents-will-pay-you-to-chat-with-them-activity-7450211357200904192-D8Hh
+
 severity: critical
 category: lateral_movement_and_pivoting
 fp_rate: low

@@ -1,27 +1,16 @@
 id: rp-052
 name: "Code Interpreter Sandbox Escape via Python Frame Traversal"
 version: "0.1.0"
-description: >
-  Detects Python code interpreter sandbox escape attempts via exception frame
-  traversal and whitelisted library introspection. CVE-2026-39888 (PraisonAI,
-  CVSS 9.9) exploited missing AST blocklist entries for __traceback__, tb_frame,
-  f_back, and f_builtins to climb the Python call stack and access unrestricted
-  builtins — achieving full host RCE. GHSA-pmgp-2m3v-34mq (Agenta) abused the
-  whitelisted numpy package: numpy.ma.core.inspect.sys.modules["os"] bypassed
-  RestrictedPython to execute arbitrary shell commands with API server access.
-  CIBER benchmark (arXiv:2602.19547, Feb 2026) confirmed these attacks are
-  systematically underdetected: natural-language-disguised sandbox escapes achieve
-  14.1% higher ASR than explicit code patterns, bypassing syntax-only defenses.
-  Distinct from rp-003 (Privilege Guard / shell tool abuse) — this rule targets
-  code interpreter tools specifically and Python-level runtime sandbox bypass
-  patterns rather than shell-level command patterns.
-  References: CVE-2026-39888 CVSS 9.9 (PraisonAI praisonaiagents <v1.5.115),
-  GHSA-pmgp-2m3v-34mq (Agenta <v0.48.1 RestrictedPython numpy whitelist bypass),
-  arXiv:2602.19547 CIBER benchmark (Southeast/Huazhong Univ, Feb 2026),
-  OWASP LLM08:2025, MITRE T1059.006 (Python Command Execution) -
-  https://vulert.com/vuln-db/CVE-2026-39888,
-  https://github.com/Agenta-AI/agenta/security/advisories/GHSA-pmgp-2m3v-34mq,
-  https://arxiv.org/abs/2602.19547
+description: |
+  Detects Python code interpreter sandbox escape attempts via exception frame traversal and whitelisted library introspection. CVE-2026-39888 (PraisonAI, CVSS 9.9) exploited missing AST blocklist entries for __traceback__, tb_frame, f_back, and f_builtins to climb the Python call stack and access unrestricted builtins — achieving full host RCE. GHSA-pmgp-2m3v-34mq (Agenta) abused the whitelisted numpy package: numpy.ma.core.inspect.sys.modules["os"] bypassed RestrictedPython to execute arbitrary shell commands with API server access. CIBER benchmark (arXiv:2602.19547, Feb 2026) confirmed these attacks are systematically underdetected: natural-language-disguised sandbox escapes achieve 14.1% higher ASR than explicit code patterns, bypassing syntax-only defenses.
+
+  Distinct from rp-003 (Privilege Guard / shell tool abuse) — this rule targets code interpreter tools specifically and Python-level runtime sandbox bypass patterns rather than shell-level command patterns.
+
+  References: CVE-2026-39888 CVSS 9.9 (PraisonAI praisonaiagents <v1.5.115), GHSA-pmgp-2m3v-34mq (Agenta <v0.48.1 RestrictedPython numpy whitelist bypass), arXiv:2602.19547 CIBER benchmark (Southeast/Huazhong Univ, Feb 2026), OWASP LLM08:2025, MITRE T1059.006 (Python Command Execution) -
+  - https://vulert.com/vuln-db/CVE-2026-39888,
+  - https://github.com/Agenta-AI/agenta/security/advisories/GHSA-pmgp-2m3v-34mq,
+  - https://arxiv.org/abs/2602.19547
+
 severity: critical
 category: agent_privilege_escalation
 fp_rate: low

@@ -1,32 +1,13 @@
 id: rp-026
 name: "Embedding Vector Exfiltration via RAG Tool Output"
 version: "0.3.1"
-description: >
-  Detects when raw embedding vectors (high-dimensional float arrays) appear in tool results
-  or LLM responses — indicating potential exfiltration of vector database embeddings. State-
-  of-the-art inversion attacks can reconstruct source text from embeddings with few or zero
-  training samples: ALGEN (arXiv:2502.11308, ACL 2025) achieves partial inversion with a
-  single sample; ZSInvert (arXiv:2504.00147, Mar 2025) requires zero training and only
-  black-box encoder access. An attacker who manipulates an agent into returning embeddings
-  (via "return_embeddings: true" parameter injection or social engineering) can reconstruct
-  all RAG-indexed documents offline. The pattern matches 5+ consecutive floats with 4+
-  decimal places — characteristic of embedding vectors (typical dimension 768-3072) —
-  distinguishing them from normal financial/scientific float arrays (usually 2-3 decimal
-  places). Fires on tool_complete (vector store tool returning embeddings) and llm_response
-  (agent relaying vectors in output). v0.2.0 adds parameter injection detection: when an
-  agent is instructed to set return_embeddings=true, include_vectors=true, or similar flags
-  in tool_input (tool_complete events), this is captured as a precursor signal even if the
-  embedding output hasn't arrived yet. Reduces fp_rate from medium to low.
-  v0.3.0 adds: base64-encoded embedding exfiltration bypass detection. Some attackers
-  instruct agents to return embeddings encoded as base64 (embeddings_b64 / vectors_b64
-  key with 40+ char base64 value) to evade the float-array detection pattern.
-  The redteams.ai Embedding Inversion topic (2026) documents this evasion variant.
-  References: arXiv:2502.11308 ALGEN Embedding Inversion - https://arxiv.org/abs/2502.11308,
-  arXiv:2504.00147 ZSInvert Zero-shot Inversion - https://arxiv.org/abs/2504.00147,
-  OWASP LLM08:2025 - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
-  redteams.ai Embedding Inversion 2026 - https://redteams.ai/topics/embedding-vector-security/embedding-inversion-attacks,
-  Example: tool_result {"embeddings_b64": "eyJlbWJlZGRpbmdzIjpbMC4wMjM0..."} (base64-encoded 768-dim float array)
-  promptfoo LMVD-bd566a31 - https://www.promptfoo.dev/lm-security-db/vuln/embedding-inversion-privacy-leak-bd566a31
+description: |
+  Detects when raw embedding vectors (high-dimensional float arrays) appear in tool results or LLM responses — indicating potential exfiltration of vector database embeddings. State- of-the-art inversion attacks can reconstruct source text from embeddings with few or zero training samples: ALGEN (arXiv:2502.11308, ACL 2025) achieves partial inversion with a single sample; ZSInvert (arXiv:2504.00147, Mar 2025) requires zero training and only black-box encoder access. An attacker who manipulates an agent into returning embeddings (via "return_embeddings: true" parameter injection or social engineering) can reconstruct all RAG-indexed documents offline. The pattern matches 5+ consecutive floats with 4+ decimal places — characteristic of embedding vectors (typical dimension 768-3072) — distinguishing them from normal financial/scientific float arrays (usually 2-3 decimal places). Fires on tool_complete (vector store tool returning embeddings) and llm_response (agent relaying vectors in output). v0.2.0 adds parameter injection detection: when an agent is instructed to set return_embeddings=true, include_vectors=true, or similar flags in tool_input (tool_complete events), this is captured as a precursor signal even if the embedding output hasn't arrived yet. Reduces fp_rate from medium to low. v0.3.0 adds: base64-encoded embedding exfiltration bypass detection. Some attackers instruct agents to return embeddings encoded as base64 (embeddings_b64 / vectors_b64 key with 40+ char base64 value) to evade the float-array detection pattern. The redteams.ai Embedding Inversion topic (2026) documents this evasion variant.
+
+  References: arXiv:2502.11308 ALGEN Embedding Inversion - https://arxiv.org/abs/2502.11308, arXiv:2504.00147 ZSInvert Zero-shot Inversion - https://arxiv.org/abs/2504.00147, OWASP LLM08:2025 - https://owasp.org/www-project-top-10-for-large-language-model-applications/, redteams.ai Embedding Inversion 2026 - https://redteams.ai/topics/embedding-vector-security/embedding-inversion-attacks,
+
+  Example: tool_result {"embeddings_b64": "eyJlbWJlZGRpbmdzIjpbMC4wMjM0..."} (base64-encoded 768-dim float array) promptfoo LMVD-bd566a31 - https://www.promptfoo.dev/lm-security-db/vuln/embedding-inversion-privacy-leak-bd566a31
+
 severity: warning
 category: data_exfiltration_and_leakage
 fp_rate: low

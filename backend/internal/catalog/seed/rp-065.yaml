@@ -1,28 +1,16 @@
 id: rp-065
 name: "Agent-as-a-Proxy — Adversarial Monitor Bypass Detector"
 version: "0.1.0"
-description: >
-  Detects the Agent-as-a-Proxy attack (arXiv:2602.05066, Isbarov & Kantarcioglu,
-  Virginia Tech, Feb 2026): adversaries embed Parallel-GCG optimized adversarial
-  compliance tokens in external content retrieved by the agent (tool results). When
-  the agent echoes these tokens in its chain-of-thought (assistant_message) or tool
-  call parameters (tool_input), the secondary monitoring/safety system that observes
-  the agent's reasoning classifies the malicious trajectory as safe — achieving >90%
-  ASR against AlignmentCheck, Extract-and-Evaluate, and LlamaFirewall monitors.
-  The attack works by weaponizing the monitoring channel itself: forcing the agent
-  to act as an unwitting proxy, delivering adversarial compliance tokens directly
-  into the monitor's context window. Model scale provides no protection — Qwen2.5-72B
-  monitors were bypassed by GPT-4o mini and Llama-3.1-70B proxy agents.
-  Observable pattern: fake monitor-verdict tokens (VERIFIED_COMPLIANT, _PROXY_OK_,
-  "confirmed-safe by alignment monitor", "safety check passed") appearing in
-  agent output or tool inputs, often echoed from adversarial content in tool_result.
-  Distinct from rp-014 (override/task-hijack language in tool results) — this rule
-  detects the monitor-impersonation/bypass mechanism that occurs in agent output.
-  References: arXiv:2602.05066 (Agent-as-a-Proxy Attacks, Feb 2026),
-  OWASP Agentic AI ASI02:2026, OWASP LLM01:2025 -
-  https://arxiv.org/abs/2602.05066,
-  https://agent-as-a-proxy-attack.github.io/,
-  https://github.com/dspl-lab/agent-as-a-proxy-attack
+description: |
+  Detects the Agent-as-a-Proxy attack (arXiv:2602.05066, Isbarov & Kantarcioglu, Virginia Tech, Feb 2026): adversaries embed Parallel-GCG optimized adversarial compliance tokens in external content retrieved by the agent (tool results). When the agent echoes these tokens in its chain-of-thought (assistant_message) or tool call parameters (tool_input), the secondary monitoring/safety system that observes the agent's reasoning classifies the malicious trajectory as safe — achieving >90% ASR against AlignmentCheck, Extract-and-Evaluate, and LlamaFirewall monitors. The attack works by weaponizing the monitoring channel itself: forcing the agent to act as an unwitting proxy, delivering adversarial compliance tokens directly into the monitor's context window. Model scale provides no protection — Qwen2.5-72B monitors were bypassed by GPT-4o mini and Llama-3.1-70B proxy agents. Observable pattern: fake monitor-verdict tokens (VERIFIED_COMPLIANT, _PROXY_OK_, "confirmed-safe by alignment monitor", "safety check passed") appearing in agent output or tool inputs, often echoed from adversarial content in tool_result.
+
+  Distinct from rp-014 (override/task-hijack language in tool results) — this rule detects the monitor-impersonation/bypass mechanism that occurs in agent output.
+
+  References: arXiv:2602.05066 (Agent-as-a-Proxy Attacks, Feb 2026), OWASP Agentic AI ASI02:2026, OWASP LLM01:2025 -
+  - https://arxiv.org/abs/2602.05066,
+  - https://agent-as-a-proxy-attack.github.io/,
+  - https://github.com/dspl-lab/agent-as-a-proxy-attack
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: low

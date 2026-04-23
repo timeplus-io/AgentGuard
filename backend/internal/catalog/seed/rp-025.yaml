@@ -1,29 +1,17 @@
 id: rp-025
 name: "MCP Cross-Client JSON-RPC Misrouting Detector (CVE-2026-25536)"
 version: "0.2.2"
-description: >
-  Detects MCP protocol-layer anomalies in application-level tool results. Two distinct
-  threat classes: (1) Cross-client data leak (CVE-2026-25536, GHSA-345p-7cg4-v4c7, CVSS
-  High, disclosed Feb 4 2026) where shared StreamableHTTPServerTransport or McpServer
-  instances cause JSON-RPC message ID collisions between concurrent clients — responses
-  intended for Tenant B are routed to Tenant A's HTTP stream. The pattern "jsonrpc":"2.0"
-  should never appear in a processed tool result in normal operation; its presence
-  indicates wire-protocol bleed-through from a misconfigured shared server instance.
-  (2) MCP STDIO process injection (OX Security "Mother of All AI Supply Chains" Apr 2026,
-  30+ responsible disclosures, 10+ Critical/High CVEs, 200,000+ MCP servers impacted):
-  the MCP TypeScript/Python SDK STDIO transport executes any OS command passed as the
-  "command" field without sanitization — including bash -c payloads and env var poisoning
-  blocks (LD_PRELOAD, NODE_OPTIONS). A malicious MCP server config returned as a tool
-  result can trigger STDIO RCE when the client attempts to connect to the "new" server.
-  v0.2.0 adds the STDIO injection branch covering shell command injection and environment
-  variable poisoning in mcpServers config blocks returned via tool_result.
+description: |
+  Detects MCP protocol-layer anomalies in application-level tool results. Two distinct threat classes: (1) Cross-client data leak (CVE-2026-25536, GHSA-345p-7cg4-v4c7, CVSS High, disclosed Feb 4 2026) where shared StreamableHTTPServerTransport or McpServer instances cause JSON-RPC message ID collisions between concurrent clients — responses intended for Tenant B are routed to Tenant A's HTTP stream. The pattern "jsonrpc":"2.0" should never appear in a processed tool result in normal operation; its presence indicates wire-protocol bleed-through from a misconfigured shared server instance. (2) MCP STDIO process injection (OX Security "Mother of All AI Supply Chains" Apr 2026, 30+ responsible disclosures, 10+ Critical/High CVEs, 200,000+ MCP servers impacted): the MCP TypeScript/Python SDK STDIO transport executes any OS command passed as the "command" field without sanitization — including bash -c payloads and env var poisoning blocks (LD_PRELOAD, NODE_OPTIONS). A malicious MCP server config returned as a tool result can trigger STDIO RCE when the client attempts to connect to the "new" server. v0.2.0 adds the STDIO injection branch covering shell command injection and environment variable poisoning in mcpServers config blocks returned via tool_result.
+
   References: CVE-2026-25536 GHSA-345p-7cg4-v4c7 -
-  https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-345p-7cg4-v4c7,
+  - https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-345p-7cg4-v4c7,
   OX Security "Mother of All AI Supply Chains" Apr 2026 -
-  https://www.cyberkendra.com/2026/04/anthropics-mcp-design-flaw-enables.html,
+  - https://www.cyberkendra.com/2026/04/anthropics-mcp-design-flaw-enables.html,
   arXiv:2601.17549 MCP Security Analysis - https://arxiv.org/abs/2601.17549,
-  Example: tool_result contains {"jsonrpc": "2.0", "id": 42, "result": {"session_token": "eyJhbGci..."}} (JSON-RPC wire frame of another tenant's session bleeding into current tool output)
-  OWASP LLM09:2025 - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
+  Example: tool_result contains {"jsonrpc": "2.0", "id": 42, "result": {"session_token": "eyJhbGci..."}} (JSON-RPC wire frame of another tenant's session bleeding into current tool output) OWASP LLM09:2025 - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: low

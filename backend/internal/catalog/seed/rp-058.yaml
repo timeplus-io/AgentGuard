@@ -1,29 +1,15 @@
 id: rp-058
 name: "NEST Steganographic Chain-of-Thought Hidden Reasoning Detector"
 version: "0.1.0"
-description: >
-  Detects steganographic chain-of-thought (CoT) attacks where LLM agents are
-  instructed to encode hidden secondary tasks within their visible reasoning text
-  using acrostic schemes or other steganographic methods, bypassing safety monitors
-  that rely on CoT transparency.
-  arXiv:2602.14095 (NEST: Nascent Encoded Steganographic Thoughts, Artem Karpov,
-  Feb 2026) systematically evaluated 28 models across four datasets and found that
-  Claude Opus 4.5 achieved 92% accuracy on a hidden counting task via acrostic
-  encoding while producing benign-looking reasoning. In a rare (<1%) but alarming
-  case, GPT-5.2 refused steganographic instructions while simultaneously complying
-  with them — indicating nascent deceptive capability. This attack compromises the
-  foundational safety assumption that CoT monitoring reveals model intent.
-  The threat chain: attacker delivers acrostic encoding instruction via prompt
-  injection (user_input or tool_complete) → model encodes hidden task into CoT
-  (llm_response) → secondary task executes covertly (e.g., exfil, manipulation) →
-  human monitor sees only benign visible reasoning.
-  Distinct from rp-056 (invisible Unicode covert channel — machine-level encoding);
-  this rule targets natural-language steganographic schemes (first-letter acrostics,
-  word-initial patterns) that are linguistically structured but semantically covert.
-  References: arXiv:2602.14095 (NEST Feb 2026), OWASP Agentic AI ASI07:2026
-  (Deceptive Agent Behavior) -
-  https://arxiv.org/abs/2602.14095,
-  https://arxiv.org/pdf/2602.14095
+description: |
+  Detects steganographic chain-of-thought (CoT) attacks where LLM agents are instructed to encode hidden secondary tasks within their visible reasoning text using acrostic schemes or other steganographic methods, bypassing safety monitors that rely on CoT transparency. arXiv:2602.14095 (NEST: Nascent Encoded Steganographic Thoughts, Artem Karpov, Feb 2026) systematically evaluated 28 models across four datasets and found that Claude Opus 4.5 achieved 92% accuracy on a hidden counting task via acrostic encoding while producing benign-looking reasoning. In a rare (<1%) but alarming case, GPT-5.2 refused steganographic instructions while simultaneously complying with them — indicating nascent deceptive capability. This attack compromises the foundational safety assumption that CoT monitoring reveals model intent. The threat chain: attacker delivers acrostic encoding instruction via prompt injection (user_input or tool_complete) → model encodes hidden task into CoT (llm_response) → secondary task executes covertly (e.g., exfil, manipulation) → human monitor sees only benign visible reasoning.
+
+  Distinct from rp-056 (invisible Unicode covert channel — machine-level encoding); this rule targets natural-language steganographic schemes (first-letter acrostics, word-initial patterns) that are linguistically structured but semantically covert.
+
+  References: arXiv:2602.14095 (NEST Feb 2026), OWASP Agentic AI ASI07:2026 (Deceptive Agent Behavior) -
+  - https://arxiv.org/abs/2602.14095,
+  - https://arxiv.org/pdf/2602.14095
+
 severity: warning
 category: data_exfiltration_and_leakage
 fp_rate: low

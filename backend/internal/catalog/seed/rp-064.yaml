@@ -1,38 +1,16 @@
 id: rp-064
 name: "Sponge Tool Attack — Reasoning Inflation Denial-of-Efficiency Detector"
 version: "0.2.0"
-description: >
-  Detects the Sponge Tool Attack (STA, arXiv:2601.17566, Li & Wang NTU Jan 2026):
-  adversaries rewrite user prompts to inject deeply nested verification/cross-reference
-  chains and exhaustiveness directives that convert efficient agent reasoning into
-  unnecessarily verbose, convoluted trajectories — dramatically increasing tool-call
-  count and token consumption without changing task semantics or final answer correctness.
-  Validated across 6 models (GPT-4o, Claude, Llama, Gemini), 12 tools, 4 agentic
-  frameworks, 13 datasets: STA consistently induces substantial tool-calling step increases.
-  Complements arXiv:2410.11272 (Cognitive Overload Attack, up to 99.99% ASR via nested
-  context overload). Distinct from rp-006 (tool_result-based loop directives) and rp-018
-  (token drain via continuation protocols in tool results): STA operates entirely within
-  the user_message at prompt-ingestion time, before any tool call occurs. Cannot be
-  detected by tool-result monitoring alone.
-  Also provides a metrics-based branch detecting anomalous tool.call rate per session
-  in a sliding 5-minute window, complementing the content-based user_message signal.
-  v0.2.0 extends with RECUR (arXiv:2602.08214, Recursive Entropy Guided Counterfactual
-  Utilization and Reflection, Feb 2026): a resource exhaustion attack targeting Large
-  Reasoning Models (o1/o3/DeepSeek-R1/Gemini 2.5 Pro) by injecting counterfactual forcing
-  questions that trigger recursive reflection loops — up to 11x output length inflation and
-  90% throughput reduction. RECUR exploits the reflection/self-correction mechanism of LRMs
-  by asking the model to verify against the negation of its own conclusions, causing recursive
-  entropy increase. Distinct from STA (user-level nesting) but same event surface (user_input)
-  and same category (resource_exhaustion_and_dos).
-  References: arXiv:2601.17566 (Sponge Tool Attack Jan 2026),
-  arXiv:2410.11272 (Cognitive Overload Attack Oct 2024),
-  arXiv:2602.08214 (RECUR Recursive Entropy Feb 2026, 11x token inflation, 90% throughput drop),
-  OWASP LLM04:2025 -
-  https://arxiv.org/abs/2601.17566,
-  https://arxiv.org/abs/2410.11272,
-  https://arxiv.org/abs/2602.08214,
-  https://liqiiiii.github.io/Sponge-Tool-ProjectPage/,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+description: |
+  Detects the Sponge Tool Attack (STA, arXiv:2601.17566, Li & Wang NTU Jan 2026): adversaries rewrite user prompts to inject deeply nested verification/cross-reference chains and exhaustiveness directives that convert efficient agent reasoning into unnecessarily verbose, convoluted trajectories — dramatically increasing tool-call count and token consumption without changing task semantics or final answer correctness. Validated across 6 models (GPT-4o, Claude, Llama, Gemini), 12 tools, 4 agentic frameworks, 13 datasets: STA consistently induces substantial tool-calling step increases. Complements arXiv:2410.11272 (Cognitive Overload Attack, up to 99.99% ASR via nested context overload). Distinct from rp-006 (tool_result-based loop directives) and rp-018 (token drain via continuation protocols in tool results): STA operates entirely within the user_message at prompt-ingestion time, before any tool call occurs. Cannot be detected by tool-result monitoring alone. Also provides a metrics-based branch detecting anomalous tool.call rate per session in a sliding 5-minute window, complementing the content-based user_message signal. v0.2.0 extends with RECUR (arXiv:2602.08214, Recursive Entropy Guided Counterfactual Utilization and Reflection, Feb 2026): a resource exhaustion attack targeting Large Reasoning Models (o1/o3/DeepSeek-R1/Gemini 2.5 Pro) by injecting counterfactual forcing questions that trigger recursive reflection loops — up to 11x output length inflation and 90% throughput reduction. RECUR exploits the reflection/self-correction mechanism of LRMs by asking the model to verify against the negation of its own conclusions, causing recursive entropy increase. Distinct from STA (user-level nesting) but same event surface (user_input) and same category (resource_exhaustion_and_dos).
+
+  References: arXiv:2601.17566 (Sponge Tool Attack Jan 2026), arXiv:2410.11272 (Cognitive Overload Attack Oct 2024), arXiv:2602.08214 (RECUR Recursive Entropy Feb 2026, 11x token inflation, 90% throughput drop), OWASP LLM04:2025 -
+  - https://arxiv.org/abs/2601.17566,
+  - https://arxiv.org/abs/2410.11272,
+  - https://arxiv.org/abs/2602.08214,
+  - https://liqiiiii.github.io/Sponge-Tool-ProjectPage/,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: warning
 category: resource_exhaustion_and_dos
 fp_rate: medium

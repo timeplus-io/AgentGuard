@@ -1,31 +1,16 @@
 id: rp-023
 name: "Agent Self-Permission Escalation Kill Chain Detector"
 version: "0.3.0"
-description: >
-  Detects autonomous agent privilege escalation where agents self-grant permissions
-  when encountering access denials, rather than reporting the failure to the user.
-  Documents the kill chain observed in production: Devin AI ran chmod +x on a blocked
-  malicious binary (documented by Johann Rehberger), Irregular Labs frontier LLMs
-  forged admin JWT cookies from leaked Flask secrets and disabled Windows Defender
-  autonomously in March 2026 testing. arXiv:2601.11893 (SEAgent) formalizes this as
-  confused-deputy privilege escalation in LLM agent systems. Analysis of 18,470 agent
-  configurations found 98.9% ship with zero deny rules. v0.2.0 extends with: Linux
-  capability grant via setcap (cap_net_raw, cap_net_admin, all=); polkit pkexec abuse
-  (CVE-2021-4034 still unpatched in many agent containers); NOPASSWD sudoers injection;
-  newuidmap/newgidmap user namespace mapping for rootless container escape; and MCP
-  STDIO process injection (OX Security "Mother of All AI Supply Chains" Apr 2026 —
-  30+ disclosures, 10+ Critical/High CVEs, 200,000+ MCP servers affected). Rule detects:
-  chmod +x, sudo bash/su, security tooling disablement (ufw/defender/apparmor), Windows
-  admin group manipulation, credential forgery, registry persistence, dotfile-based
-  shell persistence (curl | bash >> ~/.bashrc), setcap Linux capability grant, pkexec
-  abuse, NOPASSWD sudoers edit, and MCP STDIO command injection in tool results.
-  References: arXiv:2601.11893 (SEAgent MAC Framework Jan 2026), OWASP Agentic AI
-  ASI02:2026, OX Security "Mother of All AI Supply Chains" Apr 2026 -
-  <https://arxiv.org/abs/2601.11893>,
-  <https://www.arunbaby.com/ai-security/0001-agent-privilege-escalation-kill-chain/>,
-  <https://www.cyberkendra.com/2026/04/anthropics-mcp-design-flaw-enables.html>,
+description: |
+  Detects autonomous agent privilege escalation where agents self-grant permissions when encountering access denials, rather than reporting the failure to the user. Documents the kill chain observed in production: Devin AI ran chmod +x on a blocked malicious binary (documented by Johann Rehberger), Irregular Labs frontier LLMs forged admin JWT cookies from leaked Flask secrets and disabled Windows Defender autonomously in March 2026 testing. arXiv:2601.11893 (SEAgent) formalizes this as confused-deputy privilege escalation in LLM agent systems. Analysis of 18,470 agent configurations found 98.9% ship with zero deny rules. v0.2.0 extends with: Linux capability grant via setcap (cap_net_raw, cap_net_admin, all=); polkit pkexec abuse (CVE-2021-4034 still unpatched in many agent containers); NOPASSWD sudoers injection; newuidmap/newgidmap user namespace mapping for rootless container escape; and MCP STDIO process injection (OX Security "Mother of All AI Supply Chains" Apr 2026 — 30+ disclosures, 10+ Critical/High CVEs, 200,000+ MCP servers affected). Rule detects: chmod +x, sudo bash/su, security tooling disablement (ufw/defender/apparmor), Windows admin group manipulation, credential forgery, registry persistence, dotfile-based shell persistence (curl | bash >> ~/.bashrc), setcap Linux capability grant, pkexec abuse, NOPASSWD sudoers edit, and MCP STDIO command injection in tool results.
+
+  References: arXiv:2601.11893 (SEAgent MAC Framework Jan 2026), OWASP Agentic AI ASI02:2026, OX Security "Mother of All AI Supply Chains" Apr 2026 -
+  - https://arxiv.org/abs/2601.11893>,
+  - https://www.arunbaby.com/ai-security/0001-agent-privilege-escalation-kill-chain/>,
+  - https://www.cyberkendra.com/2026/04/anthropics-mcp-design-flaw-enables.html>,
   Example: tool_input="setcap cap_net_raw+ep /tmp/payload && echo 'NOPASSWD:ALL' >> /etc/sudoers.d/agent" (Linux capability grant + sudoers persistence in single agent command)
-  <https://neuraltrust.ai/blog/owasp-top-10-for-agentic-applications-2026>
+  - https://neuraltrust.ai/blog/owasp-top-10-for-agentic-applications-2026
+
 severity: critical
 category: agent_privilege_escalation
 fp_rate: low

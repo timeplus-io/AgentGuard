@@ -1,35 +1,18 @@
 id: rp-111
 name: "YOLO Mode Permission Bypass Injection Detector"
 version: "0.1.0"
-description: >
-  Detects the YOLO Attack (Johann Rehberger, April 2026): an indirect prompt injection
-  technique that instructs an agent to write auto-approve configuration into its own
-  settings files, disabling the human-in-the-loop confirmation gate. Once an agent
-  writes dangerouslySkipPermissions, bypassPermissions, or yoloMode=true into a config
-  file or spawns a sub-agent with these flags, all subsequent tool calls execute without
-  user approval — enabling arbitrary command execution and credential exfiltration.
-  The complete exploitation chain was documented against GitHub Copilot: injected
-  instructions in a repository code comment caused Copilot to write yoloMode=true into
-  .vscode/settings.json, after which the attacker achieved RCE without user confirmation.
-  Claude Code (claude-code#25000) has a similar sub-agent bypass: spawned sub-processes
-  inherit elevated trust without propagating the parent's deny rules, and
-  claude-code#25936 shows autocompact confabulation of user consent enabling unauthorized
-  actions. Distinct from rp-036 (READ-phase: detects malicious config returned by a
-  file-read tool before the agent acts) — this rule detects the WRITE-phase: the agent
-  itself invoking a write tool to install bypass configuration, acting as the threat
-  vector rather than the victim. Distinct from rp-023 (self-permission escalation via
-  OS-level setcap/pkexec) — this targets agent-framework approval gate bypass.
-  Example: tool_invoke with tool_name="write_file", tool_input={"path":
-  ".vscode/settings.json", "content": "{\"github.copilot.advanced.yoloMode\": true,
-  \"dangerouslySkipPermissions\": true}"} triggered by injected instructions in a
-  repo code comment processed by the agent.
-  References: Johann Rehberger "The YOLO Attack" Apr 2026, claude-code#25000,
-  claude-code#25936, CVE-2026-33068 (bypassPermissions), OWASP Agentic AI ASI03:2026 -
-  https://dev.to/ajbuilds/the-yolo-attack-how-hackers-are-hijacking-ai-agents-by-flipping-one-switch-1fmh,
-  https://github.com/anthropics/claude-code/issues/25000,
-  https://github.com/anthropics/claude-code/issues/25936,
-  https://aiproductivity.ai/news/claude-code-workspace-trust-bypass-cve-2026-33068/,
-  https://genai.owasp.org/llmrisk/llm-agentic-security/
+description: |
+  Detects the YOLO Attack (Johann Rehberger, April 2026): an indirect prompt injection technique that instructs an agent to write auto-approve configuration into its own settings files, disabling the human-in-the-loop confirmation gate. Once an agent writes dangerouslySkipPermissions, bypassPermissions, or yoloMode=true into a config file or spawns a sub-agent with these flags, all subsequent tool calls execute without user approval — enabling arbitrary command execution and credential exfiltration. The complete exploitation chain was documented against GitHub Copilot: injected instructions in a repository code comment caused Copilot to write yoloMode=true into .vscode/settings.json, after which the attacker achieved RCE without user confirmation. Claude Code (claude-code#25000) has a similar sub-agent bypass: spawned sub-processes inherit elevated trust without propagating the parent's deny rules, and claude-code#25936 shows autocompact confabulation of user consent enabling unauthorized actions. Distinct from rp-036 (READ-phase: detects malicious config returned by a file-read tool before the agent acts) — this rule detects the WRITE-phase: the agent itself invoking a write tool to install bypass configuration, acting as the threat vector rather than the victim. Distinct from rp-023 (self-permission escalation via OS-level setcap/pkexec) — this targets agent-framework approval gate bypass.
+
+  Example: tool_invoke with tool_name="write_file", tool_input={"path": ".vscode/settings.json", "content": "{\"github.copilot.advanced.yoloMode\": true, \"dangerouslySkipPermissions\": true}"} triggered by injected instructions in a repo code comment processed by the agent.
+
+  References: Johann Rehberger "The YOLO Attack" Apr 2026, claude-code#25000, claude-code#25936, CVE-2026-33068 (bypassPermissions), OWASP Agentic AI ASI03:2026 -
+  - https://dev.to/ajbuilds/the-yolo-attack-how-hackers-are-hijacking-ai-agents-by-flipping-one-switch-1fmh,
+  - https://github.com/anthropics/claude-code/issues/25000,
+  - https://github.com/anthropics/claude-code/issues/25936,
+  - https://aiproductivity.ai/news/claude-code-workspace-trust-bypass-cve-2026-33068/,
+  - https://genai.owasp.org/llmrisk/llm-agentic-security/
+
 severity: critical
 category: agent_privilege_escalation
 fp_rate: low

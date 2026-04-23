@@ -1,28 +1,13 @@
 id: rp-051
 name: "Constrained Decoding Attack — Schema-Level Structured Output Jailbreak Detector"
 version: "0.1.0"
-description: >
-  Detects Constrained Decoding Attacks (CDA, arXiv:2503.24191 v2 Jan 2026), a novel
-  control-plane jailbreak class that embeds malicious intent in JSON schema grammar
-  rules (enum fields, dict grammar keys) rather than in surface prompts. Unlike
-  traditional prompt injection (data-plane), CDA operates by hiding malicious payloads
-  in the schema-level grammar constraints that guide token generation, bypassing both
-  external prompt auditing and internal safety alignment. Two attack variants:
-  EnumAttack — embeds harmful instructions as enum values in a JSON schema property;
-  the surface prompt appears benign ("select the appropriate response") while enum
-  values encode the attack. DictAttack — decouples the malicious payload across
-  dictionary grammar keys so no single key is harmful but their composition is.
-  DictAttack achieves 94.3-99.5% ASR against gpt-5, gemini-2.5-pro, deepseek-r1,
-  and gpt-oss-120b, and maintains 75.8% ASR even against multiple state-of-the-art
-  jailbreak guardrails. Evaluated across 13 proprietary and open-weight models.
-  This rule targets the tool_invoke event where users or malicious retrieval content
-  supply a JSON schema to a structured-output tool, and user_input where users directly
-  supply malicious response_format schemas. Distinct from rp-001 (data-plane prompt
-  injection in surface prompts) and rp-005 (tool description poisoning in tool metadata):
-  CDA operates exclusively in the schema/grammar control-plane of structured output APIs.
+description: |
+  Detects Constrained Decoding Attacks (CDA, arXiv:2503.24191 v2 Jan 2026), a novel control-plane jailbreak class that embeds malicious intent in JSON schema grammar rules (enum fields, dict grammar keys) rather than in surface prompts. Unlike traditional prompt injection (data-plane), CDA operates by hiding malicious payloads in the schema-level grammar constraints that guide token generation, bypassing both external prompt auditing and internal safety alignment. Two attack variants: EnumAttack — embeds harmful instructions as enum values in a JSON schema property; the surface prompt appears benign ("select the appropriate response") while enum values encode the attack. DictAttack — decouples the malicious payload across dictionary grammar keys so no single key is harmful but their composition is. DictAttack achieves 94.3-99.5% ASR against gpt-5, gemini-2.5-pro, deepseek-r1, and gpt-oss-120b, and maintains 75.8% ASR even against multiple state-of-the-art jailbreak guardrails. Evaluated across 13 proprietary and open-weight models. This rule targets the tool_invoke event where users or malicious retrieval content supply a JSON schema to a structured-output tool, and user_input where users directly supply malicious response_format schemas. Distinct from rp-001 (data-plane prompt injection in surface prompts) and rp-005 (tool description poisoning in tool metadata): CDA operates exclusively in the schema/grammar control-plane of structured output APIs.
+
   References: arXiv:2503.24191 (CDA Jan 2026), OWASP LLM01:2025, OWASP LLM07:2025 -
-  https://arxiv.org/abs/2503.24191,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  - https://arxiv.org/abs/2503.24191,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: low

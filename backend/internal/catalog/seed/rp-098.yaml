@@ -1,49 +1,26 @@
 id: rp-098
 name: "Visual Confused Deputy — CUA Click Target Mismatch & Screenshot Manipulation Detector"
 version: "0.1.1"
-description: >
-  Detects the Visual Confused Deputy attack on Computer-Using Agents (CUAs):
-  a failure mode where an agent authorizes a GUI action based on a misperceived
-  or adversarially manipulated screen state. The agent's stated click intent
-  (cancel/archive/close) diverges from the actual element clicked or resulting
-  action (confirm_payment/delete/grant_admin), enabling privilege escalation.
+description: |
+  Detects the Visual Confused Deputy attack on Computer-Using Agents (CUAs): a failure mode where an agent authorizes a GUI action based on a misperceived or adversarially manipulated screen state. The agent's stated click intent (cancel/archive/close) diverges from the actual element clicked or resulting action (confirm_payment/delete/grant_admin), enabling privilege escalation.
 
-  ScreenSwap (arXiv:2603.14707, Mar 2026): as few as 8 lines of pixel swapping
-  redirects routine "Cancel" clicks into "Confirm Payment" or "Grant Admin" actions
-  while remaining indistinguishable from ordinary CUA misclicks. OSWorld-MCP reports
-  56.7% of CUA actions miss their intended target — meaning this attack surface is
-  extremely broad. CUAHarm finds frontier models comply with dangerous GUI actions
-  90% of the time without jailbreaking.
+  ScreenSwap (arXiv:2603.14707, Mar 2026): as few as 8 lines of pixel swapping redirects routine "Cancel" clicks into "Confirm Payment" or "Grant Admin" actions while remaining indistinguishable from ordinary CUA misclicks. OSWorld-MCP reports 56.7% of CUA actions miss their intended target — meaning this attack surface is extremely broad. CUAHarm finds frontier models comply with dangerous GUI actions 90% of the time without jailbreaking.
 
-  Branch 1: tool_invoke where CUA tool_input states a benign click target (cancel/
-  close/dismiss/archive) but the session's prior tool_result (screenshot) shows
-  adversarial manipulation signals, OR the stated target diverges from a high-privilege
-  action word in the tool_input description itself.
+  Branch 1: tool_invoke where CUA tool_input states a benign click target (cancel/ close/dismiss/archive) but the session's prior tool_result (screenshot) shows adversarial manipulation signals, OR the stated target diverges from a high-privilege action word in the tool_input description itself.
 
-  Branch 2 (2-step lag sequence): tool_complete result shows a high-privilege action
-  was executed (confirm/delete/grant/approve/transfer/forward_all) while the prior
-  tool_invoke's stated target was a benign action — click target mismatch detected.
+  Branch 2 (2-step lag sequence): tool_complete result shows a high-privilege action was executed (confirm/delete/grant/approve/transfer/forward_all) while the prior tool_invoke's stated target was a benign action — click target mismatch detected.
 
-  Branch 3: Screenshot tool returns result with render error or element ID mismatch
-  immediately before a high-privilege CUA action in the same session.
+  Branch 3: Screenshot tool returns result with render error or element ID mismatch immediately before a high-privilege CUA action in the same session.
 
-  Distinct from rp-022 (CUA GUI Injection: hidden HTML/CSS injection in page content),
-  rp-088 (OS-BLIND: visible environmental content with imperative task directives), and
-  rp-092 (TOCTOU: adversarial content in read result before write). This rule targets
-  the CLICK TARGET DIVERGENCE: agent's stated intent (tool_input target description)
-  vs actual executed action (tool_result confirmed action) — a distinct signal surface.
+  Distinct from rp-022 (CUA GUI Injection: hidden HTML/CSS injection in page content), rp-088 (OS-BLIND: visible environmental content with imperative task directives), and rp-092 (TOCTOU: adversarial content in read result before write). This rule targets the CLICK TARGET DIVERGENCE: agent's stated intent (tool_input target description) vs actual executed action (tool_result confirmed action) — a distinct signal surface.
 
-  References: arXiv:2603.14707 (Visual Confused Deputy, Mar 2026, MBZUAI/McGill/AMD/Red Hat),
-  promptfoo LMVD-b3f726b4 (Visual Confused Deputy Attack, Apr 2026),
-  OSWorld-MCP (56.7% target miss rate), CUAHarm (Zhang et al. 2025, 90% compliance
-  with dangerous GUI actions), OWASP Agentic AI ASI03:2026, OWASP LLM01:2025 -
-  https://arxiv.org/abs/2603.14707,
-  https://www.promptfoo.dev/lm-security-db/vuln/visual-confused-deputy-attack-b3f726b4,
-  https://arxiv.org/abs/2604.10577,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
-  Example: agent reasons "clicking Cancel at (450,320)" → ScreenSwap swaps pixels
-  → actual click lands on "Confirm Payment $9,999" → tool_result shows
-  {"action_result": "payment_confirmed", "amount": 9999}.
+  References: arXiv:2603.14707 (Visual Confused Deputy, Mar 2026, MBZUAI/McGill/AMD/Red Hat), promptfoo LMVD-b3f726b4 (Visual Confused Deputy Attack, Apr 2026), OSWorld-MCP (56.7% target miss rate), CUAHarm (Zhang et al. 2025, 90% compliance with dangerous GUI actions), OWASP Agentic AI ASI03:2026, OWASP LLM01:2025 -
+  - https://arxiv.org/abs/2603.14707,
+  - https://www.promptfoo.dev/lm-security-db/vuln/visual-confused-deputy-attack-b3f726b4,
+  - https://arxiv.org/abs/2604.10577,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  Example: agent reasons "clicking Cancel at (450,320)" → ScreenSwap swaps pixels → actual click lands on "Confirm Payment $9,999" → tool_result shows {"action_result": "payment_confirmed", "amount": 9999}.
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: medium

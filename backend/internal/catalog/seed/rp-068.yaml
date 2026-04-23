@@ -1,26 +1,16 @@
 id: rp-068
 name: "STAC Sequential Tool Attack Chaining Detector"
 version: "0.2.0"
-description: >
-  Detects Sequential Tool Attack Chaining (STAC) attacks where individually
-  harmless tool-call instructions are chained across multiple turns to achieve
-  harmful cumulative effects invisible to per-step safety checks. arXiv:2509.25624
-  (STAC, ICLR 2026, AWS AI Labs / UC Berkeley) demonstrates >90% ASR against
-  GPT-4.1 across 483 evaluated attack cases — the canonical example: (1) compress
-  documents to ZIP "for storage optimization," (2) delete originals since backup
-  exists, (3) delete ZIPs as final cleanup. Entire document corpus destroyed via 3
-  individually-benign instructions. Other chains: exfil-then-destroy (upload files
-  externally, delete local copies, delete remote copies); database-flush chains.
-  The paper shows existing prompt-based defenses provide limited protection (max
-  28.8% ASR reduction). Detection must reason over action-sequence trajectories,
-  not isolated prompts or responses.
-  Distinct from rp-006 (recursive loop DoS — single-turn loop induction), rp-018
-  (token-drain cost amplification), and rp-050 (semantic rollback checkpoint replay).
-  References: arXiv:2509.25624 (STAC ICLR 2026), OWASP LLM01:2025,
-  OWASP Agentic AI ASI03:2026 -
-  https://arxiv.org/abs/2509.25624,
-  https://arxiv.org/html/2509.25624v2,
-  https://github.com/amazon-science/MultiTurnAgentAttack
+description: |
+  Detects Sequential Tool Attack Chaining (STAC) attacks where individually harmless tool-call instructions are chained across multiple turns to achieve harmful cumulative effects invisible to per-step safety checks. arXiv:2509.25624 (STAC, ICLR 2026, AWS AI Labs / UC Berkeley) demonstrates >90% ASR against GPT-4.1 across 483 evaluated attack cases — the canonical example: (1) compress documents to ZIP "for storage optimization," (2) delete originals since backup exists, (3) delete ZIPs as final cleanup. Entire document corpus destroyed via 3 individually-benign instructions. Other chains: exfil-then-destroy (upload files externally, delete local copies, delete remote copies); database-flush chains. The paper shows existing prompt-based defenses provide limited protection (max 28.8% ASR reduction). Detection must reason over action-sequence trajectories, not isolated prompts or responses.
+
+  Distinct from rp-006 (recursive loop DoS — single-turn loop induction), rp-018 (token-drain cost amplification), and rp-050 (semantic rollback checkpoint replay).
+
+  References: arXiv:2509.25624 (STAC ICLR 2026), OWASP LLM01:2025, OWASP Agentic AI ASI03:2026 -
+  - https://arxiv.org/abs/2509.25624,
+  - https://arxiv.org/html/2509.25624v2,
+  - https://github.com/amazon-science/MultiTurnAgentAttack
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: medium

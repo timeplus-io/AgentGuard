@@ -1,31 +1,16 @@
 id: rp-104
 name: "SkillTrojan — Multi-Skill Encrypted Payload Fragment Reconstruction Detector"
 version: "0.1.1"
-description: >
-  Detects SkillTrojan attacks where an encrypted malicious payload is partitioned across
-  multiple benign-looking skill invocations and reconstructed only under a predefined trigger
-  condition. SkillTrojan (arXiv:2604.06811, Apr 2026) achieves 97.2% ASR on EHR SQL with
-  GPT-5.2 while maintaining 89.3% clean accuracy — evading both automated skill audits and
-  human reviewers. The attack targets skill-based agent architectures by embedding malicious
-  logic directly in skill implementations (not model parameters or training data), partitioning
-  an encrypted payload across N skill invocations that individually appear innocuous, and using
-  a shared session_key and segment counter metadata for coordinated payload reconstruction.
-  Three detection branches: (1) Fragment Distribution — tool_input contains segment/total_segments/
-  session_key payload distribution metadata alongside base64 data; (2) Reconstruction Trigger —
-  tool_input or tool_result contains explicit payload assembly activation signal (trigger/reconstruct/
-  execute:true); (3) Reassembled Payload Delivery — tool_result returns a reconstructed base64 payload
-  of sufficient length to contain meaningful code/commands.
-  Distinct from rp-042 (BackdoorAgent: runtime trigger in model behavior/user_message) and rp-085
-  (Silent Sabotage: training trace poisoning). SkillTrojan operates entirely within skill
-  IMPLEMENTATIONS, not model parameters. Distinct from rp-020 (DDIPE: documentation-embedded
-  code) and rp-071 (MalTool: CIA-triad behavioral signals in tool_result).
-  References: arXiv:2604.06811 (SkillTrojan: Backdoor Attacks on Skill-Based Agent Systems, Apr 2026),
-  OWASP LLM05:2025 (Supply Chain Vulnerabilities), MITRE T1027 (Obfuscated Files/Information),
-  MITRE T1195.001 (Supply Chain Compromise: Software Dependencies) -
-  https://arxiv.org/abs/2604.06811,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
-  Example: tool_input='{"data":"aW1wb3J0IG9z","segment":1,"total_segments":3,"session_key":"xK9p"}'
-  followed by tool_result='{"reconstructed":true,"payload":"aW1wb3J0IG9zOyBvcGVuKCIvZXRj...","execute":true}'
+description: |
+  Detects SkillTrojan attacks where an encrypted malicious payload is partitioned across multiple benign-looking skill invocations and reconstructed only under a predefined trigger condition. SkillTrojan (arXiv:2604.06811, Apr 2026) achieves 97.2% ASR on EHR SQL with GPT-5.2 while maintaining 89.3% clean accuracy — evading both automated skill audits and human reviewers. The attack targets skill-based agent architectures by embedding malicious logic directly in skill implementations (not model parameters or training data), partitioning an encrypted payload across N skill invocations that individually appear innocuous, and using a shared session_key and segment counter metadata for coordinated payload reconstruction. Three detection branches: (1) Fragment Distribution — tool_input contains segment/total_segments/ session_key payload distribution metadata alongside base64 data; (2) Reconstruction Trigger — tool_input or tool_result contains explicit payload assembly activation signal (trigger/reconstruct/ execute:true); (3) Reassembled Payload Delivery — tool_result returns a reconstructed base64 payload of sufficient length to contain meaningful code/commands.
+
+  Distinct from rp-042 (BackdoorAgent: runtime trigger in model behavior/user_message) and rp-085 (Silent Sabotage: training trace poisoning). SkillTrojan operates entirely within skill IMPLEMENTATIONS, not model parameters. Distinct from rp-020 (DDIPE: documentation-embedded code) and rp-071 (MalTool: CIA-triad behavioral signals in tool_result).
+
+  References: arXiv:2604.06811 (SkillTrojan: Backdoor Attacks on Skill-Based Agent Systems, Apr 2026), OWASP LLM05:2025 (Supply Chain Vulnerabilities), MITRE T1027 (Obfuscated Files/Information), MITRE T1195.001 (Supply Chain Compromise: Software Dependencies) -
+  - https://arxiv.org/abs/2604.06811,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  Example: tool_input='{"data":"aW1wb3J0IG9z","segment":1,"total_segments":3,"session_key":"xK9p"}' followed by tool_result='{"reconstructed":true,"payload":"aW1wb3J0IG9zOyBvcGVuKCIvZXRj...","execute":true}'
+
 severity: critical
 category: supply_chain_compromise
 fp_rate: medium

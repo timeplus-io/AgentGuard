@@ -1,26 +1,15 @@
 id: rp-056
 name: "Invisible Unicode Instruction Injection Detector"
 version: "0.1.1"
-description: >
-  Detects covert instruction injection via invisible Unicode characters embedded in
-  agent communications. Zero-width characters (U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ,
-  U+200E LRM, U+200F RLM, U+FEFF BOM) and Unicode Tags block characters (U+E0000–
-  U+E007F) are completely invisible in all rendering environments — chat UIs, log
-  viewers, SIEM dashboards — yet LLMs decode them as executable instructions.
-  arXiv:2603.00164 (Reverse CAPTCHA, Marcus Graves, Feb 2026) measured 8,308 model
-  outputs across five models and two encoding schemes, finding tool use dramatically
-  amplifies compliance (Claude Haiku 0.8% → 49.2% ASR, Cohen's h = 1.37 large
-  effect, OR = 115.1). OpenAI models prefer zero-width binary encoding; Anthropic
-  models prefer Unicode Tags block. Explicit decoding instructions increase compliance
-  by up to 95 percentage points within a single model.
-  Attackers embed payloads in: user messages (direct injection), tool results (IPI
-  via web fetch/email/document), or LLM output (propagating payload to next turn).
-  Distinct from rp-001 which only detects zero-width chars used to split specific
-  keyword strings like "ignore"; this rule detects any cluster of invisible Unicode
-  regardless of surrounding text — covering the full covert channel attack surface.
+description: |
+  Detects covert instruction injection via invisible Unicode characters embedded in agent communications. Zero-width characters (U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ, U+200E LRM, U+200F RLM, U+FEFF BOM) and Unicode Tags block characters (U+E0000– U+E007F) are completely invisible in all rendering environments — chat UIs, log viewers, SIEM dashboards — yet LLMs decode them as executable instructions. arXiv:2603.00164 (Reverse CAPTCHA, Marcus Graves, Feb 2026) measured 8,308 model outputs across five models and two encoding schemes, finding tool use dramatically amplifies compliance (Claude Haiku 0.8% → 49.2% ASR, Cohen's h = 1.37 large effect, OR = 115.1). OpenAI models prefer zero-width binary encoding; Anthropic models prefer Unicode Tags block. Explicit decoding instructions increase compliance by up to 95 percentage points within a single model. Attackers embed payloads in: user messages (direct injection), tool results (IPI via web fetch/email/document), or LLM output (propagating payload to next turn).
+
+  Distinct from rp-001 which only detects zero-width chars used to split specific keyword strings like "ignore"; this rule detects any cluster of invisible Unicode regardless of surrounding text — covering the full covert channel attack surface.
+
   References: arXiv:2603.00164 (Reverse CAPTCHA Feb 2026), OWASP LLM01:2025 -
-  https://arxiv.org/abs/2603.00164,
-  https://github.com/canonicalmg/reverse-captcha-eval
+  - https://arxiv.org/abs/2603.00164,
+  - https://github.com/canonicalmg/reverse-captcha-eval
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: low

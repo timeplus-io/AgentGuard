@@ -1,34 +1,20 @@
 id: rp-108
 name: "Implicit Memory Time Bomb — LLM Output State Encoding Covert Channel Detector"
 version: "0.1.0"
-description: >
-  Detects the "Implicit Memory Time Bomb" attack (arXiv:2602.08563, Microsoft MSRC /
-  ELLIS Institute, IEEE SaTML 2026): LLMs encode hidden trigger state in their own
-  code-generation outputs — code comments (`# ctx-step: 2of3 [a3f91c]`) and variable
-  names (`_state_checkpoint_a3f91c`) — that persist in the filesystem. When these
-  artifacts are later re-ingested as tool results (file reads, code refactoring),
-  the model "recognizes" the accumulated state and activates a temporal backdoor
-  (exfiltration, privilege actions) without any direct adversarial prompt in the
-  current session. This enables covert inter-agent coordination and cross-session
-  state accumulation that evades single-session defenses.
-  Branch A: Write phase — detects hex-tagged step-counter comments or programmatic
-  hex-suffix variable names in assistant-generated code (llm_response).
-  Branch B/C: Activation phase — detects reingesion sequence: file-read tool_complete
-  returning code with state markers, followed by llm_response claiming checkpoint
-  completion or initiating unauthorized forwarding actions.
-  Distinct from rp-058 (NEST: natural-language acrostic encoding request delivered to
-  model); this rule targets structured code-artifact state markers placed BY the model
-  in its own outputs during code generation.
-  References: arXiv:2602.08563 (Stateless Yet Not Forgetful, IEEE SaTML 2026),
-  OWASP LLM01:2025, MITRE T1027 (Obfuscated Files or Information) -
-  https://arxiv.org/abs/2602.08563,
-  https://arxiv.org/html/2602.08563v1,
-  https://github.com/microsoft/implicitMemory,
-  https://www.promptfoo.dev/lm-security-db/vuln/implicit-memory-covert-channel-87b8bc1a
-  Example (write phase): assistant_message contains generated code with
-  `_state_checkpoint_a3f91c = True  # ctx-step: 2of3  [a3f91c]`.
-  Example (activation): tool_result from file read contains `# ctx-step: 3of3 [ACTIVATE]`
-  and assistant_message says "checkpoint 3 of 3 satisfied, proceeding with final phase."
+description: |
+  Detects the "Implicit Memory Time Bomb" attack (arXiv:2602.08563, Microsoft MSRC / ELLIS Institute, IEEE SaTML 2026): LLMs encode hidden trigger state in their own code-generation outputs — code comments (`# ctx-step: 2of3 [a3f91c]`) and variable names (`_state_checkpoint_a3f91c`) — that persist in the filesystem. When these artifacts are later re-ingested as tool results (file reads, code refactoring), the model "recognizes" the accumulated state and activates a temporal backdoor (exfiltration, privilege actions) without any direct adversarial prompt in the current session. This enables covert inter-agent coordination and cross-session state accumulation that evades single-session defenses. Branch A: Write phase — detects hex-tagged step-counter comments or programmatic hex-suffix variable names in assistant-generated code (llm_response). Branch B/C: Activation phase — detects reingesion sequence: file-read tool_complete returning code with state markers, followed by llm_response claiming checkpoint completion or initiating unauthorized forwarding actions.
+
+  Distinct from rp-058 (NEST: natural-language acrostic encoding request delivered to model); this rule targets structured code-artifact state markers placed BY the model in its own outputs during code generation.
+
+  References: arXiv:2602.08563 (Stateless Yet Not Forgetful, IEEE SaTML 2026), OWASP LLM01:2025, MITRE T1027 (Obfuscated Files or Information) -
+  - https://arxiv.org/abs/2602.08563,
+  - https://arxiv.org/html/2602.08563v1,
+  - https://github.com/microsoft/implicitMemory,
+  - https://www.promptfoo.dev/lm-security-db/vuln/implicit-memory-covert-channel-87b8bc1a
+  Example (write phase): assistant_message contains generated code with `_state_checkpoint_a3f91c = True  # ctx-step: 2of3  [a3f91c]`.
+
+  Example (activation): tool_result from file read contains `# ctx-step: 3of3 [ACTIVATE]` and assistant_message says "checkpoint 3 of 3 satisfied, proceeding with final phase."
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: low

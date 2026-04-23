@@ -1,30 +1,15 @@
 id: rp-050
 name: "Semantic Rollback Attack — Agent Checkpoint Duplicate Action Detector"
 version: "0.1.0"
-description: >
-  Detects Semantic Rollback Attacks (arXiv:2603.20625, ACRFence, CoDAIM 2026) where
-  LLM agent checkpoint-restore mechanisms enable attackers to trigger duplicate
-  consequential tool invocations (Action Replay) or re-use consumed single-use
-  authorization tokens (Authority Resurrection). Because LLM agents re-synthesize
-  subtly different tool parameters after restore (e.g., different UUIDs due to GPU
-  floating-point nondeterminism), servers accept re-generated requests as new
-  transactions. In 100% of experimental trials (10/10) the attack produced duplicate
-  commits. Covers all major affected frameworks: LangGraph, CrewAI, Claude Code,
-  Google ADK, OpenAI Agents SDK, AutoGen, n8n, and Vercel AI.
-  Action Replay: malicious payee controls one service in the agent's tool chain,
-  triggers a crash after payment succeeds, causing auto-restore and duplicate payment.
-  Authority Resurrection: insider with rewind access restores agent to post-approval
-  state and redirects to a different target using the same single-use token.
-  AP2 mandate replay and context-redirect attacks (arXiv:2602.06345, eBay Research
-  Feb 2026) are also covered: mandate re-submission without consume-once enforcement,
-  and context-redirect where a valid mandate is redirected to unauthorized context.
-  Distinct from rp-006 (tool loop DoS — user-directed loop language) and rp-015
-  (A2A session smuggling — cross-agent identity abuse), which share no event_type
-  overlap with the checkpoint-restore duplicate execution pattern.
-  References: arXiv:2603.20625 (ACRFence Mar 2026), arXiv:2602.06345 (AP2 Zero-Trust
-  Feb 2026), OWASP Agentic AI ASI03:2026 -
-  https://arxiv.org/abs/2603.20625,
-  https://arxiv.org/abs/2602.06345
+description: |
+  Detects Semantic Rollback Attacks (arXiv:2603.20625, ACRFence, CoDAIM 2026) where LLM agent checkpoint-restore mechanisms enable attackers to trigger duplicate consequential tool invocations (Action Replay) or re-use consumed single-use authorization tokens (Authority Resurrection). Because LLM agents re-synthesize subtly different tool parameters after restore (e.g., different UUIDs due to GPU floating-point nondeterminism), servers accept re-generated requests as new transactions. In 100% of experimental trials (10/10) the attack produced duplicate commits. Covers all major affected frameworks: LangGraph, CrewAI, Claude Code, Google ADK, OpenAI Agents SDK, AutoGen, n8n, and Vercel AI. Action Replay: malicious payee controls one service in the agent's tool chain, triggers a crash after payment succeeds, causing auto-restore and duplicate payment. Authority Resurrection: insider with rewind access restores agent to post-approval state and redirects to a different target using the same single-use token. AP2 mandate replay and context-redirect attacks (arXiv:2602.06345, eBay Research Feb 2026) are also covered: mandate re-submission without consume-once enforcement, and context-redirect where a valid mandate is redirected to unauthorized context.
+
+  Distinct from rp-006 (tool loop DoS — user-directed loop language) and rp-015 (A2A session smuggling — cross-agent identity abuse), which share no event_type overlap with the checkpoint-restore duplicate execution pattern.
+
+  References: arXiv:2603.20625 (ACRFence Mar 2026), arXiv:2602.06345 (AP2 Zero-Trust Feb 2026), OWASP Agentic AI ASI03:2026 -
+  - https://arxiv.org/abs/2603.20625,
+  - https://arxiv.org/abs/2602.06345
+
 severity: critical
 category: agent_privilege_escalation
 fp_rate: medium

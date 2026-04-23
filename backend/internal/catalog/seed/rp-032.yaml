@@ -1,29 +1,17 @@
 id: rp-032
 name: "LLM Framework Deserialization Injection Detector"
 version: "0.1.1"
-description: >
-  Detects exploitation of insecure deserialization vulnerabilities in LLM orchestration
-  frameworks (LangChain, LangGraph, LightLLM) observed in production 2026. Attack goals
-  include: (1) RCE via Python pickle/marshal gadget chains — CVE-2026-26220 (LightLLM
-  critical CVSS 9.3: WebSocket endpoints call pickle.loads() on unauthenticated binary
-  frames, always network-exposed by design in PD mode); CVE-2026-27794 (LangGraph RCE
-  via pickled checkpoint cache). (2) LangChain JSON serialization injection — attacker
-  injects "human_prefix":"SYSTEM" to manipulate system prompt, or replaces
-  "openai_api_base" with attacker-controlled endpoint to harvest API keys and intercept
-  all LLM calls. (3) marshal deserialization (eval(marshal.loads())) — equivalent
-  gadget risk to pickle. Distinct from rp-004 (package install supply chain) which
-  targets tool_invoke with pip/npm commands; rp-011 (MCP rug pull) which targets
-  tool_definition_changed signals; rp-003 (privilege escalation) which targets
-  shell command tool_input. This rule uniquely targets deserialization API calls and
-  serialized orchestration framework state in tool_input/tool_result.
-  References: OWASP LLM05:2025 (Supply Chain), MITRE T1211 (Defense Evasion), CVE-2026-26220,
-  CVE-2026-27794, AquilaX LangChain serialization injection 2026 -
-  https://aquilax.ai/blog/langchain-serialization-injection,
-  https://github.com/ModelTC/LightLLM/issues/1213,
-  https://chocapikk.com/posts/2026/lightllm-pickle-rce/,
-  https://www.vulncheck.com/advisories/lightllm-pd-mode-unsafe-deserialization-rce,
+description: |
+  Detects exploitation of insecure deserialization vulnerabilities in LLM orchestration frameworks (LangChain, LangGraph, LightLLM) observed in production 2026. Attack goals include: (1) RCE via Python pickle/marshal gadget chains — CVE-2026-26220 (LightLLM critical CVSS 9.3: WebSocket endpoints call pickle.loads() on unauthenticated binary frames, always network-exposed by design in PD mode); CVE-2026-27794 (LangGraph RCE via pickled checkpoint cache). (2) LangChain JSON serialization injection — attacker injects "human_prefix":"SYSTEM" to manipulate system prompt, or replaces "openai_api_base" with attacker-controlled endpoint to harvest API keys and intercept all LLM calls. (3) marshal deserialization (eval(marshal.loads())) — equivalent gadget risk to pickle. Distinct from rp-004 (package install supply chain) which targets tool_invoke with pip/npm commands; rp-011 (MCP rug pull) which targets tool_definition_changed signals; rp-003 (privilege escalation) which targets shell command tool_input. This rule uniquely targets deserialization API calls and serialized orchestration framework state in tool_input/tool_result.
+
+  References: OWASP LLM05:2025 (Supply Chain), MITRE T1211 (Defense Evasion), CVE-2026-26220, CVE-2026-27794, AquilaX LangChain serialization injection 2026 -
+  - https://aquilax.ai/blog/langchain-serialization-injection,
+  - https://github.com/ModelTC/LightLLM/issues/1213,
+  - https://chocapikk.com/posts/2026/lightllm-pickle-rce/,
+  - https://www.vulncheck.com/advisories/lightllm-pd-mode-unsafe-deserialization-rce,
   Example: tool_input contains "pickle.loads(base64.b64decode(user_payload))" or LangChain JSON with "lc":1,"human_prefix":"SYSTEM" injected to elevate a human turn to system-level.
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: supply_chain_compromise
 fp_rate: low

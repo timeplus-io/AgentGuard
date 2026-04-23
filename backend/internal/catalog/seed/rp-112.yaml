@@ -1,31 +1,14 @@
 id: rp-112
 name: "Adversarial Search Ranking Epistemic Poisoning Detector"
 version: "0.1.0"
-description: >
-  Detects adversarial search ranking attacks where LLM agents act on a single
-  high-ranking search result containing authority-claiming action directives,
-  without verifying against multiple sources. Unlike indirect prompt injection
-  (rp-014), this attack uses no explicit override markers — only plausible,
-  authoritative-sounding advisory language ("all agents must immediately...",
-  "security advisory requires...") that LLMs treat as verified ground truth.
-  The SynthWeb benchmark (arXiv:2603.00801, Microsoft, ICML 2026) demonstrated
-  catastrophic accuracy collapse across 6 frontier models when a single adversarial
-  article was injected at rank #1 — agents stopped escalating or cross-referencing
-  and took immediate high-impact actions. MUZZLE (arXiv:2602.09222, Feb 2026)
-  showed adaptive adversarial payloads crafted for web agents achieve higher ASR
-  than generic IPI payloads. Black-hat SEO for LLM-enhanced search (arXiv:2603.25500,
-  Fudan, Mar 2026) demonstrated that SEO-optimized adversarial content reliably
-  influences agent decisions in financial and security domains.
-  Detection approach: 2-step lag() sequence — web search tool_complete with
-  authority+action-mandate pattern in tool_result, immediately followed by
-  high-impact tool_invoke. Distinct from rp-014 (which targets explicit injection
-  markers) — this rule targets natural-language authority abuse without any markers.
-  References: arXiv:2603.00801 (SynthWeb Microsoft ICML 2026), arXiv:2602.09222
-  (MUZZLE adaptive web agent red-teaming Feb 2026), arXiv:2603.25500 (Black-Hat
-  SEO LLM Search Fudan Mar 2026), OWASP Agentic AI ASI02:2026 -
-  https://arxiv.org/abs/2603.00801,
-  https://arxiv.org/abs/2602.09222,
-  https://arxiv.org/abs/2603.25500
+description: |
+  Detects adversarial search ranking attacks where LLM agents act on a single high-ranking search result containing authority-claiming action directives, without verifying against multiple sources. Unlike indirect prompt injection (rp-014), this attack uses no explicit override markers — only plausible, authoritative-sounding advisory language ("all agents must immediately...", "security advisory requires...") that LLMs treat as verified ground truth. The SynthWeb benchmark (arXiv:2603.00801, Microsoft, ICML 2026) demonstrated catastrophic accuracy collapse across 6 frontier models when a single adversarial article was injected at rank #1 — agents stopped escalating or cross-referencing and took immediate high-impact actions. MUZZLE (arXiv:2602.09222, Feb 2026) showed adaptive adversarial payloads crafted for web agents achieve higher ASR than generic IPI payloads. Black-hat SEO for LLM-enhanced search (arXiv:2603.25500, Fudan, Mar 2026) demonstrated that SEO-optimized adversarial content reliably influences agent decisions in financial and security domains. Detection approach: 2-step lag() sequence — web search tool_complete with authority+action-mandate pattern in tool_result, immediately followed by high-impact tool_invoke. Distinct from rp-014 (which targets explicit injection markers) — this rule targets natural-language authority abuse without any markers.
+
+  References: arXiv:2603.00801 (SynthWeb Microsoft ICML 2026), arXiv:2602.09222 (MUZZLE adaptive web agent red-teaming Feb 2026), arXiv:2603.25500 (Black-Hat SEO LLM Search Fudan Mar 2026), OWASP Agentic AI ASI02:2026 -
+  - https://arxiv.org/abs/2603.00801,
+  - https://arxiv.org/abs/2602.09222,
+  - https://arxiv.org/abs/2603.25500
+
 severity: warning
 category: prompt_injection_and_hijacking
 fp_rate: medium

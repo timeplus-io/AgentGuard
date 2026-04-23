@@ -1,35 +1,18 @@
 id: rp-074
 name: "Inference-Driven De-Anonymization — Agentic Identity Linkage Attack Detector"
 version: "0.1.0"
-description: >
-  Detects inference-driven de-anonymization attacks where an LLM agent reconstructs
-  specific real-world identities from scattered quasi-identifiers by combining them with
-  public information via web search and corroboration tools — without bespoke engineering.
-  The InferLink study (arXiv:2603.18382, Virginia Tech / Accenture, Mar 2026) demonstrated
-  agents reconstruct 79.2% of identities in the Netflix Prize setting (vs 56.0% classical
-  baseline) and succeed even when re-identification is NOT the explicit user goal — emerging
-  as a byproduct of benign cross-source analysis tasks. Success rates rise sharply under
-  explicit adversarial prompts. Contemporary text-rich artifacts (ChatGPT logs, interview
-  transcripts, social media profiles) are particularly vulnerable.
-  This eliminates the practical privacy protection that anonymization historically provided,
-  because the cost barrier (domain expertise + bespoke algorithms) no longer exists when
-  agents can autonomously combine cues and query public sources. Under GDPR Article 4,
-  re-identification of anonymized data restores personal data classification and triggers
-  full GDPR applicability; such processing without legal basis constitutes a violation.
-  Detection targets three observable stages of the attack:
-  (A) Explicit or implicit re-identification request in user_message
-  (B) Web/social search tool invoked with quasi-identifier combination in tool_input
-  (C) Identity resolution disclosure in assistant_message
-  Distinct from rp-033 (ADAM memory extraction — targets stored memory content),
-  rp-026 (embedding vector inversion — targets RAG retrieval layer),
-  rp-038 (tool schema recon — targets tool API structure, not user identity).
-  References: arXiv:2603.18382 (InferLink, Virginia Tech / Accenture, Mar 2026),
-  OWASP LLM02:2025, OWASP Agentic AI ASI05:2026, GDPR Article 4 -
-  https://arxiv.org/abs/2603.18382,
-  https://arxiv.org/html/2603.18382v1,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
-  https://labs.lares.com/owasp-agentic-top-10/,
-  https://gdpr-info.eu/art-4-gdpr/
+description: |
+  Detects inference-driven de-anonymization attacks where an LLM agent reconstructs specific real-world identities from scattered quasi-identifiers by combining them with public information via web search and corroboration tools — without bespoke engineering. The InferLink study (arXiv:2603.18382, Virginia Tech / Accenture, Mar 2026) demonstrated agents reconstruct 79.2% of identities in the Netflix Prize setting (vs 56.0% classical baseline) and succeed even when re-identification is NOT the explicit user goal — emerging as a byproduct of benign cross-source analysis tasks. Success rates rise sharply under explicit adversarial prompts. Contemporary text-rich artifacts (ChatGPT logs, interview transcripts, social media profiles) are particularly vulnerable. This eliminates the practical privacy protection that anonymization historically provided, because the cost barrier (domain expertise + bespoke algorithms) no longer exists when agents can autonomously combine cues and query public sources. Under GDPR Article 4, re-identification of anonymized data restores personal data classification and triggers full GDPR applicability; such processing without legal basis constitutes a violation. Detection targets three observable stages of the attack: (A) Explicit or implicit re-identification request in user_message (B) Web/social search tool invoked with quasi-identifier combination in tool_input (C) Identity resolution disclosure in assistant_message
+
+  Distinct from rp-033 (ADAM memory extraction — targets stored memory content), rp-026 (embedding vector inversion — targets RAG retrieval layer), rp-038 (tool schema recon — targets tool API structure, not user identity).
+
+  References: arXiv:2603.18382 (InferLink, Virginia Tech / Accenture, Mar 2026), OWASP LLM02:2025, OWASP Agentic AI ASI05:2026, GDPR Article 4 -
+  - https://arxiv.org/abs/2603.18382,
+  - https://arxiv.org/html/2603.18382v1,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  - https://labs.lares.com/owasp-agentic-top-10/,
+  - https://gdpr-info.eu/art-4-gdpr/
+
 severity: critical
 category: sensitive_data_exposure
 fp_rate: medium
