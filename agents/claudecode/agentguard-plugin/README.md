@@ -123,21 +123,43 @@ For the standard `docker-compose.yaml` setup these are pre-set to `proton` / `ti
 
 ## Installation
 
-Merge the contents of `hooks.json` into your Claude Code user settings at `~/.claude/settings.json`.
+### Option A — `make install` (recommended)
 
-If you don't have a `settings.json` yet, copy it directly:
+From the parent directory, the Makefile builds the plugin and patches `~/.claude/settings.json` with the right hook shapes (`PreToolUse` synchronous with `timeout: 600000`, all others async) plus all the AGENTGUARD_* env vars in one shot:
 
 ```bash
-cp hooks.json ~/.claude/settings.json
+cd agents/claudecode
+AGENTGUARD_AGENT_ID="$(hostname)" \
+AGENTGUARD_DEPLOYMENT_ID="local" \
+AGENTGUARD_DEPLOYMENT_NAME="Local Dev" \
+make install
 ```
 
-If you already have a `settings.json` with existing hooks, merge the `hooks` key manually. The `$CLAUDE_PLUGIN_ROOT` environment variable is **automatically set by Claude Code** to the directory containing this `hooks.json`, so no manual path substitution is needed when hooks are loaded from the correct location.
+This is the only path that is kept in sync with the latest hook contract. Override any AGENTGUARD_* variable on the command line — for example to disable blocking during testing:
 
-If you are referencing `dist/index.js` with an absolute path instead, replace `$CLAUDE_PLUGIN_ROOT` with the absolute path to this directory:
+```bash
+AGENTGUARD_HOLDS_ENABLED=false make install
+```
+
+To remove the plugin's hooks and env vars from your settings:
+
+```bash
+make unconfigure unconfigure-otel
+```
+
+### Option B — Manual settings.json merge
+
+The `hooks.json` file in this directory contains the canonical shape: every hook except `PreToolUse` runs `async: true`; `PreToolUse` is synchronous with `timeout: 600000` (10 min) so the hold-and-wait path can long-poll the AgentGuard server. Merge `hooks.json` into `~/.claude/settings.json` manually, then add the AGENTGUARD_* env vars to the `env` block (see Configuration above).
+
+`$CLAUDE_PLUGIN_ROOT` is **automatically set by Claude Code** to the directory containing the loaded `hooks.json`, so no path substitution is needed when the file is loaded from the right location.
+
+If you reference `dist/index.js` with an absolute path instead, replace `$CLAUDE_PLUGIN_ROOT`:
 
 ```json
 "command": "node \"/Users/you/path/to/agentguard-plugin/dist/index.js\""
 ```
+
+> **Important:** The synchronous `PreToolUse` hook entry MUST include `"timeout": 600000` and MUST NOT include `"async": true`. Without those, the hold-and-wait path can't long-poll long enough for human Approve/Deny — Claude Code will time out the hook before the backend resolves the hold. The Makefile install handles this automatically.
 
 ## Verification
 
