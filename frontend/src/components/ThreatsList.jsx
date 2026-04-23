@@ -41,6 +41,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
   const [threats, setThreats] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+  const [actionError, setActionError] = useState(null)
   const [severityFilter, setSeverityFilter] = useState('All')
   const [statusFilter, setStatusFilter] = useState('All')
   const [agentTypeMap, setAgentTypeMap] = useState({})
@@ -53,7 +54,11 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
         for (const a of (data.agents || [])) map[a.agent_id] = a.agent_type
         setAgentTypeMap(map)
       })
-      .catch(() => {})
+      .catch(err => {
+        // Decorative — only affects the agent-type icon column. Log so the
+        // failure is visible in DevTools rather than completely silent.
+        console.warn('ThreatsList: listAgents failed (icons will be missing):', err)
+      })
   }, [])
 
   useEffect(() => {
@@ -81,6 +86,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
   })
 
   async function handleAcknowledge(threat) {
+    setActionError(null)
     setThreats(prev => prev.map(t =>
       t.threat_id === threat.threat_id ? { ...t, status: 'acknowledged' } : t
     ))
@@ -91,14 +97,17 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
         session_id: threat.session_id,
         rule_id: threat.rule_id,
       })
-    } catch {
+    } catch (err) {
+      console.error('ThreatsList: acknowledge failed:', err)
       setThreats(prev => prev.map(t =>
         t.threat_id === threat.threat_id ? { ...t, status: threat.status } : t
       ))
+      setActionError(`Acknowledge failed: ${err?.message ?? String(err)}`)
     }
   }
 
   async function handleClear(threat) {
+    setActionError(null)
     setThreats(prev => prev.map(t =>
       t.threat_id === threat.threat_id ? { ...t, status: 'cleared' } : t
     ))
@@ -109,10 +118,12 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
         session_id: threat.session_id,
         rule_id: threat.rule_id,
       })
-    } catch {
+    } catch (err) {
+      console.error('ThreatsList: clear failed:', err)
       setThreats(prev => prev.map(t =>
         t.threat_id === threat.threat_id ? { ...t, status: threat.status } : t
       ))
+      setActionError(`Clear failed: ${err?.message ?? String(err)}`)
     }
   }
 
@@ -167,6 +178,16 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
             </div>
           </div>
         </section>
+      )}
+
+      {actionError && (
+        <div className="mb-3 flex items-center gap-2 px-4 py-2 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs">
+          <span className="material-symbols-outlined text-base shrink-0">error</span>
+          <span className="flex-1">{actionError}</span>
+          <button onClick={() => setActionError(null)} className="text-[#ffb4ab] hover:text-white">
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
+        </div>
       )}
 
       <section className="bg-[#211e29] rounded-sm overflow-hidden mb-8">

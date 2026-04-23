@@ -19,6 +19,31 @@ import (
 
 const argsSummaryMaxBytes = 2048
 
+// holdsLatestSubquery folds agentguard_holds down to one row per hold_id with
+// the latest field values. We compute this inline at query time (matching the
+// agentguard_rules pattern) instead of via a stateful MV — Proton's streaming
+// MVs with GROUP BY emit one snapshot per source row, so a `WHERE status='X'`
+// against an MV can match stale snapshots from before a status change.
+const holdsLatestSubquery = `(
+  SELECT hold_id,
+         arg_max(deployment_id,  updated_at) AS deployment_id,
+         arg_max(agent_id,       updated_at) AS agent_id,
+         arg_max(session_id,     updated_at) AS session_id,
+         arg_max(run_id,         updated_at) AS run_id,
+         arg_max(tool_name,      updated_at) AS tool_name,
+         arg_max(rule_id,        updated_at) AS rule_id,
+         arg_max(severity,       updated_at) AS severity,
+         arg_max(args_summary,   updated_at) AS args_summary,
+         arg_max(message,        updated_at) AS message,
+         arg_max(created_at,     updated_at) AS created_at,
+         arg_max(status,         updated_at) AS status,
+         arg_max(decided_by,     updated_at) AS decided_by,
+         arg_max(decided_at,     updated_at) AS decided_at,
+         arg_max(decided_reason, updated_at) AS decided_reason
+  FROM table(agentguard_holds)
+  GROUP BY hold_id
+)`
+
 // failPolicyToDecision maps the config FailPolicy ("deny"|"allow") to the
 // HoldResponse Decision contract ("block"|"allow"). Returns "block" by default
 // for any unknown value (fail-closed).
@@ -221,6 +246,10 @@ VALUES
 
 // queryPreExistingOpenThreats returns open threats for this session and
 // a rule_id → block_policy map for those threats' rules.
+//
+// Rules where the latest state is enabled=false or deleted=true are excluded:
+// the user has turned the rule off, and stale security_events from before the
+// disable must not block new tool calls.
 func queryPreExistingOpenThreats(cfg *config.Config, req *models.HoldRequest) ([]models.Threat, map[string]string, error) {
 	sql := fmt.Sprintf(`
 SELECT t.rule_id, t.rule_name, t.severity, 'open' AS status, r.block_policy
@@ -232,11 +261,15 @@ FROM (
   WHERE deployment_id = '%s' AND agent_id = '%s' AND session_id = '%s'
   GROUP BY rule_id
 ) AS t
-LEFT JOIN (
-  SELECT rule_id, arg_max(block_policy, updated_at) AS block_policy
+INNER JOIN (
+  SELECT rule_id,
+         arg_max(block_policy, updated_at) AS block_policy,
+         arg_max(enabled,      updated_at) AS enabled,
+         arg_max(deleted,      updated_at) AS deleted
   FROM table(agentguard_rules)
   GROUP BY rule_id
-) AS r ON t.rule_id = r.rule_id`,
+) AS r ON t.rule_id = r.rule_id
+WHERE r.enabled AND NOT r.deleted`,
 		escapeSQLStr(req.DeploymentID), escapeSQLStr(req.AgentID), escapeSQLStr(req.SessionID))
 
 	rows, err := tp.Query(&cfg.Timeplus, sql)
@@ -277,12 +310,16 @@ FROM (
   WHERE deployment_id = '%s' AND agent_id = '%s' AND session_id = '%s'
     AND detected_at >= '%s'
 ) AS s
-LEFT JOIN (
-  SELECT rule_id, arg_max(block_policy, updated_at) AS block_policy
+INNER JOIN (
+  SELECT rule_id,
+         arg_max(block_policy, updated_at) AS block_policy,
+         arg_max(enabled,      updated_at) AS enabled,
+         arg_max(deleted,      updated_at) AS deleted
   FROM table(agentguard_rules)
   GROUP BY rule_id
 ) AS r ON s.rule_id = r.rule_id
-WHERE r.block_policy IN ('hold', 'auto_block')`,
+WHERE r.enabled AND NOT r.deleted
+  AND r.block_policy IN ('hold', 'auto_block')`,
 		escapeSQLStr(req.DeploymentID), escapeSQLStr(req.AgentID), escapeSQLStr(req.SessionID),
 		req.EventTime.UTC().Format("2006-01-02 15:04:05.999"))
 
@@ -344,7 +381,7 @@ SELECT
   '%s' AS decided_at,
   '%s' AS decided_reason,
   '%s' AS updated_at
-FROM table(mv_holds_current)
+FROM ` + holdsLatestSubquery + `
 WHERE hold_id = '%s'
 LIMIT 1`,
 		status, escapeSQLStr(decidedBy), now, escapeSQLStr(decidedReason), now,
@@ -426,7 +463,7 @@ func ListHolds(cfg *config.Config) gin.HandlerFunc {
 SELECT hold_id, deployment_id, agent_id, session_id, run_id, tool_name,
        rule_id, severity, args_summary, message, created_at, status,
        decided_by, decided_at, decided_reason
-FROM table(mv_holds_current)
+FROM ` + holdsLatestSubquery + `
 WHERE status = '%s'
 ORDER BY created_at DESC
 LIMIT %d`, escapeSQLStr(status), limit)
@@ -501,7 +538,7 @@ func AbandonSession(cfg *config.Config, registry *holdregistry.Registry) gin.Han
 		sessionID := c.Param("session_id")
 
 		sql := fmt.Sprintf(`
-SELECT hold_id FROM table(mv_holds_current)
+SELECT hold_id FROM ` + holdsLatestSubquery + `
 WHERE session_id = '%s' AND status = 'pending'`, escapeSQLStr(sessionID))
 		rows, err := tp.Query(&cfg.Timeplus, sql)
 		if err != nil {
@@ -537,7 +574,7 @@ func DrainHolds(cfg *config.Config, registry *holdregistry.Registry) gin.Handler
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
 			return
 		}
-		sql := `SELECT hold_id FROM table(mv_holds_current) WHERE status = 'pending'`
+		sql := `SELECT hold_id FROM ` + holdsLatestSubquery + ` WHERE status = 'pending'`
 		rows, err := tp.Query(&cfg.Timeplus, sql)
 		if err != nil {
 			log.Printf("holds: DrainHolds query: %v", err)
@@ -566,7 +603,7 @@ func getHoldByID(cfg *config.Config, holdID string) (*models.Hold, error) {
 SELECT hold_id, deployment_id, agent_id, session_id, run_id, tool_name,
        rule_id, severity, args_summary, message, created_at, status,
        decided_by, decided_at, decided_reason
-FROM table(mv_holds_current)
+FROM ` + holdsLatestSubquery + `
 WHERE hold_id = '%s'
 LIMIT 1`, escapeSQLStr(holdID))
 	rows, err := tp.Query(&cfg.Timeplus, sql)

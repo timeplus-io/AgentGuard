@@ -87,7 +87,7 @@ Key components:
 | Hold handler | `backend/internal/handlers/holds.go` | Ingests event, queries threats, polls MV results, builds `DecisionInput`, long-polls for human decision |
 | Pure decision function | `backend/internal/handlers/holds_decision.go` | `Decide(DecisionInput) DecisionOutput` — strictly: `hold > auto_block > log_only` |
 | In-memory hold registry | `backend/internal/holdregistry/registry.go` | Maps `hold_id → buffered chan Decision`; lost on restart, but timeout + fail-policy take over |
-| Persistence | `backend/internal/timeplus/holds_init.go` | `agentguard_holds` append-only stream + `mv_holds_current` (latest state per `hold_id` via `arg_max(... updated_at)`) |
+| Persistence | `backend/internal/timeplus/holds_init.go` | `agentguard_holds` append-only stream. Latest state per `hold_id` is computed **inline at query time** via `arg_max(field, updated_at) GROUP BY hold_id` (see `holdsLatestSubquery` in `handlers/holds.go`). No stateful materialized view. |
 | Cleanup | `AbandonStalePendingHolds` (called from `auth.MigrateHoldsSchema` on startup) | Marks orphaned `pending` rows as `abandoned` |
 
 ---
@@ -231,25 +231,27 @@ The MV-wait window is bounded (default 500 ms); some rules — e.g. cumulative o
 
 Every state change appends a new row. There is no `UPDATE`. This matches the rest of AgentGuard's mutation-log style (`agentguard_rules`, `agentguard_threats`).
 
-### `mv_holds_current` — folded latest state
+### Inline latest-state subquery
+
+There is no stateful materialized view for holds. Latest-state-per-`hold_id` is computed inline at query time, matching the pattern used by `agentguard_rules` and other mutation logs:
 
 ```sql
-CREATE MATERIALIZED VIEW mv_holds_current AS
-SELECT
-  hold_id,
-  arg_max(deployment_id, updated_at) AS deployment_id,
-  arg_max(agent_id,      updated_at) AS agent_id,
-  ...
-  arg_max(status,        updated_at) AS status,
-  arg_max(decided_by,    updated_at) AS decided_by,
-  ...
-FROM agentguard_holds
+SELECT hold_id,
+       arg_max(deployment_id,  updated_at) AS deployment_id,
+       arg_max(agent_id,       updated_at) AS agent_id,
+       ...
+       arg_max(status,         updated_at) AS status,
+       arg_max(decided_by,     updated_at) AS decided_by,
+       ...
+FROM table(agentguard_holds)
 GROUP BY hold_id
 ```
 
-Every read path (`ListHolds`, `GetHold`, `AbandonSession`, `DrainHolds`) queries `mv_holds_current`, never the raw stream — so reads always see the most recent state regardless of how many rows have been appended for a given `hold_id`.
+This subquery is exported as the `holdsLatestSubquery` constant in `handlers/holds.go` and embedded into every read path (`ListHolds`, `GetHold`, `AbandonSession`, `DrainHolds`, plus the pending-hold lookup in `GetThreat`).
 
-The full timeline (for `GET /api/holds/:id`) does query the raw `agentguard_holds` stream with `ORDER BY updated_at ASC` to render the audit trail.
+> **Why no MV:** A streaming `MATERIALIZED VIEW … GROUP BY` in Proton emits one snapshot row per source-stream input — so the MV's bounded snapshot contains *all historical aggregates*, not "one row per key." A naive `WHERE status='pending'` against such an MV picks up stale snapshots from before a status change. Computing arg_max inline at query time is correct by construction and trivially fast for a low-volume stream like `agentguard_holds` (1 row per create + 1 per decision).
+
+The full timeline (for `GET /api/holds/:id`) queries the raw `agentguard_holds` stream with `ORDER BY updated_at ASC` to render the audit trail.
 
 ---
 
@@ -297,7 +299,7 @@ The two are conceptually independent and can be set differently. In practice, de
 | Backend crashes mid-hold | In-memory channel lost. On restart, `AbandonStalePendingHolds` writes `status='abandoned'` for any `pending` rows → UI no longer shows them. The plugin's HTTP connection drops and AbortController fires → plugin → `holdFailPolicy` |
 | Session ends with pending holds | Plugin's `SessionEnd` hook fire-and-forgets `POST /api/holds/_abandon-session/:session_id`; backend writes `status='abandoned'` for those holds and signals waiting goroutines so the agent (if still listening) gets a quick decision via fail-policy |
 | Operator wants to clear all pending holds | `POST /api/holds/_drain` (authenticated): writes `status='abandoned'` for every pending hold and signals all waiting goroutines |
-| Same hold decided twice (race) | `DecideHold` checks `mv_holds_current` first; if status is non-`pending` it returns `{"already_decided_as": ...}` without writing a new row. Channel buffer (size 1) drops second `Signal` |
+| Same hold decided twice (race) | `DecideHold` checks the latest-state subquery first; if status is non-`pending` it returns `{"already_decided_as": ...}` without writing a new row. Channel buffer (size 1) drops second `Signal` |
 
 ---
 
@@ -344,16 +346,15 @@ Most observability deployments are not willing to pay this on every tool call. T
 
 ### Restart safety
 
-Pending holds are persisted (`agentguard_holds` is a Timeplus stream backed by disk). The in-memory `holdRegistry` is **not** persisted — on restart, all in-flight long-polls are dead. Two mechanisms cover this:
+Pending holds are persisted (`agentguard_holds` is a Timeplus stream backed by disk). The in-memory `holdRegistry` is **not** persisted — on restart, all in-flight long-polls are dead. The plugin's HTTP connection drops when the backend restarts; `AbortController` fires and `holdFailPolicy` decides.
 
-1. The plugin's HTTP connection drops when the backend restarts; `AbortController` fires and `holdFailPolicy` decides.
-2. On startup, `AbandonStalePendingHolds` writes `status='abandoned'` for any orphaned `pending` rows so the UI doesn't show stale entries.
+> **Known limitation (no migrations before 1.0):** rows that were `pending` at the moment of restart remain `pending` in `agentguard_holds` because there is no startup cleanup. The frontend will re-display them as pending toasts after reconnect even though the originating agent has long since given up. The fix is a clean reprovision (drop the `agentguard_holds` stream) — there is intentionally no automatic recovery path. A future release may filter pending holds by `created_at >= now() - timeout_seconds` on the read path.
 
 A new hold for a re-tried tool call after restart starts fresh, gets a new `hold_id`, and goes through the normal flow.
 
-### Schema migration
+### Schema lifecycle
 
-The holds streams (`agentguard_holds`, `mv_holds_current`) and the `agentguard_rules.block_policy` column are not part of the original setup-wizard provisioning. They are created lazily by `timeplus.MigrateHoldsSchema`, called from the auth-init path on first authenticated request. This avoids breaking pre-holds installs and keeps the wizard idempotent.
+The `agentguard_holds` stream and the `agentguard_rules.block_policy` column are part of the regular setup-wizard provisioning (`tp.Init()`). There is no in-place schema migration — schema changes between releases require a clean reprovision. This is a deliberate pre-1.0 policy: drop your data volume / `config.yaml` and re-run setup when upgrading to a release with schema changes.
 
 ---
 

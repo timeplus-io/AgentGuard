@@ -104,9 +104,6 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	if err := seedPricingData(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning seeding pricing: %v", err)
 	}
-	if err := migrateSkillsStreamIfNeeded(ctx, conn, emit); err != nil {
-		log.Printf("timeplus init: warning migrating skills stream: %v", err)
-	}
 	if err := createSkillsStream(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating skills stream: %v", err)
 	}
@@ -143,14 +140,9 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 		log.Printf("timeplus init: warning syncing MVs: %v", err)
 	}
 
-	// Setup holds storage (stream + MV + ALTER rules.block_policy).
+	// Setup holds storage (stream + MV).
 	if err := SetupHoldsStorage(ctx, conn, emit); err != nil {
 		log.Printf("timeplus: holds storage setup failed: %v (continuing — /api/holds will return 503)", err)
-	}
-
-	// Abandon any stale pending holds left over from a previous process.
-	if err := AbandonStalePendingHolds(ctx, conn, emit); err != nil {
-		log.Printf("timeplus: abandon stale pending holds: %v (continuing)", err)
 	}
 
 	emit("ok", "  ✓ All resources provisioned")
@@ -726,6 +718,7 @@ CREATE STREAM agentguard_rules
   required_telemetry string,
   fp_rate            low_cardinality(string),
   hook_sources       string,
+  block_policy       low_cardinality(string) DEFAULT 'log_only',
   updated_at         datetime64(3)
 )`
 
@@ -1438,46 +1431,6 @@ func createSkillsMVs(ctx context.Context, conn proton.Conn, emit func(string, st
 			return err
 		}
 	}
-	return nil
-}
-
-// migrateSkillsStreamIfNeeded drops the old agentguard_skills stream and its
-// four source MVs when the stream exists but lacks the skill_namespace column.
-// The normal createSkillsStream / createSkillsMVs calls that follow will
-// recreate them with the enriched schema and backfill via earliest_ts().
-func migrateSkillsStreamIfNeeded(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
-	exists, err := streamExists(ctx, conn, "agentguard_skills")
-	if err != nil {
-		return fmt.Errorf("checking agentguard_skills existence: %w", err)
-	}
-	if !exists {
-		return nil // Fresh install — nothing to migrate.
-	}
-	q := "SELECT count() FROM system.columns WHERE table = 'agentguard_skills' AND name = 'skill_namespace' AND database = current_database()"
-	row := conn.QueryRow(ctx, q)
-	var count uint64
-	if err := row.Scan(&count); err != nil {
-		return fmt.Errorf("checking skills schema for migration: %w", err)
-	}
-	if count > 0 {
-		return nil // Already on the new schema.
-	}
-	emit("running", "$ Migrating agentguard_skills to enriched schema…")
-	for _, mv := range []string{
-		"mv_skills_invoked_claudecode",
-		"mv_skills_invoked_openclaw",
-		"mv_skills_loaded_claudecode",
-		"mv_skills_loaded_openclaw",
-	} {
-		if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s", mv)); err != nil {
-			return fmt.Errorf("migrate drop view %s: %w", mv, err)
-		}
-		emit("ok", "  ✓ dropped "+mv+" (or did not exist)")
-	}
-	if err := conn.Exec(ctx, "DROP STREAM IF EXISTS agentguard_skills"); err != nil {
-		return fmt.Errorf("dropping agentguard_skills for migration: %w", err)
-	}
-	emit("ok", "  ✓ Dropped old agentguard_skills — will recreate with enriched schema")
 	return nil
 }
 

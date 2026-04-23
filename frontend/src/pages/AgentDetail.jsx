@@ -1292,16 +1292,22 @@ export default function AgentDetail() {
   const [sessions, setSessions] = useState([])
   const [sessionsError, setSessionsError] = useState(null)
   const [sessionDetail, setSessionDetail] = useState(null)
+  const [sessionDetailError, setSessionDetailError] = useState(null)
   const [events, setEvents] = useState([])
   const [eventsTruncated, setEventsTruncated] = useState(false)
+  const [eventsError, setEventsError] = useState(null)
   const [traceData, setTraceData] = useState(null)
+  const [traceError, setTraceError] = useState(null)
   const [loadingTrace, setLoadingTrace] = useState(false)
   const [activeTab, setActiveTab] = useState('timeline')
   const [expandedSessions, setExpandedSessions] = useState(new Set())
   const [timePreset, setTimePreset] = useState('24h')
 
   const [llmMetrics, setLlmMetrics] = useState(null)
+  const [llmMetricsError, setLlmMetricsError] = useState(null)
   const [toolMetrics, setToolMetrics] = useState(null)
+  const [toolMetricsError, setToolMetricsError] = useState(null)
+  const [activeThreatsError, setActiveThreatsError] = useState(null)
   const [activeThreats, setActiveThreats] = useState(null)
 
   const [loadingAgent, setLoadingAgent] = useState(true)
@@ -1328,8 +1334,8 @@ export default function AgentDetail() {
     const since = presetToISO(timePreset)
     if (since) params.since = since
     api.getLLMMetrics(params)
-      .then(setLlmMetrics)
-      .catch(() => setLlmMetrics(null))
+      .then(d => { setLlmMetrics(d); setLlmMetricsError(null) })
+      .catch(err => { setLlmMetrics(null); setLlmMetricsError(err?.message || 'Failed to load LLM metrics') })
   }, [id, timePreset, refreshTick])
 
   useEffect(() => {
@@ -1337,16 +1343,16 @@ export default function AgentDetail() {
     const since = presetToISO(timePreset)
     if (since) params.since = since
     api.getToolMetrics(params)
-      .then(setToolMetrics)
-      .catch(() => setToolMetrics(null))
+      .then(d => { setToolMetrics(d); setToolMetricsError(null) })
+      .catch(err => { setToolMetrics(null); setToolMetricsError(err?.message || 'Failed to load tool metrics') })
   }, [id, timePreset, refreshTick])
 
   useEffect(() => {
     // agent_id is the second segment of the compound "{deploymentId}__{agentId}" id
     const agentId = id.split('__')[1] ?? id
     api.getThreats({ agent_id: agentId, status: 'open', limit: 200 })
-      .then(data => setActiveThreats(data.total ?? (data.threats?.length ?? 0)))
-      .catch(() => setActiveThreats(null))
+      .then(data => { setActiveThreats(data.total ?? (data.threats?.length ?? 0)); setActiveThreatsError(null) })
+      .catch(err => { setActiveThreats(null); setActiveThreatsError(err?.message || 'Failed to load active threats') })
   }, [id, refreshTick])
 
   useEffect(() => {
@@ -1362,14 +1368,14 @@ export default function AgentDetail() {
   }, [id, timePreset, refreshTick])
 
   useEffect(() => {
-    if (!selectedSession) { setSessionDetail(null); return }
+    if (!selectedSession) { setSessionDetail(null); setSessionDetailError(null); return }
     api.getSession(id, selectedSession)
-      .then(setSessionDetail)
-      .catch(() => setSessionDetail(null))
+      .then(d => { setSessionDetail(d); setSessionDetailError(null) })
+      .catch(err => { setSessionDetail(null); setSessionDetailError(err?.message || 'Failed to load session details') })
   }, [id, selectedSession, refreshTick])
 
   useEffect(() => {
-    if (!selectedRun) { setEvents([]); setEventsTruncated(false); return }
+    if (!selectedRun) { setEvents([]); setEventsTruncated(false); setEventsError(null); return }
     const params = { limit: 500 }
     if (selectedSession) params.session_id = selectedSession
     params.run_id = selectedRun
@@ -1382,18 +1388,24 @@ export default function AgentDetail() {
         const evts = r.events ?? []
         setEvents(evts)
         setEventsTruncated((r.total ?? evts.length) > 500)
+        setEventsError(null)
       })
-      .catch(() => { setEvents([]); setEventsTruncated(false) })
+      .catch(err => {
+        setEvents([])
+        setEventsTruncated(false)
+        setEventsError(err?.message || 'Failed to load events')
+      })
       .finally(() => setLoadingEvents(false))
   }, [id, selectedSession, selectedRun, timePreset, refreshTick])
 
   useEffect(() => {
     setTraceData(null)
+    setTraceError(null)
     if (!selectedRun || !selectedSession || activeTab !== 'trace') return
     setLoadingTrace(true)
     api.getRunTrace(id, selectedSession, selectedRun)
-      .then(setTraceData)
-      .catch(() => setTraceData(null))
+      .then(d => { setTraceData(d); setTraceError(null) })
+      .catch(err => { setTraceData(null); setTraceError(err?.message || 'Failed to load trace') })
       .finally(() => setLoadingTrace(false))
   }, [id, selectedSession, selectedRun, activeTab])
 
@@ -1421,7 +1433,7 @@ export default function AgentDetail() {
   const isRefreshing = loadingAgent || loadingSessions || loadingEvents
 
   const volumeMetrics = [
-    { label: 'Active Threats',  value: activeThreats ?? '—', icon: 'security', accent: activeThreats > 0 },
+    { label: 'Active Threats',  value: activeThreats ?? '—', icon: 'security', accent: activeThreats > 0, error: activeThreatsError },
     { label: 'Total Sessions',  value: agent ? agent.session_count   : '—', icon: 'layers' },
     { label: 'Total Events',    value: agent ? agent.event_count     : '—', icon: 'sync_alt' },
     { label: 'Total Tool Calls',value: agent ? agent.tool_call_count : '—', icon: 'handyman' },
@@ -1437,12 +1449,14 @@ export default function AgentDetail() {
       value: llmHasCalls ? fmtTokens(llmMetrics.tokens?.total) : '—',
       sub: llmHasCalls ? `↑ ${fmtTokens(llmMetrics.tokens?.input)}  ↓ ${fmtTokens(llmMetrics.tokens?.output)}` : null,
       icon: 'token',
+      error: llmMetricsError,
     },
     {
       label: 'LLM Latency p50',
       value: llmHasCalls ? fmtLatency(llmMetrics.latency_ms?.p50) : '—',
       sub: llmHasCalls ? `p95 ${fmtLatency(llmMetrics.latency_ms?.p95)}` : null,
       icon: 'speed',
+      error: llmMetricsError,
     },
     {
       label: 'LLM Success Rate',
@@ -1450,6 +1464,7 @@ export default function AgentDetail() {
       sub: llmHasCalls ? `${llmMetrics.calls?.success ?? 0} ok · ${llmMetrics.calls?.failed ?? 0} failed` : null,
       icon: 'check_circle',
       accent: llmSuccessRate != null && llmSuccessRate < 1,
+      error: llmMetricsError,
     },
     {
       label: 'Tool Success Rate',
@@ -1457,6 +1472,7 @@ export default function AgentDetail() {
       sub: toolHasCalls ? `${toolMetrics.summary?.success_calls ?? 0} ok · ${toolMetrics.summary?.failed_calls ?? 0} failed` : null,
       icon: 'build_circle',
       accent: toolSuccessRate != null && toolSuccessRate < 1,
+      error: toolMetricsError,
     },
   ]
 
@@ -1533,6 +1549,12 @@ export default function AgentDetail() {
               </div>
               <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest mb-1">{m.label}</p>
               <h2 className={`text-2xl font-medium ${m.accent ? 'text-[#ffb4ab]' : 'text-[#e7dff0]'}`}>{m.value}</h2>
+              {m.error && (
+                <p className="text-[10px] text-[#ffb4ab] mt-1 flex items-center gap-1 truncate" title={m.error}>
+                  <span className="material-symbols-outlined text-[10px]">error</span>
+                  {m.error}
+                </p>
+              )}
             </div>
           ))}
         </section>
@@ -1547,6 +1569,12 @@ export default function AgentDetail() {
               <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest mb-1">{m.label}</p>
               <h2 className={`text-2xl font-medium ${m.accent ? 'text-[#ffb4ab]' : 'text-[#e7dff0]'}`}>{m.value}</h2>
               {m.sub && <p className="text-[10px] text-zinc-600 mt-1 truncate">{m.sub}</p>}
+              {m.error && (
+                <p className="text-[10px] text-[#ffb4ab] mt-1 flex items-center gap-1 truncate" title={m.error}>
+                  <span className="material-symbols-outlined text-[10px]">error</span>
+                  {m.error}
+                </p>
+              )}
             </div>
           ))}
         </section>
@@ -1707,6 +1735,12 @@ export default function AgentDetail() {
                   <div className="flex items-center justify-center h-full">
                     <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
                   </div>
+                ) : traceError ? (
+                  <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
+                    <span className="material-symbols-outlined text-4xl">error</span>
+                    <p className="text-sm font-semibold">Failed to load trace</p>
+                    <p className="text-xs text-zinc-500 max-w-md break-words">{traceError}</p>
+                  </div>
                 ) : (
                   <RunWaterfall spans={traceData?.spans ?? []} />
                 )
@@ -1714,6 +1748,12 @@ export default function AgentDetail() {
                 loadingEvents ? (
                   <div className="flex items-center justify-center h-full">
                     <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                  </div>
+                ) : eventsError ? (
+                  <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
+                    <span className="material-symbols-outlined text-4xl">error</span>
+                    <p className="text-sm font-semibold">Failed to load events</p>
+                    <p className="text-xs text-zinc-500 max-w-md break-words">{eventsError}</p>
                   </div>
                 ) : events.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
@@ -1735,6 +1775,15 @@ export default function AgentDetail() {
               ) : (
                 // Timeline tab
                 (() => {
+                  if (sessionDetailError) {
+                    return (
+                      <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
+                        <span className="material-symbols-outlined text-4xl">error</span>
+                        <p className="text-sm font-semibold">Failed to load session</p>
+                        <p className="text-xs text-zinc-500 max-w-md break-words">{sessionDetailError}</p>
+                      </div>
+                    )
+                  }
                   if (!sessionDetail) {
                     return (
                       <div className="flex items-center justify-center h-full">

@@ -140,7 +140,8 @@ type Threat struct {
 	Events          []ThreatEvent `json:"events"`
 }
 
-// Hold is one row from agentguard_holds (current state via mv_holds_current).
+// Hold is one row from agentguard_holds (current state computed inline via
+// arg_max(field, updated_at) GROUP BY hold_id at query time).
 type Hold struct {
 	HoldID        string    `json:"hold_id"`
 	DeploymentID  string    `json:"deployment_id"`
