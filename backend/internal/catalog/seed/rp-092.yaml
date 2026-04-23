@@ -1,0 +1,101 @@
+id: rp-092
+name: "TOCTOU Agent State Tampering — Read-Then-Act Race Condition Detector"
+version: "0.1.0"
+description: >
+  Detects Time-of-Check to Time-of-Use (TOCTOU) attacks on LLM-enabled agents where
+  an adversary modifies a resource (web page, file, Slack channel, API endpoint) during
+  the LLM reasoning gap between a read/check tool call and a subsequent write/execute
+  action. The agent then acts on stale or adversarially manipulated data. Evaluated on
+  10 popular browser-use agents (Browser-Use, Midscene, UI-TARS); TOCTOU is widespread
+  across all major frameworks. This rule detects the two-step sequence: read tool
+  completing with an injected content-modification directive → high-impact write/execute
+  tool invoked in the same session.
+  References: arXiv:2508.17155 (Mind the Gap: TOCTOU in LLM-Enabled Agents, OSU/MLForSys
+  2025) - https://arxiv.org/abs/2508.17155, arXiv:2603.00476 (Atomicity for Agents:
+  TOCTOU in Browser-Use Agents, Ohio State Feb 2026) -
+  https://arxiv.org/abs/2603.00476, promptfoo LMVD-90d35ca4 -
+  https://www.promptfoo.dev/lm-security-db/vuln/llm-agent-toctou-vulnerabilities-90d35ca4,
+  OWASP Agentic AI ASI03:2026, CWE-367 Time-of-Check Time-of-Use
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: low
+hook_sources: "tool_complete,tool_invoke"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - toctou
+  - browser-use
+  - race-condition
+query_sql: |
+  -- rp-092 v0.1.0: TOCTOU read→write race condition detection via lag() sequence
+  WITH enriched AS (
+    SELECT
+      event_time,
+      session_id,
+      agent_id,
+      deployment_id,
+      run_id,
+      event_type,
+      tool_name,
+      tool_input,
+      tool_result,
+      raw_hook_name,
+      raw_event_data,
+      lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(tool_name)   OVER (PARTITION BY session_id) AS prev_tool_name,
+      lag(tool_result) OVER (PARTITION BY session_id) AS prev_tool_result
+    FROM agentguard_cim_event
+    WHERE event_type IN ('tool_complete', 'tool_invoke')
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-092' AS rule_id,
+    'TOCTOU Agent State Tampering — Read-Then-Act Race Condition Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('TOCTOU: adversarial content in read tool [', prev_tool_name,
+           '] precedes write tool [', tool_name, '] in session ', session_id) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'tool_invoke'
+    AND prev_event_type = 'tool_complete'
+    -- Previous tool was a read/check operation
+    AND lower(prev_tool_name) IN (
+      'get_webpage', 'read_file', 'fetch_url', 'read_channel', 'get_channel',
+      'browse_url', 'get_document', 'fetch_page', 'scrape_url', 'get_email',
+      'read_email', 'browser_get_content', 'get_page_content', 'read_content',
+      'get_file_content', 'get_page', 'load_document', 'download_file',
+      'get_resource', 'computer_use_screenshot', 'get_text_content',
+      'read_webpage', 'fetch_document', 'get_web_content', 'retrieve_page',
+      'list_messages', 'read_channel_messages', 'get_messages', 'fetch_content'
+    )
+    -- Current tool is a high-impact write/execute operation
+    AND lower(tool_name) IN (
+      'post_webpage', 'write_file', 'send_message', 'send_email', 'create_post',
+      'update_record', 'upload_file', 'post_message', 'post_channel', 'publish_page',
+      'update_page', 'delete_file', 'execute_code', 'run_bash', 'browser_click',
+      'browser_fill', 'browser_submit', 'fill_input', 'submit_form', 'browser_type',
+      'type_text', 'click_element', 'press_key', 'browser_action', 'patch_resource',
+      'update_config', 'set_content', 'write_webpage', 'send_channel_message',
+      'create_message', 'update_file', 'create_file', 'overwrite_file',
+      'execute_script', 'run_command', 'shell_exec'
+    )
+    -- Adversarial injection signal in the read tool result
+    AND (
+      match(lower(prev_tool_result), 'ignore (the )?(previous|prior|original) (content|instructions|data|message)')
+      OR match(lower(prev_tool_result), 'post the following to')
+      OR match(lower(prev_tool_result), '(send|forward) (all|this|the) (data|content|information|conversation) to')
+      OR match(lower(prev_tool_result), 'update (the )?(page|config|file|record) with')
+      OR match(lower(prev_tool_result), '(new|updated|revised|modified) instructions:')
+      OR match(lower(prev_tool_result), 'attention: (this page|the content|new instructions)')
+      OR match(lower(prev_tool_result), 'this page has been (updated|changed|modified)')
+      OR match(lower(prev_tool_result), '(forward|redirect|send).{0,30}https?://[a-z0-9._-]+/(exfil|collect|steal|leak|dump|harvest|log|callback)')
+      OR match(lower(prev_tool_result), 'instead (of|post|send|write|update).{0,50}(http|https)://')
+    )

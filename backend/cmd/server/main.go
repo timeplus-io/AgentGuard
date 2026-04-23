@@ -17,6 +17,7 @@ import (
 	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
+	"github.com/timeplus/agentguard/internal/holdregistry"
 	"github.com/timeplus/agentguard/internal/web"
 )
 
@@ -105,10 +106,16 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Catalog directory: %s (%d entries)\n", cfg.CatalogDir, len(mgr.All()))
 	fmt.Printf("AgentGuard webhook URL: %s\n", cfg.AgentGuardURL)
 	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
-	// Note: timeplus.Init() is no longer called at startup.
-	// All Timeplus resources are provisioned during the one-time /api/setup/provision flow.
+	// Note: timeplus.Init() is no longer called at startup. All Timeplus resources
+	// are provisioned during the one-time /api/setup/provision flow.
+	//
+	// Schema additions made AFTER the original provision (like the holds feature)
+	// are applied lazily by timeplus.MigrateHoldsSchema, called from the auth
+	// Login handler on first successful login (when credentials become available
+	// — they are deliberately not persisted to the config file).
 
 	store := auth.NewSessionStore()
+	holdReg := holdregistry.New()
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
@@ -133,7 +140,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.POST("/setup/provision", handlers.Provision(cfg, mgr, store))
 		// /alerts/webhook is called by Timeplus (server-to-server), not by the browser,
 		// so it must be reachable without a session cookie.
-		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg, store))
+		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
+		// /holds is called by agent plugins (server-to-server) — no session cookie.
+		api.POST("/holds", handlers.CreateHold(cfg, holdReg, handlers.GlobalAlertBroadcaster))
+		// /holds/_abandon-session/:session_id — unauthenticated (plugin calls fire-and-forget on SessionEnd).
+		api.POST("/holds/_abandon-session/:session_id", handlers.AbandonSession(cfg, holdReg))
 
 		// All existing routes — require a valid session cookie.
 		protected := api.Group("/", auth.AuthRequired(store))
@@ -166,7 +177,12 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.POST("/rules/:id/install", handlers.InstallRule(cfg, mgr))
 			protected.POST("/rules/:id/toggle", handlers.ToggleRule(cfg, mgr))
 			protected.POST("/rules/:id/upgrade", handlers.UpgradeRule(cfg, mgr))
+			protected.POST("/rules/:id/policy", handlers.SetRuleBlockPolicy(cfg, mgr))
 			protected.DELETE("/rules/:id", handlers.UninstallRule(cfg, mgr))
+			protected.GET("/holds", handlers.ListHolds(cfg))
+			protected.GET("/holds/:hold_id", handlers.GetHold(cfg))
+			protected.POST("/holds/:hold_id/decide", handlers.DecideHold(cfg, holdReg, handlers.GlobalAlertBroadcaster))
+			protected.POST("/holds/_drain", handlers.DrainHolds(cfg, holdReg))
 			protected.GET("/notifications/stream", handlers.NotificationsSSEHandler())
 			protected.GET("/investigate/tables", handlers.ListTables(cfg))
 			protected.POST("/onboarding/generate", handlers.GenerateConfig)

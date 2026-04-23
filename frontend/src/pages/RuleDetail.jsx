@@ -6,6 +6,7 @@ import 'prismjs/themes/prism-tomorrow.css'
 import ThreatsList from '../components/ThreatsList'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
+import BlockPolicySelect from '../components/BlockPolicySelect'
 import { api } from '../api/client'
 
 const CATEGORY_ICONS = {
@@ -280,6 +281,31 @@ export default function RuleDetail() {
               </button>
             </div>
           )}
+
+          {/* Block Policy */}
+          <div className="bg-[#1d1a25] rounded-sm p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Block Policy</span>
+              <BlockPolicySelect
+                value={rule.block_policy}
+                onChange={async (newPolicy) => {
+                  const prevPolicy = rule.block_policy
+                  setRule(prev => prev ? { ...prev, block_policy: newPolicy } : prev)
+                  try {
+                    await api.setRuleBlockPolicy(rule.id, newPolicy)
+                  } catch (e) {
+                    setRule(prev => prev ? { ...prev, block_policy: prevPolicy } : prev)
+                    alert(`Failed to update policy: ${e.message}`)
+                  }
+                }}
+              />
+            </div>
+            <p className="text-[11px] text-zinc-400">
+              {rule.block_policy === 'hold' && 'When this rule fires, AgentGuard will pause the agent and wait for human approval.'}
+              {rule.block_policy === 'auto_block' && 'When this rule fires, AgentGuard will block the tool call immediately without prompting.'}
+              {(!rule.block_policy || rule.block_policy === 'log_only') && 'When this rule fires, the threat is logged and surfaced in the UI but the agent is not blocked.'}
+            </p>
+          </div>
 
           {/* Rule Definition */}
           <div className="bg-[#1d1a25] p-8 rounded-sm">

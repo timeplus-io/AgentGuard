@@ -65,6 +65,7 @@ export default function RulePacks() {
           version: r.enabled ? (r.version || null) : null,
           active: r.enabled,
           detections24h: r.detections_24h || 0,
+          block_policy: r.block_policy || 'log_only',
         })))
       }
       if (data.total_detections_24h !== undefined) setTotalDetections(data.total_detections_24h)
@@ -135,8 +136,10 @@ export default function RulePacks() {
     setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: newVal, active: newVal, version: newVal ? (r.version || '') : null } : r))
     try {
       await api.toggleRule(id)
-    } catch {
+    } catch (err) {
+      console.error('rules: toggle failed:', err)
       setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !newVal, active: !newVal } : r))
+      setLoadError(`Failed to ${newVal ? 'enable' : 'disable'} rule: ${err?.message ?? String(err)}`)
     }
   }
 
@@ -148,13 +151,33 @@ export default function RulePacks() {
 
   const handleInstall = async (id) => {
     setInstalling(id)
+    // Optimistic update — same pattern as the toggle handler. A re-fetch
+    // immediately after the INSERT races with Proton's table() commit lag and
+    // returns stale "not installed" data, snapping the UI back.
+    const entry = catalog.find(e => e.id === id)
+    if (!entry) {
+      setInstalling(null)
+      return
+    }
+    const newRule = {
+      id: entry.id,
+      icon: CATEGORY_ICONS[entry.category] || 'shield',
+      name: entry.name,
+      desc: entry.description,
+      enabled: true,
+      version: entry.version || '',
+      active: true,
+      detections24h: 0,
+      block_policy: entry.block_policy || 'log_only',
+    }
+    setCatalog(prev => prev.map(e => e.id === id ? { ...e, installed: true } : e))
+    setRules(prev => [newRule, ...prev])
     try {
       await api.installRule(id)
-      await Promise.all([
-        loadRules(),
-        api.getRulesCatalog().then(data => setCatalog(data.catalog || [])),
-      ])
     } catch (err) {
+      // Revert
+      setCatalog(prev => prev.map(e => e.id === id ? { ...e, installed: false } : e))
+      setRules(prev => prev.filter(r => r.id !== id))
       setLoadError(err?.message || 'Install failed — please try again')
     } finally {
       setInstalling(null)

@@ -139,6 +139,20 @@ export const api = {
   listTables: () => get('/investigate/tables'),
   generateConfig: (data) => post('/onboarding/generate', data),
 
+  // ── Holds (tool-call blocking) ─────────────────────────────────────────────
+  listHolds: (status = 'pending', limit = 100) =>
+    get(`/holds?status=${encodeURIComponent(status)}&limit=${limit}`),
+  getHold: (holdId) => get(`/holds/${encodeURIComponent(holdId)}`),
+  decideHold: (holdId, decision, reason = '') =>
+    post(`/holds/${encodeURIComponent(holdId)}/decide`, {
+      decision,
+      decided_by: 'web-ui',
+      decided_reason: reason,
+    }),
+  setRuleBlockPolicy: (ruleId, blockPolicy) =>
+    post(`/rules/${encodeURIComponent(ruleId)}/policy`, { block_policy: blockPolicy }),
+  getThreatDetail: (threatId) => get(`/threats/${encodeURIComponent(threatId)}`),
+
   async *protonQuery(sql, { signal } = {}) {
     const res = await fetch(`${BASE}/proton/query`, {
       method: 'POST',

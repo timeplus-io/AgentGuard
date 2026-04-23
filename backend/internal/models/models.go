@@ -140,6 +140,69 @@ type Threat struct {
 	Events          []ThreatEvent `json:"events"`
 }
 
+// Hold is one row from agentguard_holds (current state via mv_holds_current).
+type Hold struct {
+	HoldID        string    `json:"hold_id"`
+	DeploymentID  string    `json:"deployment_id"`
+	AgentID       string    `json:"agent_id"`
+	SessionID     string    `json:"session_id"`
+	RunID         string    `json:"run_id"`
+	ToolName      string    `json:"tool_name"`
+	RuleID        string    `json:"rule_id"`
+	Severity      string    `json:"severity"`
+	ArgsSummary   string    `json:"args_summary"`
+	Message       string    `json:"message"`
+	CreatedAt     time.Time `json:"created_at"`
+	Status        string    `json:"status"` // pending|approved|denied|timeout|abandoned
+	DecidedBy     string    `json:"decided_by,omitempty"`
+	DecidedAt     time.Time `json:"decided_at,omitempty"`
+	DecidedReason string    `json:"decided_reason,omitempty"`
+}
+
+// HoldRequest is the JSON body the plugin sends to POST /api/holds.
+type HoldRequest struct {
+	DeploymentID   string                 `json:"deployment_id"`
+	AgentID        string                 `json:"agent_id"`
+	SessionID      string                 `json:"session_id"`
+	RunID          string                 `json:"run_id"`
+	ToolName       string                 `json:"tool_name"`
+	ToolInput      map[string]interface{} `json:"tool_input"`
+	EventTime      time.Time              `json:"event_time"`
+	HookPayload    map[string]interface{} `json:"hook_payload"`
+	AgentType      string                 `json:"agent_type"`      // "claudecode" | "openclaw" — defaults to "claudecode" if empty for backward compat
+	DeploymentName string                 `json:"deployment_name"` // optional, populated when known
+}
+
+// HoldResponse is what the plugin receives from POST /api/holds.
+type HoldResponse struct {
+	Decision string `json:"decision"`          // "allow" | "block"
+	Reason   string `json:"reason,omitempty"`
+	HoldID   string `json:"hold_id,omitempty"` // populated when a hold record was opened
+}
+
+// HoldDecideRequest is the JSON body the frontend sends to POST /api/holds/:id/decide.
+type HoldDecideRequest struct {
+	Decision      string `json:"decision"` // "approved" | "denied"
+	DecidedBy     string `json:"decided_by"`
+	DecidedReason string `json:"decided_reason,omitempty"`
+}
+
+// PendingHold is embedded in ThreatDetailResponse when a hold is currently
+// pending for the threat's rule + session. Used by the threat detail page
+// to render Approve/Deny controls.
+type PendingHold struct {
+	HoldID      string    `json:"hold_id"`
+	ToolName    string    `json:"tool_name"`
+	ArgsSummary string    `json:"args_summary"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// ThreatDetailResponse is returned by GET /api/threats/:id.
+type ThreatDetailResponse struct {
+	Threat
+	PendingHold *PendingHold `json:"pending_hold,omitempty"`
+}
+
 type ThreatCategory struct {
 	Name       string `json:"name"`
 	Percentage int    `json:"percentage"`
@@ -322,6 +385,7 @@ type RulePack struct {
 	Detections24h     int      `json:"detections_24h"`
 	LatestVersion     string   `json:"latest_version,omitempty"`
 	UDFs              []string `json:"udfs,omitempty"`
+	BlockPolicy       string   `json:"block_policy"` // hold|auto_block|log_only
 }
 
 type RulesResponse struct {

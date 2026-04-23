@@ -8,6 +8,9 @@ AGENTGUARD_TIMEPLUS_URL ?= http://localhost:3218
 AGENTGUARD_STREAM ?= agentguard_hook_events
 AGENTGUARD_USERNAME ?= proton
 AGENTGUARD_PASSWORD ?= timeplus@t+
+AGENTGUARD_URL ?= http://localhost:8080
+AGENTGUARD_HOLD_FAIL_POLICY ?= deny
+AGENTGUARD_HOLDS_ENABLED ?= false
 
 # OTEL configuration — shares Timeplus OTEL HTTP input on port 4318 with OpenClaw
 OTEL_ENDPOINT ?= http://localhost:4318
@@ -23,11 +26,13 @@ import json, os, sys
 settings_path = os.path.expanduser("$(SETTINGS_FILE)")
 hook_command = 'node "$(PLUGIN_DIR)/dist/index.js"'
 
-hook_events = [
+# PreToolUse must be synchronous so we can block the tool call.
+# Other hooks stay async to avoid slowing the agent.
+sync_hook_events  = ["PreToolUse"]
+async_hook_events = [
     "SessionStart",
     "SessionEnd",
     "UserPromptSubmit",
-    "PreToolUse",
     "PostToolUse",
     "PostToolUseFailure",
     "SubagentStart",
@@ -36,7 +41,18 @@ hook_events = [
     "PermissionDenied",
 ]
 
-hook_entry = {
+sync_hook_entry = {
+    "matcher": "*",
+    "hooks": [
+        {
+            "type": "command",
+            "command": hook_command,
+            "timeout": 600000,  # 600s — under Claude Code's hook timeout cap
+        }
+    ],
+}
+
+async_hook_entry = {
     "matcher": "*",
     "hooks": [
         {
@@ -56,25 +72,32 @@ else:
 
 hooks = data.setdefault("hooks", {})
 
-for event in hook_events:
+def upsert(event, entry):
     entries = hooks.setdefault(event, [])
-    # Dedup: skip if an entry with this exact command already exists
-    already = any(
-        h.get("command") == hook_command
-        for e in entries
-        for h in e.get("hooks", [])
-    )
-    if not already:
-        entries.append(hook_entry)
+    # Remove any existing entry referencing our hook_command (so we replace
+    # an old async/sync shape with the new one cleanly).
+    entries[:] = [
+        e for e in entries
+        if not any(h.get("command") == hook_command for h in e.get("hooks", []))
+    ]
+    entries.append(entry)
+
+for event in sync_hook_events:
+    upsert(event, sync_hook_entry)
+for event in async_hook_events:
+    upsert(event, async_hook_entry)
 
 plugin_env = {
-    "AGENTGUARD_AGENT_ID":        "$(AGENTGUARD_AGENT_ID)",
-    "AGENTGUARD_DEPLOYMENT_ID":   "$(AGENTGUARD_DEPLOYMENT_ID)",
-    "AGENTGUARD_DEPLOYMENT_NAME": "$(AGENTGUARD_DEPLOYMENT_NAME)",
-    "AGENTGUARD_TIMEPLUS_URL":    "$(AGENTGUARD_TIMEPLUS_URL)",
-    "AGENTGUARD_STREAM":          "$(AGENTGUARD_STREAM)",
-    "AGENTGUARD_USERNAME":        "$(AGENTGUARD_USERNAME)",
-    "AGENTGUARD_PASSWORD":        "$(AGENTGUARD_PASSWORD)",
+    "AGENTGUARD_AGENT_ID":         "$(AGENTGUARD_AGENT_ID)",
+    "AGENTGUARD_DEPLOYMENT_ID":    "$(AGENTGUARD_DEPLOYMENT_ID)",
+    "AGENTGUARD_DEPLOYMENT_NAME":  "$(AGENTGUARD_DEPLOYMENT_NAME)",
+    "AGENTGUARD_TIMEPLUS_URL":     "$(AGENTGUARD_TIMEPLUS_URL)",
+    "AGENTGUARD_STREAM":           "$(AGENTGUARD_STREAM)",
+    "AGENTGUARD_USERNAME":         "$(AGENTGUARD_USERNAME)",
+    "AGENTGUARD_PASSWORD":         "$(AGENTGUARD_PASSWORD)",
+    "AGENTGUARD_URL":              "$(AGENTGUARD_URL)",
+    "AGENTGUARD_HOLD_FAIL_POLICY": "$(AGENTGUARD_HOLD_FAIL_POLICY)",
+    "AGENTGUARD_HOLDS_ENABLED":    "$(AGENTGUARD_HOLDS_ENABLED)",
 }
 data.setdefault("env", {}).update(plugin_env)
 
@@ -97,6 +120,9 @@ plugin_env_keys = [
     "AGENTGUARD_STREAM",
     "AGENTGUARD_USERNAME",
     "AGENTGUARD_PASSWORD",
+    "AGENTGUARD_URL",
+    "AGENTGUARD_HOLD_FAIL_POLICY",
+    "AGENTGUARD_HOLDS_ENABLED",
 ]
 
 hook_events = [

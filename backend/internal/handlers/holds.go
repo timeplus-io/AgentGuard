@@ -1,0 +1,601 @@
+package handlers
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/timeplus/agentguard/internal/auth"
+	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/holdregistry"
+	"github.com/timeplus/agentguard/internal/models"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
+)
+
+const argsSummaryMaxBytes = 2048
+
+// failPolicyToDecision maps the config FailPolicy ("deny"|"allow") to the
+// HoldResponse Decision contract ("block"|"allow"). Returns "block" by default
+// for any unknown value (fail-closed).
+func failPolicyToDecision(policy string) string {
+	if policy == "allow" {
+		return "allow"
+	}
+	return "block"
+}
+
+// pluginCfg validates that service credentials are configured for handlers
+// called server-to-server (no session cookie). Plugin/Timeplus → AgentGuard
+// endpoints must have TIMEPLUS_USER + TIMEPLUS_PASSWORD set as env vars on
+// the AgentGuard process — there is no fallback.
+//
+// Returns (cfg, "") on success or (nil, "<actionable msg>") if creds missing.
+// Callers should respond with 503 + the message and a log line.
+func pluginCfg(cfg *config.Config) (*config.Config, string) {
+	if cfg.Timeplus.User == "" {
+		return nil, "service credentials not configured: set TIMEPLUS_USER and TIMEPLUS_PASSWORD env vars on the AgentGuard server"
+	}
+	return cfg, ""
+}
+
+// CreateHold handles POST /api/holds.
+// Synchronous endpoint — does not return until backend has decided
+// (allow / block / hold + human decision / hold timeout).
+func CreateHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster *alertBroadcaster) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg, errMsg := pluginCfg(cfg)
+		if errMsg != "" {
+			log.Printf("holds: CreateHold: %s", errMsg)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
+			return
+		}
+		var req models.HoldRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+
+		// Master kill-switch: skip all decision logic, just allow.
+		if cfg.Holds.Disabled {
+			c.JSON(http.StatusOK, models.HoldResponse{Decision: "allow"})
+			return
+		}
+
+		// Step 1: Ingest the hook event into agentguard_hook_events so MVs see it.
+		if err := ingestHookEvent(cfg, &req); err != nil {
+			log.Printf("holds: ingest event failed: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("ingest failed: %v", err)})
+			return
+		}
+
+		// Step 2: pre-existing open threats for this session.
+		preExisting, threatPolicies, err := queryPreExistingOpenThreats(cfg, &req)
+		if err != nil {
+			log.Printf("holds: pre-existing threats query: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("pre-existing threats query: %v", err)})
+			return
+		}
+
+		// Step 3: wait up to MVWaitMs for new MV detections matching this event.
+		newMatches, err := waitForNewMVDetections(cfg, &req)
+		if err != nil {
+			log.Printf("holds: MV-wait query: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("MV-wait query: %v", err)})
+			return
+		}
+
+		// Step 4: pure decision logic.
+		out := Decide(DecisionInput{
+			KillSwitch:         false,
+			Matches:            newMatches,
+			PreExistingThreats: preExisting,
+			ThreatRulePolicies: threatPolicies,
+		})
+
+		switch out.Decision {
+		case "allow":
+			c.JSON(http.StatusOK, models.HoldResponse{Decision: "allow"})
+			return
+		case "block":
+			c.JSON(http.StatusOK, models.HoldResponse{
+				Decision: "block",
+				Reason:   out.Reason,
+			})
+			return
+		case "hold":
+			// Step 5: open hold record, register channel, long-poll.
+			holdID := uuid.NewString()
+			argsSummary := truncateJSON(req.ToolInput, argsSummaryMaxBytes)
+			now := time.Now().UTC()
+			if err := writeHoldRow(cfg, models.Hold{
+				HoldID:       holdID,
+				DeploymentID: req.DeploymentID,
+				AgentID:      req.AgentID,
+				SessionID:    req.SessionID,
+				RunID:        req.RunID,
+				ToolName:     req.ToolName,
+				RuleID:       out.RuleID,
+				Severity:     out.Severity,
+				ArgsSummary:  argsSummary,
+				Message:      out.Reason,
+				CreatedAt:    now,
+				Status:       "pending",
+			}, now); err != nil {
+				log.Printf("holds: write pending hold row: %v", err)
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("write hold row: %v", err)})
+				return
+			}
+
+			ch := registry.Register(holdID)
+			defer registry.Cancel(holdID)
+
+			// Notify the UI via the existing SSE notification stream.
+			broadcaster.Publish(models.AlertWebhookPayload{
+				RuleID:     out.RuleID,
+				RuleName:   "hold_pending",
+				Severity:   out.Severity,
+				AgentID:    req.AgentID,
+				Message:    fmt.Sprintf("hold:%s|tool:%s|reason:%s", holdID, req.ToolName, out.Reason),
+				DetectedAt: now.Format(time.RFC3339),
+			})
+
+			timeout := time.Duration(cfg.Holds.TimeoutSeconds) * time.Second
+			select {
+			case d := <-ch:
+				// Human decided.
+				decision := "block"
+				if d.Allow {
+					decision = "allow"
+				}
+				c.JSON(http.StatusOK, models.HoldResponse{
+					Decision: decision,
+					Reason:   d.Reason,
+					HoldID:   holdID,
+				})
+			case <-time.After(timeout):
+				// Timeout — apply fail-policy and write timeout row.
+				_ = writeHoldStatus(cfg, holdID, "timeout", "system", "hold timeout")
+				c.JSON(http.StatusOK, models.HoldResponse{
+					Decision: failPolicyToDecision(cfg.Holds.FailPolicy),
+					Reason:   "AgentGuard hold timed out",
+					HoldID:   holdID,
+				})
+			}
+			return
+		}
+	}
+}
+
+func truncateJSON(v interface{}, maxBytes int) string {
+	if v == nil {
+		return ""
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	if len(b) > maxBytes {
+		return string(b[:maxBytes]) + "...[truncated]"
+	}
+	return string(b)
+}
+
+// ingestHookEvent inserts the just-emitted PreToolUse event into
+// agentguard_hook_events so MVs can detect it. The plugin does NOT also
+// call its async send() for PreToolUse, so this is the only ingest path.
+func ingestHookEvent(cfg *config.Config, req *models.HoldRequest) error {
+	payloadJSON, err := json.Marshal(req.HookPayload)
+	if err != nil {
+		return fmt.Errorf("marshal hook payload: %w", err)
+	}
+	agentType := req.AgentType
+	if agentType == "" {
+		agentType = "claudecode" // backward compat
+	}
+	sql := fmt.Sprintf(`
+INSERT INTO agentguard_hook_events
+  (hook_name, event_time, session_id, run_id, agent_id, deployment_id,
+   deployment_name, session_key, tool_name, provider, model,
+   hook_decision, block_reason, event_data, agent_type)
+VALUES
+  ('before_tool_call', '%s', '%s', '%s', '%s', '%s',
+   '%s', '', '%s', '', '',
+   'observe', '', '%s', '%s')`,
+		req.EventTime.UTC().Format("2006-01-02 15:04:05.999"),
+		escapeSQLStr(req.SessionID),
+		escapeSQLStr(req.RunID),
+		escapeSQLStr(req.AgentID),
+		escapeSQLStr(req.DeploymentID),
+		escapeSQLStr(req.DeploymentName),
+		escapeSQLStr(req.ToolName),
+		escapeSQLStr(string(payloadJSON)),
+		escapeSQLStr(agentType),
+	)
+	return tp.ExecHTTP(&cfg.Timeplus, sql)
+}
+
+// queryPreExistingOpenThreats returns open threats for this session and
+// a rule_id → block_policy map for those threats' rules.
+func queryPreExistingOpenThreats(cfg *config.Config, req *models.HoldRequest) ([]models.Threat, map[string]string, error) {
+	sql := fmt.Sprintf(`
+SELECT t.rule_id, t.rule_name, t.severity, 'open' AS status, r.block_policy
+FROM (
+  SELECT rule_id,
+         any(rule_name) AS rule_name,
+         any(severity)  AS severity
+  FROM table(agentguard_security_events)
+  WHERE deployment_id = '%s' AND agent_id = '%s' AND session_id = '%s'
+  GROUP BY rule_id
+) AS t
+LEFT JOIN (
+  SELECT rule_id, arg_max(block_policy, updated_at) AS block_policy
+  FROM table(agentguard_rules)
+  GROUP BY rule_id
+) AS r ON t.rule_id = r.rule_id`,
+		escapeSQLStr(req.DeploymentID), escapeSQLStr(req.AgentID), escapeSQLStr(req.SessionID))
+
+	rows, err := tp.Query(&cfg.Timeplus, sql)
+	if err != nil {
+		return nil, nil, err
+	}
+	threats := make([]models.Threat, 0, len(rows))
+	policies := make(map[string]string, len(rows))
+	for _, row := range rows {
+		ruleID := parseStr(row["rule_id"])
+		threats = append(threats, models.Threat{
+			RuleID:   ruleID,
+			RuleName: parseStr(row["rule_name"]),
+			Severity: parseStr(row["severity"]),
+			Status:   parseStr(row["status"]),
+		})
+		policies[ruleID] = parseStr(row["block_policy"])
+	}
+	return threats, policies, nil
+}
+
+// waitForNewMVDetections polls agentguard_security_events every 50ms for up to
+// MVWaitMs, looking for rows tagged to this session with detected_at >= event_time.
+// Returns the matching rules (joined with their current block_policy).
+func waitForNewMVDetections(cfg *config.Config, req *models.HoldRequest) ([]RuleMatch, error) {
+	const pollIntervalMs = 50
+	totalMs := cfg.Holds.MVWaitMs
+	if totalMs < pollIntervalMs {
+		totalMs = pollIntervalMs
+	}
+	deadline := time.Now().Add(time.Duration(totalMs) * time.Millisecond)
+
+	sql := fmt.Sprintf(`
+SELECT s.rule_id, s.rule_name, s.severity, s.message, r.block_policy
+FROM (
+  SELECT rule_id, rule_name, severity, message
+  FROM table(agentguard_security_events)
+  WHERE deployment_id = '%s' AND agent_id = '%s' AND session_id = '%s'
+    AND detected_at >= '%s'
+) AS s
+LEFT JOIN (
+  SELECT rule_id, arg_max(block_policy, updated_at) AS block_policy
+  FROM table(agentguard_rules)
+  GROUP BY rule_id
+) AS r ON s.rule_id = r.rule_id
+WHERE r.block_policy IN ('hold', 'auto_block')`,
+		escapeSQLStr(req.DeploymentID), escapeSQLStr(req.AgentID), escapeSQLStr(req.SessionID),
+		req.EventTime.UTC().Format("2006-01-02 15:04:05.999"))
+
+	for time.Now().Before(deadline) {
+		rows, err := tp.Query(&cfg.Timeplus, sql)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) > 0 {
+			matches := make([]RuleMatch, 0, len(rows))
+			for _, row := range rows {
+				matches = append(matches, RuleMatch{
+					RuleID:      parseStr(row["rule_id"]),
+					BlockPolicy: parseStr(row["block_policy"]),
+					Severity:    parseStr(row["severity"]),
+					Message:     parseStr(row["message"]),
+				})
+			}
+			return matches, nil
+		}
+		time.Sleep(pollIntervalMs * time.Millisecond)
+	}
+	return nil, nil
+}
+
+// writeHoldRow inserts a new row into agentguard_holds (initial 'pending' state).
+func writeHoldRow(cfg *config.Config, h models.Hold, now time.Time) error {
+	sql := fmt.Sprintf(`
+INSERT INTO agentguard_holds
+  (hold_id, deployment_id, agent_id, session_id, run_id, tool_name, rule_id,
+   severity, args_summary, message, created_at, status,
+   decided_by, decided_at, decided_reason, updated_at)
+VALUES
+  ('%s','%s','%s','%s','%s','%s','%s',
+   '%s','%s','%s','%s','%s',
+   '','1970-01-01 00:00:00.000','','%s')`,
+		escapeSQLStr(h.HoldID), escapeSQLStr(h.DeploymentID), escapeSQLStr(h.AgentID),
+		escapeSQLStr(h.SessionID), escapeSQLStr(h.RunID), escapeSQLStr(h.ToolName), escapeSQLStr(h.RuleID),
+		escapeSQLStr(h.Severity), escapeSQLStr(h.ArgsSummary), escapeSQLStr(h.Message),
+		now.Format("2006-01-02 15:04:05.999"), h.Status,
+		now.Format("2006-01-02 15:04:05.999"))
+	return tp.ExecHTTP(&cfg.Timeplus, sql)
+}
+
+// writeHoldStatus appends a status-update row for an existing hold (e.g.,
+// approved / denied / timeout / abandoned).
+func writeHoldStatus(cfg *config.Config, holdID, status, decidedBy, decidedReason string) error {
+	now := time.Now().UTC().Format("2006-01-02 15:04:05.999")
+	sql := fmt.Sprintf(`
+INSERT INTO agentguard_holds
+  (hold_id, deployment_id, agent_id, session_id, run_id, tool_name, rule_id,
+   severity, args_summary, message, created_at, status,
+   decided_by, decided_at, decided_reason, updated_at)
+SELECT
+  hold_id, deployment_id, agent_id, session_id, run_id, tool_name, rule_id,
+  severity, args_summary, message, created_at,
+  '%s' AS status,
+  '%s' AS decided_by,
+  '%s' AS decided_at,
+  '%s' AS decided_reason,
+  '%s' AS updated_at
+FROM table(mv_holds_current)
+WHERE hold_id = '%s'
+LIMIT 1`,
+		status, escapeSQLStr(decidedBy), now, escapeSQLStr(decidedReason), now,
+		escapeSQLStr(holdID))
+	return tp.ExecHTTP(&cfg.Timeplus, sql)
+}
+
+// DecideHold handles POST /api/holds/:hold_id/decide.
+// Body: HoldDecideRequest. Idempotent: if already decided, returns existing decision.
+func DecideHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster *alertBroadcaster) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		holdID := c.Param("hold_id")
+		var body models.HoldDecideRequest
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+		if body.Decision != "approved" && body.Decision != "denied" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "decision must be approved|denied"})
+			return
+		}
+
+		existing, err := getHoldByID(cfg, holdID)
+		if err != nil {
+			log.Printf("holds: DecideHold getHoldByID: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("query hold: %v", err)})
+			return
+		}
+		if existing == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "hold not found"})
+			return
+		}
+		if existing.Status != "pending" {
+			// Already terminal — idempotent: return existing decision without writing a new row.
+			c.JSON(http.StatusOK, gin.H{"ok": true, "already_decided_as": existing.Status})
+			return
+		}
+
+		newStatus := body.Decision // "approved" | "denied"
+		if err := writeHoldStatus(cfg, holdID, newStatus, body.DecidedBy, body.DecidedReason); err != nil {
+			log.Printf("holds: DecideHold writeHoldStatus: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("write decision: %v", err)})
+			return
+		}
+
+		// Wake the long-poll goroutine.
+		registry.Signal(holdID, holdregistry.Decision{
+			Allow:  newStatus == "approved",
+			Reason: body.DecidedReason,
+		})
+
+		// Push SSE so toasts/list refresh.
+		broadcaster.Publish(models.AlertWebhookPayload{
+			RuleID:     existing.RuleID,
+			RuleName:   "hold_decided",
+			Severity:   existing.Severity,
+			AgentID:    existing.AgentID,
+			Message:    fmt.Sprintf("hold:%s|decision:%s", holdID, newStatus),
+			DetectedAt: time.Now().UTC().Format(time.RFC3339),
+		})
+
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// ListHolds handles GET /api/holds. Query params: ?status=pending (default), ?limit=N (default 100, max 500).
+func ListHolds(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		status := c.DefaultQuery("status", "pending")
+		limit := 100
+		if v := c.Query("limit"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
+				limit = n
+			}
+		}
+		sql := fmt.Sprintf(`
+SELECT hold_id, deployment_id, agent_id, session_id, run_id, tool_name,
+       rule_id, severity, args_summary, message, created_at, status,
+       decided_by, decided_at, decided_reason
+FROM table(mv_holds_current)
+WHERE status = '%s'
+ORDER BY created_at DESC
+LIMIT %d`, escapeSQLStr(status), limit)
+		rows, err := tp.Query(&cfg.Timeplus, sql)
+		if err != nil {
+			log.Printf("holds: ListHolds query: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		holds := make([]models.Hold, 0, len(rows))
+		for _, row := range rows {
+			holds = append(holds, rowToHold(row))
+		}
+		c.JSON(http.StatusOK, gin.H{"holds": holds, "total": len(holds)})
+	}
+}
+
+// GetHold handles GET /api/holds/:hold_id. Returns current state + full timeline.
+func GetHold(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		holdID := c.Param("hold_id")
+
+		current, err := getHoldByID(cfg, holdID)
+		if err != nil {
+			log.Printf("holds: GetHold getHoldByID: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		if current == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "hold not found"})
+			return
+		}
+
+		timelineSQL := fmt.Sprintf(`
+SELECT status, decided_by, decided_at, decided_reason, updated_at
+FROM table(agentguard_holds)
+WHERE hold_id = '%s'
+ORDER BY updated_at ASC`, escapeSQLStr(holdID))
+		rows, err := tp.Query(&cfg.Timeplus, timelineSQL)
+		if err != nil {
+			log.Printf("holds: GetHold timeline query: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		timeline := make([]gin.H, 0, len(rows))
+		for _, row := range rows {
+			timeline = append(timeline, gin.H{
+				"status":         parseStr(row["status"]),
+				"decided_by":     parseStr(row["decided_by"]),
+				"decided_at":     parseTime(row["decided_at"]),
+				"decided_reason": parseStr(row["decided_reason"]),
+				"updated_at":     parseTime(row["updated_at"]),
+			})
+		}
+
+		c.JSON(http.StatusOK, gin.H{"hold": current, "timeline": timeline})
+	}
+}
+
+// AbandonSession handles POST /api/holds/_abandon-session/:session_id.
+// Plugin's SessionEnd hook fires this fire-and-forget to clean up holds for
+// the ending session.
+func AbandonSession(cfg *config.Config, registry *holdregistry.Registry) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg, errMsg := pluginCfg(cfg)
+		if errMsg != "" {
+			log.Printf("holds: AbandonSession: %s", errMsg)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
+			return
+		}
+		sessionID := c.Param("session_id")
+
+		sql := fmt.Sprintf(`
+SELECT hold_id FROM table(mv_holds_current)
+WHERE session_id = '%s' AND status = 'pending'`, escapeSQLStr(sessionID))
+		rows, err := tp.Query(&cfg.Timeplus, sql)
+		if err != nil {
+			log.Printf("holds: AbandonSession query: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		holdIDs := make([]string, 0, len(rows))
+		for _, row := range rows {
+			if id := parseStr(row["hold_id"]); id != "" {
+				holdIDs = append(holdIDs, id)
+			}
+		}
+
+		failAllow := cfg.Holds.FailPolicy == "allow"
+		for _, id := range holdIDs {
+			_ = writeHoldStatus(cfg, id, "abandoned", "system", "session ended")
+			registry.Signal(id, holdregistry.Decision{
+				Allow:  failAllow,
+				Reason: "session ended",
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"abandoned": len(holdIDs)})
+	}
+}
+
+// DrainHolds handles POST /api/holds/_drain. Operator-only: marks all pending holds as 'abandoned'.
+func DrainHolds(cfg *config.Config, registry *holdregistry.Registry) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg, errMsg := pluginCfg(cfg)
+		if errMsg != "" {
+			log.Printf("holds: DrainHolds: %s", errMsg)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
+			return
+		}
+		sql := `SELECT hold_id FROM table(mv_holds_current) WHERE status = 'pending'`
+		rows, err := tp.Query(&cfg.Timeplus, sql)
+		if err != nil {
+			log.Printf("holds: DrainHolds query: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			return
+		}
+		holdIDs := make([]string, 0, len(rows))
+		for _, row := range rows {
+			if id := parseStr(row["hold_id"]); id != "" {
+				holdIDs = append(holdIDs, id)
+			}
+		}
+		failAllow := cfg.Holds.FailPolicy == "allow"
+		for _, id := range holdIDs {
+			_ = writeHoldStatus(cfg, id, "abandoned", "operator", "drained")
+			registry.Signal(id, holdregistry.Decision{Allow: failAllow, Reason: "drained"})
+		}
+		c.JSON(http.StatusOK, gin.H{"drained": len(holdIDs)})
+	}
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+func getHoldByID(cfg *config.Config, holdID string) (*models.Hold, error) {
+	sql := fmt.Sprintf(`
+SELECT hold_id, deployment_id, agent_id, session_id, run_id, tool_name,
+       rule_id, severity, args_summary, message, created_at, status,
+       decided_by, decided_at, decided_reason
+FROM table(mv_holds_current)
+WHERE hold_id = '%s'
+LIMIT 1`, escapeSQLStr(holdID))
+	rows, err := tp.Query(&cfg.Timeplus, sql)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	h := rowToHold(rows[0])
+	return &h, nil
+}
+
+func rowToHold(row map[string]interface{}) models.Hold {
+	return models.Hold{
+		HoldID:        parseStr(row["hold_id"]),
+		DeploymentID:  parseStr(row["deployment_id"]),
+		AgentID:       parseStr(row["agent_id"]),
+		SessionID:     parseStr(row["session_id"]),
+		RunID:         parseStr(row["run_id"]),
+		ToolName:      parseStr(row["tool_name"]),
+		RuleID:        parseStr(row["rule_id"]),
+		Severity:      parseStr(row["severity"]),
+		ArgsSummary:   parseStr(row["args_summary"]),
+		Message:       parseStr(row["message"]),
+		CreatedAt:     parseTime(row["created_at"]),
+		Status:        parseStr(row["status"]),
+		DecidedBy:     parseStr(row["decided_by"]),
+		DecidedAt:     parseTime(row["decided_at"]),
+		DecidedReason: parseStr(row["decided_reason"]),
+	}
+}

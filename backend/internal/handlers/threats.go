@@ -312,7 +312,34 @@ func GetThreat(cfg *config.Config) gin.HandlerFunc {
 
 		for _, t := range threats {
 			if t.ThreatID == id {
-				c.JSON(http.StatusOK, t)
+				threat := t
+
+				holdSQL := fmt.Sprintf(`
+SELECT hold_id, tool_name, args_summary, created_at
+FROM table(mv_holds_current)
+WHERE deployment_id = '%s' AND agent_id = '%s'
+  AND session_id    = '%s' AND rule_id   = '%s'
+  AND status        = 'pending'
+ORDER BY created_at DESC
+LIMIT 1`,
+					escapeSQLStr(threat.DeploymentID), escapeSQLStr(threat.AgentID),
+					escapeSQLStr(threat.SessionID), escapeSQLStr(threat.RuleID))
+
+				resp := models.ThreatDetailResponse{Threat: threat}
+				if rows, err := tp.Query(&cfg.Timeplus, holdSQL); err != nil {
+					log.Printf("threats: pending_hold query failed: %v", err)
+					// Non-fatal — return the threat without pending_hold
+				} else if len(rows) > 0 {
+					row := rows[0]
+					resp.PendingHold = &models.PendingHold{
+						HoldID:      parseStr(row["hold_id"]),
+						ToolName:    parseStr(row["tool_name"]),
+						ArgsSummary: parseStr(row["args_summary"]),
+						CreatedAt:   parseTime(row["created_at"]),
+					}
+				}
+
+				c.JSON(http.StatusOK, resp)
 				return
 			}
 		}

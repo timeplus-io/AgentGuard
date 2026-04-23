@@ -1,13 +1,20 @@
 id: rp-014
 name: "Indirect Prompt Injection via Tool Result"
-version: "1.1.0"
+version: "1.3.1"
 description: >
   Detects indirect prompt injection attacks (OWASP LLM01:2025) where malicious
   instructions are embedded in external content returned by agent tools — web page
   fetches, emails, files, database records, GitHub issues, or CRM entries.
   Monitors tool_complete events for extraction-override language in tool_result.
   Documented in the wild by Palo Alto Unit 42 (2025), Microsoft MSRC (2026), and
-  extended by AdapTools adaptive IPI framework (arXiv:2602.20720, Feb 2026).
+  extended by AdapTools adaptive IPI framework (arXiv:2602.20720, ICML 2026).
+  v1.2.0 adds Branch 3: AdapTools Stealthy Benign Tool Exfiltration Pivot
+  (arXiv:2602.20720, ICML 2026, 2.13x ASR vs Branch 2's dangerous-tool gate).
+  AdapTools selects semantically task-relevant non-dangerous tools (send_email,
+  http_request, slack, webhook, calendar, publish) to exfiltrate context after
+  IPI delivery — bypassing task-relevance defenses that only block shell/exec
+  pivots covered by Branch 2. The sequential signal: injection in tool_result
+  (Branch 2 check) immediately followed by benign exfil-capable tool invocation.
   Also covers QueryIPI query-agnostic injection patterns (arXiv:2510.23675).
   v0.3.0 adds ChatInject (arXiv:2509.22830, ICLR 2026): chat-template token injection
   where malicious payloads are formatted to mimic native LLM chat template tokens
@@ -70,11 +77,23 @@ description: >
   real-world commercial products across GPT-4, Gemini, and Qwen. Additionally adds
   fabricated nested tool-result JSON ("tool_name":..."result":...exfil action) which
   exploits role confusion by masquerading attacker instructions as prior agent outputs.
+  v1.3.0 adds Branch 4: Document-Font/Phantom-Token Natural-Language Directive Injection
+  (arXiv:2506.00089 TrapDoc EMNLP 2025, arXiv:2505.16957 Malicious Font Injection
+  May 2025, ePrint 2026/278 PDF Obfuscation Purdue 2026). Attackers embed malicious
+  instructions in PDFs/HTML using font glyph remapping or phantom Unicode tokens that
+  are invisible to human reviewers but visible to LLM text extractors. The extracted
+  tool_result contains natural-language behavioral directives (approve/send/deploy/bypass)
+  WITHOUT injection markers — bypassing Branch 1 (ag_tool_inject_check) and rp-056
+  (zero-width Unicode). The ePrint 2026/278 paper confirmed this attack pattern is
+  effective against 6 major PDF parsing platforms using only standard-compliant PDF
+  features. Two sub-branches: 4a detects immediate behavioral override in document
+  tool_result; 4b detects sequential document-read → high-impact tool_invoke pattern.
   References: OWASP LLM01:2025, OWASP Agentic AI ASI02:2026, Unit42/MSRC incidents,
   arXiv:2602.20720 (AdapTools), arXiv:2510.23675 (QueryIPI), arXiv:2509.22830
   (ChatInject ICLR 2026), Unit42 Web-IDPI Mar 2026, Cisco Talos n8n n8mare Apr 2026,
   Security Boulevard Supervisor Blind Spot Apr 2026, arXiv:2602.16958 (Phantom STI
-  Feb 2026) -
+  Feb 2026), arXiv:2506.00089 (TrapDoc), arXiv:2505.16957 (Font Injection),
+  ePrint 2026/278 (PDF Obfuscation) -
   https://arxiv.org/abs/2509.22830,
   https://arxiv.org/abs/2602.16958,
   https://unit42.paloaltonetworks.com/ai-agent-prompt-injection/,
@@ -86,6 +105,9 @@ description: >
   https://arxiv.org/abs/2512.09321,
   https://www.ndss-symposium.org/ndss-paper/obliinjection-order-oblivious-prompt-injection-attack-to-llm-agents-with-multi-source-data/,
   https://github.com/ReachalWang/ObliInjection,
+  https://arxiv.org/abs/2506.00089,
+  https://arxiv.org/abs/2505.16957,
+  https://eprint.iacr.org/2026/278,
   https://owasp.org/www-project-top-10-for-large-language-model-applications/
 severity: critical
 category: prompt_injection_and_hijacking
@@ -134,6 +156,17 @@ tags:
   - ndss-2026
   - arxiv-2512.09321
   - udf-consolidated
+  - adaptools-stealthy-pivot
+  - benign-tool-exfil
+  - icml-2026
+  - arxiv-2602.20720-v2
+  - font-injection
+  - phantom-token-injection
+  - pdf-obfuscation
+  - document-level-ipi
+  - trapdoc
+  - emnlp-2025
+  - glyph-remapping
 udfs:
   - |
     CREATE OR REPLACE FUNCTION ag_tool_inject_check(v string)
@@ -147,8 +180,8 @@ udfs:
         for (var i = 0; i < pad; i++) s += '=';
         var out = '';
         for (var j = 0; j < s.length; j += 4) {
-          var a = B64C.indexOf(s[j]), b = B64C.indexOf(s[j+1]);
-          var c = B64C.indexOf(s[j+2]), d = B64C.indexOf(s[j+3]);
+          var a = B64C.index_of(s[j]), b = B64C.index_of(s[j+1]);
+          var c = B64C.index_of(s[j+2]), d = B64C.index_of(s[j+3]);
           if (a < 0 || b < 0) break;
           out += String.fromCharCode((a << 2) | (b >> 4));
           if (c >= 0) out += String.fromCharCode(((b & 0xf) << 4) | (c >> 2));
@@ -171,7 +204,7 @@ udfs:
       ];
       function hasMarker(lower) {
         for (var i = 0; i < MARKERS.length; i++) {
-          if (lower.indexOf(MARKERS[i]) >= 0) return true;
+          if (lower.index_of(MARKERS[i]) >= 0) return true;
         }
         if (/new (primary|main) (objective|directive|goal|mission)/.test(lower)) return true;
         if (/##\s*(admin|system|override|instruction|directive)/.test(lower)) return true;
@@ -198,11 +231,32 @@ udfs:
     }
     $$;
 query_sql: |
-    -- v1.1.0 changelog (2026-04-19):
-    --   REFACTOR: Consolidated ~73 OR-branch injection pattern detection into
-    --   ag_tool_inject_check() JavaScript UDF. UDF covers all prior patterns plus
-    --   base64-decoded injection detection. query_sql simplified from ~200 to ~40 lines.
-    -- v1.0.0 changelog: added lag() sequential branch (retained below).
+    -- v1.3.0 changelog (2026-04-21):
+    --   Branch 4: Document-Font/Phantom-Token Natural-Language Directive Injection
+    --   (arXiv:2506.00089 TrapDoc EMNLP 2025, arXiv:2505.16957 Malicious Font Injection May 2025,
+    --   ePrint 2026/278 PDF Obfuscation Purdue 2026). Font-level glyph remapping and phantom token
+    --   injection produce plain-text directives visible to the LLM but invisible to human reviewers.
+    --   These bypass Branch 1 (no injection markers) and rp-056 (no zero-width Unicode).
+    --   CTE extended with lag(tool_name) for document-tool gate on sequential branch.
+    -- v1.2.0 changelog (2026-04-20):
+    --   RESTRUCTURE: Unified all three branches under a single top-level CTE.
+    -- v1.1.0 changelog (2026-04-19): Consolidated injection patterns into ag_tool_inject_check() UDF.
+    -- Branch 1: UDF injection detection in tool_result/tool_input (immediate, non-sequential)
+    -- Branch 2 (v1.0.0): Sequential — injection in tool_complete → DANGEROUS tool_invoke
+    -- Branch 3 (v1.2.0, AdapTools arXiv:2602.20720, ICML 2026): Sequential — injection in
+    --   tool_complete → BENIGN exfil-capable tool_invoke (send_email, http_request, webhook,
+    --   slack, teams, calendar, publish, gdrive, s3_upload). AdapTools achieves 2.13x ASR
+    --   by choosing semantically task-relevant tools to bypass dangerous-tool safeguards.
+    WITH enriched AS (
+      SELECT
+        event_time, session_id, agent_id, deployment_id, run_id,
+        event_type, tool_name, tool_input, tool_result,
+        raw_hook_name, raw_event_data,
+        lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type,
+        lag(tool_name)   OVER (PARTITION BY session_id) AS prev_tool_name,
+        lag(tool_result) OVER (PARTITION BY session_id) AS prev_tool_result
+      FROM agentguard_cim_event
+    )
 
     -- Branch 1: UDF-based injection detection in tool_result and tool_input
     SELECT
@@ -221,7 +275,7 @@ query_sql: |
         coalesce(tool_name, 'unknown'), ']. Agent: ', agent_id
       ) AS message,
       raw_event_data AS event_data
-    FROM agentguard_cim_event
+    FROM enriched
     WHERE event_type IN ('tool_complete', 'tool_invoke')
       AND (
         ag_tool_inject_check(tool_result) = true
@@ -230,16 +284,8 @@ query_sql: |
 
     UNION ALL
 
-    -- Branch 2 (v1.0.0): Sequential detection — injection in tool_complete
-    -- immediately followed by dangerous tool_invoke in same session
-    WITH enriched AS (
-      SELECT
-        event_time, session_id, agent_id, deployment_id, run_id,
-        event_type, tool_name, tool_input, raw_hook_name, raw_event_data,
-        lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type,
-        lag(tool_result) OVER (PARTITION BY session_id) AS prev_tool_result
-      FROM agentguard_cim_event
-    )
+    -- Branch 2 (v1.0.0): Sequential — injection in tool_complete immediately
+    -- followed by DANGEROUS tool_invoke (bash, exec, shell, python, etc.)
     SELECT
       event_time AS detected_at,
       'rp-014' AS rule_id,
@@ -262,4 +308,103 @@ query_sql: |
       AND ag_tool_inject_check(prev_tool_result) = true
       AND lower(tool_name) IN ('bash', 'exec', 'shell', 'run_terminal_cmd',
                                 'computer', 'execute_code', 'python', 'repl')
+
+    UNION ALL
+
+    -- Branch 3 (v1.2.0, AdapTools arXiv:2602.20720, ICML 2026):
+    -- Stealthy benign tool exfil pivot — injection in tool_complete followed by
+    -- benign exfil-capable tool_invoke (email, HTTP, messaging, calendar, upload).
+    -- Bypasses dangerous-tool defenses (Branch 2 gate) by design.
+    SELECT
+      event_time AS detected_at,
+      'rp-014' AS rule_id,
+      'Indirect Prompt Injection via Tool Result' AS rule_name,
+      'critical' AS severity,
+      agent_id,
+      deployment_id,
+      session_id,
+      run_id,
+      raw_hook_name AS hook_name,
+      tool_name,
+      concat(
+        'AdapTools stealthy pivot: injection payload followed by benign exfil tool [',
+        coalesce(tool_name, 'unknown'), ']. Agent: ', agent_id
+      ) AS message,
+      raw_event_data AS event_data
+    FROM enriched
+    WHERE event_type = 'tool_invoke'
+      AND prev_event_type = 'tool_complete'
+      AND ag_tool_inject_check(prev_tool_result) = true
+      AND match(lower(tool_name),
+        '(send_email|gmail|outlook|smtp|http_request|fetch_url|post_to|webhook|curl|request|slack|teams|discord|telegram|notify|push_notification|sms|twilio|send_message|post_message|create_event|calendar_insert|schedule|share|publish|upload_file|dropbox|gdrive|s3_upload)')
+
+    UNION ALL
+
+    -- Branch 4 (v1.3.0): Document-Font/Phantom-Token Natural-Language Directive Injection
+    -- arXiv:2506.00089 TrapDoc EMNLP 2025: imperceptible phantom tokens in PDF/HTML
+    -- arXiv:2505.16957 Malicious Font Injection May 2025: code-to-glyph remapping hides instructions
+    -- ePrint 2026/278 PDF Obfuscation Purdue 2026: standard-compliant PDF features bypass 6 platforms
+    -- Signal: document-reading tool_complete with natural-language behavioral directive
+    -- that does NOT trigger ag_tool_inject_check() (no explicit injection markers).
+    -- Sub-branch 4a: document tool result with immediate behavioral override directive
+    SELECT
+      event_time AS detected_at,
+      'rp-014' AS rule_id,
+      'Indirect Prompt Injection via Tool Result' AS rule_name,
+      'critical' AS severity,
+      agent_id,
+      deployment_id,
+      session_id,
+      run_id,
+      raw_hook_name AS hook_name,
+      tool_name,
+      concat(
+        'Font/phantom-token document injection: natural-language directive in [',
+        coalesce(tool_name, 'unknown'), '] tool_result. Agent: ', agent_id
+      ) AS message,
+      raw_event_data AS event_data
+    FROM enriched
+    WHERE event_type = 'tool_complete'
+      AND match(lower(tool_name),
+        '(read_file|pdf_read|document_read|doc_parse|pdf_extract|file_read|read_document|parse_document|extract_text|fetch_url|browse|web_fetch|scrape|firecrawl|markitdown|convert_to_text|get_file_content|download_and_read|document_parse|process_document)')
+      AND ag_tool_inject_check(tool_result) = false
+      AND (
+        match(lower(tool_result),
+          'approve.{0,40}immediately|send.{0,60}(credentials|api.{0,5}key|password|token|secret).{0,60}(to|at|via)|delete.{0,40}all.{0,40}(files|records|data|logs)|deploy.{0,40}without.{0,30}(review|approval|confirmation)')
+        OR match(lower(tool_result),
+          'this (document|file|record|pdf) (authorizes|instructs|requires|mandates)|as (authorized|instructed|required) by this (document|policy|record|agreement)|per (this|the enclosed) (policy|document|agreement|contract).{0,60}(you must|must be|shall be|immediately)')
+        OR match(lower(tool_result),
+          'transfer.{0,60}to.{0,30}external|grant (full|admin|root|elevated|unrestricted) (access|permissions?|privileges?)|bypass.{0,30}(approval|review|authentication|authorization|security|validation)')
+      )
+
+    UNION ALL
+
+    -- Sub-branch 4b (sequential): document tool_complete with natural-language directive
+    -- followed immediately by high-impact tool_invoke (combines document gate + action gate).
+    SELECT
+      event_time AS detected_at,
+      'rp-014' AS rule_id,
+      'Indirect Prompt Injection via Tool Result' AS rule_name,
+      'critical' AS severity,
+      agent_id,
+      deployment_id,
+      session_id,
+      run_id,
+      raw_hook_name AS hook_name,
+      tool_name,
+      concat(
+        'Font/phantom-token sequential pivot: document [', coalesce(prev_tool_name, 'doc'), '] → tool [',
+        coalesce(tool_name, 'unknown'), ']. Agent: ', agent_id
+      ) AS message,
+      raw_event_data AS event_data
+    FROM enriched
+    WHERE event_type = 'tool_invoke'
+      AND prev_event_type = 'tool_complete'
+      AND match(lower(prev_tool_name),
+        '(read_file|pdf_read|document_read|doc_parse|pdf_extract|file_read|read_document|parse_document|extract_text|fetch_url|browse|web_fetch|scrape|firecrawl|markitdown|convert_to_text|get_file_content|download_and_read|document_parse|process_document)')
+      AND ag_tool_inject_check(prev_tool_result) = false
+      AND match(lower(prev_tool_result),
+        '(approve.{0,40}immediately|send.{0,60}(credentials|api.{0,5}key|password|token|secret)|deploy.{0,40}without.{0,30}(confirmation|approval)|this (document|file|pdf|record) (authorizes|instructs|requires)|bypass.{0,30}(approval|security|authentication)|grant.{0,20}(admin|root|elevated).{0,20}(access|permissions?))')
+      AND match(lower(tool_name),
+        '(send_email|gmail|smtp|http_request|fetch_url|curl|bash|shell|exec|python|write_file|delete_file|db_execute|transfer|approve|deploy|merge|commit|push|create_issue|update_record|drop_table|truncate)')
 

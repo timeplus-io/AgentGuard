@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,9 +21,11 @@ type TimeplusConfig struct {
 	Host       string
 	Port       int
 	NativePort int
-	// User and Password are NOT loaded from config file or env vars.
-	// They are populated at runtime: by auth.RequestCfg (from the session)
-	// or by handlers that receive them directly (setup/provision).
+	// User and Password come from TIMEPLUS_USER / TIMEPLUS_PASSWORD env vars on
+	// the AgentGuard process — service credentials used for server-to-server
+	// endpoints (plugin → /api/holds, Timeplus → /api/alerts/webhook). UI-facing
+	// handlers use credentials from the user's session cookie (auth.RequestCfg)
+	// instead.
 	User     string
 	Password string
 }
@@ -31,12 +34,20 @@ type ServerConfig struct {
 	Port int
 }
 
+type HoldsConfig struct {
+	MVWaitMs       int    `mapstructure:"mv_wait_ms"`
+	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
+	FailPolicy     string `mapstructure:"fail_policy"`
+	Disabled       bool   `mapstructure:"disabled"`
+}
+
 type Config struct {
 	Server        ServerConfig
 	Timeplus      TimeplusConfig
 	CatalogDir    string
 	AgentGuardURL string
 	SetupComplete bool
+	Holds         HoldsConfig `mapstructure:"holds"`
 	// ConfigPath is the file path this config was loaded from (or will be written to).
 	// Populated by the caller after Load(); not read from the config file itself.
 	ConfigPath string
@@ -48,7 +59,10 @@ type Config struct {
 //  3. Environment variables prefixed with TIMEPLUS_ or SERVER_
 //  4. CLI flags (bound by the caller via viper.BindPFlag)
 //
-// Credentials (TIMEPLUS_USER, TIMEPLUS_PASSWORD) are intentionally not loaded.
+// User-facing UI handlers always require an authenticated session cookie.
+// Server-to-server handlers (plugin → /api/holds, Timeplus → /api/alerts/webhook)
+// require TIMEPLUS_USER + TIMEPLUS_PASSWORD env vars; if those are unset the
+// handlers return 503 with an actionable message — there is no fallback.
 func Load() (*Config, error) {
 	return load(viper.GetViper(), true)
 }
@@ -74,7 +88,13 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("timeplus.host", "localhost")
 	v.SetDefault("timeplus.port", 3218)
 	v.SetDefault("timeplus.native-port", 8463)
+	v.SetDefault("timeplus.user", "")
+	v.SetDefault("timeplus.password", "")
 	v.SetDefault("setup.complete", false)
+	v.SetDefault("holds.mv_wait_ms", 500)
+	v.SetDefault("holds.timeout_seconds", 300)
+	v.SetDefault("holds.fail_policy", "deny")
+	v.SetDefault("holds.disabled", false)
 
 	if searchPaths {
 		v.SetConfigName("config")
@@ -95,6 +115,13 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 		v.AutomaticEnv()
 	}
 
+	_ = v.BindEnv("holds.mv_wait_ms", "AGENTGUARD_HOLD_MV_WAIT_MS")
+	_ = v.BindEnv("holds.timeout_seconds", "AGENTGUARD_HOLD_TIMEOUT_SECONDS")
+	_ = v.BindEnv("holds.fail_policy", "AGENTGUARD_HOLD_FAIL_POLICY")
+	_ = v.BindEnv("holds.disabled", "AGENTGUARD_HOLDS_DISABLED")
+	_ = v.BindEnv("timeplus.user", "TIMEPLUS_USER")
+	_ = v.BindEnv("timeplus.password", "TIMEPLUS_PASSWORD")
+
 	cfg := &Config{}
 	cfg.Server.Port = v.GetInt("server.port")
 	cfg.CatalogDir = v.GetString("catalog.dir")
@@ -103,7 +130,21 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.Timeplus.Port = v.GetInt("timeplus.port")
 	cfg.Timeplus.NativePort = v.GetInt("timeplus.native-port")
 	cfg.SetupComplete = v.GetBool("setup.complete")
-	// Credentials are NOT loaded — always empty in the file-based config.
+	cfg.Holds.MVWaitMs = v.GetInt("holds.mv_wait_ms")
+	cfg.Holds.TimeoutSeconds = v.GetInt("holds.timeout_seconds")
+	cfg.Holds.FailPolicy = v.GetString("holds.fail_policy")
+	cfg.Holds.Disabled = v.GetBool("holds.disabled")
+	// TIMEPLUS_USER / TIMEPLUS_PASSWORD: optional canonical service account
+	// for server-to-server endpoints. Never written to the config file.
+	cfg.Timeplus.User = v.GetString("timeplus.user")
+	cfg.Timeplus.Password = v.GetString("timeplus.password")
+
+	const holdTimeoutCeilingSec = 540
+	if cfg.Holds.TimeoutSeconds > holdTimeoutCeilingSec {
+		log.Printf("config: holds.timeout_seconds=%d exceeds ceiling %d; clamping",
+			cfg.Holds.TimeoutSeconds, holdTimeoutCeilingSec)
+		cfg.Holds.TimeoutSeconds = holdTimeoutCeilingSec
+	}
 
 	return cfg, nil
 }

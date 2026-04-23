@@ -33,6 +33,49 @@ async function main(): Promise<void> {
   const config = resolveConfig();
   const hookEventName = typeof input["hook_event_name"] === "string" ? input["hook_event_name"] : "";
 
+  // PreToolUse: synchronous hold path. POST to /api/holds and write Claude Code's
+  // permissionDecision response to stdout. Skip the async send() — /api/holds
+  // ingests the event into agentguard_hook_events itself.
+  if (hookEventName === "PreToolUse") {
+    // If holds are disabled, fall back to async observation-only:
+    // skip the synchronous /api/holds call, write a permissive permissionDecision,
+    // AND let the async send() path run so the event still reaches Timeplus.
+    if (!config.holdsEnabled) {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+          permissionDecisionReason: "",
+        },
+      }));
+      // Fall through to the regular send() so observability data still flows.
+      // (Don't return — let the existing async ingest run below.)
+    } else {
+      const event = normalize(input, config);
+      const { requestHold } = await import("./holds.js");
+      const decision = await requestHold(event, config);
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: decision.decision === "block" ? "deny" : "allow",
+          permissionDecisionReason: decision.reason ?? "",
+        },
+      }));
+      return;  // do NOT also call send() — /api/holds ingested the event already
+    }
+  }
+
+  // SessionEnd: fire-and-forget abandon-session to clean up zombie holds.
+  if (hookEventName === "SessionEnd") {
+    const sessionId = typeof input["session_id"] === "string" ? input["session_id"] : "";
+    if (sessionId) {
+      fetch(`${config.agentguardUrl}/api/holds/_abandon-session/${encodeURIComponent(sessionId)}`, {
+        method: "POST",
+      }).catch(() => { /* best-effort */ });
+    }
+    // continue with existing async ingest path below
+  }
+
   // For the Stop hook, accumulate per-call token usage from the transcript and
   // attach it as _llm_usage in event_data. The mv_cim_metrics_claudecode_cim
   // MV extracts this to produce LLM metrics without requiring OTel.

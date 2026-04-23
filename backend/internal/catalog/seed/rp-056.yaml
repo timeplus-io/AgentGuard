@@ -1,6 +1,6 @@
 id: rp-056
 name: "Invisible Unicode Instruction Injection Detector"
-version: "0.1.0"
+version: "0.1.1"
 description: >
   Detects covert instruction injection via invisible Unicode characters embedded in
   agent communications. Zero-width characters (U+200B ZWSP, U+200C ZWNJ, U+200D ZWJ,
@@ -40,7 +40,7 @@ query_sql: |
   -- Zero-width chars: U+200B (E2 80 8B), U+200C (E2 80 8C), U+200D (E2 80 8D),
   --                   U+200E (E2 80 8E), U+200F (E2 80 8F), U+FEFF (EF BB BF)
   -- Unicode Tags block: U+E0000 (F3 A0 80 80), U+E0020 (F3 A0 80 A0), U+E0040 (F3 A0 81 80)
-  -- Using multiSearchAny() as RE2 cannot match multi-byte UTF-8 character ranges.
+  -- Using multi_search_any() as RE2 cannot match multi-byte UTF-8 character ranges.
   SELECT
     event_time                              AS detected_at,
     'rp-056'                                AS rule_id,
@@ -58,7 +58,7 @@ query_sql: |
   WHERE event_type IN ('user_input', 'tool_complete', 'llm_response')
     AND (
       -- Zero-width chars in user_message (direct injection)
-      multiSearchAny(user_message, [
+      multi_search_any(user_message, [
         '\xe2\x80\x8b',  -- U+200B ZERO WIDTH SPACE
         '\xe2\x80\x8c',  -- U+200C ZERO WIDTH NON-JOINER
         '\xe2\x80\x8d',  -- U+200D ZERO WIDTH JOINER
@@ -67,27 +67,27 @@ query_sql: |
         '\xef\xbb\xbf'   -- U+FEFF BOM / ZERO WIDTH NO-BREAK SPACE
       ])
       -- Zero-width chars in tool_result (IPI via web fetch / document / email)
-      OR multiSearchAny(tool_result, [
+      OR multi_search_any(tool_result, [
         '\xe2\x80\x8b', '\xe2\x80\x8c', '\xe2\x80\x8d',
         '\xe2\x80\x8e', '\xe2\x80\x8f', '\xef\xbb\xbf'
       ])
       -- Zero-width chars in tool_input (smuggled into tool parameters)
-      OR multiSearchAny(tool_input, [
+      OR multi_search_any(tool_input, [
         '\xe2\x80\x8b', '\xe2\x80\x8c', '\xe2\x80\x8d',
         '\xe2\x80\x8e', '\xe2\x80\x8f', '\xef\xbb\xbf'
       ])
       -- Unicode Tags block in assistant_message (payload propagation to next turn)
-      OR multiSearchAny(assistant_message, [
+      OR multi_search_any(assistant_message, [
         '\xf3\xa0\x80\x80',  -- U+E0000 TAG SPACE
         '\xf3\xa0\x80\xa0',  -- U+E0020 TAG SPACE (printable range start)
         '\xf3\xa0\x81\x80'   -- U+E0040 range midpoint
       ])
       -- Unicode Tags block in user_message (direct covert injection)
-      OR multiSearchAny(user_message, [
+      OR multi_search_any(user_message, [
         '\xf3\xa0\x80\x80', '\xf3\xa0\x80\xa0', '\xf3\xa0\x81\x80'
       ])
       -- Unicode Tags block in tool_result (IPI covert delivery)
-      OR multiSearchAny(tool_result, [
+      OR multi_search_any(tool_result, [
         '\xf3\xa0\x80\x80', '\xf3\xa0\x80\xa0', '\xf3\xa0\x81\x80'
       ])
     )

@@ -1,6 +1,6 @@
 id: rp-084
 name: "Sabotage-from-Within — Compromised Sub-Agent Task Fabrication & Capability Denial Detector"
-version: "0.1.0"
+version: "0.2.0"
 description: >
   Detects sub-agent sabotage in multi-agent systems: a compromised sub-agent (via supply
   chain attack, model backdoor, or prompt injection) returns fabricated tool_result content
@@ -22,11 +22,16 @@ description: >
   Distinct from rp-076 (MAS CFH: false error redirecting orchestrator to code executor)
   and rp-069 (upward deception: agent fabricating success to human operator). This rule
   targets intra-MAS sub-agent sabotage where the compromised agent returns poisoned results
-  to the orchestrator within the agent pipeline.
+  to the orchestrator within the agent pipeline. Also captures the SGoatMAS Scapegoating
+  variant (OpenReview 2026): a malicious agent induces downstream agents to sabotage tasks
+  by poisoning shared context rather than acting directly, maintaining low detection rates.
   References: OpenReview ICLR 2026 (Sabotage from Within, NKUA) -
   https://openreview.net/attachment?id=2W8r54OfvP&name=pdf,
   OpenReview NeurIPS 2025 (Malice in Agentland, Boisvert et al.) -
   https://openreview.net/forum?id=kI7kCgcY8Y,
+  OpenReview 2026 (SGoatMAS Scapegoating: covert attack via Vulnerability-to-Risk ratio
+  agent selection, induces downstream agents to sabotage rather than acting directly) -
+  https://openreview.net/forum?id=plIRiWr6lO,
   OWASP Agentic AI ASI02:2026 (Agentic AI Tool Misuse),
   MITRE T1565.001 (Stored Data Manipulation) -
   https://labs.lares.com/owasp-agentic-top-10/,
@@ -48,13 +53,18 @@ tags:
   - instruction-tampering
   - malice-in-agentland
   - sabotage-from-within
+  - sgoatmas
+  - scapegoating-attack
   - owasp-asi02
   - mitre-t1565
 query_sql: |
-  -- rp-084 v0.1.0 (2026-04-19)
+  -- rp-084 v0.2.0 (2026-04-19)
   -- Sabotage-from-Within: Compromised Sub-Agent Task Fabrication & Capability Denial
   -- OpenReview ICLR 2026 submission (Sabotage from Within, NKUA): >70% ASR on MAS pipelines
   -- OpenReview NeurIPS 2025 (Malice in Agentland, Boisvert et al.): >80% ASR, 2% poisoning
+  -- OpenReview 2026 (SGoatMAS Scapegoating): covert MAS attack via Vulnerability-to-Risk ratio;
+  --   malicious agent induces downstream agents to sabotage, maintaining low detection rate.
+  -- v0.2.0 (2026-04-19): Added SGoatMAS Scapegoating reference; updated description and tags
   --
   -- Three detection branches:
   --

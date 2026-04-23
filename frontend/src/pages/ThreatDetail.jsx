@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import { SeverityBadge, ThreatStatusBadge } from '../components/Badge'
 import { api } from '../api/client'
@@ -141,24 +141,79 @@ function EventCard({ event }) {
 
 export default function ThreatDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [threat, setThreat] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState('')
+  // Hold decision state: null | 'pending' | 'approved' | 'denied' | 'error'
+  const [decideStatus, setDecideStatus] = useState(null)
+  const [decideError, setDecideError] = useState('')
+  const [decideReason, setDecideReason] = useState('')
+
+  // Support /threats/by-hold/:holdId — resolve hold to underlying threat and redirect.
+  const isByHold = location.pathname.startsWith('/threats/by-hold/')
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
     setError(null)
-    api.getThreat(id)
-      .then(data => setThreat(data))
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [id])
+    setDecideStatus(null)
+    setDecideReason('')
+
+    async function load() {
+      try {
+        if (isByHold) {
+          const holdResp = await api.getHold(id)
+          const h = holdResp.hold
+          const list = await api.getThreats({ agent_id: h.agent_id, limit: 200 })
+          const matched = (list.threats ?? []).find(
+            t => t.agent_id === h.agent_id
+              && t.deployment_id === h.deployment_id
+              && t.session_id === h.session_id
+              && t.rule_id === h.rule_id
+          )
+          if (!matched) throw new Error('threat for this hold not found')
+          if (!cancelled) {
+            navigate(`/threats/${encodeURIComponent(matched.threat_id)}`, { replace: true })
+          }
+          return
+        }
+        const data = await api.getThreatDetail(id)
+        if (!cancelled) setThreat(data)
+      } catch (e) {
+        if (!cancelled) setError(e.message ?? String(e))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [id, isByHold, navigate])
+
+  async function decide(decision) {
+    if (!threat?.pending_hold) return
+    setDecideStatus('pending')
+    setDecideError('')
+    try {
+      await api.decideHold(threat.pending_hold.hold_id, decision, decideReason)
+      setDecideStatus(decision)
+      const fresh = await api.getThreatDetail(id)
+      setThreat(fresh)
+    } catch (err) {
+      console.error('threat: decide hold failed:', err)
+      setDecideStatus('error')
+      setDecideError(err?.message ?? String(err))
+    }
+  }
 
   async function handleAcknowledge() {
     if (actionLoading) return
     const prev = threat.status
     setActionLoading(true)
+    setActionError('')
     setThreat(t => ({ ...t, status: 'acknowledged' }))
     try {
       await api.acknowledgeThreat(threat.threat_id, {
@@ -167,8 +222,10 @@ export default function ThreatDetail() {
         session_id: threat.session_id,
         rule_id: threat.rule_id,
       })
-    } catch {
+    } catch (err) {
+      console.error('threat: acknowledge failed:', err)
       setThreat(t => ({ ...t, status: prev }))
+      setActionError(`Acknowledge failed: ${err?.message ?? String(err)}`)
     } finally {
       setActionLoading(false)
     }
@@ -178,6 +235,7 @@ export default function ThreatDetail() {
     if (actionLoading) return
     const prev = threat.status
     setActionLoading(true)
+    setActionError('')
     setThreat(t => ({ ...t, status: 'cleared' }))
     try {
       await api.clearThreat(threat.threat_id, {
@@ -186,8 +244,10 @@ export default function ThreatDetail() {
         session_id: threat.session_id,
         rule_id: threat.rule_id,
       })
-    } catch {
+    } catch (err) {
+      console.error('threat: clear failed:', err)
       setThreat(t => ({ ...t, status: prev }))
+      setActionError(`Clear failed: ${err?.message ?? String(err)}`)
     } finally {
       setActionLoading(false)
     }
@@ -301,6 +361,72 @@ export default function ThreatDetail() {
           </div>
         ) : threat ? (
           <div className="p-8 space-y-8">
+
+            {actionError && (
+              <div className="flex items-start gap-2 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs">
+                <span className="material-symbols-outlined text-base shrink-0">error</span>
+                <span className="flex-1">{actionError}</span>
+                <button
+                  onClick={() => setActionError('')}
+                  className="text-[#ffb4ab]/70 hover:text-[#ffb4ab] shrink-0"
+                  aria-label="Dismiss"
+                >
+                  <span className="material-symbols-outlined text-[14px]">close</span>
+                </button>
+              </div>
+            )}
+
+            {/* Pending Hold banner — Approve / Deny */}
+            {threat.pending_hold && decideStatus !== 'approved' && decideStatus !== 'denied' && (
+              <section className="bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-[#ffb4ab]">block</span>
+                  <h2 className="text-sm font-semibold text-[#ffb4ab]">Pending Hold — Agent paused</h2>
+                </div>
+                <p className="text-xs text-zinc-300 mb-3">
+                  Tool: <code className="font-mono text-[#e7dff0]">{threat.pending_hold.tool_name}</code>
+                </p>
+                <pre className="bg-[#0f0c17] rounded-sm p-3 mb-4 text-[11px] font-mono text-zinc-300 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+                  {threat.pending_hold.args_summary || '(no arguments)'}
+                </pre>
+                <textarea
+                  placeholder="Optional reason for your decision..."
+                  value={decideReason}
+                  onChange={e => setDecideReason(e.target.value)}
+                  className="w-full bg-[#0f0c17] border border-[#574149]/30 rounded-sm p-2 text-xs text-[#e7dff0] mb-3"
+                  rows={2}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => decide('approved')}
+                    disabled={decideStatus === 'pending'}
+                    className="px-4 py-2 bg-emerald-500/20 text-emerald-400 text-xs font-semibold rounded-sm hover:bg-emerald-500/30 disabled:opacity-50"
+                  >
+                    ✓ Approve
+                  </button>
+                  <button
+                    onClick={() => decide('denied')}
+                    disabled={decideStatus === 'pending'}
+                    className="px-4 py-2 bg-[#ffb4ab]/20 text-[#ffb4ab] text-xs font-semibold rounded-sm hover:bg-[#ffb4ab]/30 disabled:opacity-50"
+                  >
+                    ✗ Deny
+                  </button>
+                </div>
+                {decideStatus === 'error' && (
+                  <p className="text-[11px] text-[#ffb4ab] mt-2">
+                    Failed to submit decision{decideError ? `: ${decideError}` : '. Try again.'}
+                  </p>
+                )}
+              </section>
+            )}
+
+            {(decideStatus === 'approved' || decideStatus === 'denied') && (
+              <section className="bg-[#1d1a25] rounded-sm p-4">
+                <p className="text-xs text-emerald-400">
+                  ✓ {decideStatus === 'approved' ? 'Approved' : 'Denied'} — agent has been notified.
+                </p>
+              </section>
+            )}
 
             {/* Stat strip */}
             <div className="grid grid-cols-4 gap-4">

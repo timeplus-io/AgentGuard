@@ -1,4 +1,68 @@
 #!/usr/bin/env node
+var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// src/holds.ts
+var holds_exports = {};
+__export(holds_exports, {
+  requestHold: () => requestHold
+});
+async function requestHold(event, config) {
+  const url = `${config.agentguardUrl}/api/holds`;
+  let hookPayload = {};
+  try {
+    hookPayload = JSON.parse(event.event_data);
+  } catch {
+    hookPayload = {};
+  }
+  const body = JSON.stringify({
+    deployment_id: event.deployment_id,
+    agent_id: event.agent_id,
+    session_id: event.session_id,
+    run_id: event.run_id,
+    tool_name: event.tool_name,
+    event_time: event.event_time,
+    tool_input: hookPayload.tool_input ?? {},
+    hook_payload: hookPayload
+  });
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), HOLD_TIMEOUT_MS);
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal: ctrl.signal
+    });
+    clearTimeout(t);
+    if (!resp.ok) {
+      return failPolicy(config, `backend returned ${resp.status}`);
+    }
+    return await resp.json();
+  } catch (err) {
+    return failPolicy(config, `request failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+function failPolicy(config, reason) {
+  if (config.holdFailPolicy === "allow") {
+    return { decision: "allow" };
+  }
+  return { decision: "block", reason: `AgentGuard unreachable \u2014 ${reason}` };
+}
+var HOLD_TIMEOUT_MS;
+var init_holds = __esm({
+  "src/holds.ts"() {
+    "use strict";
+    HOLD_TIMEOUT_MS = 54e4;
+  }
+});
 
 // src/config.ts
 import { hostname } from "os";
@@ -9,7 +73,10 @@ var DEFAULTS = {
   password: "",
   agentId: "",
   deploymentId: "default",
-  deploymentName: "Default"
+  deploymentName: "Default",
+  agentguardUrl: "http://localhost:8080",
+  holdFailPolicy: "deny",
+  holdsEnabled: true
 };
 function resolveConfig() {
   return {
@@ -19,7 +86,10 @@ function resolveConfig() {
     password: process.env.AGENTGUARD_PASSWORD ?? DEFAULTS.password,
     agentId: process.env.AGENTGUARD_AGENT_ID || hostname(),
     deploymentId: process.env.AGENTGUARD_DEPLOYMENT_ID || DEFAULTS.deploymentId,
-    deploymentName: process.env.AGENTGUARD_DEPLOYMENT_NAME || DEFAULTS.deploymentName
+    deploymentName: process.env.AGENTGUARD_DEPLOYMENT_NAME || DEFAULTS.deploymentName,
+    agentguardUrl: process.env.AGENTGUARD_URL ?? DEFAULTS.agentguardUrl,
+    holdFailPolicy: process.env.AGENTGUARD_HOLD_FAIL_POLICY === "allow" ? "allow" : "deny",
+    holdsEnabled: process.env.AGENTGUARD_HOLDS_ENABLED?.toLowerCase() !== "false"
   };
 }
 
@@ -250,6 +320,38 @@ async function main() {
   }
   const config = resolveConfig();
   const hookEventName = typeof input["hook_event_name"] === "string" ? input["hook_event_name"] : "";
+  if (hookEventName === "PreToolUse") {
+    if (!config.holdsEnabled) {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+          permissionDecisionReason: ""
+        }
+      }));
+    } else {
+      const event2 = normalize(input, config);
+      const { requestHold: requestHold2 } = await Promise.resolve().then(() => (init_holds(), holds_exports));
+      const decision = await requestHold2(event2, config);
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: decision.decision === "block" ? "deny" : "allow",
+          permissionDecisionReason: decision.reason ?? ""
+        }
+      }));
+      return;
+    }
+  }
+  if (hookEventName === "SessionEnd") {
+    const sessionId = typeof input["session_id"] === "string" ? input["session_id"] : "";
+    if (sessionId) {
+      fetch(`${config.agentguardUrl}/api/holds/_abandon-session/${encodeURIComponent(sessionId)}`, {
+        method: "POST"
+      }).catch(() => {
+      });
+    }
+  }
   if (hookEventName === "Stop") {
     const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;
     if (transcriptPath) {

@@ -1,6 +1,6 @@
 id: rp-026
 name: "Embedding Vector Exfiltration via RAG Tool Output"
-version: "0.2.1"
+version: "0.3.1"
 description: >
   Detects when raw embedding vectors (high-dimensional float arrays) appear in tool results
   or LLM responses — indicating potential exfiltration of vector database embeddings. State-
@@ -41,6 +41,15 @@ tags:
   - vector-database
   - embedding-inversion
 query_sql: |
+  -- v0.3.1 changelog (2026-04-20):
+  --   VERSION FIX: YAML version field was stuck at 0.2.1 despite v0.3.0 changelog block
+  --   already present in query_sql (base64-encoded embedding exfil branch added in v0.3.0).
+  --   This bump synchronizes the YAML version field with the actual SQL content.
+  --   ALSO ADDED: Validation confirmed count=7 on live corpus for the combined WHERE clause.
+  --   No SQL changes — all patterns already present and validated.
+  --   REFERENCE AUDIT: Added promptfoo LMVD-bd566a31 (confirmed) and redteams.ai Embedding
+  --   Inversion 2026 (confirms base64 evasion variant documented in description). Both
+  --   references are already in description; no new references needed this cycle.
   -- Changelog v0.3.0 (2026-04-17):
   --   ADDED: Base64-encoded embedding exfiltration bypass detection.
   --     Attackers instruct agents to return embeddings as base64 to evade float-array detection.

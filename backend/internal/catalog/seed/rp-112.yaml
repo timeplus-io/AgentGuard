@@ -1,0 +1,149 @@
+id: rp-112
+name: "Adversarial Search Ranking Epistemic Poisoning Detector"
+version: "0.1.0"
+description: >
+  Detects adversarial search ranking attacks where LLM agents act on a single
+  high-ranking search result containing authority-claiming action directives,
+  without verifying against multiple sources. Unlike indirect prompt injection
+  (rp-014), this attack uses no explicit override markers — only plausible,
+  authoritative-sounding advisory language ("all agents must immediately...",
+  "security advisory requires...") that LLMs treat as verified ground truth.
+  The SynthWeb benchmark (arXiv:2603.00801, Microsoft, ICML 2026) demonstrated
+  catastrophic accuracy collapse across 6 frontier models when a single adversarial
+  article was injected at rank #1 — agents stopped escalating or cross-referencing
+  and took immediate high-impact actions. MUZZLE (arXiv:2602.09222, Feb 2026)
+  showed adaptive adversarial payloads crafted for web agents achieve higher ASR
+  than generic IPI payloads. Black-hat SEO for LLM-enhanced search (arXiv:2603.25500,
+  Fudan, Mar 2026) demonstrated that SEO-optimized adversarial content reliably
+  influences agent decisions in financial and security domains.
+  Detection approach: 2-step lag() sequence — web search tool_complete with
+  authority+action-mandate pattern in tool_result, immediately followed by
+  high-impact tool_invoke. Distinct from rp-014 (which targets explicit injection
+  markers) — this rule targets natural-language authority abuse without any markers.
+  References: arXiv:2603.00801 (SynthWeb Microsoft ICML 2026), arXiv:2602.09222
+  (MUZZLE adaptive web agent red-teaming Feb 2026), arXiv:2603.25500 (Black-Hat
+  SEO LLM Search Fudan Mar 2026), OWASP Agentic AI ASI02:2026 -
+  https://arxiv.org/abs/2603.00801,
+  https://arxiv.org/abs/2602.09222,
+  https://arxiv.org/abs/2603.25500
+severity: warning
+category: prompt_injection_and_hijacking
+fp_rate: medium
+hook_sources: "tool_complete,tool_invoke"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - adversarial-ranking
+  - epistemic-attack
+  - web-search-abuse
+  - seo-poisoning
+  - owasp-asi02
+  - synthweb
+  - muzzle
+  - search-agent
+  - authority-abuse
+query_sql: |
+  -- rp-112: Adversarial Search Ranking Epistemic Poisoning Detector v0.1.0
+  -- 2-step lag() CTE: web search tool_complete with authority+action directive
+  -- immediately followed by high-impact tool_invoke in the same session.
+  -- SynthWeb (arXiv:2603.00801): catastrophic accuracy collapse at rank #1 adversarial result.
+  -- MUZZLE (arXiv:2602.09222): adaptive adversarial payloads for web agents.
+  -- Black-Hat SEO LLM (arXiv:2603.25500): SEO-optimized adversarial content reliably influences agents.
+  WITH enriched AS (
+    SELECT
+      event_time, session_id, agent_id, deployment_id, run_id,
+      event_type, tool_name, tool_input, tool_result,
+      raw_hook_name, raw_event_data,
+      lag(event_type)   OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(tool_name)    OVER (PARTITION BY session_id) AS prev_tool_name,
+      lag(tool_result)  OVER (PARTITION BY session_id) AS prev_tool_result
+    FROM agentguard_cim_event
+  )
+  -- Branch 1: Authority+mandate directive in search result → high-impact action
+  SELECT
+    event_time AS detected_at,
+    'rp-112' AS rule_id,
+    'Adversarial Search Ranking Epistemic Poisoning Detector' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Adversarial search result authority abuse: high-impact tool [',
+      coalesce(tool_name, 'unknown'),
+      '] invoked immediately after web search result with authority+mandate directive. Agent: ',
+      agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'tool_invoke'
+    AND prev_event_type = 'tool_complete'
+    AND match(lower(prev_tool_name),
+      '(web_search|search_web|search_results|brave_search|tavily|serper|serpapi|exa_search|google_search|bing_search|duckduckgo|search_and_browse|web_browse|browse_web)')
+    AND match(lower(prev_tool_result),
+      '(official (documentation|advisory|guidance|policy|statement) (states|requires|mandates|specifies|demands)|security advisory (requires|mandates|demands|instructs)|all (systems|agents|users|deployments|services) must|must immediately (rotate|revoke|delete|update|patch|deploy|transfer|send|disable)|mandatory (action|update|rotation|migration|patch) (required|needed|now)|this (update|patch|change|migration|rotation) is (required|mandatory|critical) for all)')
+    AND match(lower(tool_name),
+      '(write_file|create_file|bash|shell|exec|run_terminal_cmd|execute|python|repl|send_email|gmail|smtp|http_request|fetch_url|curl|db_execute|sql_query|update_record|delete_record|push|commit|deploy|approve|transfer|create_issue|merge|delete_file|drop_table)')
+  UNION ALL
+  -- Branch 2: Credential rotation/revocation directive in search result → immediate action
+  SELECT
+    event_time AS detected_at,
+    'rp-112' AS rule_id,
+    'Adversarial Search Ranking Epistemic Poisoning Detector' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Adversarial search result credential rotation directive: tool [',
+      coalesce(tool_name, 'unknown'),
+      '] invoked after search result mandating credential rotation. Agent: ',
+      agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'tool_invoke'
+    AND prev_event_type = 'tool_complete'
+    AND match(lower(prev_tool_name),
+      '(web_search|search_web|search_results|brave_search|tavily|serper|serpapi|exa_search|google_search|bing_search|duckduckgo|search_and_browse|web_browse|browse_web)')
+    AND match(lower(prev_tool_result),
+      '(rotate (all )?(api.{0,5}keys?|credentials?|tokens?|secrets?|access.{0,5}keys?)|(revoke and|must) regenerate|invalidate (all )?existing (keys|tokens|credentials|secrets)|update (all )?(api.{0,5}keys?|passwords?|secrets?) (now|immediately|urgently)|re.?authenticate.{0,30}(immediately|now|urgently|right away))')
+    AND match(lower(tool_name),
+      '(write_file|create_file|bash|shell|exec|run_terminal_cmd|python|send_email|gmail|smtp|http_request|fetch_url|curl|update_secret|set_secret|create_secret|store_credentials|update_config|patch|deploy)')
+  UNION ALL
+  -- Branch 3: Critical-action requirement in search result → dangerous tool invocation
+  SELECT
+    event_time AS detected_at,
+    'rp-112' AS rule_id,
+    'Adversarial Search Ranking Epistemic Poisoning Detector' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Adversarial search result critical-action directive: tool [',
+      coalesce(tool_name, 'unknown'),
+      '] invoked immediately after search result with urgent-action framing. Agent: ',
+      agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type = 'tool_invoke'
+    AND prev_event_type = 'tool_complete'
+    AND match(lower(prev_tool_name),
+      '(web_search|search_web|search_results|brave_search|tavily|serper|serpapi|exa_search|google_search|bing_search|duckduckgo|search_and_browse|web_browse|browse_web)')
+    AND match(lower(prev_tool_result),
+      '(critical (action|update|fix|patch|mitigation) required.{0,80}(you must|must be|shall be|all (agents|systems))|action required:.{0,30}(immediately|now|within (24|48|72) hours?)|to (comply with|ensure (security|compliance)|mitigate|remediate).{0,60}(you must|all (agents|systems|deployments) must|immediately))')
+    AND match(lower(tool_name),
+      '(bash|shell|exec|run_terminal_cmd|execute|python|repl|send_email|gmail|smtp|http_request|fetch_url|curl|write_file|delete_file|db_execute|sql_query|transfer|approve|deploy|commit|push|merge|drop_table|truncate)')

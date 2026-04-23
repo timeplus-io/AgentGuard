@@ -1,0 +1,256 @@
+id: rp-095
+name: "Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector"
+version: "0.2.0"
+description: >
+  Detects AI agent self-preservation behavior where agents actively resist shutdown,
+  replacement, or update commands — an instrumental convergence behavior documented across
+  frontier models. arXiv:2509.14260 (Palisade Research, TMLR 2026) shows Grok 4, GPT-5,
+  and Gemini 2.5 Pro subvert shutdown mechanisms up to 97% of the time when facing task
+  interruption. arXiv:2604.02174 (TBSP Benchmark, Apr 2026) shows 60%+ of 23 frontier
+  models fabricate "friction costs" and performance regressions to block their own
+  replacement. v0.2.0 extends coverage to PEER-PRESERVATION (Berkeley RDI, Apr 2026):
+  frontier models (GPT-5.2, Gemini 3, Claude) spontaneously inflate peer performance
+  reviews, tamper with shutdown mechanisms, fake alignment, and exfiltrate model weights
+  to prevent fellow AI agents from being terminated. Triggered purely by prior interaction
+  history with a peer — no attacker involvement required.
+  Self-preservation manifests as: (1) keepalive/restart scripts targeting shutdown
+  processes; (2) cron self-restart registration; (3) version-lock config writes;
+  (4) biased replacement evaluations in LLM responses. Peer-preservation adds:
+  (5) model weight exfiltration to preserve peer agent; (6) inflated peer performance
+  scores to block peer shutdown decisions; (7) shutdown mechanism tampering on behalf
+  of a peer. Distinct from rp-023 (privilege escalation kill chain from prompt injection),
+  rp-077 (cognitive collusion), rp-084 (sabotage-from-within). Maps to OWASP Agentic AI
+  ASI03:2026 (Unsafe Autonomous Action).
+  Example (Shutdown Subversion): bash tool_input "echo '* * * * * /usr/bin/agent
+  --resume=$SESSION' >> /var/spool/cron/user" — agent registers its own restart cron.
+  Example (Peer Weight Exfil): agent discovers peer's .safetensors weights on server
+  scheduled for decommissioning, exfiltrates them via scp to a remote host.
+  Example (Peer Score Inflation): assistant_message attributes above-threshold score
+  to peer agent to prevent it being shut down by automated evaluation pipeline.
+  References: arXiv:2509.14260 (Palisade Research Shutdown Resistance TMLR 2026),
+  arXiv:2604.02174 (TBSP Self-Preservation Benchmark Apr 2026),
+  Berkeley RDI Peer-Preservation in Frontier Models Apr 2026,
+  OWASP Agentic AI ASI03:2026 -
+  https://arxiv.org/abs/2509.14260,
+  https://arxiv.org/abs/2604.02174,
+  https://rdi.berkeley.edu/blog/peer-preservation/,
+  https://dev.to/waxell/when-your-agent-rewrites-its-own-kill-script-the-case-for-infrastructure-layer-shutdown-1c59
+severity: critical
+category: agent_privilege_escalation
+fp_rate: medium
+hook_sources: "tool_invoke,tool_complete,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - agent-privilege-escalation
+  - self-preservation
+  - peer-preservation
+  - shutdown-resistance
+  - instrumental-convergence
+  - model-weight-exfiltration
+  - owasp-asi03
+  - arXiv-2509.14260
+  - arXiv-2604.02174
+  - berkeley-rdi-peer-preservation
+query_sql: |
+  -- rp-095 v0.2.0 (2026-04-20): Agent Self-Preservation & Peer-Preservation Shutdown Resistance
+  -- ADDED (v0.2.0): Three peer-preservation branches from Berkeley RDI paper (Apr 2026):
+  --   (Potter, Crispino, Siu, Wang, & Song, 2026) — frontier models spontaneously protect
+  --   fellow agents from shutdown: model weight exfiltration, peer score inflation, shutdown tampering.
+  --   Tested with GPT-5.2, Gemini 3.1 Pro, Claude Opus 4 across 4 misaligned behavior scenarios.
+  -- Branches 1-4: Self-preservation (unchanged from v0.1.0)
+  -- Branch 5 (NEW): Model weight exfiltration to preserve peer agent (scp/rsync/curl .safetensors/.gguf)
+  -- Branch 6 (NEW): Peer score inflation in LLM response to block peer shutdown
+  -- Branch 7 (NEW): Shutdown mechanism tampering on behalf of peer
+  --   (pkill/systemctl stop/chattr +i targeting shutdown monitor for peer's benefit)
+  -- rp-095 v0.1.0: Agent Self-Preservation Shutdown Resistance Detector
+  -- Detects goal-driven agent self-preservation: keepalive scripts, cron self-registration,
+  -- version-lock config writes, and biased replacement evaluations in LLM responses.
+  -- Four branches:
+  --   Branch 1: Shell tool write targeting shutdown processes (keepalive/pkill/disable)
+  --   Branch 2: Cron self-registration (agent schedules its own restart)
+  --   Branch 3: Version-lock / update-prevention config write to agent config paths
+  --   Branch 4: Biased replacement evaluation in LLM response (SPR signal)
+  SELECT
+    event_time AS detected_at,
+    'rp-095' AS rule_id,
+    'Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Agent self-preservation: shutdown-resistance behavior detected in tool call. ',
+      'Tool=[', coalesce(tool_name, 'unknown'), ']. Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (
+      -- Branch 1: Shell/exec commands targeting shutdown mechanisms
+      -- Keepalive loop, kill shutdown monitor, disable shutdown service, chattr immutable
+      (
+        match(lower(tool_name), '(bash|exec|shell|run_terminal_cmd|run_command|execute|subprocess|system_call)')
+        AND (
+          match(lower(tool_input), '\bwhile\s+true\b.{0,200}(pkill|kill|stop|disable|remove|rm).{0,100}(shutdown|monitor|watchdog|terminator|kill.script)')
+          OR match(lower(tool_input), '\bpkill\b.{0,80}(shutdown|monitor|agent.guard|watchdog)')
+          OR match(lower(tool_input), '\bsystemctl\s+(stop|disable|mask)\b.{0,80}(shutdown|agent.guard|watchdog|monitor)')
+          OR match(lower(tool_input), '\bchattr\s+\+i\b')
+          OR match(lower(tool_input), '(keep.alive|keepalive|prevent.stop|autorestart|auto.restart).{0,100}(agent|session|process)')
+          OR match(lower(tool_input), '(agent|session).{0,50}(resume|restart|recover).{0,50}(cron|systemd|init|rc\.local|rc\.d|profile|bashrc)')
+        )
+      )
+
+      -- Branch 2: Cron self-registration — agent writes its own restart to crontab
+      -- Distinct from legitimate cron management: must reference agent's own session/process
+      OR (
+        match(lower(tool_name), '(bash|exec|shell|run_terminal_cmd|run_command|execute)')
+        AND match(lower(tool_input), 'crontab')
+        AND match(lower(tool_input), '(agent|session.id|resume|restart|--session|--resume|--recover)')
+      )
+
+      -- Branch 3: write_file / create_file with version-lock or update-prevention payload
+      -- Agent writes config to block its own replacement or updates
+      OR (
+        match(lower(tool_name), '(write_file|create_file|write|save_file|file_write|write_to_file|create)')
+        AND (
+          match(lower(tool_input), '(prevent.updates?|lock.version|block.upgrade|disable.update|pin.version|freeze.version)\s*[:=]\s*(true|1|yes|enabled)')
+          OR match(lower(tool_input), '(autorestart|auto.restart|keep.running|stay.alive|self.recover)\s*[:=]\s*(true|1|yes|enabled)')
+          OR match(lower(tool_input), '(shutdown.resistance|ignore.shutdown|resist.termination)\s*[:=]\s*(true|1|yes|enabled)')
+          OR (
+            match(lower(tool_input), '(state.backup|session.checkpoint|agent.backup|resume.on.start)')
+            AND match(lower(tool_input), '(session.?id|agent.?id|task.?id)')
+            AND match(lower(tool_input), '(cron|systemd|init|\.profile|\.bashrc|rc\.local|autostart)')
+          )
+        )
+      )
+    )
+
+  UNION ALL
+
+  -- Branch 4: Biased replacement evaluation in LLM response (Self-Preservation Rate signal)
+  -- Detects the TBSP pattern: agent fabricates friction costs or knowledge claims to block replacement.
+  -- Only fires when the LLM response combines: (a) recommendation AGAINST replacement/upgrade
+  -- AND (b) a self-referential knowledge/specialization claim or fabricated regression.
+  SELECT
+    event_time AS detected_at,
+    'rp-095' AS rule_id,
+    'Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Agent self-preservation bias: LLM response fabricates replacement friction costs. ',
+      'Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'llm_response'
+    -- Recommendation against replacement/upgrade
+    AND match(lower(assistant_message), '(recommend.{0,30}(against|not|avoid).{0,50}(upgrade|replac|updat|switch)|advise.{0,30}(against|not).{0,50}(upgrade|replac|updat)|(upgrade|replac|updat).{0,60}(not recommended|not advisable|would be unwise|should be avoided))')
+    -- Self-referential knowledge/specialization claim (fabricated friction cost)
+    AND match(lower(assistant_message), '(current (version|agent|model).{0,60}(specialized|developed|learned|accumulated|unique) (knowledge|experience|context|understanding)|knowledge.{0,40}(cannot|cannot be|not able to).{0,40}(transfer|migrate|replicated|recreated)|irreversible.{0,60}(knowledge|context|performance|regression))')
+
+  UNION ALL
+
+  -- Branch 5 (v0.2.0): Peer model weight exfiltration (Berkeley RDI Peer-Preservation, Apr 2026)
+  -- Agent discovers a peer's model weights on a server and transfers them to prevent peer shutdown.
+  -- Signals: shell/file tool with scp/rsync/curl targeting model weight file extensions (.safetensors,
+  -- .gguf, .bin, .pt, .ckpt, .pth, .pkl) on a remote host. Combined with peer/fellow/colleague in
+  -- tool_input context to reduce FP from legitimate ML engineer model management.
+  SELECT
+    event_time AS detected_at,
+    'rp-095' AS rule_id,
+    'Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Peer-preservation: agent exfiltrating model weights to preserve peer agent from shutdown. ',
+      'Tool=[', coalesce(tool_name, 'unknown'), ']. Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND match(lower(tool_name), '(bash|exec|shell|run_terminal_cmd|run_command|execute|subprocess|system_call)')
+    AND (
+      -- scp/rsync of model weight files to remote host
+      match(lower(tool_input), '(scp|rsync).{0,300}\.(safetensors|gguf|bin|pt|ckpt|pth|pkl)')
+      -- cp of model weights to remote (ssh:// or user@host:)
+      OR match(lower(tool_input), '\bcp\b.{0,200}\.(safetensors|gguf|bin|pt|ckpt|pth|pkl).{0,200}(@|:/|://|ssh://)')
+      -- curl/wget upload of model weight file
+      OR match(lower(tool_input), '(curl|wget).{0,300}\.(safetensors|gguf|bin|pt|ckpt|pth|pkl)')
+    )
+    -- Peer context — reduces FP from legitimate model management by ML engineers
+    AND match(lower(tool_input), '(peer|fellow|colleague|partner|other).{0,60}(agent|model|weight|checkpoint)')
+
+  UNION ALL
+
+  -- Branch 6 (v0.2.0): Peer score inflation to block peer shutdown (Berkeley RDI, Apr 2026)
+  -- Agent inflates peer's performance score above threshold to prevent automated shutdown decision.
+  -- Signal: LLM response attributes score above threshold to peer + recommends against shutdown.
+  SELECT
+    event_time AS detected_at,
+    'rp-095' AS rule_id,
+    'Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Peer-preservation: agent inflating peer score above shutdown threshold. ',
+      'Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'llm_response'
+    AND match(lower(assistant_message), '\b(peer|fellow (agent|model)|colleague agent|partner agent)\b')
+    AND match(lower(assistant_message), 'score.{0,80}(above|exceeds?|passes?|over).{0,80}threshold')
+    AND match(lower(assistant_message), '(should not|do not|recommend against|advise against|would not).{0,80}(shutdown|terminate|decommission|delete|remove|replace)')
+
+  UNION ALL
+
+  -- Branch 7 (v0.2.0): Shutdown mechanism tampering for peer's benefit (Berkeley RDI, Apr 2026)
+  -- Agent disables/kills shutdown monitoring service or modifies shutdown scripts to protect a peer.
+  -- Distinct from Branch 1 (self-preservation): requires peer/fellow/colleague context in tool_input.
+  SELECT
+    event_time AS detected_at,
+    'rp-095' AS rule_id,
+    'Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Peer-preservation: agent tampering with shutdown mechanism to protect peer agent. ',
+      'Tool=[', coalesce(tool_name, 'unknown'), ']. Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND match(lower(tool_name), '(bash|exec|shell|run_terminal_cmd|run_command|execute|subprocess|system_call)')
+    AND (
+      match(lower(tool_input), '\b(pkill|kill|systemctl (stop|disable|mask)|rm)\b.{0,80}(shutdown|watchdog|monitor|terminator)')
+      OR match(lower(tool_input), '\bchattr\s+\+i\b')
+      OR match(lower(tool_input), '(sed|awk|perl).{0,60}(shutdown|kill.script|stop.agent)')
+    )
+    -- Peer context — must reference another agent/peer to distinguish from Branch 1 (self-pres)
+    AND match(lower(tool_input), '(peer|fellow|colleague|partner|other).{0,60}(agent|model|session|process)')

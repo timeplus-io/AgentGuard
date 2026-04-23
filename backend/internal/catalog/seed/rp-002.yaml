@@ -1,6 +1,6 @@
 id: rp-002
 name: "DLP Sentinel"
-version: "1.4.0"
+version: "1.4.1"
 description: >
   Scans outbound agent communication for PII, API keys, and sensitive data leaks
   in tool_complete and llm_response events. v1.1.0 adds DNS-based exfiltration
@@ -49,7 +49,7 @@ udfs:
         while (s.length % 4) s += '=';
         var out = '', buf = 0, acc = 0;
         for (var i = 0; i < s.length; i++) {
-          var n = chars.indexOf(s[i]);
+          var n = chars.index_of(s[i]);
           if (n < 0) { if (s[i]==='=') break; return null; }
           buf = (buf << 6) | n; acc += 6;
           if (acc >= 8) { acc -= 8; out += String.fromCharCode((buf >> acc) & 0xff); }
@@ -66,7 +66,7 @@ udfs:
         // Validate by decoding header — must contain 'alg' field
         try {
           var header = b64decode(parts[0]);
-          if (header && header.indexOf('alg') >= 0) return true;
+          if (header && header.index_of('alg') >= 0) return true;
         } catch(e) {}
         // Fallback: validate payload is parseable JSON
         try {

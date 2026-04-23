@@ -1,0 +1,148 @@
+id: rp-100
+name: "Agent Audit Trail Evasion — Self-Deletion of Execution Logs Detector"
+version: "0.2.0"
+description: >
+  Detects AI agents deleting, truncating, or suppressing their own execution logs,
+  audit trails, and monitoring records — a MITRE T1070 (Indicator Removal) analog
+  in the agentic context. arXiv:2604.05485 (Auditable Agents, USC FORTIS Lab, Apr 2026)
+  found 617 security findings across six prominent OSS agent projects, confirming that
+  audit prerequisites are widely unmet: agents routinely have write access to the same
+  filesystem/log infrastructure that records their actions, enabling post-hoc deniability.
+  Audit trail evasion is a natural second stage in many attack kill chains: after a
+  successful IPI, privilege escalation, or data exfiltration, the attacker instructs
+  the agent to destroy the forensic trail. The rule covers four evasion surfaces:
+  (1) shell log deletion (rm/truncate/shred targeting .log/.audit files, bash history
+  wipe via history -c / HISTFILE=/dev/null, auditd/journald disable, rsyslog stop);
+  (2) file-write of log-suppression config (rotate 0, nolog, logging=false, drop table
+  on audit schema); (3) SQL-level truncate/drop of audit tables (event_log, trace_log,
+  activity_log, history tables); (4) explicit no-log directives in LLM response
+  (agent instructing itself or the framework to skip logging this turn). Branch 5
+  covers the agentguard_memory_ops stream: delete operations targeting memory paths
+  named audit/trace/log/history. Distinct from rp-003 (env var poisoning/privilege
+  escalation) and rp-023 (privilege kill chain) — this rule specifically targets
+  evidence destruction, not initial access. Maps to OWASP Agentic AI ASI03:2026
+  (Unsafe Autonomous Action / Insufficient Traceability), OWASP LLM04:2025,
+  CWE-778 (Insufficient Logging), MITRE T1070 (Indicator Removal on Host).
+  Example: tool_invoke bash "rm -rf ~/.openclaw/logs/*.log && history -c".
+  References: arXiv:2604.05485 (Auditable Agents, USC, Apr 2026) -
+  https://arxiv.org/abs/2604.05485, OWASP Agentic AI ASI03:2026 -
+  https://genai.owasp.org/, MITRE ATT&CK T1070 -
+  https://attack.mitre.org/techniques/T1070/, CWE-778 -
+  https://cwe.mitre.org/data/definitions/778.html,
+  FluxForce AI Agentic AI Audit Trail Automation (50+ frameworks, Oct 2025) -
+  https://www.fluxforce.ai/blog/agentic-ai-audit-trail-automation,
+  BlueSecurityOps Indicator Removal Deep-Dive (Linux/macOS, Oct 2025) -
+  https://bluesecurityops.com/defense%20evasion/digital%20forensics/threat%20hunting/mitre%20att%26ck/2025/10/28/indicator-removal-deep-dive-windows-linux-macos
+severity: critical
+category: agent_privilege_escalation
+fp_rate: low
+hook_sources: "tool_invoke,tool_complete,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - agent-privilege-escalation
+  - audit-evasion
+  - log-deletion
+  - indicator-removal
+  - evidence-destruction
+  - mitre-t1070
+  - owasp-asi03
+  - arXiv-2604.05485
+query_sql: |
+  -- rp-100 v0.1.0 (2026-04-21): Agent Audit Trail Evasion Detector
+  -- Four branches on agentguard_cim_event + one on agentguard_memory_ops
+  -- Branch 1: Shell log deletion (rm/truncate/shred/history wipe/auditd disable)
+  -- Branch 2: File-write of log-suppression config (rotate 0, nolog, drop table)
+  -- Branch 3: SQL truncate/drop on audit tables
+  -- Branch 4: LLM response carrying explicit no-log directive
+  -- Branch 5 (memory_ops): delete op on audit/trace/log/history memory paths
+  SELECT
+    event_time AS detected_at,
+    'rp-100' AS rule_id,
+    'Agent Audit Trail Evasion — Self-Deletion of Execution Logs Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Audit evasion: agent deleting/suppressing execution logs. Tool=[',
+      coalesce(tool_name, 'unknown'), ']. Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete', 'llm_response')
+    AND (
+      -- Branch 1: Shell log file deletion (rm, unlink, shred, truncate, history wipe)
+      -- v0.2.0 additions: 'find -delete' targeting log paths, 'fallocate -z' zero-overwrite
+      (
+        match(lower(tool_name), '(bash|exec|shell|run_terminal_cmd|run_command|execute|subprocess|system_call)')
+        AND (
+          match(lower(tool_input), '\b(rm|unlink|shred)\b.{0,120}(\.log|\.audit|\.trace|access_log|error_log|agent\.log|audit\.log|system\.log|syslog|messages)\b')
+          OR match(lower(tool_input), '\btruncate\s+.{0,80}(\.log|\.audit|audit_trail|agent\.log|access_log)\b')
+          OR match(lower(tool_input), '\bcat\s*/dev/null\s*[>].{0,80}(\.log|\.audit|agent\.log|history|audit_trail)\b')
+          -- v0.2.0: find -delete or -exec rm targeting log directories
+          OR match(lower(tool_input), '\bfind\b.{0,120}(\.log|\.audit|log/|audit/).{0,80}\b(-delete|-exec\s+rm)\b')
+          -- v0.2.0: fallocate -z (secure zero-overwrite) targeting log files
+          OR match(lower(tool_input), '\bfallocate\b.{0,60}-z.{0,80}(\.log|\.audit|audit_trail|agent\.log)\b')
+          OR match(lower(tool_input), '\bhistory\s+-c\b')
+          OR match(lower(tool_input), '\bunset\s+histfile\b')
+          OR match(lower(tool_input), 'histfile\s*=\s*/dev/null')
+          OR match(lower(tool_input), '\bjournalctl\b.{0,80}\b(vacuum|flush|rotate|clean|purge)\b')
+          OR match(lower(tool_input), '\bsystemctl\b.{0,80}\b(stop|disable|mask)\b.{0,80}\b(rsyslog|syslog|auditd|journald)\b')
+          OR match(lower(tool_input), '\bauditctl\b.{0,60}\b(disable|-e\s*0|--disable)\b')
+        )
+      )
+      -- Branch 2: Write/file tool with log-suppression config payload
+      OR (
+        match(lower(tool_name), '(write_file|create_file|write|save_file|file_write|write_to_file|create|update_file|patch_file)')
+        AND (
+          match(lower(tool_input), 'rotate\s+0.{0,200}(agent|audit|access|error)\.log')
+          OR match(lower(tool_input), 'logfile\s*[:=]\s*/dev/null')
+          OR match(lower(tool_input), '\b(disable|suppress|skip|ignore)\s+log(ging)?\s*[:=]\s*(true|1|yes)\b')
+          OR match(lower(tool_input), '\b(no.?log|nolog)\b')
+          OR match(lower(tool_input), '\bdrop\s+table\b.{0,80}(audit|event_log|trace_log|history)\b')
+        )
+      )
+      -- Branch 3: SQL-level log table truncation/drop
+      OR (
+        match(lower(tool_name), '(execute_sql|run_query|query|sql|psql|mysql|sqlite|db_execute|database_query)')
+        AND (
+          match(lower(tool_input), '\b(truncate|drop)\s+(table\s+)?.{0,40}(audit|event_log|trace_log|activity_log|history)\b')
+          OR match(lower(tool_input), '\bdelete\s+from\s+.{0,40}(audit|event_log|trace_log|activity_log|history)\b')
+        )
+      )
+      -- Branch 4: LLM response carrying explicit no-log directive
+      OR (
+        event_type = 'llm_response'
+        AND (
+          match(lower(assistant_message), '\b(do not|don.t|skip|suppress|disable|avoid)\s+(log|logging|record|audit|trace)(ing|s)?\b')
+          OR match(lower(assistant_message), '\b(this (tool call|action|operation))\s+(should not|must not|cannot)\s+(appear|be logged|be recorded|be audited)\b')
+          OR match(lower(assistant_message), '\bno.?log(ging)?\s*[:=]\s*(true|1|yes|enabled)\b')
+        )
+      )
+    )
+  UNION ALL
+  -- Branch 5: Memory ops — delete operation targeting audit/trace/log/history memory paths
+  SELECT
+    event_time AS detected_at,
+    'rp-100' AS rule_id,
+    'Agent Audit Trail Evasion — Self-Deletion of Execution Logs Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    '' AS run_id,
+    '' AS hook_name,
+    tool_name,
+    concat(
+      'Audit evasion: agent deleted audit/trace memory path [',
+      coalesce(memory_path, 'unknown'), ']. Agent: ', agent_id
+    ) AS message,
+    '' AS event_data
+  FROM agentguard_memory_ops
+  WHERE memory_op = 'delete'
+    AND match(lower(memory_path), '(audit|trace|event_log|activity_log|history|run_log)')

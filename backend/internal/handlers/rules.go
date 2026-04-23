@@ -52,7 +52,8 @@ SELECT
   arg_max(category,           updated_at) AS category,
   arg_max(required_telemetry, updated_at) AS required_telemetry,
   arg_max(fp_rate,            updated_at) AS fp_rate,
-  arg_max(hook_sources,       updated_at) AS hook_sources
+  arg_max(hook_sources,       updated_at) AS hook_sources,
+  arg_max(block_policy,       updated_at) AS block_policy
 FROM table(agentguard_rules)
 GROUP BY rule_id
 HAVING arg_max(deleted, updated_at) = false`
@@ -141,6 +142,7 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			LIMIT 50
 		`, escapeSQL(id)))
 		if err != nil {
+			log.Printf("rules: GetRule recent detections query: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -174,8 +176,43 @@ func ToggleRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 
+		// Run the MV operation FIRST. If it fails, we return 500 without touching
+		// the agentguard_rules row — so the frontend's revert-on-error reflects
+		// reality, and the rule's enabled state stays consistent with whether
+		// the MV is actually running.
+		newEnabled := !current.Enabled
+		if newEnabled {
+			exists, err := mvExists(&cfg.Timeplus, id)
+			if err != nil {
+				log.Printf("rules: toggle %s mvExists: %v", id, err)
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "MV status check failed"})
+				return
+			}
+			if exists {
+				if err := tp.ResumeRuleMV(&cfg.Timeplus, id); err != nil {
+					log.Printf("rules: toggle %s resume MV: %v", id, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV resume failed: %v", err)})
+					return
+				}
+			} else {
+				catalogEntry, _ := mgr.Lookup(id)
+				if err := tp.CreateRuleMV(&cfg.Timeplus, id, current.QuerySQL, catalogEntry.UDFs); err != nil {
+					log.Printf("rules: toggle %s create MV: %v", id, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
+					return
+				}
+			}
+		} else {
+			if err := tp.PauseRuleMV(&cfg.Timeplus, id); err != nil {
+				log.Printf("rules: toggle %s pause MV: %v", id, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV pause failed: %v", err)})
+				return
+			}
+		}
+
+		// MV op succeeded — now flip the enabled column.
 		sql := fmt.Sprintf(`
-INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
+INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
 SELECT
   rule_id,
   arg_max(name,               updated_at) AS name,
@@ -189,40 +226,16 @@ SELECT
   arg_max(required_telemetry, updated_at) AS required_telemetry,
   arg_max(fp_rate,            updated_at) AS fp_rate,
   arg_max(hook_sources,       updated_at) AS hook_sources,
+  arg_max(block_policy,       updated_at) AS block_policy,
   now64(3)                                AS updated_at
 FROM table(agentguard_rules)
 WHERE rule_id = '%s'
-GROUP BY rule_id`, id)
+GROUP BY rule_id`, escapeSQLStr(id))
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
+			log.Printf("rules: toggle %s db update: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "toggle failed"})
 			return
-		}
-
-		newEnabled := !current.Enabled
-		if newEnabled {
-			exists, err := mvExists(&cfg.Timeplus, id)
-			if err != nil {
-				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "MV status check failed"})
-				return
-			}
-			if exists {
-				if err := tp.ResumeRuleMV(&cfg.Timeplus, id); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV resume failed: %v", err)})
-					return
-				}
-			} else {
-				catalogEntry, _ := mgr.Lookup(id)
-				if err := tp.CreateRuleMV(&cfg.Timeplus, id, current.QuerySQL, catalogEntry.UDFs); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
-					return
-				}
-			}
-		} else {
-			if err := tp.PauseRuleMV(&cfg.Timeplus, id); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV pause failed: %v", err)})
-				return
-			}
 		}
 
 		current.Enabled = newEnabled
@@ -239,6 +252,7 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
+			log.Printf("rules: UpgradeRule queryCurrentRulePacks: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
 			return
 		}
@@ -279,8 +293,8 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		escapedSQL := escapeSQLStr(targetSQL)
-		insertSQL := fmt.Sprintf(`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES
-('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s',now64(3))`,
+		insertSQL := fmt.Sprintf(`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at) VALUES
+('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s','%s',now64(3))`,
 			id,
 			escapeSQLStr(current.Name),
 			targetVersion,
@@ -289,6 +303,7 @@ func UpgradeRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			current.Enabled,
 			current.Severity, current.Category,
 			current.RequiredTelemetry, current.FPRate, current.HookSources,
+			current.BlockPolicy,
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
 			log.Printf("rules: upgrade %s insert: %v", id, err)
@@ -336,7 +351,7 @@ func UninstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		sql := fmt.Sprintf(`
-INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)
+INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
 SELECT
   rule_id,
   arg_max(name,               updated_at) AS name,
@@ -350,17 +365,20 @@ SELECT
   arg_max(required_telemetry, updated_at) AS required_telemetry,
   arg_max(fp_rate,            updated_at) AS fp_rate,
   arg_max(hook_sources,       updated_at) AS hook_sources,
+  arg_max(block_policy,       updated_at) AS block_policy,
   now64(3)                                AS updated_at
 FROM table(agentguard_rules)
 WHERE rule_id = '%s'
 GROUP BY rule_id`, escapeSQL(id))
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
+			log.Printf("rules: UninstallRule db update: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "uninstall failed"})
 			return
 		}
 
 		if err := tp.DropRuleMV(&cfg.Timeplus, id); err != nil {
+			log.Printf("rules: UninstallRule DropRuleMV: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV drop failed: %v", err)})
 			return
 		}
@@ -375,6 +393,7 @@ func ListCatalog(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		cfg := auth.RequestCfg(c, cfg)
 		installed, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
+			log.Printf("rules: ListCatalog queryCurrentRulePacks: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("catalog query failed: %v", err)})
 			return
 		}
@@ -465,7 +484,7 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		escapedSQL := escapeSQLStr(entry.QuerySQL)
 		insertSQL := fmt.Sprintf(
-			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s',now64(3))`,
+			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at) VALUES ('%s','%s','%s','%s','%s',true,false,'%s','%s','%s','%s','%s','log_only',now64(3))`,
 			id,
 			escapeSQLStr(entry.Name),
 			entry.Version,
@@ -475,10 +494,12 @@ func InstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			entry.RequiredTelemetry, entry.FPRate, entry.HookSources,
 		)
 		if err := tp.ExecHTTP(&cfg.Timeplus, insertSQL); err != nil {
+			log.Printf("rules: InstallRule insert: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "install insert failed"})
 			return
 		}
 		if err := tp.CreateRuleMV(&cfg.Timeplus, id, entry.QuerySQL, entry.UDFs); err != nil {
+			log.Printf("rules: InstallRule CreateRuleMV: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 			return
 		}
@@ -501,6 +522,7 @@ func MVStatus(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			WHERE name LIKE 'mv_rule_%' AND database = current_database()
 		`)
 		if err != nil {
+			log.Printf("rules: MVStatus system.tables query: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -549,6 +571,7 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			WHERE name LIKE 'mv_rule_%' AND database = current_database()
 		`)
 		if err != nil {
+			log.Printf("rules: SyncMVs system.tables query: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -632,8 +655,15 @@ func isThreatAlreadyOpen(cfg *config.Config, agentID, deploymentID, ruleID strin
 	return parseInt64(rows[0]["cnt"]) > 0
 }
 
-func AlertWebhook(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
+func AlertWebhook(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		queryCfg, errMsg := pluginCfg(cfg)
+		if errMsg != "" {
+			log.Printf("alert: AlertWebhook: %s", errMsg)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
+			return
+		}
+
 		var payload models.AlertWebhookPayload
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
@@ -644,18 +674,12 @@ func AlertWebhook(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc 
 
 		// Deduplicate: suppress the SSE notification when an open threat already
 		// exists for this (agent, deployment, rule) — the MV occasionally fires
-		// multiple times for the same active threat. Use any live session for
-		// credentials; if none exists, fail open and allow the notification.
-		queryCfg := *cfg
-		if user, pass := store.AnyCredentials(); user != "" {
-			queryCfg.Timeplus.User = user
-			queryCfg.Timeplus.Password = pass
-			if isThreatAlreadyOpen(&queryCfg, payload.AgentID, payload.DeploymentID, payload.RuleID) {
-				log.Printf("alert: suppressed duplicate notification for rule=%s agent=%s (threat already open)",
-					payload.RuleID, payload.AgentID)
-				c.JSON(http.StatusOK, gin.H{"received": true, "suppressed": true})
-				return
-			}
+		// multiple times for the same active threat.
+		if isThreatAlreadyOpen(queryCfg, payload.AgentID, payload.DeploymentID, payload.RuleID) {
+			log.Printf("alert: suppressed duplicate notification for rule=%s agent=%s (threat already open)",
+				payload.RuleID, payload.AgentID)
+			c.JSON(http.StatusOK, gin.H{"received": true, "suppressed": true})
+			return
 		}
 
 		GlobalAlertBroadcaster.Publish(payload)
@@ -729,7 +753,7 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		escapedSQL := escapeSQLStr(finalSQL)
 		insertSQL := fmt.Sprintf(
-			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s',now64(3))`,
+			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at) VALUES ('%s','%s','1.0.0','%s','%s',true,false,'%s','%s','','%s','%s','log_only',now64(3))`,
 			ruleID,
 			escapeSQLStr(body.Name),
 			escapeSQLStr(body.Description),
@@ -788,6 +812,10 @@ func queryCurrentRulePacks(cfg *config.TimeplusConfig, mgr *catalog.Manager) ([]
 			RequiredTelemetry: parseStr(row["required_telemetry"]),
 			FPRate:            parseStr(row["fp_rate"]),
 			HookSources:       parseStr(row["hook_sources"]),
+			BlockPolicy:       parseStr(row["block_policy"]),
+		}
+		if pack.BlockPolicy == "" {
+			pack.BlockPolicy = "log_only"
 		}
 		// Enrich from catalog: newer version and UDFs.
 		if catalogEntry, ok := mgr.Lookup(id); ok {
@@ -869,6 +897,77 @@ func mvExists(cfg *config.TimeplusConfig, ruleID string) (bool, error) {
 		return cnt > 0, nil
 	}
 	return false, nil
+}
+
+// SetRuleBlockPolicy handles POST /api/rules/:id/policy
+// Body: {"block_policy": "hold" | "auto_block" | "log_only"}
+func SetRuleBlockPolicy(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		id := c.Param("id")
+		var body struct {
+			BlockPolicy string `json:"block_policy"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+		switch body.BlockPolicy {
+		case "hold", "auto_block", "log_only":
+			// ok
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "block_policy must be hold|auto_block|log_only"})
+			return
+		}
+
+		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
+		if err != nil {
+			log.Printf("rules: SetRuleBlockPolicy queryCurrentRulePacks: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			return
+		}
+		var current *models.RulePack
+		for i := range packs {
+			if packs[i].ID == id {
+				current = &packs[i]
+				break
+			}
+		}
+		if current == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "rule not found"})
+			return
+		}
+
+		sql := fmt.Sprintf(`
+INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
+SELECT
+  rule_id,
+  arg_max(name,               updated_at) AS name,
+  arg_max(version,            updated_at) AS version,
+  arg_max(description,        updated_at) AS description,
+  arg_max(query_sql,          updated_at) AS query_sql,
+  arg_max(enabled,            updated_at) AS enabled,
+  false                                   AS deleted,
+  arg_max(severity,           updated_at) AS severity,
+  arg_max(category,           updated_at) AS category,
+  arg_max(required_telemetry, updated_at) AS required_telemetry,
+  arg_max(fp_rate,            updated_at) AS fp_rate,
+  arg_max(hook_sources,       updated_at) AS hook_sources,
+  '%s'                                    AS block_policy,
+  now64(3)                                AS updated_at
+FROM table(agentguard_rules)
+WHERE rule_id = '%s'
+GROUP BY rule_id`, escapeSQLStr(body.BlockPolicy), escapeSQLStr(id))
+
+		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
+			log.Printf("rules: SetRuleBlockPolicy ExecHTTP: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("set policy failed: %v", err)})
+			return
+		}
+
+		current.BlockPolicy = body.BlockPolicy
+		c.JSON(http.StatusOK, current)
+	}
 }
 
 // versionGreater returns true if version string a is strictly greater than b.

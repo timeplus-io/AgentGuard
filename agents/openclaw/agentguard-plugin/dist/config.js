@@ -7,6 +7,12 @@ const DEFAULTS = {
     password: "",
     deploymentId: "default",
     deploymentName: "Default",
+    // Default to localhost for the standalone-plugin case (plugin and AgentGuard
+    // on the same host). The Makefile-driven Docker setup writes the
+    // Docker-appropriate URL (host.docker.internal) into openclaw.json explicitly.
+    agentguardUrl: "http://localhost:8080",
+    holdFailPolicy: "deny",
+    holdsEnabled: true,
 };
 export function resolveConfig(pluginConfig) {
     const timeplusUrl = (process.env.AGENTGUARD_TIMEPLUS_URL || undefined) ??
@@ -36,6 +42,32 @@ export function resolveConfig(pluginConfig) {
         DEFAULTS.deploymentId;
     const deploymentName = pluginConfig?.deploymentName ??
         DEFAULTS.deploymentName;
-    return { timeplusUrl, stream, flushMs, batchSize, username, password, deploymentId, deploymentName };
+    const agentguardUrl = (process.env.AGENTGUARD_URL || undefined) ??
+        pluginConfig?.agentguardUrl ??
+        DEFAULTS.agentguardUrl;
+    const holdFailPolicy = process.env.AGENTGUARD_HOLD_FAIL_POLICY === "allow" ||
+        pluginConfig?.holdFailPolicy === "allow"
+        ? "allow"
+        : "deny";
+    const envHolds = process.env.AGENTGUARD_HOLDS_ENABLED;
+    const pluginHolds = pluginConfig?.holdsEnabled;
+    const holdsEnabled = envHolds !== undefined
+        ? envHolds.toLowerCase() !== "false"
+        : typeof pluginHolds === "boolean"
+            ? pluginHolds
+            : DEFAULTS.holdsEnabled;
+    return {
+        timeplusUrl,
+        stream,
+        flushMs,
+        batchSize,
+        username,
+        password,
+        deploymentId,
+        deploymentName,
+        agentguardUrl,
+        holdFailPolicy,
+        holdsEnabled,
+    };
 }
 //# sourceMappingURL=config.js.map

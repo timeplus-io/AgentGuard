@@ -1,3 +1,4 @@
+import { requestHold } from "./holds.js";
 // Safe cast helper — avoids repetitive `as unknown as BaseCtx` at every call site.
 function toBase(ctx) {
     return ctx;
@@ -94,13 +95,28 @@ export function registerAllHooks(api, client, config) {
         client.enqueue({ ...base, event_data: safeStringify(event) });
     });
     // ── Tool hooks ───────────────────────────────────────────────────────────
-    api.on("before_tool_call", (event, ctx) => {
+    api.on("before_tool_call", async (event, ctx) => {
         const base = baseEvent("before_tool_call", ctx, config);
-        client.enqueue({
+        const evt = {
             ...base,
             tool_name: ctx.toolName,
             event_data: safeStringify(event),
-        });
+        };
+        // If holds are disabled, fall back to observation-only mode: async enqueue, no block.
+        if (!config.holdsEnabled) {
+            client.enqueue(evt);
+            return;
+        }
+        // Holds enabled: synchronous /api/holds path.
+        // /api/holds will ingest this event itself — do NOT also enqueue here.
+        const decision = await requestHold(evt, event?.params, config);
+        if (decision.decision === "block") {
+            return {
+                block: true,
+                blockReason: decision.reason || "Blocked by AgentGuard",
+            };
+        }
+        // No return = no block
     });
     api.on("after_tool_call", (event, ctx) => {
         const base = baseEvent("after_tool_call", ctx, config);

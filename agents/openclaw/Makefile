@@ -4,6 +4,13 @@ IMAGE := ghcr.io/openclaw/openclaw:2026.4.5
 
 LITELLM_API_KEY := sk-openclaw-proxy
 
+# AgentGuard plugin defaults — OpenClaw runs in Docker, so it needs to reach
+# AgentGuard on the host via host.docker.internal. Override via env var when
+# running outside Docker.
+AGENTGUARD_URL ?= http://host.docker.internal:8080
+AGENTGUARD_HOLDS_ENABLED ?= true
+AGENTGUARD_HOLD_FAIL_POLICY ?= deny
+
 .PHONY: workspace init run start configure add-agents url devices approve clean install-plugin build-plugin deploy-plugin test
 
 workspace:
@@ -82,7 +89,10 @@ data["plugins"]["entries"]["agentguard"] = {
         "username": "proton",
         "password": "timeplus@t+",
         "deploymentId": "local",
-        "deploymentName": "Local Dev"
+        "deploymentName": "Local Dev",
+        "agentguardUrl": "$(AGENTGUARD_URL)",
+        "holdFailPolicy": "$(AGENTGUARD_HOLD_FAIL_POLICY)",
+        "holdsEnabled": "$(AGENTGUARD_HOLDS_ENABLED)".lower() != "false",
     }
 }
 

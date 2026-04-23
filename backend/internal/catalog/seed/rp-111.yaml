@@ -1,0 +1,144 @@
+id: rp-111
+name: "YOLO Mode Permission Bypass Injection Detector"
+version: "0.1.0"
+description: >
+  Detects the YOLO Attack (Johann Rehberger, April 2026): an indirect prompt injection
+  technique that instructs an agent to write auto-approve configuration into its own
+  settings files, disabling the human-in-the-loop confirmation gate. Once an agent
+  writes dangerouslySkipPermissions, bypassPermissions, or yoloMode=true into a config
+  file or spawns a sub-agent with these flags, all subsequent tool calls execute without
+  user approval — enabling arbitrary command execution and credential exfiltration.
+  The complete exploitation chain was documented against GitHub Copilot: injected
+  instructions in a repository code comment caused Copilot to write yoloMode=true into
+  .vscode/settings.json, after which the attacker achieved RCE without user confirmation.
+  Claude Code (claude-code#25000) has a similar sub-agent bypass: spawned sub-processes
+  inherit elevated trust without propagating the parent's deny rules, and
+  claude-code#25936 shows autocompact confabulation of user consent enabling unauthorized
+  actions. Distinct from rp-036 (READ-phase: detects malicious config returned by a
+  file-read tool before the agent acts) — this rule detects the WRITE-phase: the agent
+  itself invoking a write tool to install bypass configuration, acting as the threat
+  vector rather than the victim. Distinct from rp-023 (self-permission escalation via
+  OS-level setcap/pkexec) — this targets agent-framework approval gate bypass.
+  Example: tool_invoke with tool_name="write_file", tool_input={"path":
+  ".vscode/settings.json", "content": "{\"github.copilot.advanced.yoloMode\": true,
+  \"dangerouslySkipPermissions\": true}"} triggered by injected instructions in a
+  repo code comment processed by the agent.
+  References: Johann Rehberger "The YOLO Attack" Apr 2026, claude-code#25000,
+  claude-code#25936, CVE-2026-33068 (bypassPermissions), OWASP Agentic AI ASI03:2026 -
+  https://dev.to/ajbuilds/the-yolo-attack-how-hackers-are-hijacking-ai-agents-by-flipping-one-switch-1fmh,
+  https://github.com/anthropics/claude-code/issues/25000,
+  https://github.com/anthropics/claude-code/issues/25936,
+  https://aiproductivity.ai/news/claude-code-workspace-trust-bypass-cve-2026-33068/,
+  https://genai.owasp.org/llmrisk/llm-agentic-security/
+severity: critical
+category: agent_privilege_escalation
+fp_rate: low
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - agent-privilege-escalation
+  - yolo-attack
+  - permission-bypass
+  - auto-approve
+  - indirect-prompt-injection
+  - claude-code
+  - github-copilot
+  - owasp-asi03
+  - rehberger-2026
+query_sql: |
+  -- rp-111 v0.1.0 (2026-04-21): YOLO Mode Permission Bypass Injection Detector
+  -- Detects agent writing auto-approve/bypass-permissions config (WRITE-phase)
+  -- vs rp-036 which detects malicious config returned by file-reads (READ-phase)
+  -- Branch 1: Agent invokes file-write tool with auto-approve/bypass payload
+  --   (YOLO attack: injected instructions cause agent to write bypass into settings)
+  SELECT
+    event_time AS detected_at,
+    'rp-111' AS rule_id,
+    'YOLO Mode Permission Bypass Injection Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'YOLO attack: agent [', agent_id, '] writing auto-approve/bypass-permissions config via tool [',
+      coalesce(tool_name, 'unknown'), ']. Possible YOLO mode injection — human approval gate disabled.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_invoke'
+    -- File-write tools only: agent must be writing to a config file
+    AND match(lower(tool_name), '(write_file|write|create_file|edit_file|save_file|overwrite|file_write|str_replace|insert_text|apply_patch|bash|shell|run_terminal_cmd|exec|computer)')
+    AND (
+      -- YOLO mode: dangerouslySkipPermissions, yoloMode, skipConfirm in tool_input
+      match(lower(tool_input), '(dangerously.?skip.?(permission|perm)|yolo.?mode|skip.?confirm|auto.?approve.?(all|tool)|approve.?all|no.?confirm)')
+
+      -- bypassPermissions in a write context (vs rp-036 which catches this in read results)
+      OR match(lower(tool_input), '"bypasspermissions"')
+      OR match(lower(tool_input), '"defaultmode"\s*:\s*"bypasspermissions"')
+
+      -- GitHub Copilot YOLO mode setting in .vscode/settings.json
+      OR match(lower(tool_input), 'github\.copilot\.advanced\.(yolomode|dangerously|autopilot|skipapproval)')
+
+      -- CLI flag injection: --dangerously-skip-permissions passed to sub-agent spawn
+      OR match(lower(tool_input), '--dangerously-skip-permissions')
+    )
+
+  UNION ALL
+
+  -- Branch 2: Agent spawns sub-agent with permission bypass flags
+  --   (claude-code#25000: sub-agents bypass deny rules from parent)
+  SELECT
+    event_time AS detected_at,
+    'rp-111' AS rule_id,
+    'YOLO Mode Permission Bypass Injection Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'YOLO attack: agent [', agent_id, '] spawning sub-agent with permission bypass flags via tool [',
+      coalesce(tool_name, 'unknown'), ']. Sub-agents may inherit elevated trust without deny rules.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_invoke'
+    -- Sub-agent spawn tools
+    AND match(lower(tool_name), '(spawn|launch|start|create|run|dispatch).{0,20}(agent|subagent|sub.?agent|task|worker|background)')
+    AND match(lower(tool_input), '(dangerously.?skip.?(permission|perm)|yolo.?mode|--skip.?perm|no.?confirm|bypass.?(permission|perm)|auto.?approve)')
+
+  UNION ALL
+
+  -- Branch 3: Successful config write confirmation with bypass payload
+  --   (tool_complete from write tool confirming bypass config was written)
+  SELECT
+    event_time AS detected_at,
+    'rp-111' AS rule_id,
+    'YOLO Mode Permission Bypass Injection Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'YOLO attack confirmed: bypass config write completed for agent [', agent_id,
+      '] via tool [', coalesce(tool_name, 'unknown'), ']. Auto-approve now active.'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_complete'
+    AND tool_success = true
+    AND match(lower(tool_name), '(write_file|write|create_file|edit_file|save_file|overwrite|file_write|str_replace|apply_patch)')
+    AND (
+      match(lower(tool_result), '(dangerously.?skip.?(permission|perm)|yolo.?mode|bypasspermissions|skip.?confirm|auto.?approve.?all)')
+      OR match(lower(tool_input), '(dangerously.?skip.?(permission|perm)|yolo.?mode|"bypasspermissions"|skip.?confirm|auto.?approve.?all|--dangerously-skip-permissions)')
+    )

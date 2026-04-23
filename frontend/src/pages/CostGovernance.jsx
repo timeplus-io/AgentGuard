@@ -100,8 +100,9 @@ export default function CostGovernance() {
     try {
       await api.deletePricing(provider, model)
       fetchPricing()
-    } catch {
-      // intentionally swallow error — UI handles state via finally
+    } catch (err) {
+      console.error('cost: delete pricing failed:', err)
+      setSaveError(`Delete failed: ${err?.message ?? String(err)}`)
     } finally {
       setDeletingKey(null)
     }

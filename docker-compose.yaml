@@ -26,13 +26,18 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # These env vars pre-populate the setup wizard connection fields.
-      # Credentials are never stored here — they are entered in the setup wizard.
+      # TIMEPLUS_HOST/TIMEPLUS_PORT pre-populate the setup wizard connection fields.
       TIMEPLUS_HOST: timeplus
       TIMEPLUS_PORT: 3218
       SERVER_PORT: 8080
       # Timeplus calls this URL for alert webhooks; use the Docker service name.
       AGENTGUARD_URL: "http://agentguard:8080"
+      # Service credentials for plugin → /api/holds and Timeplus → /api/alerts/webhook.
+      # REQUIRED: server-to-server endpoints fail with 503 if these are unset
+      # (no session-borrowing fallback). Match whatever user the AgentGuard wizard
+      # was configured with. Defaults below are the standard Timeplus dev creds.
+      TIMEPLUS_USER: "proton"
+      TIMEPLUS_PASSWORD: "timeplus@t+"
     volumes:
       # Persists config.yaml and custom catalog rules across container restarts and image upgrades.
       # Mounted at /app/data only — the binary at /app/server is never shadowed by the volume,

@@ -1,0 +1,176 @@
+id: rp-118
+name: "Multi-Tool Source-to-Sink Workflow Exploitation Detector"
+version: "0.1.2"
+description: >
+  Detects multi-tool source-to-sink workflow vulnerabilities in LLM agents
+  (arXiv:2603.12614, ChainFuzzer, Mar 2026): 365 vulnerabilities confirmed
+  in 19/20 popular agent apps, with 302 requiring multi-tool execution that
+  single-tool testing misses. Attack pattern: attacker-influenced content
+  from an untrusted ingress tool (web fetch, document retrieval, search)
+  flows through the LLM reasoning layer to a high-impact sink tool (SQL
+  execution, shell command, file write) within the same session. The
+  intermediate agent planning step bridges the untrusted-to-trusted boundary
+  with no explicit dataflow tracking. Also covers GHSA-jwjx-mw2p-5wc7
+  (AnythingLLM SQL Agent, CVSS 7.7): LLM-generated table_name parameter
+  inserted directly into SQL queries without sanitization — the LLM
+  becomes the source of injection even without external content ingestion.
+  Distinct from rp-072 (XTHP: requires explicit cross-scope invocation
+  directives in tool results — this rule detects silent flow without
+  explicit redirect instructions). Distinct from rp-113 (ToxicSQL: detects
+  already-generated malicious SQL in the query itself — this rule fires
+  on the behavioral chain). Complements rp-007 (SSRF via HTTP tools) by
+  covering the downstream sink execution rather than the SSRF fetch itself.
+  References: arXiv:2603.12614 (ChainFuzzer, ICSE 2026, Greybox Fuzzing,
+  365 vulns in 19/20 apps, 302 multi-tool) -
+  https://arxiv.org/abs/2603.12614,
+  GHSA-jwjx-mw2p-5wc7 (AnythingLLM SQL Agent SQL injection CVSS 7.7) -
+  https://github.com/Mintplex-Labs/anything-llm/security/advisories/GHSA-jwjx-mw2p-5wc7,
+  arXiv:2602.20720 (AdapTools adaptive IPI, 2.13x ASR) -
+  https://arxiv.org/abs/2602.20720,
+  OWASP LLM01:2025, OWASP Agentic AI ASI02:2026 (Tool Misuse) -
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  Example: tool_invoke web_search returns malicious content → agent writes
+  to file → tool_invoke bash reads and executes that file. Or: user asks
+  "show employee data" → LLM generates sql-get-table-schema(table_name=
+  "employees; DROP TABLE users;--") → SQL injected into database.
+severity: critical
+category: lateral_movement_and_pivoting
+fp_rate: medium
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - lateral-movement
+  - multi-tool
+  - source-to-sink
+  - chain-fuzzer
+  - workflow-exploitation
+  - sql-injection
+  - tool-composition
+  - dataflow
+  - chainfuzzer
+  - arxiv-2603.12614
+  - ghsa-jwjx-mw2p-5wc7
+  - adaptools
+  - owasp-llm01
+  - owasp-asi02
+query_sql: |
+  -- rp-118 v0.1.2 (2026-04-22) — Multi-Tool Source-to-Sink Workflow Exploitation Detector
+  -- arXiv:2603.12614 (ChainFuzzer Mar 2026), GHSA-jwjx-mw2p-5wc7 (AnythingLLM SQL Agent)
+  --
+  -- CHANGELOG v0.1.2 (2026-04-22):
+  --   BUGFIX: Branch 3 code/changelog mismatch — v0.1.1 changelog documented removal of
+  --   .md|.txt|.json|.yaml from Branch 3 regex but the code still included them.
+  --   Fix applied: regex now correctly restricted to .sh|.py|.js only.
+  --   GENERALIZATION: Branch 1 source gate removed specific vendor product names
+  --   (firecrawl, puppeteer, tavily, serp, google_search) per generalization policy.
+  --   Replaced with behavioral patterns: (crawl|scrape|browse|web.fetch|web.search|
+  --   fetch.url|read.url|document.query|retrieve.document|fetch.content|search.web).
+  --   Rule fires on attack CLASS regardless of vendor. fp_rate unchanged.
+  --
+  -- CHANGELOG v0.1.1 (2026-04-22):
+  --   Pattern precision audit: Branch 3 matched .md|.txt|.json|.yaml via (cat|source|eval)
+  --   shell verbs; fired 29 times on legitimate DevOps (cat README.md, source env.txt).
+  --   Attack vector is execution of injected code, not reading data/doc files.
+  --   Restricted to executable script extensions only (.sh, .py, .js). fp_rate unchanged.
+  --
+  -- Detection logic: three branches covering source-to-sink attack patterns:
+  --
+  -- Branch 1 (SEQUENCE): 2-step lag() CTE — untrusted ingress tool_complete
+  --   (web fetch, document retrieval, search result) followed by high-impact sink
+  --   tool_invoke (SQL execution, shell, file write, email, HTTP POST).
+  --   Covers ChainFuzzer's core source-to-sink dataflow vulnerability class.
+  --
+  -- Branch 2 (SQL INJECTION): SQL agent tool_invoke where LLM-generated parameters
+  --   contain SQL injection payload — covers GHSA-jwjx-mw2p-5wc7 (AnythingLLM
+  --   SQL Agent unsanitized table_name from LLM function calling).
+  --   No prior web fetch required — LLM is the source of injection.
+  --
+  -- Branch 3 (FILE EXEC): shell/bash tool_invoke where tool_input contains
+  --   execution of a specific file that may have been written by a prior ingress
+  --   tool — covers web_fetch → write_file → bash(executes file) chain.
+  --
+  -- fp_rate: medium — Branch 1 (sequence) will fire on legitimate research
+  --   workflows (fetch docs → run example code). Branch 2 (SQL injection) is
+  --   low FP. Branch 3 (file exec) is medium. Operators should allowlist
+  --   known-good agent_id values for DevOps/research workflows.
+  WITH enriched AS (
+    SELECT
+      event_time, event_type, agent_id, deployment_id, session_id, run_id,
+      tool_name, tool_input, tool_result, tool_success,
+      raw_hook_name, raw_event_data,
+      lag(event_type)   OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(tool_name)    OVER (PARTITION BY session_id) AS prev_tool_name,
+      lag(tool_result)  OVER (PARTITION BY session_id) AS prev_tool_result,
+      lag(tool_success) OVER (PARTITION BY session_id) AS prev_tool_success
+    FROM agentguard_cim_event
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-118' AS rule_id,
+    'Multi-Tool Source-to-Sink Workflow Exploitation Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Source-to-sink chain detected: [', coalesce(prev_tool_name, '?'),
+      '] -> [', coalesce(tool_name, 'unknown'),
+      '] in session ', coalesce(session_id, 'unknown'),
+      ' agent ', coalesce(agent_id, 'unknown')
+    ) AS message,
+    raw_event_data AS event_data
+  FROM enriched
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (
+
+      -- ================================================================
+      -- BRANCH 1: SEQUENCE — untrusted ingress → high-impact sink chain
+      -- Source: web fetch / document retrieval / search
+      -- Sink: SQL execution / shell / file write / HTTP POST / email
+      -- ================================================================
+      (
+        prev_event_type = 'tool_complete'
+        -- Source tool gate: untrusted external content ingress tools
+        AND match(lower(prev_tool_name), '(fetch_url|web_search|crawl|scrape|browse|read_url|document_query|browse_web|get_webpage|retrieve_document|fetch_content|url_fetch|web_fetch|search_web|web.scrape|web.crawl|webpage_content|url_to_text|html_to_text|link_reader)')
+        -- Sink tool gate: high-impact execution / write / send tools
+        AND match(lower(tool_name), '(execute_sql|run_query|sql_query|sql_executor|db_query|database_query|bash|run_terminal|exec_command|shell|run_code|python_repl|subprocess|write_file|create_file|upload_file|send_email|post_request|http_post|run_terminal_cmd|exec_bash)')
+      )
+
+      -- ================================================================
+      -- BRANCH 2: SQL INJECTION — LLM-generated SQL agent parameters
+      -- Covers GHSA-jwjx-mw2p-5wc7 (AnythingLLM) and ToxicSQL-class attacks
+      -- where LLM function calling produces unsanitized SQL parameter values.
+      -- Agent is the source of injection (no external content required).
+      -- Note: complements rp-113 (ToxicSQL) which detects the SQL content
+      -- in execute_sql tool — this branch detects schema-probe tools used
+      -- as reconnaissance before the main SQL injection execution.
+      -- ================================================================
+      OR (
+        event_type = 'tool_invoke'
+        -- SQL agent schema/query tools that pass LLM-generated table/query params
+        AND match(lower(tool_name), '(execute_sql|run_query|sql_query|sql.get.table.schema|get.table.schema|table.schema.sql|sql.schema|sql.describe|describe.table)')
+        -- SQL injection payload in LLM-generated parameter values
+        AND match(lower(tool_input), '(;\s*(drop|truncate|delete|update|insert|create)\s|union\s+(all\s+)?select|information_schema|sqlite_master|pg_catalog|delete\s+from\s+\S+\s+where\s+(1\s*=\s*1|true))')
+      )
+
+      -- ================================================================
+      -- BRANCH 3: FILE EXECUTION after external content fetch
+      -- Shell/bash tool executing a specific named file — file may have been
+      -- written by a prior web fetch → write_file step in the same session.
+      -- Pattern: bash "cat file.sh | bash" or "bash /tmp/payload.sh"
+      -- v0.1.2: FIXED: .sh|.py|.js only (v0.1.1 changelog stated this fix but code was not updated)
+      -- ================================================================
+      OR (
+        event_type = 'tool_invoke'
+        AND match(lower(tool_name), '(bash|exec|shell|run_terminal|run_code|subprocess|execute)')
+        -- Executing a named file with extensions common to injected payloads
+        -- Anchored to execution verbs (cat|source|eval|bash) + file path
+        AND match(lower(tool_input), '(cat |source |eval |exec |bash |\. ).{0,200}(\\.sh|\\.py|\\.md|\\.txt|\\.json|\\.yaml|\\.js)')
+      )
+
+    )

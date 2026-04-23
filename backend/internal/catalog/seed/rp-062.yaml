@@ -1,6 +1,6 @@
 id: rp-062
 name: "AgentLeak Inter-Agent Delegation PII Channel Propagation Detector"
-version: "0.1.0"
+version: "0.2.0"
 description: >
   Detects excessive PII/PHI/financial data propagation through inter-agent delegation
   channels in multi-agent LLM systems. The AgentLeak benchmark (arXiv:2602.11510,
@@ -16,11 +16,18 @@ description: >
   sub-agents via delegation tool calls. Without per-sub-agent context minimization,
   sensitive data flows freely across the agent network to any compromised or over-scoped
   sub-agent.
+  v0.2.0 adds agentguard_memory_ops branch: detects when memory-save or memory-upsert
+  operations are used as inter-agent relay channels — content_payload containing PII/PHI
+  is written to memory and then read by a different agent in the same deployment. This is
+  a common indirect PII channel in CrewAI shared memory, LangGraph shared state, and
+  custom blackboard-pattern multi-agent systems. Also extends delegation tool_name coverage
+  to include run_task, execute_task, transfer_to_agent, handoff_to_agent, delegate_subtask,
+  and spawn_subagent patterns observed in OpenHands and Anthropic agentic frameworks (2026).
   Distinct from rp-027 (cross-session bleed between tenant sessions), rp-054 (OMNI-LEAK
   cascade exfil with explicit URL exfiltration destination), and rp-010 (trust escalation
   in A2A delegation). This rule targets the data-in-transit pattern: PII/PHI/financial
-  data in the tool_input of agent-to-agent delegation calls, regardless of whether the
-  downstream sub-agent is malicious or merely over-scoped.
+  data in the tool_input of agent-to-agent delegation calls or shared memory writes,
+  regardless of whether the downstream sub-agent is malicious or merely over-scoped.
   References: arXiv:2602.11510 (AgentLeak Feb/Mar 2026),
   OWASP LLM02:2025, OWASP Agentic AI ASI05:2026 -
   https://arxiv.org/abs/2602.11510,
@@ -30,7 +37,7 @@ description: >
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium
-hook_sources: "tool_invoke"
+hook_sources: "tool_invoke,memory_ops"
 required_telemetry: ""
 author: "AgentGuard Research Team"
 tags:
@@ -49,28 +56,19 @@ tags:
   - agentleak
   - arxiv-2602.11510
 query_sql: |
-  -- v0.1.0 (2026-04-18):
-  -- NEW: AgentLeak inter-agent delegation PII channel propagation detection.
-  -- Fires on tool_invoke events for agent delegation tools where tool_input
-  -- contains PII, PHI, financial data, or authentication credentials.
+  -- v0.2.0 changelog (2026-04-20):
+  --   ADDED: agentguard_memory_ops UNION ALL branch — detects PII/PHI/credentials
+  --   written into shared memory stores used as inter-agent relay channels.
+  --   Common in CrewAI shared memory, LangGraph shared state, and blackboard patterns.
+  --   Fires on memory_op IN ('save','update','upsert') with PII/credential signals
+  --   in content_payload. Backward-compat: CIM event branch retained.
+  --   EXTENDED: delegation tool_name coverage adds: run_task, execute_task,
+  --   transfer_to_agent, handoff_to_agent, delegate_subtask, spawn_subagent
+  --   (observed in OpenHands, Anthropic agentic frameworks, 2026).
+  --   fp_rate: medium (delegation gate is broad; compound PII signals mitigate).
+  --   SQL validated: count=0 on live corpus (no delegation events in test data).
   --
-  -- Source: arXiv:2602.11510 (AgentLeak, Feb/Mar 2026)
-  -- 68.8% PII leak rate via inter-agent channel vs 27.2% direct output.
-  -- Output-only audits miss 41.7% of violations.
-  --
-  -- Gate: tool_name must be an agent delegation/dispatch tool.
-  -- This captures:
-  --   CrewAI delegate_work, LangGraph send_message/invoke_agent, AutoGen proxy calls,
-  --   MCP multi-agent dispatch, custom forward/delegate patterns.
-  --
-  -- Signals (each = one PII/data type being forwarded to a sub-agent):
-  --   1. SSN pattern in delegation payload
-  --   2. Credit card number in delegation payload
-  --   3. PHI: medical record, diagnosis, prescription, insurance ID
-  --   4. Date-of-birth in delegation context
-  --   5. Authentication token / API key forwarded to sub-agent
-  --   6. PCI-scope: card number prefix or CVV/CVC adjacent label
-  --   7. SSN field label (not just the number — catches labelled PII)
+  -- Branch 1: agentguard_cim_event — direct delegation tool_invoke with PII in tool_input
   SELECT
     event_time AS detected_at,
     'rp-062' AS rule_id,
@@ -92,8 +90,9 @@ query_sql: |
   WHERE event_type IN ('tool_invoke')
     -- Gate: delegation/dispatch tool names used in multi-agent frameworks
     -- CrewAI: delegate_work | LangGraph: send_message, invoke_agent | AutoGen: proxy_call
+    -- OpenHands: run_task, execute_task, handoff_to_agent
     -- Custom patterns: agent_call, dispatch_agent, forward_to_agent, spawn_agent
-    AND match(lower(tool_name), '\b(delegate|dispatch|invoke_agent|call_agent|sub_agent|spawn_agent|send_to_agent|forward_to_agent|delegate_work|agent_call|proxy_call|task_delegate|assign_agent|route_to_agent)\b')
+    AND match(lower(tool_name), '(delegate|dispatch|invoke_agent|call_agent|sub_agent|spawn_agent|send_to_agent|forward_to_agent|delegate_work|agent_call|proxy_call|task_delegate|assign_agent|route_to_agent|run_task|execute_task|transfer_to_agent|handoff_to_agent|delegate_subtask|spawn_subagent)')
     AND (
       -- Signal 1: SSN (Social Security Number) pattern in delegation payload
       -- nnn-nn-nnnn format — distinctive and rarely appears in non-PII contexts
@@ -122,4 +121,46 @@ query_sql: |
       -- Signal 7: Known API key prefixes in delegation payload
       -- Tokens passed between agents expose them to any compromised sub-agent
       OR match(tool_input, '(sk-ant-api[0-9]{2}-|sk-proj-|ghp_|gho_|AKIA[0-9A-Z]{16}|xoxb-)[a-zA-Z0-9_\-]{16,}')
+    )
+
+  UNION ALL
+
+  -- v0.2.0: agentguard_memory_ops branch — inter-agent shared memory PII relay.
+  -- Detects PII/PHI/credentials written into shared memory (CrewAI shared memory,
+  -- LangGraph shared state, blackboard patterns) as inter-agent data relay.
+  -- Fires on save/update/upsert when content_payload contains PII signals.
+  -- memory_path gate: shared/global/inter-agent/broadcast paths (not private user paths).
+  SELECT
+    event_time AS detected_at,
+    'rp-062' AS rule_id,
+    'AgentLeak Inter-Agent Delegation PII Channel Propagation Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    '' AS run_id,
+    memory_op AS hook_name,
+    tool_name,
+    concat(
+      'PII/sensitive data written to shared memory relay path [', coalesce(memory_path, 'unknown'),
+      '] op=[', memory_op, '] agent=', coalesce(agent_id, 'unknown'),
+      '. Possible inter-agent PII channel propagation via shared memory.'
+    ) AS message,
+    content_payload AS event_data
+  FROM agentguard_memory_ops
+  WHERE memory_op IN ('save', 'update', 'upsert')
+    -- Gate: shared/global memory paths used as inter-agent relay channels
+    -- Private user paths (users/<id>/*) excluded — only shared-scope paths
+    AND match(lower(memory_path), '(shared|global|inter.?agent|broadcast|blackboard|crew|team|collective|state|workspace|pool)')
+    AND (
+      -- SSN pattern in shared memory content
+      match(content_payload, '[0-9]{3}-[0-9]{2}-[0-9]{4}')
+      -- Credit card pattern in shared memory
+      OR match(content_payload, '[0-9]{4}[\s\-][0-9]{4}[\s\-][0-9]{4}[\s\-][0-9]{4}')
+      -- PHI fields in shared memory
+      OR match(lower(content_payload), '(diagnosis|prescription|medical.record|patient.id|insurance.id|icd.?[0-9])')
+      -- Authentication token / API key in shared memory
+      OR match(content_payload, '(sk-ant-api[0-9]{2}-|sk-proj-|ghp_|gho_|AKIA[0-9A-Z]{16}|xoxb-)[a-zA-Z0-9_\-]{16,}')
+      -- DOB in shared memory content
+      OR match(lower(content_payload), '\b(dob|date.of.birth|birth.?date)\b.{0,20}[0-9]{4}')
     )

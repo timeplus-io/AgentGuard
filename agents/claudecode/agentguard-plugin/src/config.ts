@@ -8,6 +8,9 @@ export type AgentGuardConfig = {
   agentId: string;
   deploymentId: string;
   deploymentName: string;
+  agentguardUrl: string;
+  holdFailPolicy: "deny" | "allow";
+  holdsEnabled: boolean;
 };
 
 const DEFAULTS: AgentGuardConfig = {
@@ -18,6 +21,9 @@ const DEFAULTS: AgentGuardConfig = {
   agentId: "",
   deploymentId: "default",
   deploymentName: "Default",
+  agentguardUrl: "http://localhost:8080",
+  holdFailPolicy: "deny",
+  holdsEnabled: true,
 };
 
 export function resolveConfig(): AgentGuardConfig {
@@ -29,5 +35,8 @@ export function resolveConfig(): AgentGuardConfig {
     agentId: process.env.AGENTGUARD_AGENT_ID || hostname(),
     deploymentId: process.env.AGENTGUARD_DEPLOYMENT_ID || DEFAULTS.deploymentId,
     deploymentName: process.env.AGENTGUARD_DEPLOYMENT_NAME || DEFAULTS.deploymentName,
+    agentguardUrl: process.env.AGENTGUARD_URL ?? DEFAULTS.agentguardUrl,
+    holdFailPolicy: (process.env.AGENTGUARD_HOLD_FAIL_POLICY === "allow") ? "allow" : "deny",
+    holdsEnabled: process.env.AGENTGUARD_HOLDS_ENABLED?.toLowerCase() !== "false",
   };
 }

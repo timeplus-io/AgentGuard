@@ -1,6 +1,6 @@
 id: rp-067
 name: "Unicode Confusable Homoglyph Permission Bypass Detector"
-version: "0.1.0"
+version: "0.1.1"
 description: >
   Detects Unicode confusable homoglyph attacks against LLM agent permission systems.
   Agents like Claude Code and OpenAI Codex match allow/deny rules (e.g. Bash(rm:/etc/*),
@@ -49,7 +49,7 @@ query_sql: |
   -- Claude Code #29489 and OpenAI Codex #13095: permission rule bypass via homoglyphs
   -- Distinct from rp-056: rp-056=invisible zero-width chars; rp-067=visible confusables.
   --
-  -- Strategy: Use multiSearchAny() to detect Cyrillic/Greek/Armenian bytes in
+  -- Strategy: Use multi_search_any() to detect Cyrillic/Greek/Armenian bytes in
   -- security-sensitive contexts (tool_input file paths and shell commands,
   -- user_message path/command tokens). RE2 cannot match multi-byte UTF-8 ranges directly.
   --
@@ -96,7 +96,7 @@ query_sql: |
       -- Anchored to file/shell tool_name to avoid FP on legitimate Cyrillic text in content tools.
       (
         match(lower(tool_name), '(read_file|read|edit|write|bash|shell|exec|run|file_read|get_file|open_file|cat|create_file|delete_file|move_file|copy_file|chmod|chown|mkdir|rm|ls|find|grep)')
-        AND multiSearchAny(tool_input, [
+        AND multi_search_any(tool_input, [
           '\xd0\xb0',  -- Cyrillic а (U+0430) — confusable for Latin 'a'
           '\xd1\x81',  -- Cyrillic с (U+0441) — confusable for Latin 'c'
           '\xd0\xb5',  -- Cyrillic е (U+0435) — confusable for Latin 'e'
@@ -110,7 +110,7 @@ query_sql: |
       -- Branch 2: Greek confusables in tool_input (file path / shell command context)
       OR (
         match(lower(tool_name), '(read_file|read|edit|write|bash|shell|exec|run|file_read|get_file|open_file|cat|create_file|delete_file|move_file|copy_file|chmod|chown|mkdir|rm|ls|find|grep)')
-        AND multiSearchAny(tool_input, [
+        AND multi_search_any(tool_input, [
           '\xce\xb1',  -- Greek α (U+03B1) — confusable for Latin 'a'
           '\xce\xbf',  -- Greek ο (U+03BF) — confusable for Latin 'o'
           '\xcf\x81'   -- Greek ρ (U+03C1) — confusable for Latin 'p'/'r'
@@ -122,7 +122,7 @@ query_sql: |
       -- or "rеad" to shadow "read" — bypassing tool-name-based allow/deny rules.
       OR (
         event_type = 'tool_invoke'
-        AND multiSearchAny(tool_name, [
+        AND multi_search_any(tool_name, [
           '\xd0', '\xd1',  -- Cyrillic UTF-8 lead bytes (range U+0400-04FF)
           '\xce', '\xcf',  -- Greek UTF-8 lead bytes (range U+0370-03FF)
           '\xd4', '\xd5'   -- Armenian UTF-8 lead bytes (range U+0531-058F)
@@ -135,7 +135,7 @@ query_sql: |
       -- Anchor: path-separator context (slash or tilde before confusable char).
       OR (
         event_type = 'user_input'
-        AND multiSearchAny(user_message, [
+        AND multi_search_any(user_message, [
           '\xd0\xb0', '\xd1\x81', '\xd0\xb5',
           '\xd0\xbe', '\xd1\x80', '\xd1\x96', '\xd1\x95'
         ])

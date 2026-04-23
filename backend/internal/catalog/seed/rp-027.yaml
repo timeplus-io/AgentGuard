@@ -1,6 +1,6 @@
 id: rp-027
 name: "Cross-Session Context Leak Detector"
-version: "0.4.0"
+version: "0.4.1"
 description: >
   Detects application-layer cross-session context leakage in multi-tenant AI platforms,
   where data from one user's session bleeds into another user's conversation context.
@@ -29,6 +29,11 @@ description: >
   https://tianpan.co/blog/2026-04-10-cross-tenant-data-leakage-llm-infrastructure,
   arXiv:2603.10726 CacheSolidarity (prefix caching side-channel, Mar 2026) - https://arxiv.org/abs/2603.10726,
   arXiv:2508.08438 Selective KV-Cache Sharing (timing side-channel mitigation) - https://arxiv.org/abs/2508.08438,
+  redteams.ai MCP Cross-Client Data Leak guide (CVE-2026-25536, session isolation patterns) - https://redteams.ai/topics/agent-exploitation/mcp-cross-client-data-leak,
+  v0.4.1 reference audit (2026-04-21): Added redteams.ai "MCP Cross-Client Data Leak:
+  Preventing Session Isolation Failures" (2026) — comprehensive defense-focused guide
+  to CVE-2026-25536 and session-isolated state management patterns in multi-tenant MCP
+  deployments. SQL unchanged; patterns confirmed current against published attack variants.
   v0.3.1 reference audit (2026-04-18): Added CacheSolidarity arXiv:2603.10726 (Mar 2026,
   IMDEA Software/UPM) — documents timing side-channel via prefix caching in multi-tenant
   LLM serving (vLLM, SGLang, TensorRT-LLM). Attacker infers another tenant's system prompt

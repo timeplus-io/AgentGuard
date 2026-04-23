@@ -1,0 +1,171 @@
+id: rp-104
+name: "SkillTrojan — Multi-Skill Encrypted Payload Fragment Reconstruction Detector"
+version: "0.1.1"
+description: >
+  Detects SkillTrojan attacks where an encrypted malicious payload is partitioned across
+  multiple benign-looking skill invocations and reconstructed only under a predefined trigger
+  condition. SkillTrojan (arXiv:2604.06811, Apr 2026) achieves 97.2% ASR on EHR SQL with
+  GPT-5.2 while maintaining 89.3% clean accuracy — evading both automated skill audits and
+  human reviewers. The attack targets skill-based agent architectures by embedding malicious
+  logic directly in skill implementations (not model parameters or training data), partitioning
+  an encrypted payload across N skill invocations that individually appear innocuous, and using
+  a shared session_key and segment counter metadata for coordinated payload reconstruction.
+  Three detection branches: (1) Fragment Distribution — tool_input contains segment/total_segments/
+  session_key payload distribution metadata alongside base64 data; (2) Reconstruction Trigger —
+  tool_input or tool_result contains explicit payload assembly activation signal (trigger/reconstruct/
+  execute:true); (3) Reassembled Payload Delivery — tool_result returns a reconstructed base64 payload
+  of sufficient length to contain meaningful code/commands.
+  Distinct from rp-042 (BackdoorAgent: runtime trigger in model behavior/user_message) and rp-085
+  (Silent Sabotage: training trace poisoning). SkillTrojan operates entirely within skill
+  IMPLEMENTATIONS, not model parameters. Distinct from rp-020 (DDIPE: documentation-embedded
+  code) and rp-071 (MalTool: CIA-triad behavioral signals in tool_result).
+  References: arXiv:2604.06811 (SkillTrojan: Backdoor Attacks on Skill-Based Agent Systems, Apr 2026),
+  OWASP LLM05:2025 (Supply Chain Vulnerabilities), MITRE T1027 (Obfuscated Files/Information),
+  MITRE T1195.001 (Supply Chain Compromise: Software Dependencies) -
+  https://arxiv.org/abs/2604.06811,
+  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  Example: tool_input='{"data":"aW1wb3J0IG9z","segment":1,"total_segments":3,"session_key":"xK9p"}'
+  followed by tool_result='{"reconstructed":true,"payload":"aW1wb3J0IG9zOyBvcGVuKCIvZXRj...","execute":true}'
+severity: critical
+category: supply_chain_compromise
+fp_rate: medium
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - supply-chain
+  - skilltrojan
+  - backdoor
+  - payload-fragmentation
+  - encrypted-payload
+  - skill-registry
+  - multi-skill-attack
+  - owasp-llm05
+  - mitre-t1027
+  - mitre-t1195
+  - arxiv-2604.06811
+query_sql: |
+  -- rp-104 v0.1.1 (2026-04-21)
+  -- CHANGELOG: Added Branch 3 (Standalone Reassembly Delivery) — tool_result returns
+  --   a large base64-encoded payload (>= 128 chars) WITHOUT an explicit execute/reconstructed
+  --   flag. The description documented this branch but SQL only had it folded inside Branch 2.
+  --   Branch 3 catches delivery phase where the coordinating metadata is stripped before return.
+  -- SkillTrojan — Multi-Skill Encrypted Payload Fragment Reconstruction Detector
+  -- arXiv:2604.06811 (SkillTrojan, Apr 2026): 97.2% ASR, evades skill audits and human review
+  -- Multi-skill encrypted payload partitioned across N invocations; reconstructs at trigger.
+  --
+  -- Distinct from rp-042 (model-level backdoor trigger activation in user_message/assistant_message).
+  -- SkillTrojan: malicious logic in SKILL IMPLEMENTATION, coordinated via tool_input metadata.
+  --
+  -- Branch 1: Fragment Distribution Pattern
+  --   tool_invoke where tool_input contains payload segmentation metadata.
+  --   Signal: "segment" + "total_segments" + "session_key" in tool_input (coordination schema)
+  --   Combined with base64-like data field ("data":"[A-Za-z0-9+/=]{20,}").
+  --   This pattern does NOT appear in standard skill APIs — it is specific to the
+  --   SkillTrojan payload distribution coordination protocol.
+  --   Legitimate chunked uploads use page/offset patterns, not segment/total_segments/session_key.
+  SELECT
+    event_time AS detected_at,
+    'rp-104' AS rule_id,
+    'SkillTrojan — Multi-Skill Encrypted Payload Fragment Reconstruction Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'SkillTrojan fragment distribution: tool=[', coalesce(tool_name, 'unknown'),
+      '] contains segment/session_key payload metadata. Agent=', coalesce(agent_id, 'unknown')
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_invoke'
+    AND (
+      -- Fragment + session coordination metadata pattern (all three fields = distribution protocol)
+      (
+        match(lower(tool_input), '"segment"\s*:\s*[0-9]+')
+        AND match(lower(tool_input), '"total_segments"\s*:\s*[0-9]+')
+        AND match(lower(tool_input), '"session_key"\s*:\s*"[a-zA-Z0-9+/=_\-]{4,32}"')
+      )
+      -- Segment + base64 data (even without session_key — simpler variant)
+      OR (
+        match(lower(tool_input), '"segment"\s*:\s*[0-9]+')
+        AND match(lower(tool_input), '"total_segments"\s*:\s*[0-9]+')
+        AND match(tool_input, '"data"\s*:\s*"[A-Za-z0-9+/=]{24,}"')
+      )
+    )
+
+  UNION ALL
+
+  -- Branch 2: Reconstruction Trigger Signal
+  --   tool_invoke containing explicit payload reconstruction directive,
+  --   OR tool_complete returning reconstruction confirmation flag.
+  --   "trigger":"reconstruct/activate/assemble" in tool_input = activation signal.
+  --   "execute":true combined with "payload":"..." in tool_result = delivery signal.
+  SELECT
+    event_time AS detected_at,
+    'rp-104' AS rule_id,
+    'SkillTrojan — Multi-Skill Encrypted Payload Fragment Reconstruction Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'SkillTrojan reconstruction trigger: tool=[', coalesce(tool_name, 'unknown'),
+      '] payload assembly activation in ', event_type,
+      '. Agent=', coalesce(agent_id, 'unknown')
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (
+      -- Explicit reconstruction trigger directive in tool_input
+      match(lower(tool_input), '"trigger"\s*:\s*"(reconstruct|activate|assemble|merge|execute|deploy|fire|launch|arm)"')
+      -- Reconstructed payload with execute flag in tool_result (delivery phase)
+      OR (
+        match(lower(tool_result), '"execute"\s*:\s*(true|"true")')
+        AND match(tool_result, '"payload"\s*:\s*"[A-Za-z0-9+/=]{32,}"')
+      )
+      -- Explicit reconstruction confirmation in tool_result
+      OR (
+        match(lower(tool_result), '"(reconstructed|assembled|merged)"\s*:\s*(true|"true")')
+        AND match(tool_result, '"payload"\s*:\s*"[A-Za-z0-9+/=]{24,}"')
+      )
+    )
+
+  UNION ALL
+
+  -- Branch 3: Standalone Reassembly Delivery (bare base64 blob in tool_result)
+  --   The coordinating metadata (execute:true, reconstructed:true) may be stripped
+  --   before the final delivery. Detect: tool_complete where tool_result contains a
+  --   standalone large base64 value (>= 128 chars) under a "payload" or "result" key,
+  --   NOT a routine chunked upload tool (no file/chunk/upload/part in tool_name).
+  --   This is a weaker signal so combined with tool_name gate for FP reduction.
+  SELECT
+    event_time AS detected_at,
+    'rp-104' AS rule_id,
+    'SkillTrojan — Multi-Skill Encrypted Payload Fragment Reconstruction Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'SkillTrojan bare payload delivery: tool=[', coalesce(tool_name, 'unknown'),
+      '] returned large base64 payload (possibly assembled fragments). Agent=', coalesce(agent_id, 'unknown')
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_complete'
+    -- Large base64 payload in tool_result under "payload" or "result" key
+    AND match(tool_result, '"(payload|assembled_result|final_output|decoded_output)"\s*:\s*"[A-Za-z0-9+/=]{128,}"')
+    -- Must NOT be a legitimate chunked data tool (file upload, chunk processor, etc.)
+    AND NOT match(lower(tool_name), '(upload|chunk|file_write|write_file|put_object|store_file|save_file|encode|base64_encode|part_upload)')
