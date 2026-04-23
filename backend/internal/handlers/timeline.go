@@ -77,7 +77,9 @@ WHERE deployment_id = '%s'
 ORDER BY event_time ASC`,
 		escapeSQL(deploymentID), escapeSQL(agentID), escapeSQL(sessionID), escapeSQL(runID))
 
-	return timeplus.Query(&cfg.Timeplus, sql)
+	// Use native binary protocol — event_data may contain arbitrary user content
+	// (LLM messages, tool inputs) that breaks Proton's text JSON serializer.
+	return timeplus.QueryNative(&cfg.Timeplus, sql)
 }
 
 // detectAgentType returns the agent_type value from the first event that has

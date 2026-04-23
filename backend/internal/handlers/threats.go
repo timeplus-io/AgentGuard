@@ -316,7 +316,7 @@ func GetThreat(cfg *config.Config) gin.HandlerFunc {
 
 				holdSQL := fmt.Sprintf(`
 SELECT hold_id, tool_name, args_summary, created_at
-FROM table(mv_holds_current)
+FROM `+holdsLatestSubquery+`
 WHERE deployment_id = '%s' AND agent_id = '%s'
   AND session_id    = '%s' AND rule_id   = '%s'
   AND status        = 'pending'

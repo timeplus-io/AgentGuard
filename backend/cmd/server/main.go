@@ -107,12 +107,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("AgentGuard webhook URL: %s\n", cfg.AgentGuardURL)
 	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
 	// Note: timeplus.Init() is no longer called at startup. All Timeplus resources
-	// are provisioned during the one-time /api/setup/provision flow.
-	//
-	// Schema additions made AFTER the original provision (like the holds feature)
-	// are applied lazily by timeplus.MigrateHoldsSchema, called from the auth
-	// Login handler on first successful login (when credentials become available
-	// — they are deliberately not persisted to the config file).
+	// are provisioned during the one-time /api/setup/provision flow. There is no
+	// runtime schema migration — schema changes between releases require a clean
+	// reprovision (delete config.yaml or the agentguard-data volume).
 
 	store := auth.NewSessionStore()
 	holdReg := holdregistry.New()

@@ -15,7 +15,7 @@ const agentTypes = [
     id: 'openclaw',
     name: 'OpenClaw',
     desc: 'Open-source AI agent gateway with full plugin support. Ideal for production workloads and custom security policies.',
-    icon: 'terminal',
+    imgSrc: '/static/icons/openclaw-dark.svg',
     badge: 'Supported',
     disabled: false,
   },
@@ -23,7 +23,7 @@ const agentTypes = [
     id: 'claude-code',
     name: 'Claude Code',
     desc: "Anthropic's Claude Code CLI. Monitor tool use, LLM calls, cost, and security events in real time.",
-    icon: 'code',
+    imgSrc: '/static/icons/claude-seeklogo.svg',
     badge: 'Supported',
     disabled: false,
   },
@@ -76,19 +76,27 @@ export default function Onboarding() {
   const [deploymentId, setDeploymentId] = useState('my-team')
   const [deploymentName, setDeploymentName] = useState('My Team')
   const [timeplusUrl, setTimeplusUrl] = useState('http://localhost:3218')
-  const [configTab, setConfigTab] = useState('env')
-
-  useEffect(() => {
-    setConfigTab(selectedAgent === 'claude-code' ? 'json' : 'env')
-  }, [selectedAgent])
+  const [timeplusUsername, setTimeplusUsername] = useState('proton')
+  const [timeplusPassword, setTimeplusPassword] = useState('')
+  const [agentguardUrl, setAgentguardUrl] = useState('http://localhost:8080')
+  const [holdsEnabled, setHoldsEnabled] = useState(true)
+  const [holdFailPolicy, setHoldFailPolicy] = useState('deny')
 
   const hermesEnvCode =
+    `# Async event ingest (Hermes → Timeplus)\n` +
     `export AGENTGUARD_TIMEPLUS_URL="${timeplusUrl}"\n` +
+    `export AGENTGUARD_USERNAME="${timeplusUsername}"\n` +
+    `export AGENTGUARD_PASSWORD="${timeplusPassword || '<your-password>'}"\n` +
+    `\n` +
+    `# Identity\n` +
     `export AGENTGUARD_AGENT_ID="${agentId || '<your-hostname>'}"\n` +
     `export AGENTGUARD_DEPLOYMENT_ID="${deploymentId}"\n` +
     `export AGENTGUARD_DEPLOYMENT_NAME="${deploymentName}"\n` +
-    `export AGENTGUARD_USERNAME=proton\n` +
-    `export AGENTGUARD_PASSWORD=<your-password>`
+    `\n` +
+    `# Synchronous tool-call blocking (pre_tool_call → AgentGuard /api/holds)\n` +
+    `export AGENTGUARD_URL="${agentguardUrl}"\n` +
+    `export AGENTGUARD_HOLDS_ENABLED="${holdsEnabled}"\n` +
+    `export AGENTGUARD_HOLD_FAIL_POLICY="${holdFailPolicy}"`
 
   // Step 2 OTel config — derived from timeplusUrl host, port 4318; user can override
   const [otelEndpointOverride, setOtelEndpointOverride] = useState(null)
@@ -102,21 +110,28 @@ export default function Onboarding() {
   const setOtelEndpoint = val => setOtelEndpointOverride(val === derivedOtelEndpoint ? null : val)
 
 
-  const envVarsCode =
-    `export AGENTGUARD_TIMEPLUS_URL=${timeplusUrl}\nexport AGENTGUARD_DEPLOYMENT_ID=${deploymentId}\nexport AGENTGUARD_DEPLOYMENT_NAME="${deploymentName}"`
-
   const jsonConfigCode = JSON.stringify({
     plugins: {
+      load: {
+        paths: [
+          '/absolute/path/to/agentguard-plugin',
+        ],
+      },
       entries: {
         agentguard: {
           enabled: true,
           config: {
             timeplusUrl,
+            username: timeplusUsername,
+            password: timeplusPassword || '<your-password>',
             deploymentId,
             deploymentName,
             stream: 'agentguard_hook_events',
             flushMs: 2000,
             batchSize: 50,
+            agentguardUrl,
+            holdsEnabled,
+            holdFailPolicy,
           },
         },
       },
@@ -145,33 +160,35 @@ export default function Onboarding() {
   }, null, 2)
 
   // ── Claude Code computed snippets ──────────────────────────────────────────
-  const hookEntry = { matcher: '*', hooks: [{ type: 'command', command: 'agentguard-hook', async: true }] }
+  // PreToolUse runs synchronously (no async:true) so the plugin can pause
+  // the tool call while AgentGuard evaluates rules. Other hooks stay async.
+  const ccAsyncHookEntry = { matcher: '*', hooks: [{ type: 'command', command: 'agentguard-hook', async: true }] }
+  const ccSyncHookEntry  = { matcher: '*', hooks: [{ type: 'command', command: 'agentguard-hook', timeout: 600000 }] }
   const ccSettingsJsonCode = JSON.stringify({
     hooks: {
-      SessionStart:       [hookEntry],
-      SessionEnd:         [hookEntry],
-      UserPromptSubmit:   [hookEntry],
-      PreToolUse:         [hookEntry],
-      PostToolUse:        [hookEntry],
-      PostToolUseFailure: [hookEntry],
-      SubagentStart:      [hookEntry],
-      SubagentStop:       [hookEntry],
-      Stop:               [hookEntry],
-      PermissionDenied:   [hookEntry],
+      PreToolUse:         [ccSyncHookEntry],
+      SessionStart:       [ccAsyncHookEntry],
+      SessionEnd:         [ccAsyncHookEntry],
+      UserPromptSubmit:   [ccAsyncHookEntry],
+      PostToolUse:        [ccAsyncHookEntry],
+      PostToolUseFailure: [ccAsyncHookEntry],
+      SubagentStart:      [ccAsyncHookEntry],
+      SubagentStop:       [ccAsyncHookEntry],
+      Stop:               [ccAsyncHookEntry],
+      PermissionDenied:   [ccAsyncHookEntry],
     },
     env: {
-      AGENTGUARD_AGENT_ID:        agentId || '<your-hostname>',
-      AGENTGUARD_DEPLOYMENT_ID:   deploymentId,
-      AGENTGUARD_DEPLOYMENT_NAME: deploymentName,
-      AGENTGUARD_TIMEPLUS_URL:    timeplusUrl,
+      AGENTGUARD_AGENT_ID:         agentId || '<your-hostname>',
+      AGENTGUARD_DEPLOYMENT_ID:    deploymentId,
+      AGENTGUARD_DEPLOYMENT_NAME:  deploymentName,
+      AGENTGUARD_TIMEPLUS_URL:     timeplusUrl,
+      AGENTGUARD_USERNAME:         timeplusUsername,
+      AGENTGUARD_PASSWORD:         timeplusPassword || '<your-password>',
+      AGENTGUARD_URL:              agentguardUrl,
+      AGENTGUARD_HOLDS_ENABLED:    String(holdsEnabled),
+      AGENTGUARD_HOLD_FAIL_POLICY: holdFailPolicy,
     },
   }, null, 2)
-
-  const ccEnvCode =
-    `export AGENTGUARD_AGENT_ID="${agentId || '<your-hostname>'}"\n` +
-    `export AGENTGUARD_DEPLOYMENT_ID="${deploymentId}"\n` +
-    `export AGENTGUARD_DEPLOYMENT_NAME="${deploymentName}"\n` +
-    `export AGENTGUARD_TIMEPLUS_URL="${timeplusUrl}"`
 
   const ccOtelSettingsCode = JSON.stringify({
     env: {
@@ -216,16 +233,29 @@ export default function Onboarding() {
     if (ruleIds.length > 0) {
       setActivating(true)
       setActivateError(null)
+      const failures = []
       try {
         for (const ruleId of ruleIds) {
           const entry = catalog.find(c => c.id === ruleId)
-          // Install only if not already installed; ignore install errors so re-running doesn't block.
+          // Install only if not already installed; record install failures so the
+          // user is told which rules didn't activate instead of being silently skipped.
           if (entry && !entry.installed) {
-            try { await api.installRule(ruleId) } catch (e) { console.warn('Install failed for', ruleId, e) }
+            try {
+              await api.installRule(ruleId)
+            } catch (e) {
+              console.warn('Install failed for', ruleId, e)
+              failures.push(`${entry?.name || ruleId}: install failed (${e?.message ?? String(e)})`)
+              continue  // skip the policy step for a rule we couldn't install
+            }
           }
           const policy = policies[ruleId]
           if (policy && policy !== 'log_only') {
-            try { await api.setRuleBlockPolicy(ruleId, policy) } catch (e) { console.warn('Set policy failed for', ruleId, e) }
+            try {
+              await api.setRuleBlockPolicy(ruleId, policy)
+            } catch (e) {
+              console.warn('Set policy failed for', ruleId, e)
+              failures.push(`${entry?.name || ruleId}: set ${policy} policy failed (${e?.message ?? String(e)})`)
+            }
           }
         }
       } catch (e) {
@@ -234,6 +264,11 @@ export default function Onboarding() {
         return
       }
       setActivating(false)
+      if (failures.length > 0) {
+        // Surface partial failure inline rather than navigating away silently.
+        setActivateError(`${failures.length} of ${ruleIds.length} rule activation(s) failed:\n• ${failures.join('\n• ')}`)
+        return
+      }
     }
     localStorage.setItem('agentguard_onboarded', '1')
     navigate('/rules')
@@ -367,10 +402,14 @@ export default function Onboarding() {
                         { label: 'Deployment ID', val: deploymentId, set: setDeploymentId, ph: 'my-team' },
                         { label: 'Deployment Name', val: deploymentName, set: setDeploymentName, ph: 'My Team' },
                         { label: 'Timeplus URL', val: timeplusUrl, set: setTimeplusUrl, ph: 'http://localhost:3218' },
-                      ].map(({ label, val, set, ph }) => (
+                        { label: 'Timeplus Username', val: timeplusUsername, set: setTimeplusUsername, ph: 'proton' },
+                        { label: 'Timeplus Password', val: timeplusPassword, set: setTimeplusPassword, ph: 'your-password', type: 'password' },
+                        { label: 'AgentGuard URL', val: agentguardUrl, set: setAgentguardUrl, ph: 'http://localhost:8080' },
+                      ].map(({ label, val, set, ph, type }) => (
                         <div key={label} className="flex items-center gap-4">
                           <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">{label}</label>
                           <input
+                            type={type || 'text'}
                             value={val}
                             onChange={e => set(e.target.value)}
                             placeholder={ph}
@@ -378,26 +417,49 @@ export default function Onboarding() {
                           />
                         </div>
                       ))}
+                      <div className="flex items-center gap-4">
+                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={holdsEnabled}
+                            onChange={e => setHoldsEnabled(e.target.checked)}
+                            className="accent-[#ffb0cf]"
+                          />
+                          <span className="text-[10px] text-zinc-400">{holdsEnabled ? 'Synchronous PreToolUse blocking on' : 'Observation-only — no blocking'}</span>
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
+                        <select
+                          value={holdFailPolicy}
+                          onChange={e => setHoldFailPolicy(e.target.value)}
+                          disabled={!holdsEnabled}
+                          className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
+                        >
+                          <option value="deny">deny — block on errors</option>
+                          <option value="allow">allow — pass through on errors</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">3. Apply configuration</p>
-                    <div className="flex gap-2 mb-2">
-                      {[{ id: 'env', label: 'Env Variables' }, { id: 'json', label: 'openclaw.json' }].map(tab => (
-                        <button
-                          key={tab.id}
-                          onClick={() => setConfigTab(tab.id)}
-                          className={`px-3 py-1 text-[10px] font-semibold rounded-full transition-colors ${configTab === tab.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'text-zinc-500 hover:text-zinc-300'}`}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
+                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">3. Add to openclaw.json</p>
                     <CodeBlock
-                      label={configTab === 'env' ? '.env / shell export' : 'plugins.entries.agentguard (openclaw.json)'}
-                      code={configTab === 'env' ? envVarsCode : jsonConfigCode}
+                      label="openclaw.json — plugins.load.paths + plugins.entries.agentguard"
+                      code={jsonConfigCode}
                     />
+                    <p className="text-[10px] text-zinc-500 leading-relaxed">
+                      Replace <code className="text-zinc-400">/absolute/path/to/agentguard-plugin</code> with the absolute path to the directory containing the plugin's <code className="text-zinc-400">package.json</code>. There is no fixed install path — it depends on where you ran <code className="text-zinc-400">npm install</code>. To find it, run this in the same directory:
+                    </p>
+                    <CodeBlock
+                      label="Resolve the installed plugin path"
+                      code={'node -e "console.log(require.resolve(\'@timeplus/agentguard-openclaw-plugin\').replace(/\\/dist\\/index\\.js$/, \'\'))"'}
+                    />
+                    <p className="text-[10px] text-zinc-500 leading-relaxed">
+                      For Docker, use the in-container bind-mount path instead (e.g. <code className="text-zinc-400">/home/node/.openclaw/agentguard-plugin</code>). Without this entry OpenClaw will not load the plugin.
+                    </p>
                   </div>
                 </>
               )}
@@ -419,10 +481,14 @@ export default function Onboarding() {
                         { label: 'Deployment ID', val: deploymentId, set: setDeploymentId, ph: 'local' },
                         { label: 'Deployment Name', val: deploymentName, set: setDeploymentName, ph: 'Local Dev' },
                         { label: 'Timeplus URL', val: timeplusUrl, set: setTimeplusUrl, ph: 'http://localhost:3218' },
-                      ].map(({ label, val, set, ph }) => (
+                        { label: 'Timeplus Username', val: timeplusUsername, set: setTimeplusUsername, ph: 'proton' },
+                        { label: 'Timeplus Password', val: timeplusPassword, set: setTimeplusPassword, ph: 'your-password', type: 'password' },
+                        { label: 'AgentGuard URL', val: agentguardUrl, set: setAgentguardUrl, ph: 'http://localhost:8080' },
+                      ].map(({ label, val, set, ph, type }) => (
                         <div key={label} className="flex items-center gap-4">
                           <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">{label}</label>
                           <input
+                            type={type || 'text'}
                             value={val}
                             onChange={e => set(e.target.value)}
                             placeholder={ph}
@@ -430,30 +496,46 @@ export default function Onboarding() {
                           />
                         </div>
                       ))}
+                      <div className="flex items-center gap-4">
+                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={holdsEnabled}
+                            onChange={e => setHoldsEnabled(e.target.checked)}
+                            className="accent-[#ffb0cf]"
+                          />
+                          <span className="text-[10px] text-zinc-400">{holdsEnabled ? 'Synchronous PreToolUse blocking on' : 'Observation-only — no blocking'}</span>
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
+                        <select
+                          value={holdFailPolicy}
+                          onChange={e => setHoldFailPolicy(e.target.value)}
+                          disabled={!holdsEnabled}
+                          className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
+                        >
+                          <option value="deny">deny — block on errors</option>
+                          <option value="allow">allow — pass through on errors</option>
+                        </select>
+                      </div>
                     </div>
                     <p className="text-[10px] text-zinc-500 leading-relaxed">* Agent ID identifies this Claude Code instance — use your hostname or machine name.</p>
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">3. Add to ~/.claude/settings.json</p>
-                    <div className="flex gap-2 mb-2">
-                      {[{ id: 'json', label: 'settings.json' }, { id: 'env', label: 'Shell env' }].map(tab => (
-                        <button
-                          key={tab.id}
-                          onClick={() => setConfigTab(tab.id)}
-                          className={`px-3 py-1 text-[10px] font-semibold rounded-full transition-colors ${configTab === tab.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'text-zinc-500 hover:text-zinc-300'}`}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
+                    <div className="flex items-start gap-2 px-3 py-2 mb-2 bg-amber-500/10 border-l-4 border-amber-400 rounded-sm">
+                      <span className="material-symbols-outlined text-amber-400 text-base shrink-0 mt-px">warning</span>
+                      <div className="text-xs text-amber-200 leading-relaxed">
+                        <span className="font-bold">Merge — do not replace.</span> If you already have a <code className="text-amber-100 bg-amber-900/40 px-1 rounded">~/.claude/settings.json</code>, copy only the <code className="text-amber-100 bg-amber-900/40 px-1 rounded">hooks</code> and <code className="text-amber-100 bg-amber-900/40 px-1 rounded">env</code> keys from below into your existing file. <span className="font-semibold">Overwriting the whole file will wipe out any other Claude Code settings you have configured.</span>
+                      </div>
                     </div>
                     <CodeBlock
-                      label={configTab === 'json' ? '~/.claude/settings.json — merge this block' : 'Shell profile (.zshrc / .bashrc)'}
-                      code={configTab === 'json' ? ccSettingsJsonCode : ccEnvCode}
+                      label="~/.claude/settings.json — merge this block"
+                      code={ccSettingsJsonCode}
                     />
-                    {configTab === 'json' && (
-                      <p className="text-[10px] text-zinc-500 leading-relaxed">Merge with your existing <code className="text-zinc-400">~/.claude/settings.json</code> — do not replace the whole file.</p>
-                    )}
                   </div>
                 </>
               )}
@@ -476,10 +558,14 @@ export default function Onboarding() {
                         { label: 'Deployment ID', val: deploymentId, set: setDeploymentId, ph: 'local' },
                         { label: 'Deployment Name', val: deploymentName, set: setDeploymentName, ph: 'Local Dev' },
                         { label: 'Timeplus URL', val: timeplusUrl, set: setTimeplusUrl, ph: 'http://localhost:3218' },
-                      ].map(({ label, val, set, ph }) => (
+                        { label: 'Timeplus Username', val: timeplusUsername, set: setTimeplusUsername, ph: 'proton' },
+                        { label: 'Timeplus Password', val: timeplusPassword, set: setTimeplusPassword, ph: 'your-password', type: 'password' },
+                        { label: 'AgentGuard URL', val: agentguardUrl, set: setAgentguardUrl, ph: 'http://localhost:8080' },
+                      ].map(({ label, val, set, ph, type }) => (
                         <div key={label} className="flex items-center gap-4">
                           <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">{label}</label>
                           <input
+                            type={type || 'text'}
                             value={val}
                             onChange={e => set(e.target.value)}
                             placeholder={ph}
@@ -487,12 +573,37 @@ export default function Onboarding() {
                           />
                         </div>
                       ))}
+                      <div className="flex items-center gap-4">
+                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={holdsEnabled}
+                            onChange={e => setHoldsEnabled(e.target.checked)}
+                            className="accent-[#ffb0cf]"
+                          />
+                          <span className="text-[10px] text-zinc-400">{holdsEnabled ? 'Synchronous pre_tool_call blocking on' : 'Observation-only — no blocking'}</span>
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
+                        <select
+                          value={holdFailPolicy}
+                          onChange={e => setHoldFailPolicy(e.target.value)}
+                          disabled={!holdsEnabled}
+                          className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
+                        >
+                          <option value="deny">deny — block on errors</option>
+                          <option value="allow">allow — pass through on errors</option>
+                        </select>
+                      </div>
                     </div>
                     <p className="text-[10px] text-zinc-500 leading-relaxed">* Agent ID identifies this Hermes instance — use your hostname or machine name.</p>
                   </div>
 
                   <div className="space-y-2">
                     <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">4. Set env vars before starting Hermes</p>
+                    <p className="text-[10px] text-zinc-500 leading-relaxed">The Hermes plugin reads these on startup. Add them to your shell profile (or a process-manager unit file) and restart your Hermes process for the changes to take effect.</p>
                     <CodeBlock label="Shell profile (.zshrc / .bashrc)" code={hermesEnvCode} />
                   </div>
                 </>
@@ -645,7 +756,7 @@ export default function Onboarding() {
                   )}
 
                   {activateError && (
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 text-xs text-red-400">{activateError}</div>
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 text-xs text-red-400 whitespace-pre-line">{activateError}</div>
                   )}
 
                   <p className="text-xs text-zinc-500 leading-relaxed">

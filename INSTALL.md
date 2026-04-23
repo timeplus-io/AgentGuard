@@ -216,11 +216,19 @@ npm install @timeplus/agentguard-openclaw-plugin
 
 ### 5b. Configure the plugin
 
-Add the plugin to your `openclaw.json`:
+Add **two** sections to your `openclaw.json`:
+
+1. `plugins.load.paths` — tells OpenClaw where to find the plugin on disk
+2. `plugins.entries.agentguard` — enables it and supplies its runtime config
 
 ```json
 {
   "plugins": {
+    "load": {
+      "paths": [
+        "/absolute/path/to/agentguard-plugin"
+      ]
+    },
     "entries": {
       "agentguard": {
         "enabled": true,
@@ -240,17 +248,19 @@ Add the plugin to your `openclaw.json`:
 }
 ```
 
-Or set environment variables before starting OpenClaw:
+> **What goes in `load.paths`:** the absolute path to the directory containing the plugin's `package.json` and `openclaw.plugin.json`. Without this, OpenClaw will not discover the plugin — `plugins.entries.agentguard` alone is not enough. There is no fixed install path; it depends on where you ran `npm install`.
+>
+> Run this in the same directory as your `npm install` to get the absolute path:
+>
+> ```bash
+> node -e "console.log(require.resolve('@timeplus/agentguard-openclaw-plugin').replace(/\/dist\/index\.js$/, ''))"
+> ```
+>
+> For Docker setups, use the in-container bind-mount path instead (e.g. `/home/node/.openclaw/agentguard-plugin`). The bundled `agents/openclaw/Makefile` writes exactly this path.
 
-```bash
-export AGENTGUARD_TIMEPLUS_URL=http://localhost:3218
-export AGENTGUARD_DEPLOYMENT_ID=my-team
-export AGENTGUARD_DEPLOYMENT_NAME="My Team"
-export AGENTGUARD_USERNAME=default
-export AGENTGUARD_PASSWORD=""
-```
+> **Docker (OpenClaw in container, Timeplus on host):** Use `http://host.docker.internal:3218` for `timeplusUrl`.
 
-> **Docker (OpenClaw in container, Timeplus on host):** Use `http://host.docker.internal:3218` instead of `localhost`.
+> **Optional — environment-variable overrides.** Every key under `entries.agentguard.config` can be supplied via env var instead (e.g. `AGENTGUARD_TIMEPLUS_URL`, `AGENTGUARD_USERNAME`). Env vars override `openclaw.json` when both are set. The JSON config above is fully sufficient on its own — you do not need any env vars unless you want to override a specific value at runtime.
 
 ### 5c. OTel diagnostics
 

@@ -58,6 +58,7 @@ export default function RuleDetail() {
   const confirmToggle = async () => {
     setToggleConfirm(false)
     setActionLoading(true)
+    setActionError(null)
     try {
       await api.toggleRule(id)
       // Refresh from API to get authoritative state
@@ -66,6 +67,7 @@ export default function RuleDetail() {
       setDetections24h(data.detections_24h || 0)
     } catch (e) {
       console.error('Toggle failed', e)
+      setActionError(e?.message || 'Toggle failed')
     } finally {
       setActionLoading(false)
     }
@@ -88,6 +90,7 @@ export default function RuleDetail() {
   const handleUninstall = async () => {
     if (!rule || actionLoading) return
     setActionLoading(true)
+    setActionError(null)
     try {
       await api.uninstallRule(id)
       navigate('/rules')
@@ -95,6 +98,7 @@ export default function RuleDetail() {
       console.error('Uninstall failed', e)
       setActionLoading(false)
       setUninstallConfirm(false)
+      setActionError(e?.message || 'Uninstall failed')
     }
   }
 

@@ -31,6 +31,7 @@ export default function RulePacks() {
   const density = rules.length > 0 ? Math.round(rules.filter(r => r.enabled).length * 100 / rules.length) : 0
   const [chartData, setChartData] = useState({ openThreats: [], totalEvents: [] })
   const [chartsLoading, setChartsLoading] = useState(true)
+  const [chartsError, setChartsError] = useState(null)
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const importInputRef = useRef(null)
@@ -108,9 +109,10 @@ export default function RulePacks() {
         }
         const totalEvents = Object.values(evtMap).sort((a, b) => b.cnt - a.cnt)
 
-        if (!cancelled) setChartData({ openThreats, totalEvents })
+        if (!cancelled) { setChartData({ openThreats, totalEvents }); setChartsError(null) }
       } catch (e) {
         console.error('Chart load failed', e)
+        if (!cancelled) setChartsError(e?.message || 'Failed to load charts')
       } finally {
         if (!cancelled) setChartsLoading(false)
       }
@@ -539,6 +541,11 @@ export default function RulePacks() {
                 <h4 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-6">Open Threats by Rule</h4>
                 {chartsLoading ? (
                   <div className="h-40 animate-pulse bg-[#2c2834] rounded-sm" />
+                ) : chartsError ? (
+                  <p className="text-xs text-[#ffb4ab] py-4 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">error</span>
+                    Failed to load: {chartsError}
+                  </p>
                 ) : chartData.openThreats.length === 0 ? (
                   <p className="text-xs text-zinc-600 py-4">No open threats.</p>
                 ) : (
@@ -567,6 +574,11 @@ export default function RulePacks() {
                 <h4 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-6">Security Events by Rule</h4>
                 {chartsLoading ? (
                   <div className="h-40 animate-pulse bg-[#2c2834] rounded-sm" />
+                ) : chartsError ? (
+                  <p className="text-xs text-[#ffb4ab] py-4 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">error</span>
+                    Failed to load: {chartsError}
+                  </p>
                 ) : chartData.totalEvents.length === 0 ? (
                   <p className="text-xs text-zinc-600 py-4">No events recorded.</p>
                 ) : (

@@ -18,6 +18,7 @@ func parseStr(v any) string {
 }
 
 // parseInt handles json.Number / float64 / int from Proton rows.
+// Also handles int64/uint64/int32/uint32 emitted by the native driver.
 func parseInt(v any) int {
 	switch n := v.(type) {
 	case float64:
@@ -28,6 +29,22 @@ func parseInt(v any) int {
 		}
 	case int:
 		return n
+	case int64:
+		return int(n)
+	case uint64:
+		return int(n)
+	case int32:
+		return int(n)
+	case uint32:
+		return int(n)
+	case int16:
+		return int(n)
+	case uint16:
+		return int(n)
+	case int8:
+		return int(n)
+	case uint8:
+		return int(n)
 	}
 	return 0
 }
@@ -54,14 +71,27 @@ func parseInt64(v any) int64 {
 }
 
 // parseFloat64 handles float64 / json.Number from Proton rows.
+// Also handles float32 and integer types from the native driver.
 func parseFloat64(v any) float64 {
 	switch n := v.(type) {
 	case float64:
 		return n
+	case float32:
+		return float64(n)
 	case interface{ Float64() (float64, error) }:
 		if f, err := n.Float64(); err == nil {
 			return f
 		}
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	case uint64:
+		return float64(n)
+	case int32:
+		return float64(n)
+	case uint32:
+		return float64(n)
 	}
 	return 0
 }
@@ -75,8 +105,11 @@ func parseBool(v any) bool {
 }
 
 // parseTime handles the multiple time formats Proton returns.
+// HTTP+JSON path delivers strings; the native binary driver delivers time.Time.
 func parseTime(v any) time.Time {
 	switch s := v.(type) {
+	case time.Time:
+		return s
 	case string:
 		if s == "" {
 			return time.Time{}

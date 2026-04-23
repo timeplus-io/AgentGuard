@@ -94,7 +94,7 @@ SELECT count() AS total
 FROM table(agentguard_hook_events)
 WHERE %s`, whereClause)
 
-		countRows, err := timeplus.Query(&cfg.Timeplus, countSQL)
+		countRows, err := timeplus.QueryNative(&cfg.Timeplus, countSQL)
 		if err != nil {
 			log.Printf("[events] ListEvents count query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
@@ -135,7 +135,9 @@ ORDER BY event_time ASC
 LIMIT %d OFFSET %d`,
 			whereClause, limit, (page-1)*limit)
 
-		rows, err := timeplus.Query(&cfg.Timeplus, pageSQL)
+		// Use native binary protocol — event_data carries arbitrary LLM/tool
+		// content; HTTP+JSON path can corrupt the response on bad escapes.
+		rows, err := timeplus.QueryNative(&cfg.Timeplus, pageSQL)
 		if err != nil {
 			log.Printf("[events] ListEvents page query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})

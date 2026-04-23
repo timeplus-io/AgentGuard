@@ -98,3 +98,21 @@ func TestDecide_PreExistingClearedThreatIgnored(t *testing.T) {
 		t.Fatalf("got %s, want allow (cleared threats don't trigger)", out.Decision)
 	}
 }
+
+// When the upstream SQL excludes a disabled (or deleted) rule from the join,
+// the threat's rule_id is missing from ThreatRulePolicies — the resulting
+// empty-string policy must be treated as no-op so disabling a rule mid-session
+// stops it from blocking on stale security_events recorded before disable.
+func TestDecide_PreExistingThreatFromDisabledRuleIgnored(t *testing.T) {
+	out := Decide(DecisionInput{
+		PreExistingThreats: []models.Threat{
+			{RuleID: "rp_001", Status: "open", RuleName: "Disabled Rule"},
+		},
+		// rp_001 is intentionally absent — simulates the INNER JOIN dropping it
+		// because agentguard_rules has enabled=false for rp_001.
+		ThreatRulePolicies: map[string]string{},
+	})
+	if out.Decision != "allow" {
+		t.Fatalf("got %s, want allow (disabled rule must not block on pre-existing threats)", out.Decision)
+	}
+}

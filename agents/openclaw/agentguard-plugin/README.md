@@ -214,11 +214,16 @@ Install the plugin package into your OpenClaw project:
 npm install @timeplus/agentguard-openclaw-plugin
 ```
 
-Then add the plugin to your `openclaw.json`:
+Then add **two** sections to your `openclaw.json` — `plugins.load.paths` (so OpenClaw discovers the plugin on disk) and `plugins.entries.agentguard` (so it actually runs):
 
 ```json
 {
   "plugins": {
+    "load": {
+      "paths": [
+        "/absolute/path/to/node_modules/@timeplus/agentguard-openclaw-plugin"
+      ]
+    },
     "entries": {
       "agentguard": {
         "enabled": true,
@@ -240,6 +245,10 @@ Then add the plugin to your `openclaw.json`:
   }
 }
 ```
+
+> **`plugins.load.paths` is required.** OpenClaw does not auto-discover plugins from `node_modules`; you must list the absolute path to the plugin directory (the one containing its `package.json` and `openclaw.plugin.json`). Use `npm root` to find your project's `node_modules` prefix. Without this entry, `entries.agentguard` is ignored and no events flow.
+>
+> The Docker setup in `agents/openclaw/Makefile` writes `/home/node/.openclaw/agentguard-plugin` here, since the plugin source is bind-mounted into the container at that path.
 
 Set `holdsEnabled: false` to keep all the observability but disable synchronous tool blocking — useful for early validation before any rule has `block_policy: "hold"` or `auto_block` configured.
 

@@ -59,7 +59,11 @@ export default function Dashboard() {
         for (const r of (d.rule_packs || [])) map[r.id] = r.category
         setRuleCategory(map)
       })
-      .catch(() => {})
+      .catch(err => {
+        // Decorative — only used to label rule categories in chart tooltips.
+        // Log so the failure is at least visible in DevTools.
+        console.warn('Dashboard: listRules failed (category labels will be missing):', err)
+      })
   }, [])
 
   useEffect(() => {
