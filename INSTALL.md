@@ -314,13 +314,33 @@ This installs the `agentguard-hook` command on your `PATH`.
 Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) **before** launching Claude Code:
 
 ```bash
+# Async event ingest (Claude Code → Timeplus)
 export AGENTGUARD_AGENT_ID="your-hostname"        # identifies this machine
 export AGENTGUARD_DEPLOYMENT_ID="local"
 export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
 export AGENTGUARD_TIMEPLUS_URL="http://localhost:3218"
 export AGENTGUARD_USERNAME="default"
 export AGENTGUARD_PASSWORD=""
+
+# Synchronous tool-call blocking (PreToolUse → AgentGuard /api/holds)
+# Disabled by default — set to "true" to enable hold-and-wait gating.
+export AGENTGUARD_URL="http://localhost:8080"
+export AGENTGUARD_HOLDS_ENABLED="false"           # "true" to enable blocking
+export AGENTGUARD_HOLD_FAIL_POLICY="deny"         # or "allow" if /api/holds unreachable
 ```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AGENTGUARD_TIMEPLUS_URL` | `http://localhost:3218` | Timeplus HTTP endpoint for async ingest |
+| `AGENTGUARD_USERNAME` / `AGENTGUARD_PASSWORD` | `default` / _(empty)_ | Timeplus credentials used by the plugin's async ingest path |
+| `AGENTGUARD_AGENT_ID` | hostname | Identifier for this agent instance |
+| `AGENTGUARD_DEPLOYMENT_ID` | `local` | Deployment environment tag |
+| `AGENTGUARD_DEPLOYMENT_NAME` | `Local Dev` | Human-readable deployment name |
+| `AGENTGUARD_URL` | `http://localhost:8080` | AgentGuard server base URL — where `PreToolUse` POSTs its hold request |
+| `AGENTGUARD_HOLDS_ENABLED` | `false` | When `true`, `PreToolUse` runs synchronously and can block; when `false`, observation-only |
+| `AGENTGUARD_HOLD_FAIL_POLICY` | `deny` | What to return when `/api/holds` is unreachable: `deny` blocks the tool call, `allow` lets it proceed |
+
+> **Why `false` by default:** synchronous PreToolUse blocking adds round-trip latency to every tool call and requires the AgentGuard server to be reachable. Most users want async observation first, then opt in to blocking once rules are tuned. The bundled `agents/claudecode/Makefile` (`make install`) writes the same `false` default into `~/.claude/settings.json`. Override with `AGENTGUARD_HOLDS_ENABLED=true make configure`.
 
 Then reload your shell:
 
@@ -335,10 +355,10 @@ Merge the following into `~/.claude/settings.json`. If the file does not exist, 
 ```json
 {
   "hooks": {
+    "PreToolUse":         [{"matcher":"*","hooks":[{"type":"command","command":"agentguard-hook","timeout":600000}]}],
     "SessionStart":       [{"matcher":"*","hooks":[{"type":"command","command":"agentguard-hook","async":true}]}],
     "SessionEnd":         [{"matcher":"*","hooks":[{"type":"command","command":"agentguard-hook","async":true}]}],
     "UserPromptSubmit":   [{"matcher":"*","hooks":[{"type":"command","command":"agentguard-hook","async":true}]}],
-    "PreToolUse":         [{"matcher":"*","hooks":[{"type":"command","command":"agentguard-hook","async":true}]}],
     "PostToolUse":        [{"matcher":"*","hooks":[{"type":"command","command":"agentguard-hook","async":true}]}],
     "PostToolUseFailure": [{"matcher":"*","hooks":[{"type":"command","command":"agentguard-hook","async":true}]}],
     "SubagentStart":      [{"matcher":"*","hooks":[{"type":"command","command":"agentguard-hook","async":true}]}],
@@ -349,7 +369,11 @@ Merge the following into `~/.claude/settings.json`. If the file does not exist, 
 }
 ```
 
+> **PreToolUse must be synchronous.** It runs without `async:true` so the plugin can pause the tool call while AgentGuard evaluates rules. The 600 s `timeout` matches Claude Code's hook cap. When `AGENTGUARD_HOLDS_ENABLED=false` (the default), the hook still fires synchronously but short-circuits immediately — no `/api/holds` call is made. All other hooks stay async to avoid slowing the agent.
+
 > **Merge, do not replace.** If you already have a `settings.json`, add only the `hooks` key. Existing keys are unaffected.
+
+> **Shortcut:** if you cloned this repo, `cd agents/claudecode && make install` builds the plugin and writes the hooks block above plus the env vars from 6b into `~/.claude/settings.json` for you. Override defaults at install time, e.g. `AGENTGUARD_HOLDS_ENABLED=true make configure`.
 
 ### 6d. OTel telemetry
 
@@ -456,7 +480,7 @@ Out of the box, every rule is `log_only` — matches are recorded as threats but
    - `log_only` — default; record threats but never pause the agent.
    - `auto_block` — deny the tool call immediately, no human prompt.
    - `hold` — pause the agent and require a human Approve / Deny in the UI (Pending Holds appear under `/threats` and `/threats/:id`). Tool resumes within ~1 s of the click.
-3. Make sure your plugin's `AGENTGUARD_URL` points at the AgentGuard server and `AGENTGUARD_HOLDS_ENABLED=true` (the default for all three plugins).
+3. Make sure your plugin's `AGENTGUARD_URL` points at the AgentGuard server and `AGENTGUARD_HOLDS_ENABLED=true`. Defaults differ per plugin: OpenClaw and Hermes default to `true`, **Claude Code defaults to `false`** — re-run `cd agents/claudecode && AGENTGUARD_HOLDS_ENABLED=true make configure` (or set the env var in `~/.claude/settings.json`) to opt in.
 
 > **Server-side prerequisite (same as section 7c):** the `/api/holds` endpoint requires `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process. The bundled `docker-compose.yaml` pre-sets these to `proton` / `timeplus@t+`. Without them every plugin hold request fails with HTTP 503 — and depending on `AGENTGUARD_HOLD_FAIL_POLICY`, every tool call will be either denied or allowed unconditionally.
 
