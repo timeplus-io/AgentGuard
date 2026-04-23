@@ -10,6 +10,7 @@ AGENTGUARD_USERNAME ?= proton
 AGENTGUARD_PASSWORD ?= timeplus@t+
 AGENTGUARD_URL ?= http://localhost:8080
 AGENTGUARD_HOLD_FAIL_POLICY ?= deny
+AGENTGUARD_HOLDS_ENABLED ?= true
 
 # OTEL configuration — shares Timeplus OTEL HTTP input on port 4318 with OpenClaw
 OTEL_ENDPOINT ?= http://localhost:4318
@@ -96,6 +97,7 @@ plugin_env = {
     "AGENTGUARD_PASSWORD":         "$(AGENTGUARD_PASSWORD)",
     "AGENTGUARD_URL":              "$(AGENTGUARD_URL)",
     "AGENTGUARD_HOLD_FAIL_POLICY": "$(AGENTGUARD_HOLD_FAIL_POLICY)",
+    "AGENTGUARD_HOLDS_ENABLED":    "$(AGENTGUARD_HOLDS_ENABLED)",
 }
 data.setdefault("env", {}).update(plugin_env)
 
@@ -120,6 +122,7 @@ plugin_env_keys = [
     "AGENTGUARD_PASSWORD",
     "AGENTGUARD_URL",
     "AGENTGUARD_HOLD_FAIL_POLICY",
+    "AGENTGUARD_HOLDS_ENABLED",
 ]
 
 hook_events = [

@@ -75,7 +75,8 @@ var DEFAULTS = {
   deploymentId: "default",
   deploymentName: "Default",
   agentguardUrl: "http://localhost:8080",
-  holdFailPolicy: "deny"
+  holdFailPolicy: "deny",
+  holdsEnabled: true
 };
 function resolveConfig() {
   return {
@@ -87,7 +88,8 @@ function resolveConfig() {
     deploymentId: process.env.AGENTGUARD_DEPLOYMENT_ID || DEFAULTS.deploymentId,
     deploymentName: process.env.AGENTGUARD_DEPLOYMENT_NAME || DEFAULTS.deploymentName,
     agentguardUrl: process.env.AGENTGUARD_URL ?? DEFAULTS.agentguardUrl,
-    holdFailPolicy: process.env.AGENTGUARD_HOLD_FAIL_POLICY === "allow" ? "allow" : "deny"
+    holdFailPolicy: process.env.AGENTGUARD_HOLD_FAIL_POLICY === "allow" ? "allow" : "deny",
+    holdsEnabled: process.env.AGENTGUARD_HOLDS_ENABLED?.toLowerCase() !== "false"
   };
 }
 
@@ -319,17 +321,27 @@ async function main() {
   const config = resolveConfig();
   const hookEventName = typeof input["hook_event_name"] === "string" ? input["hook_event_name"] : "";
   if (hookEventName === "PreToolUse") {
-    const event2 = normalize(input, config);
-    const { requestHold: requestHold2 } = await Promise.resolve().then(() => (init_holds(), holds_exports));
-    const decision = await requestHold2(event2, config);
-    process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: decision.decision === "block" ? "deny" : "allow",
-        permissionDecisionReason: decision.reason ?? ""
-      }
-    }));
-    return;
+    if (!config.holdsEnabled) {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+          permissionDecisionReason: ""
+        }
+      }));
+    } else {
+      const event2 = normalize(input, config);
+      const { requestHold: requestHold2 } = await Promise.resolve().then(() => (init_holds(), holds_exports));
+      const decision = await requestHold2(event2, config);
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: decision.decision === "block" ? "deny" : "allow",
+          permissionDecisionReason: decision.reason ?? ""
+        }
+      }));
+      return;
+    }
   }
   if (hookEventName === "SessionEnd") {
     const sessionId = typeof input["session_id"] === "string" ? input["session_id"] : "";

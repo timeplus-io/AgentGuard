@@ -37,17 +37,32 @@ async function main(): Promise<void> {
   // permissionDecision response to stdout. Skip the async send() — /api/holds
   // ingests the event into agentguard_hook_events itself.
   if (hookEventName === "PreToolUse") {
-    const event = normalize(input, config);
-    const { requestHold } = await import("./holds.js");
-    const decision = await requestHold(event, config);
-    process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: decision.decision === "block" ? "deny" : "allow",
-        permissionDecisionReason: decision.reason ?? "",
-      },
-    }));
-    return;
+    // If holds are disabled, fall back to async observation-only:
+    // skip the synchronous /api/holds call, write a permissive permissionDecision,
+    // AND let the async send() path run so the event still reaches Timeplus.
+    if (!config.holdsEnabled) {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+          permissionDecisionReason: "",
+        },
+      }));
+      // Fall through to the regular send() so observability data still flows.
+      // (Don't return — let the existing async ingest run below.)
+    } else {
+      const event = normalize(input, config);
+      const { requestHold } = await import("./holds.js");
+      const decision = await requestHold(event, config);
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: decision.decision === "block" ? "deny" : "allow",
+          permissionDecisionReason: decision.reason ?? "",
+        },
+      }));
+      return;  // do NOT also call send() — /api/holds ingested the event already
+    }
   }
 
   // SessionEnd: fire-and-forget abandon-session to clean up zombie holds.

@@ -87,4 +87,25 @@ describe("resolveConfig", () => {
     process.env.AGENTGUARD_HOLD_FAIL_POLICY = "bogus";
     expect(resolveConfig().holdFailPolicy).toBe("deny");
   });
+
+  it("holdsEnabled defaults to true when AGENTGUARD_HOLDS_ENABLED is unset", () => {
+    delete process.env.AGENTGUARD_HOLDS_ENABLED;
+    expect(resolveConfig().holdsEnabled).toBe(true);
+  });
+
+  it("holdsEnabled is false when AGENTGUARD_HOLDS_ENABLED=\"false\" (case-insensitive)", () => {
+    process.env.AGENTGUARD_HOLDS_ENABLED = "false";
+    expect(resolveConfig().holdsEnabled).toBe(false);
+    process.env.AGENTGUARD_HOLDS_ENABLED = "FALSE";
+    expect(resolveConfig().holdsEnabled).toBe(false);
+  });
+
+  it("holdsEnabled is true for \"true\" or other non-false values", () => {
+    process.env.AGENTGUARD_HOLDS_ENABLED = "true";
+    expect(resolveConfig().holdsEnabled).toBe(true);
+    process.env.AGENTGUARD_HOLDS_ENABLED = "1";
+    expect(resolveConfig().holdsEnabled).toBe(true);
+    process.env.AGENTGUARD_HOLDS_ENABLED = "anything";
+    expect(resolveConfig().holdsEnabled).toBe(true);
+  });
 });
