@@ -10,7 +10,7 @@
 [![npm: OpenClaw plugin](https://img.shields.io/npm/v/%40timeplus%2Fagentguard-openclaw-plugin?label=openclaw-plugin&logo=npm)](https://www.npmjs.com/package/@timeplus/agentguard-openclaw-plugin)
 [![PyPI: Hermes plugin](https://img.shields.io/pypi/v/agentguard-hermes-plugin?label=hermes-plugin&logo=pypi)](https://pypi.org/project/agentguard-hermes-plugin/)
 
-Real-time security monitoring and governance platform for AI coding agents. AgentGuard ingests telemetry from **OpenClaw**, **Claude Code**, and **Hermes Agent**, detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), enforces cost budgets, and surfaces everything through a streaming security dashboard.
+Real-time security monitoring, governance, **and synchronous tool-call blocking** for AI coding agents. AgentGuard ingests telemetry from **OpenClaw**, **Claude Code**, and **Hermes Agent**, detects threats (prompt injection, data exfiltration, privilege escalation, supply chain attacks), **pauses risky tool calls for human Approve/Deny review**, enforces cost budgets, and surfaces everything through a streaming security dashboard.
 
 Built on [Timeplus](https://timeplus.com) — a streaming SQL engine for real-time data.
 
@@ -119,8 +119,10 @@ timeplus:
 | `TIMEPLUS_HOST` | `localhost` | Timeplus hostname |
 | `TIMEPLUS_PORT` | `3218` | HTTP query port |
 | `TIMEPLUS_NATIVE_PORT` | `8463` | native TCP port (used for streaming inserts) |
+| `TIMEPLUS_USER` | _(unset)_ | **Service credentials** for plugin/server-to-server endpoints (`/api/holds`, `/api/holds/_abandon-session`, `/api/holds/_drain`, `/api/alerts/webhook`). Required for the synchronous tool-call blocking flow — endpoints return `HTTP 503 service credentials not configured` when unset. **Not** used for user-facing UI requests, which always borrow the logged-in user's session credentials from the wizard / login form. The bundled `docker-compose.yaml` pre-sets this to `proton`. |
+| `TIMEPLUS_PASSWORD` | _(unset)_ | Password for `TIMEPLUS_USER`. Same constraints as above. The bundled `docker-compose.yaml` pre-sets this to `timeplus@t+`. |
 
-> Credentials are not accepted via environment variables. Use the setup wizard or login form.
+> User credentials (the ones you see in the dashboard) are not accepted via environment variables — use the setup wizard or login form. The `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD` env vars above are a **separate** server-to-server service identity, used only by plugin endpoints and the alert webhook.
 
 ### CLI flags
 
@@ -165,12 +167,26 @@ If this URL is wrong, security rules will still detect events and write to the `
 | Security Posture | `/dashboard` | KPI summary, live threat feed, threat categories, recent agent activity |
 | Agent Fleet | `/agents` | All monitored agents with event counts, session counts, token usage, last-seen |
 | Agent Detail | `/agents/:id` | Per-agent metrics, session list, run waterfall trace, hook event timeline |
-| Threats | `/threats` | Filterable threat feed by severity and category, newest-first |
+| Threats | `/threats` | Filterable threat feed by severity and category; **Pending Holds** section surfaces tool calls awaiting human review |
+| Threat Detail | `/threats/:id` | Per-threat detail with rule context, agent/session links, and an **Approve / Deny** banner when a hold is pending |
 | Cost Governance | `/cost` | Daily spend trends, per-model token breakdown, configurable pricing table |
 | Rule Packs | `/rules` | Install, enable/disable, and upgrade detection rules; real-time MV health status |
+| Rule Detail | `/rules/:id` | Per-rule configuration including the **Block Policy** panel (`log_only` / `auto_block` / `hold`) |
 | Investigate | `/investigate` | Ad-hoc streaming SQL console backed by Timeplus |
 | Onboarding | `/onboarding` | 4-step wizard to connect an OpenClaw, Claude Code, or Hermes agent |
 | Settings | `/settings` | Application configuration |
+
+### Tool-call blocking (NEW)
+
+AgentGuard can synchronously **pause an agent's tool call** while a human reviews it in the UI. Per-rule `block_policy`:
+
+- `log_only` — default; rule fires, threat is recorded, agent is never paused (current behavior).
+- `auto_block` — rule fires and the tool call is denied immediately, no human prompt.
+- `hold` — rule fires, the agent's hot path is paused, a Pending Hold appears under `/threats` and on the threat detail page (`/threats/:id`); the agent resumes (or rejects) within ~1 s of an Approve / Deny click. No LLM tokens are burned while waiting.
+
+Set the policy on the rule detail page (`/rules/:id` → Block Policy panel). All three plugins ([OpenClaw](agents/openclaw/agentguard-plugin/README.md), [Claude Code](agents/claudecode/agentguard-plugin/README.md), [Hermes](agents/hermes/agentguard-plugin/README.md)) implement the synchronous hold-and-wait path in their `PreToolUse` / `pre_tool_call` / `before_tool_call` hook. See each plugin's README for the env vars (`AGENTGUARD_URL`, `AGENTGUARD_HOLD_FAIL_POLICY`, `AGENTGUARD_HOLDS_ENABLED`) and the end-to-end walkthrough.
+
+> **Server-side prerequisite:** the `/api/holds` endpoint requires `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process — see [Environment variables](#environment-variables) below.
 
 ---
 

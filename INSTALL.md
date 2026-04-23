@@ -8,7 +8,9 @@ This guide walks through a complete AgentGuard setup from scratch:
 4. [First-time setup wizard](#4-first-time-setup-wizard)
 5. [Connect OpenClaw](#5-connect-openclaw)
 6. [Connect Claude Code](#6-connect-claude-code)
-7. [Verify everything is working](#7-verify-everything-is-working)
+7. [Connect Hermes](#7-connect-hermes-agent)
+8. [Configure rule blocking (optional)](#8-configure-rule-blocking-optional)
+9. [Verify everything is working](#9-verify-everything-is-working)
 
 ---
 
@@ -22,6 +24,8 @@ This guide walks through a complete AgentGuard setup from scratch:
 | Go | 1.23+ | Only if building AgentGuard from source |
 | Claude Code CLI | any | Only for Claude Code integration |
 | OpenClaw | 2026.4.0+ | Only for OpenClaw integration |
+| Hermes Agent | any recent version | Only for Hermes integration; plugin distributed via PyPI (`agentguard-hermes-plugin`), requires Python 3.10+ |
+| Python | 3.10+ | Required for Hermes plugin |
 
 ---
 
@@ -372,7 +376,95 @@ Add the following `env` block to `~/.claude/settings.json` (merge with any exist
 
 ---
 
-## 7. Verify everything is working
+## 7. Connect Hermes Agent
+
+### 7a. Install the plugin
+
+```bash
+pip install agentguard-hermes-plugin
+agentguard-hermes install
+```
+
+This copies the plugin into `~/.hermes/plugins/agentguard/` where Hermes auto-loads it on startup. Use `--hermes-dir /path/to/hermes/data` if you keep Hermes data in a non-default location.
+
+### 7b. Configure environment variables
+
+Set these before starting Hermes (e.g. in `~/.zshrc` or `~/.bashrc`):
+
+```bash
+# Async event ingest (Hermes → Timeplus)
+export AGENTGUARD_TIMEPLUS_URL="http://localhost:3218"
+export AGENTGUARD_USERNAME="proton"
+export AGENTGUARD_PASSWORD="timeplus@t+"
+
+# Identity
+export AGENTGUARD_AGENT_ID="$(hostname)"
+export AGENTGUARD_DEPLOYMENT_ID="local"
+export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
+
+# Synchronous tool-call blocking (pre_tool_call → AgentGuard /api/holds)
+export AGENTGUARD_URL="http://localhost:8080"
+export AGENTGUARD_HOLD_FAIL_POLICY="deny"   # or "allow"
+export AGENTGUARD_HOLDS_ENABLED="true"      # set "false" for observation-only
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AGENTGUARD_TIMEPLUS_URL` | `http://localhost:3218` | Timeplus HTTP endpoint for async ingest |
+| `AGENTGUARD_USERNAME` / `AGENTGUARD_PASSWORD` | `proton` / _(empty)_ | Timeplus credentials used by the plugin's async ingest path |
+| `AGENTGUARD_AGENT_ID` | hostname | Identifier for this agent instance |
+| `AGENTGUARD_DEPLOYMENT_ID` | `local` | Deployment environment tag |
+| `AGENTGUARD_DEPLOYMENT_NAME` | `Local Dev` | Human-readable deployment name |
+| `AGENTGUARD_URL` | `http://localhost:8080` | AgentGuard server base URL — where `pre_tool_call` POSTs its hold request |
+| `AGENTGUARD_HOLD_FAIL_POLICY` | `deny` | What to return when `/api/holds` is unreachable: `deny` blocks the tool call, `allow` lets it proceed |
+| `AGENTGUARD_HOLDS_ENABLED` | `true` | When `false`, `pre_tool_call` reverts to async observation-only (no blocking) |
+
+> **Docker (Hermes in container, Timeplus on host):** use `http://host.docker.internal:3218` for `AGENTGUARD_TIMEPLUS_URL` and `http://host.docker.internal:8080` for `AGENTGUARD_URL`.
+
+### 7c. Server-side prerequisite — Timeplus service credentials
+
+The plugin's synchronous `/api/holds` call hits the AgentGuard server with no user-session cookie (server-to-server). The AgentGuard server in turn needs Timeplus credentials to ingest the event and query rules. **You must set `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process** — these are the canonical service credentials for plugin endpoints. Without them, `/api/holds` returns:
+
+```
+HTTP 503 {"error":"service credentials not configured: set TIMEPLUS_USER and TIMEPLUS_PASSWORD env vars on the AgentGuard server"}
+```
+
+The bundled `docker-compose.yaml` already sets these to `proton` / `timeplus@t+`. Edit them if your wizard credentials differ, then `docker compose up -d --build agentguard`. For binary installs, set them in your shell or systemd unit before starting `agentguard`.
+
+### 7d. Verify
+
+Start Hermes and run any tool call. The events should land in Timeplus within a few seconds:
+
+```bash
+curl -s -X POST http://localhost:3218/proton/v1/query \
+  -u proton:'timeplus@t+' -H 'Content-Type: application/json' \
+  -d '{"query":"SELECT hook_name, agent_id, event_time FROM table(agentguard_hook_events) WHERE agent_type='"'"'hermes'"'"' ORDER BY event_time DESC LIMIT 5"}'
+```
+
+Hermes events also show up under **Agent Fleet** (`/agents`) in the AgentGuard UI.
+
+For the full configuration reference and the synchronous hold-and-wait walkthrough, see [`agents/hermes/agentguard-plugin/README.md`](agents/hermes/agentguard-plugin/README.md).
+
+---
+
+## 8. Configure rule blocking (optional)
+
+Out of the box, every rule is `log_only` — matches are recorded as threats but the agent is never paused. To enable synchronous blocking:
+
+1. Open the AgentGuard UI, go to **Rule Packs** (`/rules`), and click into a rule.
+2. In the **Block Policy** panel, choose:
+   - `log_only` — default; record threats but never pause the agent.
+   - `auto_block` — deny the tool call immediately, no human prompt.
+   - `hold` — pause the agent and require a human Approve / Deny in the UI (Pending Holds appear under `/threats` and `/threats/:id`). Tool resumes within ~1 s of the click.
+3. Make sure your plugin's `AGENTGUARD_URL` points at the AgentGuard server and `AGENTGUARD_HOLDS_ENABLED=true` (the default for all three plugins).
+
+> **Server-side prerequisite (same as section 7c):** the `/api/holds` endpoint requires `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process. The bundled `docker-compose.yaml` pre-sets these to `proton` / `timeplus@t+`. Without them every plugin hold request fails with HTTP 503 — and depending on `AGENTGUARD_HOLD_FAIL_POLICY`, every tool call will be either denied or allowed unconditionally.
+
+For per-plugin config and end-to-end walkthroughs, see the plugin READMEs: [OpenClaw](agents/openclaw/agentguard-plugin/README.md), [Claude Code](agents/claudecode/agentguard-plugin/README.md), [Hermes](agents/hermes/agentguard-plugin/README.md).
+
+---
+
+## 9. Verify everything is working
 
 ### Check Timeplus is reachable
 
