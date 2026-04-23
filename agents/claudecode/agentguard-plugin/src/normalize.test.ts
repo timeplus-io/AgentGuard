@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { normalize, normalizeContextEvent, inferProvider } from "./normalize.js";
 
-const BASE_CONFIG = {
+import type { AgentGuardConfig } from "./config.js";
+
+const BASE_CONFIG: AgentGuardConfig = {
   timeplusUrl: "http://localhost:3218",
   stream: "agentguard_hook_events",
   username: "proton",
@@ -9,6 +11,9 @@ const BASE_CONFIG = {
   agentId: "test-agent",
   deploymentId: "test-deploy",
   deploymentName: "Test",
+  agentguardUrl: "http://localhost:8080",
+  holdFailPolicy: "deny",
+  holdsEnabled: false,
 };
 
 describe("normalize", () => {

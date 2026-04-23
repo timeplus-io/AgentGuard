@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { hostname } from "os";
 import { resolveConfig } from "./config.js";
 
 describe("resolveConfig", () => {
@@ -25,7 +26,9 @@ describe("resolveConfig", () => {
     expect(cfg.password).toBe("");
     expect(cfg.deploymentId).toBe("default");
     expect(cfg.deploymentName).toBe("Default");
-    expect(cfg.agentId).toBe("");
+    // agentId falls back to os.hostname() when AGENTGUARD_AGENT_ID is unset.
+    // Compare against the live hostname so the test is deterministic across hosts.
+    expect(cfg.agentId).toBe(hostname());
   });
 
   it("reads AGENTGUARD_TIMEPLUS_URL from env", () => {

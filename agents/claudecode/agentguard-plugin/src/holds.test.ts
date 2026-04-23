@@ -13,6 +13,7 @@ const BASE_CONFIG: AgentGuardConfig = {
   deploymentName: "D",
   agentguardUrl:  "http://localhost:8080",
   holdFailPolicy: "deny",
+  holdsEnabled:   true,
 };
 
 const BASE_EVENT: HookEvent = {
@@ -78,9 +79,9 @@ describe("requestHold", () => {
   });
 
   it("POSTs the right body shape", async () => {
-    const fetchMock = vi.fn(async () => new Response(
-      JSON.stringify({ decision: "allow" }), { status: 200 },
-    ));
+    const fetchMock = vi.fn<(url: string, init?: { body?: string }) => Promise<Response>>(
+      async () => new Response(JSON.stringify({ decision: "allow" }), { status: 200 }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     await requestHold(BASE_EVENT, BASE_CONFIG);
 
@@ -91,7 +92,8 @@ describe("requestHold", () => {
         headers: expect.objectContaining({ "Content-Type": "application/json" }),
       }),
     );
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const init = fetchMock.mock.calls[0]?.[1];
+    const body = JSON.parse(init?.body ?? "{}");
     expect(body.deployment_id).toBe("d");
     expect(body.agent_id).toBe("a");
     expect(body.session_id).toBe("s1");
