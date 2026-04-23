@@ -12,6 +12,7 @@ import (
 	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/holdregistry"
 	"github.com/timeplus/agentguard/internal/models"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
@@ -154,7 +155,7 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	}
 }
 
-func ToggleRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
+func ToggleRule(cfg *config.Config, mgr *catalog.Manager, holdReg *holdregistry.Registry, broadcaster *alertBroadcaster) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := auth.RequestCfg(c, cfg)
 		id := c.Param("id")
@@ -239,6 +240,12 @@ GROUP BY rule_id`, escapeSQLStr(id))
 		}
 
 		current.Enabled = newEnabled
+		// Disabling a rule must also abandon any pending holds for it — the
+		// operator's intent is "stop blocking," and stale holds otherwise stay
+		// pending until timeout (~5 min) and re-pop after every page reload.
+		if !newEnabled {
+			AbandonHoldsForRule(cfg, holdReg, broadcaster, id, "rule disabled")
+		}
 		c.JSON(http.StatusOK, current)
 	}
 }
@@ -901,7 +908,7 @@ func mvExists(cfg *config.TimeplusConfig, ruleID string) (bool, error) {
 
 // SetRuleBlockPolicy handles POST /api/rules/:id/policy
 // Body: {"block_policy": "hold" | "auto_block" | "log_only"}
-func SetRuleBlockPolicy(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
+func SetRuleBlockPolicy(cfg *config.Config, mgr *catalog.Manager, holdReg *holdregistry.Registry, broadcaster *alertBroadcaster) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := auth.RequestCfg(c, cfg)
 		id := c.Param("id")
@@ -966,6 +973,15 @@ GROUP BY rule_id`, escapeSQLStr(body.BlockPolicy), escapeSQLStr(id))
 		}
 
 		current.BlockPolicy = body.BlockPolicy
+		// Switching to log_only must abandon any pending holds — those holds
+		// were created under the old policy but the operator has now declared
+		// "this rule shouldn't block anything." The next tool call won't trigger
+		// a hold (queryPreExistingOpenThreats and waitForNewMVDetections both
+		// skip log_only) but the in-flight ones would otherwise stay pending
+		// until timeout.
+		if body.BlockPolicy == "log_only" {
+			AbandonHoldsForRule(cfg, holdReg, broadcaster, id, "rule policy changed to log_only")
+		}
 		c.JSON(http.StatusOK, current)
 	}
 }

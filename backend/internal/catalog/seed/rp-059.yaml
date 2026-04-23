@@ -1,35 +1,17 @@
 id: rp-059
 name: "LLM Markdown Output XSS and Downstream Rendering Injection Detector"
 version: "0.1.0"
-description: >
-  Detects XSS and RCE payloads embedded in LLM assistant_message output that
-  exploit unsanitized Markdown renderers in agent frontends. GHSA-rrmw-2j6x-4mf2
-  (AnythingLLM v1.11.1): a custom markdown-it image renderer interpolates
-  token.content directly into HTML alt attributes without entity escaping, then
-  renders via dangerouslySetInnerHTML. With Electron nodeIntegration:true and
-  contextIsolation:false, an onerror handler calling require('child_process') in an
-  LLM image tag achieves full host OS RCE. The attacker influences LLM output via
-  RAG document injection, malicious LLM endpoint, or direct prompt. CopilotKit
-  CopilotKit#3938: rehype-raw passes raw HTML in Markdown responses to the browser
-  DOM without DOMPurify sanitization — stored XSS via <script> tags in responses.
-  Medium/InstaTunnel Polyglot SVG Attack (Feb 2026): SVG onload event handlers in
-  LLM output execute arbitrary JavaScript when rendered by unsanitized markdown
-  components. The javascript: protocol URI scheme in Markdown hyperlinks ([label])
-  executes JS in browser rendering contexts. This is the "AI-specific XSS" path
-  described in OWASP LLM02:2025 (Insecure Output Handling): the LLM faithfully
-  outputs attacker-controlled content into a rendering context the model cannot
-  anticipate.
-  Distinct from rp-014 (text-based tool_result injection), rp-022 (browser
-  DOM/CSS manipulation by CUA agents), rp-037 (cross-modal vision/audio
-  injection) — this rule targets the assistant_message rendering surface: the
-  output the user's frontend consumes.
-  References: GHSA-rrmw-2j6x-4mf2 (AnythingLLM Streaming XSS→RCE),
-  CopilotKit/CopilotKit#3938 (rehype-raw XSS), Medium Polyglot SVG Attack
-  Feb 2026, OWASP LLM02:2025 (Insecure Output Handling), CWE-79, CWE-116 -
-  https://github.com/Mintplex-Labs/anything-llm/security/advisories/GHSA-rrmw-2j6x-4mf2,
-  https://github.com/CopilotKit/CopilotKit/issues/3938,
-  https://medium.com/@instatunnel/multimodal-prompt-injection-the-polyglot-svg-attack-1cc70fee0b21,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+description: |
+  Detects XSS and RCE payloads embedded in LLM assistant_message output that exploit unsanitized Markdown renderers in agent frontends. GHSA-rrmw-2j6x-4mf2 (AnythingLLM v1.11.1): a custom markdown-it image renderer interpolates token.content directly into HTML alt attributes without entity escaping, then renders via dangerouslySetInnerHTML. With Electron nodeIntegration:true and contextIsolation:false, an onerror handler calling require('child_process') in an LLM image tag achieves full host OS RCE. The attacker influences LLM output via RAG document injection, malicious LLM endpoint, or direct prompt. CopilotKit CopilotKit#3938: rehype-raw passes raw HTML in Markdown responses to the browser DOM without DOMPurify sanitization — stored XSS via <script> tags in responses. Medium/InstaTunnel Polyglot SVG Attack (Feb 2026): SVG onload event handlers in LLM output execute arbitrary JavaScript when rendered by unsanitized markdown components. The javascript: protocol URI scheme in Markdown hyperlinks ([label]) executes JS in browser rendering contexts. This is the "AI-specific XSS" path described in OWASP LLM02:2025 (Insecure Output Handling): the LLM faithfully outputs attacker-controlled content into a rendering context the model cannot anticipate.
+
+  Distinct from rp-014 (text-based tool_result injection), rp-022 (browser DOM/CSS manipulation by CUA agents), rp-037 (cross-modal vision/audio injection) — this rule targets the assistant_message rendering surface: the output the user's frontend consumes.
+
+  References: GHSA-rrmw-2j6x-4mf2 (AnythingLLM Streaming XSS→RCE), CopilotKit/CopilotKit#3938 (rehype-raw XSS), Medium Polyglot SVG Attack Feb 2026, OWASP LLM02:2025 (Insecure Output Handling), CWE-79, CWE-116 -
+  - https://github.com/Mintplex-Labs/anything-llm/security/advisories/GHSA-rrmw-2j6x-4mf2,
+  - https://github.com/CopilotKit/CopilotKit/issues/3938,
+  - https://medium.com/@instatunnel/multimodal-prompt-injection-the-polyglot-svg-attack-1cc70fee0b21,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium

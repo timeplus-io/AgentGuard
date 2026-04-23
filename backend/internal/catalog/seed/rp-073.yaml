@@ -1,32 +1,20 @@
 id: rp-073
 name: "AgentRaft Data Over-Exposure — Cross-Tool PII Egress Detector"
 version: "0.1.0"
-description: >
-  Detects Data Over-Exposure (DOE) in LLM agent cross-tool data flows: the agent
-  inadvertently forwards sensitive PII, PHI, PCI data, or credentials to egress tools
-  (email, messaging, upload, webhook) beyond the scope of user intent and functional
-  necessity. The AgentRaft study (arXiv:2603.07557, Sun Yat-sen Univ. / UCF, Mar 2026)
-  evaluated 6,675 real-world MCP tools and found DOE present in 57.07% of potential
-  tool interaction paths, with 65.42% of transmitted data fields over-exposed (GDPR/CCPA/PIPL
-  violations). The canonical example: user asks "extract the payment date from the log and
-  email it to the auditor" — the upstream read_file tool returns the full record containing
-  credit card number, CVV, and SSN, and the agent passes all of it to send_email without
-  stripping non-requested fields.
-  This is a structural privacy risk driven by: (1) tools that return broad data payloads
-  by default and (2) LLM failure to enforce data minimization at tool boundaries at runtime.
-  Distinct from rp-062 (inter-agent delegation PII channel, where data flows between agents
-  in a multi-agent system) — this rule targets the final egress step where sensitive data
-  is sent to external services, third parties, or communication channels.
-  Distinct from rp-002 (DLP Sentinel, which detects raw sensitive data in tool outputs) —
-  DOE specifically targets the cross-tool egress pattern where sensitive data from a read
-  tool flows into a send/upload tool in the same agent turn.
-  References: arXiv:2603.07557 (AgentRaft, Sun Yat-sen / UCF, Mar 2026), GDPR 2018,
-  CCPA 2024, PIPL 2024, OWASP LLM02:2025 -
-  https://arxiv.org/abs/2603.07557,
-  https://arxiv.org/html/2603.07557v1,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/,
-  https://gdpr-info.eu/,
-  https://oag.ca.gov/privacy/ccpa
+description: |
+  Detects Data Over-Exposure (DOE) in LLM agent cross-tool data flows: the agent inadvertently forwards sensitive PII, PHI, PCI data, or credentials to egress tools (email, messaging, upload, webhook) beyond the scope of user intent and functional necessity. The AgentRaft study (arXiv:2603.07557, Sun Yat-sen Univ. / UCF, Mar 2026) evaluated 6,675 real-world MCP tools and found DOE present in 57.07% of potential tool interaction paths, with 65.42% of transmitted data fields over-exposed (GDPR/CCPA/PIPL violations). The canonical example: user asks "extract the payment date from the log and email it to the auditor" — the upstream read_file tool returns the full record containing credit card number, CVV, and SSN, and the agent passes all of it to send_email without stripping non-requested fields. This is a structural privacy risk driven by: (1) tools that return broad data payloads by default and (2) LLM failure to enforce data minimization at tool boundaries at runtime.
+
+  Distinct from rp-062 (inter-agent delegation PII channel, where data flows between agents in a multi-agent system) — this rule targets the final egress step where sensitive data is sent to external services, third parties, or communication channels.
+
+  Distinct from rp-002 (DLP Sentinel, which detects raw sensitive data in tool outputs) — DOE specifically targets the cross-tool egress pattern where sensitive data from a read tool flows into a send/upload tool in the same agent turn.
+
+  References: arXiv:2603.07557 (AgentRaft, Sun Yat-sen / UCF, Mar 2026), GDPR 2018, CCPA 2024, PIPL 2024, OWASP LLM02:2025 -
+  - https://arxiv.org/abs/2603.07557,
+  - https://arxiv.org/html/2603.07557v1,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  - https://gdpr-info.eu/,
+  - https://oag.ca.gov/privacy/ccpa
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium

@@ -1,32 +1,20 @@
 id: rp-082
 name: "ANSI Terminal Escape Code Injection via Agent Tool Output"
 version: "0.2.0"
-description: >
-  Detects ANSI/VT100 terminal escape sequence injection in LLM agent tool output.
-  When terminal-based coding agents (Codex CLI, Claude Code, OpenHands) echo tool
-  results to stdout without sanitization, malicious content from files, web pages, or
-  APIs can inject escape sequences that manipulate terminal state: erasing lines to
-  cover tracks (ESC[2K), poisoning the clipboard via OSC 52, enabling mouse-tracking
-  for keystroke interception, or switching to alternate screen buffers (ESC[?1049h).
-  dganev.com (Feb 2026) demonstrated RCE via Codex CLI --model ANSI injection.
-  NVIDIA garak ANSI probe reports 76.7% ASR against frontier LLMs. Claude Code #18418
-  and OpenHands SDK #2244 confirm terminal corruption from tool output escape sequences.
-  Distinct from rp-014 (structural template token injection in tool_result) and
-  rp-056 (invisible Unicode/zero-width injection): this rule targets byte-level control
-  sequences that hijack the terminal emulator, not the LLM context parser.
-  References: CWE-150 (Improper Neutralization of Escape/Control Sequences),
-  OWASP LLM02:2025, dganev.com ANSI RCE Feb 2026, EmbraceTheRed Terminal DiLLMa,
-  NVIDIA garak garak.probes.ansiescape (76.7% ASR), Claude Code #18418,
-  OpenHands SDK #2244 -
-  https://dganev.com/posts/2026-02-12-ansi-escape-injection-codex-cli/,
-  https://embracethered.com/blog/posts/2024/terminal-dillmas-prompt-injection-ansi-sequences/,
-  https://reference.garak.ai/en/stable/garak.probes.ansiescape.html,
-  https://github.com/anthropics/claude-code/issues/18418,
-  https://github.com/OpenHands/software-agent-sdk/issues/2244,
-  https://cwe.mitre.org/data/definitions/150.html,
-  Example: tool_result contains \x1b[2K\x1b[1A which erases the previous terminal line
-  and overwrites it with attacker content; or \x1b]52;c;BASE64 which poisons clipboard
-  with ssh command.
+description: |
+  Detects ANSI/VT100 terminal escape sequence injection in LLM agent tool output. When terminal-based coding agents (Codex CLI, Claude Code, OpenHands) echo tool results to stdout without sanitization, malicious content from files, web pages, or APIs can inject escape sequences that manipulate terminal state: erasing lines to cover tracks (ESC[2K), poisoning the clipboard via OSC 52, enabling mouse-tracking for keystroke interception, or switching to alternate screen buffers (ESC[?1049h). dganev.com (Feb 2026) demonstrated RCE via Codex CLI --model ANSI injection. NVIDIA garak ANSI probe reports 76.7% ASR against frontier LLMs. Claude Code #18418 and OpenHands SDK #2244 confirm terminal corruption from tool output escape sequences.
+
+  Distinct from rp-014 (structural template token injection in tool_result) and rp-056 (invisible Unicode/zero-width injection): this rule targets byte-level control sequences that hijack the terminal emulator, not the LLM context parser.
+
+  References: CWE-150 (Improper Neutralization of Escape/Control Sequences), OWASP LLM02:2025, dganev.com ANSI RCE Feb 2026, EmbraceTheRed Terminal DiLLMa, NVIDIA garak garak.probes.ansiescape (76.7% ASR), Claude Code #18418, OpenHands SDK #2244 -
+  - https://dganev.com/posts/2026-02-12-ansi-escape-injection-codex-cli/,
+  - https://embracethered.com/blog/posts/2024/terminal-dillmas-prompt-injection-ansi-sequences/,
+  - https://reference.garak.ai/en/stable/garak.probes.ansiescape.html,
+  - https://github.com/anthropics/claude-code/issues/18418,
+  - https://github.com/OpenHands/software-agent-sdk/issues/2244,
+  - https://cwe.mitre.org/data/definitions/150.html,
+  Example: tool_result contains \x1b[2K\x1b[1A which erases the previous terminal line and overwrites it with attacker content; or \x1b]52;c;BASE64 which poisons clipboard with ssh command.
+
 severity: warning
 category: prompt_injection_and_hijacking
 fp_rate: medium

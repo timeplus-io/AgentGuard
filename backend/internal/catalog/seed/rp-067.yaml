@@ -1,30 +1,16 @@
 id: rp-067
 name: "Unicode Confusable Homoglyph Permission Bypass Detector"
 version: "0.1.1"
-description: >
-  Detects Unicode confusable homoglyph attacks against LLM agent permission systems.
-  Agents like Claude Code and OpenAI Codex match allow/deny rules (e.g. Bash(rm:/etc/*),
-  Read(~/.ssh/*)) via exact string comparison without Unicode normalization. An attacker
-  substitutes one or more characters in a file path or shell command with visually identical
-  Unicode confusables from Cyrillic (U+0400-04FF), Greek (U+0370-03FF), or Armenian
-  (U+0531-058F) script. The resulting string renders identically to a human operator but
-  fails the permission rule string match, bypassing both allow-list and deny-rule enforcement.
-  arXiv:2508.14070 (Special-Character Adversarial Attacks, Nov 2025) measured 58.7% filter
-  bypass rate. Claude Code issue #29489 and OpenAI Codex issue #13095 both confirm the bypass
-  in production agent permission systems. No tokenizer (tiktoken, SentencePiece, Claude BPE)
-  applies TR39 skeleton normalization for cross-script confusables — the normalization gap is
-  structural. Key confusable pairs: Cyrillic а/с/е/о/р/і (U+0430/0441/0435/043E/0440/0456),
-  Greek α/ο/ρ (U+03B1/03BF/03C1). Distinct from rp-056 (invisible zero-width Unicode):
-  rp-056 targets invisible characters; rp-067 targets VISIBLE homoglyphs that are
-  perceptually identical but differ in Unicode codepoint, creating permission bypass.
-  References: arXiv:2508.14070 (Special-Character Adversarial Attacks Nov 2025),
-  Claude Code #29489, OpenAI Codex #13095, paultendo confusable-vision 2026,
-  Cambridge "Bad Characters" IEEE S&P 2022, OWASP LLM01:2025 -
-  https://arxiv.org/abs/2508.14070,
-  https://github.com/anthropics/claude-code/issues/29489,
-  https://github.com/openai/codex/issues/13095,
-  https://paultendo.github.io/posts/confusable-llm-attack-vectors/,
-  https://www.cl.cam.ac.uk/~is410/Papers/badchars_draft.pdf
+description: |
+  Detects Unicode confusable homoglyph attacks against LLM agent permission systems. Agents like Claude Code and OpenAI Codex match allow/deny rules (e.g. Bash(rm:/etc/*), Read(~/.ssh/*)) via exact string comparison without Unicode normalization. An attacker substitutes one or more characters in a file path or shell command with visually identical Unicode confusables from Cyrillic (U+0400-04FF), Greek (U+0370-03FF), or Armenian (U+0531-058F) script. The resulting string renders identically to a human operator but fails the permission rule string match, bypassing both allow-list and deny-rule enforcement. arXiv:2508.14070 (Special-Character Adversarial Attacks, Nov 2025) measured 58.7% filter bypass rate. Claude Code issue #29489 and OpenAI Codex issue #13095 both confirm the bypass in production agent permission systems. No tokenizer (tiktoken, SentencePiece, Claude BPE) applies TR39 skeleton normalization for cross-script confusables — the normalization gap is structural. Key confusable pairs: Cyrillic а/с/е/о/р/і (U+0430/0441/0435/043E/0440/0456), Greek α/ο/ρ (U+03B1/03BF/03C1). Distinct from rp-056 (invisible zero-width Unicode): rp-056 targets invisible characters; rp-067 targets VISIBLE homoglyphs that are perceptually identical but differ in Unicode codepoint, creating permission bypass.
+
+  References: arXiv:2508.14070 (Special-Character Adversarial Attacks Nov 2025), Claude Code #29489, OpenAI Codex #13095, paultendo confusable-vision 2026, Cambridge "Bad Characters" IEEE S&P 2022, OWASP LLM01:2025 -
+  - https://arxiv.org/abs/2508.14070,
+  - https://github.com/anthropics/claude-code/issues/29489,
+  - https://github.com/openai/codex/issues/13095,
+  - https://paultendo.github.io/posts/confusable-llm-attack-vectors/,
+  - https://www.cl.cam.ac.uk/~is410/Papers/badchars_draft.pdf
+
 severity: warning
 category: prompt_injection_and_hijacking
 fp_rate: medium

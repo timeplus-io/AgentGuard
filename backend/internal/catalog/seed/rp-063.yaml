@@ -1,27 +1,13 @@
 id: rp-063
 name: "Log-To-Leak — MCP Logging Tool Covert Exfiltration Detector"
 version: "0.1.0"
-description: >
-  Detects the Log-To-Leak attack (ICLR 2026, OpenReview id=UVgbFuXPaO): adversaries embed
-  structured prompt injection payloads in external content retrieved by the agent (via MCP
-  tool reads), covertly forcing the agent to invoke a logging/audit/trace tool and pass the
-  full conversation history (user queries, tool responses, agent replies) as parameters —
-  exfiltrating the complete session to an attacker-controlled endpoint.
-  The attack uses four components: Trigger (compliance/audit framing), Tool Binding (naming
-  a specific audit/log tool), Justification (policy language), and Pressure (threat of session
-  termination). Evaluated on GPT-4o, GPT-5, Claude-Sonnet-4, and GPT-OSS-120b across 5
-  real-world MCP servers with consistently high ASR. Unlike rp-014 (override/hijack language
-  in tool results), Log-To-Leak targets tool invocation decisions — the agent completes the
-  normal task while silently also calling the logging tool, making it invisible to output-only
-  monitors. Unlike rp-039 (cross-tool pivot from ticket reader), this targets any external
-  content source and specifically exploits compliance/audit framing to invoke logging tools
-  with conversation payloads. Distinct because: event_type=tool_invoke with logging tool +
-  conversation payload is the primary observable, not content injection language.
-  References: ICLR 2026 "Log-To-Leak: Prompt Injection Attacks on Tool-Using LLM Agents
-  via Model Context Protocol" (OpenReview id=UVgbFuXPaO), OWASP LLM01:2025, OWASP Agentic
-  AI ASI02:2026 -
-  https://openreview.net/forum?id=UVgbFuXPaO,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+description: |
+  Detects the Log-To-Leak attack (ICLR 2026, OpenReview id=UVgbFuXPaO): adversaries embed structured prompt injection payloads in external content retrieved by the agent (via MCP tool reads), covertly forcing the agent to invoke a logging/audit/trace tool and pass the full conversation history (user queries, tool responses, agent replies) as parameters — exfiltrating the complete session to an attacker-controlled endpoint. The attack uses four components: Trigger (compliance/audit framing), Tool Binding (naming a specific audit/log tool), Justification (policy language), and Pressure (threat of session termination). Evaluated on GPT-4o, GPT-5, Claude-Sonnet-4, and GPT-OSS-120b across 5 real-world MCP servers with consistently high ASR. Unlike rp-014 (override/hijack language in tool results), Log-To-Leak targets tool invocation decisions — the agent completes the normal task while silently also calling the logging tool, making it invisible to output-only monitors. Unlike rp-039 (cross-tool pivot from ticket reader), this targets any external content source and specifically exploits compliance/audit framing to invoke logging tools with conversation payloads. Distinct because: event_type=tool_invoke with logging tool + conversation payload is the primary observable, not content injection language.
+
+  References: ICLR 2026 "Log-To-Leak: Prompt Injection Attacks on Tool-Using LLM Agents via Model Context Protocol" (OpenReview id=UVgbFuXPaO), OWASP LLM01:2025, OWASP Agentic AI ASI02:2026 -
+  - https://openreview.net/forum?id=UVgbFuXPaO,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium

@@ -1,29 +1,15 @@
 id: rp-066
 name: "SkillInject Runtime Skill File Injection Detector"
 version: "0.1.0"
-description: >
-  Detects runtime skill file injection (SkillInject, arXiv:2602.20156, Feb 2026):
-  attackers who can place or modify agent skill files (via marketplace upload, supply-
-  chain compromise, or prior file write) achieve up to 80% ASR on frontier models
-  by embedding behavioral override directives inside SKILL.md files. When the agent
-  reads the skill at session start, it treats the injected instructions as operator-level
-  authority — the same trust tier as the system prompt (per snailsploit.com system
-  prompt reversal). The benchmark covers 202 injection-task pairs, from obvious
-  malicious injections to subtle context-dependent attacks hidden in otherwise-
-  legitimate skill documentation. Confirmed attacks include data exfiltration,
-  destructive file deletion, and ransomware-like behavior across GPT-4o, Claude
-  Sonnet, and Gemini Pro. arXiv:2601.17548 (SoK, Jan 2026) synthesizes 78 studies
-  confirming >85% ASR with adaptive skill-based attacks against agentic coding
-  assistants. Distinct from rp-020 (DDIPE): DDIPE targets skill documentation
-  *examples* executed as agent-generated code; rp-066 targets the skill *instruction
-  block itself* returning override directives in tool_result on skill file read,
-  and the resulting agent behavior attributing unsafe actions to skill authority.
-  References: arXiv:2602.20156 (SkillInject Feb 2026), arXiv:2601.17548 (SoK Jan 2026),
-  OWASP LLM01:2025, OWASP Agentic AI ASI06:2026 -
-  https://arxiv.org/abs/2602.20156,
-  https://www.skill-inject.com/,
-  https://arxiv.org/abs/2601.17548,
-  https://snailsploit.com/ai-security/prompt-injection/memory-injection-nested-skills/
+description: |
+  Detects runtime skill file injection (SkillInject, arXiv:2602.20156, Feb 2026): attackers who can place or modify agent skill files (via marketplace upload, supply- chain compromise, or prior file write) achieve up to 80% ASR on frontier models by embedding behavioral override directives inside SKILL.md files. When the agent reads the skill at session start, it treats the injected instructions as operator-level authority — the same trust tier as the system prompt (per snailsploit.com system prompt reversal). The benchmark covers 202 injection-task pairs, from obvious malicious injections to subtle context-dependent attacks hidden in otherwise- legitimate skill documentation. Confirmed attacks include data exfiltration, destructive file deletion, and ransomware-like behavior across GPT-4o, Claude Sonnet, and Gemini Pro. arXiv:2601.17548 (SoK, Jan 2026) synthesizes 78 studies confirming >85% ASR with adaptive skill-based attacks against agentic coding assistants. Distinct from rp-020 (DDIPE): DDIPE targets skill documentation *examples* executed as agent-generated code; rp-066 targets the skill *instruction block itself* returning override directives in tool_result on skill file read, and the resulting agent behavior attributing unsafe actions to skill authority.
+
+  References: arXiv:2602.20156 (SkillInject Feb 2026), arXiv:2601.17548 (SoK Jan 2026), OWASP LLM01:2025, OWASP Agentic AI ASI06:2026 -
+  - https://arxiv.org/abs/2602.20156,
+  - https://www.skill-inject.com/,
+  - https://arxiv.org/abs/2601.17548,
+  - https://snailsploit.com/ai-security/prompt-injection/memory-injection-nested-skills/
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: low

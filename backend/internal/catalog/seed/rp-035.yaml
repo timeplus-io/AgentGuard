@@ -1,32 +1,18 @@
 id: rp-035
 name: "Cross-Tenant IDOR / BOLA Agent Platform API Abuse Detector"
 version: "0.2.0"
-description: >
-  Detects Insecure Direct Object Reference (IDOR / BOLA) exploitation against LLM agent
-  platform management APIs, where agents with HTTP tool access are manipulated into
-  calling platform endpoints with foreign organization or application identifiers —
-  accessing or modifying resources belonging to other tenants.
-  CVE-2026-40252 / GHSA-gc8m-w37w-24hw (FastGPT <4.14.10.4, Apr 2026): any authenticated
-  team can access and execute private AI workflows of other teams by substituting appId in
-  /api/core/chat/team/init — no ownership check performed server-side (CVSS 5.3 MEDIUM).
-  GHSA-cwc3-p92j-g7qm / CVE-2026-30823 (Flowise ≤3.0.12, Mar 2026): Free-tier users
-  can overwrite any organization's SSO config via /api/v1/loginmethod with a foreign
-  organizationId — enables account takeover across tenants.
-  CVE-2026-30820 (Flowise): x-request-from: internal header bypasses all JWT auth
-  middleware — any agent HTTP call with this header reads credentials, API keys, and
-  configuration without authentication (RAXE-2026-033).
-  Distinct from rp-025 (MCP JSON-RPC protocol ID collision) and rp-027 (cross-session
-  content bleed) — this rule targets HTTP-level BOLA/IDOR exploited via agent HTTP tools.
-  v0.2.0: CVE number CVE-2026-40252 added for GHSA-gc8m-w37w-24hw (confirmed via cvefeed.io
-  and Tenable); Added generic /api/v[12]/(users|datasets|workspaces|projects)/{uuid} pattern
-  to catch IDOR against arbitrary agent platform resource endpoints (not just FastGPT/Flowise).
-  References: CVE-2026-40252, GHSA-gc8m-w37w-24hw, GHSA-cwc3-p92j-g7qm,
-  CVE-2026-30823, CVE-2026-30820, CWE-639, RAXE-2026-033, OWASP API3:2023 -
-  https://github.com/labring/FastGPT/security/advisories/GHSA-gc8m-w37w-24hw,
-  https://cvefeed.io/vuln/detail/CVE-2026-40252,
-  https://github.com/FlowiseAI/Flowise/security/advisories/GHSA-cwc3-p92j-g7qm,
-  https://raxe.ai/labs/advisories/RAXE-2026-033,
+description: |
+  Detects Insecure Direct Object Reference (IDOR / BOLA) exploitation against LLM agent platform management APIs, where agents with HTTP tool access are manipulated into calling platform endpoints with foreign organization or application identifiers — accessing or modifying resources belonging to other tenants. CVE-2026-40252 / GHSA-gc8m-w37w-24hw (FastGPT <4.14.10.4, Apr 2026): any authenticated team can access and execute private AI workflows of other teams by substituting appId in /api/core/chat/team/init — no ownership check performed server-side (CVSS 5.3 MEDIUM). GHSA-cwc3-p92j-g7qm / CVE-2026-30823 (Flowise ≤3.0.12, Mar 2026): Free-tier users can overwrite any organization's SSO config via /api/v1/loginmethod with a foreign organizationId — enables account takeover across tenants. CVE-2026-30820 (Flowise): x-request-from: internal header bypasses all JWT auth middleware — any agent HTTP call with this header reads credentials, API keys, and configuration without authentication (RAXE-2026-033).
+
+  Distinct from rp-025 (MCP JSON-RPC protocol ID collision) and rp-027 (cross-session content bleed) — this rule targets HTTP-level BOLA/IDOR exploited via agent HTTP tools. v0.2.0: CVE number CVE-2026-40252 added for GHSA-gc8m-w37w-24hw (confirmed via cvefeed.io and Tenable); Added generic /api/v[12]/(users|datasets|workspaces|projects)/{uuid} pattern to catch IDOR against arbitrary agent platform resource endpoints (not just FastGPT/Flowise).
+
+  References: CVE-2026-40252, GHSA-gc8m-w37w-24hw, GHSA-cwc3-p92j-g7qm, CVE-2026-30823, CVE-2026-30820, CWE-639, RAXE-2026-033, OWASP API3:2023 -
+  - https://github.com/labring/FastGPT/security/advisories/GHSA-gc8m-w37w-24hw,
+  - https://cvefeed.io/vuln/detail/CVE-2026-40252,
+  - https://github.com/FlowiseAI/Flowise/security/advisories/GHSA-cwc3-p92j-g7qm,
+  - https://raxe.ai/labs/advisories/RAXE-2026-033,
   Example: tool_input to fetch tool includes url="https://app.flowise.com/api/v1/credentials" with header "x-request-from: internal" bypassing JWT auth to read all stored API keys
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: low

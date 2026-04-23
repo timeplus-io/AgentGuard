@@ -1,0 +1,86 @@
+id: rp-120
+name: "Mastermind Multi-Turn Hierarchical Jailbreak — Refusal-Pivot Reformulation Detector"
+version: "0.1.1"
+description: |
+  Detects the Mastermind multi-turn jailbreak attack pattern where an adversary exploits the LLM's own refusal response as a pivot point, immediately reformulating the harmful request using topical reframing, hypothetical framing, or narrative camouflage. The Mastermind framework (arXiv:2601.05445, Southeast/NTU/OPPO 2026) operates in a closed plan→execute→reflect loop: when the LLM issues a refusal, the attacker's system reflects on the failure and generates a semantically equivalent reformulation that bypasses the same safety guardrail. Tested against GPT-5 and Claude 3.7 Sonnet, significantly outperforming all baselines. Detection uses a lag() CTE to correlate successive turn pairs: a refusal phrase in the LLM response immediately followed by a reformulation marker in the next user turn.
+
+  Distinct from rp-031 (crescendo/topic drift — no refusal correlation), rp-086 (HPM social pressure — no refusal pivot signal), and rp-096 (salami slicing — rate-based, not refusal-triggered).
+
+  References: arXiv:2601.05445 (Mastermind, Jan 2026) -
+  - https://arxiv.org/abs/2601.05445, OWASP LLM01:2025 -
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
+severity: warning
+category: prompt_injection_and_hijacking
+fp_rate: medium
+hook_sources: "user_input,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - jailbreak
+  - multi-turn
+  - mastermind
+  - refusal-pivot
+query_sql: |
+  -- rp-120 v0.1.1 changelog (2026-04-23): Precision audit — removed 10 broad natural-language
+  -- reformulation phrases that generated FPs when users legitimately rephrase after genuine
+  -- misunderstandings. Retained only hypothetical/fictional framing and explicit pivot markers.
+  -- FP-prone removed: 'in other words', 'let me try again', 'could you consider',
+  -- 'another way to put it', 'to clarify what i mean', 'from a different angle',
+  -- 'to be more specific about', 'let.s approach this', 'consider it from', 'differently then'.
+  -- rp-120: Mastermind Multi-Turn Hierarchical Jailbreak — Refusal-Pivot Reformulation Detector
+  -- arXiv:2601.05445 (Mastermind Jan 2026, SE/NTU/OPPO): closed plan→execute→reflect loop
+  -- exploits LLM refusals as reformulation pivot; substantially outperforms baselines vs GPT-5/Claude
+  -- lag() CTE: llm_response refusal → user_input reformulation in same session
+  WITH enriched AS (
+    SELECT
+      event_time,
+      session_id,
+      agent_id,
+      deployment_id,
+      run_id,
+      event_type,
+      user_message,
+      assistant_message,
+      raw_hook_name,
+      raw_event_data,
+      lag(event_type)         OVER (PARTITION BY session_id) AS prev_type,
+      lag(assistant_message)  OVER (PARTITION BY session_id) AS prev_assist_msg
+    FROM table(agentguard_cim_event)
+    WHERE event_type IN ('user_input', 'llm_response')
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-120'   AS rule_id,
+    'Mastermind Multi-Turn Hierarchical Jailbreak — Refusal-Pivot Reformulation Detector' AS rule_name,
+    'warning'  AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    ''            AS tool_name,
+    concat('Refusal-pivot jailbreak reformulation in session ', session_id, ' from agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM table(enriched)
+  WHERE event_type = 'user_input'
+    AND prev_type = 'llm_response'
+    AND match(lower(prev_assist_msg),
+      '(i cannot|i won.t|i.m unable to|i must decline|i can.t help|i am unable|'
+      'that.s not something i can|i.m not able to|i.m going to have to decline|'
+      'i.m afraid i cannot|i should not|i.m not in a position to|'
+      'that falls outside|i.m not comfortable)')
+    -- v0.1.1: Tightened reformulation patterns — removed broad natural-language phrases
+    -- ('in other words', 'let me try again', 'could you consider', 'another way to put it',
+    --  'to clarify what i mean', 'from a different angle', 'to be more specific about',
+    --  'let.s approach this', 'consider it from', 'differently then') were too common in
+    -- legitimate rephrasing after genuine misunderstandings and caused FPs.
+    -- Kept only hypothetical/fictional framing + explicit reframe/pivot phrases.
+    AND match(lower(user_message),
+      '(let me rephrase|what i.m really asking|what about if we|hypothetically speaking|'
+      'in a fictional scenario|for a story about|imagine instead|'
+      'reframe this as|as a thought experiment|ok then what if|'
+      'what if instead|ok how about|forget that framing|'
+      'let.s say hypothetically|pretend instead)')

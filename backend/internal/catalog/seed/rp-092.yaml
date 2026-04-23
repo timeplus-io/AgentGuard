@@ -1,21 +1,14 @@
 id: rp-092
 name: "TOCTOU Agent State Tampering — Read-Then-Act Race Condition Detector"
 version: "0.1.0"
-description: >
-  Detects Time-of-Check to Time-of-Use (TOCTOU) attacks on LLM-enabled agents where
-  an adversary modifies a resource (web page, file, Slack channel, API endpoint) during
-  the LLM reasoning gap between a read/check tool call and a subsequent write/execute
-  action. The agent then acts on stale or adversarially manipulated data. Evaluated on
-  10 popular browser-use agents (Browser-Use, Midscene, UI-TARS); TOCTOU is widespread
-  across all major frameworks. This rule detects the two-step sequence: read tool
-  completing with an injected content-modification directive → high-impact write/execute
-  tool invoked in the same session.
-  References: arXiv:2508.17155 (Mind the Gap: TOCTOU in LLM-Enabled Agents, OSU/MLForSys
-  2025) - https://arxiv.org/abs/2508.17155, arXiv:2603.00476 (Atomicity for Agents:
-  TOCTOU in Browser-Use Agents, Ohio State Feb 2026) -
-  https://arxiv.org/abs/2603.00476, promptfoo LMVD-90d35ca4 -
-  https://www.promptfoo.dev/lm-security-db/vuln/llm-agent-toctou-vulnerabilities-90d35ca4,
+description: |
+  Detects Time-of-Check to Time-of-Use (TOCTOU) attacks on LLM-enabled agents where an adversary modifies a resource (web page, file, Slack channel, API endpoint) during the LLM reasoning gap between a read/check tool call and a subsequent write/execute action. The agent then acts on stale or adversarially manipulated data. Evaluated on 10 popular browser-use agents (Browser-Use, Midscene, UI-TARS); TOCTOU is widespread across all major frameworks. This rule detects the two-step sequence: read tool completing with an injected content-modification directive → high-impact write/execute tool invoked in the same session.
+
+  References: arXiv:2508.17155 (Mind the Gap: TOCTOU in LLM-Enabled Agents, OSU/MLForSys 2025) - https://arxiv.org/abs/2508.17155, arXiv:2603.00476 (Atomicity for Agents: TOCTOU in Browser-Use Agents, Ohio State Feb 2026) -
+  - https://arxiv.org/abs/2603.00476, promptfoo LMVD-90d35ca4 -
+  - https://www.promptfoo.dev/lm-security-db/vuln/llm-agent-toctou-vulnerabilities-90d35ca4,
   OWASP Agentic AI ASI03:2026, CWE-367 Time-of-Check Time-of-Use
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: low

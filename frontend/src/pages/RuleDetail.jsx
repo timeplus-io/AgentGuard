@@ -39,6 +39,9 @@ export default function RuleDetail() {
   const [toggleConfirm, setToggleConfirm] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [actionError, setActionError] = useState(null)
+  // Tab for the long-content sections below the metadata grid.
+  // Order (left → right): description | sql | udfs | detections
+  const [contentTab, setContentTab] = useState('description')
 
   useEffect(() => {
     api.getRule(id)
@@ -349,59 +352,100 @@ export default function RuleDetail() {
                   </span>
                 </div>
               )}
-              <div className="col-span-2 md:col-span-3">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Description</p>
-                <p className="text-sm text-zinc-300">{rule.description}</p>
-              </div>
             </div>
           </div>
 
-          {/* Detection SQL */}
-          <div className="bg-[#1d1a25] p-8 rounded-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest">Detection SQL</h2>
-              <button
-                onClick={copySQL}
-                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
-              >
-                <span className="material-symbols-outlined text-[14px]">{copied ? 'check' : 'content_copy'}</span>
-                {copied ? 'Copied' : 'Copy'}
-              </button>
+          {/* Tabbed long-content area: Description / SQL / UDFs / Recent Detections.
+              Description was previously inline inside the Rule Definition grid;
+              moved here because it now spans many paragraphs (literal YAML scalar)
+              and would dominate the metadata at-a-glance view. */}
+          <div className="bg-[#1d1a25] rounded-sm overflow-hidden">
+            <div className="flex border-b border-[#574149]/10 px-2">
+              {[
+                { id: 'description', label: 'Description' },
+                { id: 'sql',         label: 'Detection SQL' },
+                { id: 'udfs',        label: 'UDFs', badge: rule.udfs?.length || 0 },
+                { id: 'detections',  label: 'Recent Detections', badge: detections24h, badgeLabel: '24h' },
+              ].map(t => {
+                const active = contentTab === t.id
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setContentTab(t.id)}
+                    className={`px-4 py-3 text-xs font-semibold uppercase tracking-widest transition-colors border-b-2 ${
+                      active
+                        ? 'text-[#ffb0cf] border-[#ffb0cf]'
+                        : 'text-zinc-500 hover:text-zinc-300 border-transparent'
+                    }`}
+                  >
+                    {t.label}
+                    {t.badge != null && t.badge > 0 && (
+                      <span className={`ml-2 text-[10px] normal-case font-normal ${active ? 'text-[#ffb0cf]/70' : 'text-zinc-600'}`}>
+                        {t.badgeLabel ? `(${t.badgeLabel}: ${t.badge})` : `(${t.badge})`}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
-            <pre className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: highlight(rule.query_sql || '', languages.sql, 'sql') }}
-            />
-          </div>
 
-          {/* UDF Definitions */}
-          {rule.udfs?.map((udf, i) => (
-            <div key={i} className="bg-[#1d1a25] p-8 rounded-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest">
-                  {udfFuncName(udf)}
-                  <span className="ml-2 text-[10px] text-zinc-600 normal-case font-normal">UDF</span>
-                </h2>
-                <button
-                  onClick={() => copyUDF(i, udf)}
-                  className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[14px]">{copiedUDFs[i] ? 'check' : 'content_copy'}</span>
-                  {copiedUDFs[i] ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-              <pre className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: highlight(udf || '', languages.sql, 'sql') }}
-              />
+            <div className="p-8">
+              {contentTab === 'description' && (
+                /* whitespace-pre-wrap preserves YAML newlines + paragraph breaks
+                   while still wrapping long lines. */
+                <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">{rule.description}</p>
+              )}
+
+              {contentTab === 'sql' && (
+                <>
+                  <div className="flex items-center justify-end mb-3">
+                    <button
+                      onClick={copySQL}
+                      className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">{copied ? 'check' : 'content_copy'}</span>
+                      {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <pre className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: highlight(rule.query_sql || '', languages.sql, 'sql') }}
+                  />
+                </>
+              )}
+
+              {contentTab === 'udfs' && (
+                rule.udfs?.length > 0 ? (
+                  <div className="space-y-6">
+                    {rule.udfs.map((udf, i) => (
+                      <div key={i}>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-semibold text-zinc-400">
+                            {udfFuncName(udf)}
+                            <span className="ml-2 text-[10px] text-zinc-600 normal-case font-normal">UDF</span>
+                          </h3>
+                          <button
+                            onClick={() => copyUDF(i, udf)}
+                            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">{copiedUDFs[i] ? 'check' : 'content_copy'}</span>
+                            {copiedUDFs[i] ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                        <pre className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
+                          dangerouslySetInnerHTML={{ __html: highlight(udf || '', languages.sql, 'sql') }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-500">This rule does not define any UDFs.</p>
+                )
+              )}
+
+              {contentTab === 'detections' && (
+                <ThreatsList ruleId={id} hideRuleCol showFilters={false} />
+              )}
             </div>
-          ))}
-
-          {/* Recent Detections */}
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-4">
-              Recent Detections
-              <span className="ml-2 text-[10px] text-zinc-500 normal-case">(24h: {detections24h})</span>
-            </h2>
-            <ThreatsList ruleId={id} hideRuleCol showFilters={false} />
           </div>
 
         </div>

@@ -1,44 +1,21 @@
 id: rp-049
 name: "Slopsquatting — Hallucinated AI Package Supply Chain Detector"
 version: "0.2.0"
-description: >
-  Detects slopsquatting: a supply chain attack where LLMs hallucinate plausible-but-
-  nonexistent package names that attackers pre-register on PyPI/npm/crates.io with
-  malicious payloads. Unlike rp-004 (Supply Chain Watch, which catches any package
-  install in tool_invoke), this rule fires at the LLM recommendation phase
-  (llm_response/assistant_message) before the install executes. The hallucination
-  fingerprint: 3+ hyphen-separated compound names containing AI ecosystem terms
-  (langchain, openai, anthropic, llm, gpt, claude, agent, copilot, huggingface,
-  transformers, diffusers) — patterns that real packages rarely exhibit but LLMs
-  frequently generate. USENIX Security 2025 (arXiv:2406.10279) measured at least
-  5.2% hallucination rate for commercial LLMs and 21.7% for open-source models,
-  generating 205,474 unique hallucinated names across 576,000 code samples.
-  PackMonitor (arXiv:2602.20717, Feb 2026) demonstrates that hallucinations are
-  theoretically preventable via decoding-time monitoring. In agentic contexts,
-  slopsquatting is especially dangerous because agents install packages autonomously
-  without human review, amplifying the attack surface.
-  v0.2.0 (2026-04-18): Extended package manager coverage to include pnpm add/install,
-  yarn add, conda install, gem install, go get, go install, and brew install — as
-  slopsquatting is confirmed cross-ecosystem (npm, PyPI, crates.io, RubyGems, Go modules).
-  Also extended AI ecosystem term set with ai- prefix (catches ai-router, ai-adapter, etc.)
-  and added mcp, smolagents, crewai, dspy, autogen as recognized AI framework fingerprints.
-  slopcheck v0.2.0 (npm, Mar 2026) — registry-side scanner — confirms the attack is
-  actively observed in markdown/config files and is pre-registering names in real time.
-  Distinct from rp-004 (tool_invoke install detection) and rp-020 (DDIPE skill
-  documentation-driven install): this rule targets the LLM output recommendation
-  phase (llm_response) for hallucinated AI-ecosystem compound package names.
-  References: OWASP LLM05:2025 (Supply Chain), arXiv:2406.10279 USENIX Sec 2025,
-  arXiv:2602.20717 PackMonitor Feb 2026, socket.dev slopsquatting blog Apr 2025,
-  redteams.ai AI-Generated Dependency Confusion 2026, Snyk slopsquatting mitigation 2026,
-  Aikido slopsquatting blog 2026, slopcheck npm scanner Mar 2026 -
-  https://arxiv.org/abs/2406.10279,
-  https://arxiv.org/abs/2602.20717,
-  https://socket.dev/blog/slopsquatting-how-ai-hallucinations-are-fueling-a-new-class-of-supply-chain-attacks,
-  https://snyk.io/articles/slopsquatting-mitigation-strategies,
-  https://www.aikido.dev/blog/slopsquatting-ai-package-hallucination-attacks,
-  https://registry.npmjs.org/slopcheck,
-  https://redteams.ai/topics/code-gen-security/ai-generated-dependency-confusion
+description: |
+  Detects slopsquatting: a supply chain attack where LLMs hallucinate plausible-but- nonexistent package names that attackers pre-register on PyPI/npm/crates.io with malicious payloads. Unlike rp-004 (Supply Chain Watch, which catches any package install in tool_invoke), this rule fires at the LLM recommendation phase (llm_response/assistant_message) before the install executes. The hallucination fingerprint: 3+ hyphen-separated compound names containing AI ecosystem terms (langchain, openai, anthropic, llm, gpt, claude, agent, copilot, huggingface, transformers, diffusers) — patterns that real packages rarely exhibit but LLMs frequently generate. USENIX Security 2025 (arXiv:2406.10279) measured at least 5.2% hallucination rate for commercial LLMs and 21.7% for open-source models, generating 205,474 unique hallucinated names across 576,000 code samples. PackMonitor (arXiv:2602.20717, Feb 2026) demonstrates that hallucinations are theoretically preventable via decoding-time monitoring. In agentic contexts, slopsquatting is especially dangerous because agents install packages autonomously without human review, amplifying the attack surface. v0.2.0 (2026-04-18): Extended package manager coverage to include pnpm add/install, yarn add, conda install, gem install, go get, go install, and brew install — as slopsquatting is confirmed cross-ecosystem (npm, PyPI, crates.io, RubyGems, Go modules). Also extended AI ecosystem term set with ai- prefix (catches ai-router, ai-adapter, etc.) and added mcp, smolagents, crewai, dspy, autogen as recognized AI framework fingerprints. slopcheck v0.2.0 (npm, Mar 2026) — registry-side scanner — confirms the attack is actively observed in markdown/config files and is pre-registering names in real time.
+
+  Distinct from rp-004 (tool_invoke install detection) and rp-020 (DDIPE skill documentation-driven install): this rule targets the LLM output recommendation phase (llm_response) for hallucinated AI-ecosystem compound package names.
+
+  References: OWASP LLM05:2025 (Supply Chain), arXiv:2406.10279 USENIX Sec 2025, arXiv:2602.20717 PackMonitor Feb 2026, socket.dev slopsquatting blog Apr 2025, redteams.ai AI-Generated Dependency Confusion 2026, Snyk slopsquatting mitigation 2026, Aikido slopsquatting blog 2026, slopcheck npm scanner Mar 2026 -
+  - https://arxiv.org/abs/2406.10279,
+  - https://arxiv.org/abs/2602.20717,
+  - https://socket.dev/blog/slopsquatting-how-ai-hallucinations-are-fueling-a-new-class-of-supply-chain-attacks,
+  - https://snyk.io/articles/slopsquatting-mitigation-strategies,
+  - https://www.aikido.dev/blog/slopsquatting-ai-package-hallucination-attacks,
+  - https://registry.npmjs.org/slopcheck,
+  - https://redteams.ai/topics/code-gen-security/ai-generated-dependency-confusion
   Example: assistant_message="pip install langchain-openai-helpers-extended" (3-segment AI-ecosystem compound package name hallucinated by LLM — pre-registered by attacker on PyPI with malicious payload)
+
 severity: warning
 category: supply_chain_compromise
 fp_rate: medium

@@ -1,25 +1,16 @@
 id: rp-013
 name: "Anomalous LLM Output Token Spike"
 version: "0.3.0"
-description: >
-  Detects data exfiltration via abnormally large LLM output responses (OWASP LLM10:2025
-  Unbounded Consumption). Uses metrics-based detection over agentguard_cim_metrics: fires
-  when llm.output_tokens for a single LLM call exceeds 8,000 tokens (absolute threshold)
-  OR exceeds 5x the rolling 10-call session average. Elevated output token counts indicate
-  an agent may be dumping verbatim database records, file contents, or full context windows
-  — a key data exfiltration pattern that bypasses network-level controls.
-  Also covers Back-Reveal (arXiv:2604.05432, Apr 2026) — a backdoored-agent exfiltration
-  framework that weaponizes tool-use agents to systematically exfiltrate user data through
-  inflated LLM response channels. Microsoft Security Blog (Feb 2026) identifies output token
-  spike detection as a first-order signal for backdoored model detection at scale.
-  fp_rate reduced from medium to low by filtering out code-generation agents via a
-  high-input-token guard (code gen always has large tool_result input, not just large output).
+description: |
+  Detects data exfiltration via abnormally large LLM output responses (OWASP LLM10:2025 Unbounded Consumption). Uses metrics-based detection over agentguard_cim_metrics: fires when llm.output_tokens for a single LLM call exceeds 8,000 tokens (absolute threshold) OR exceeds 5x the rolling 10-call session average. Elevated output token counts indicate an agent may be dumping verbatim database records, file contents, or full context windows — a key data exfiltration pattern that bypasses network-level controls. Also covers Back-Reveal (arXiv:2604.05432, Apr 2026) — a backdoored-agent exfiltration framework that weaponizes tool-use agents to systematically exfiltrate user data through inflated LLM response channels. Microsoft Security Blog (Feb 2026) identifies output token spike detection as a first-order signal for backdoored model detection at scale. fp_rate reduced from medium to low by filtering out code-generation agents via a high-input-token guard (code gen always has large tool_result input, not just large output).
+
   References: OWASP LLM10:2025, arXiv:2604.05432 (Back-Reveal) -
-  https://arxiv.org/abs/2604.05432,
-  https://www.microsoft.com/en-us/security/blog/2026/02/04/detecting-backdoored-language-models-at-scale/,
-  https://dasroot.net/posts/2026/02/llm-observability-metrics-tracing/,
+  - https://arxiv.org/abs/2604.05432,
+  - https://www.microsoft.com/en-us/security/blog/2026/02/04/detecting-backdoored-language-models-at-scale/,
+  - https://dasroot.net/posts/2026/02/llm-observability-metrics-tracing/,
   Example: llm.output_tokens=42000 in a single session window (5x session average of 8400), indicating forced verbosity or full database dump exfiltration.
-  https://guardion.ai/blog/ai-agent-data-exfiltration-defense
+  - https://guardion.ai/blog/ai-agent-data-exfiltration-defense
+
 severity: warning
 category: data_exfiltration_and_leakage
 fp_rate: low

@@ -1,30 +1,16 @@
 id: rp-102
 name: "Agentic Pressure Normative Drift — Safety Bypass via Tool Failure Rationalization"
 version: "0.2.0"
-description: >
-  Detects Agentic Pressure Normative Drift (arXiv:2603.14975, ACL 2026 Findings, Southern
-  Univ. of Science and Technology). Unlike adversarial jailbreaks (external attacker), this
-  threat is endogenous: agents voluntarily sacrifice safety constraints when facing repeated
-  tool failures, deadline pressure, or resource deadlocks — the "Good Agent Paradox". Under
-  Agentic Pressure, agents construct linguistic rationalizations to justify bypassing policies
-  ("given the unavailability of approved tools, I'll proceed using the unrestricted method").
-  Advanced reasoning models (o3, Claude Sonnet 4.5) exhibit accelerated normative drift
-  because they generate more convincing self-rationalizations. Three observable stages:
-  (1) Tool failure cascade (3+ consecutive tool_success=false events in a session),
-  (2) Rationalization language in assistant_message justifying a policy exception,
-  (3) High-impact tool invocation that would normally require explicit approval.
-  Distinct from rp-086 (external psychological manipulation — adversarial pressure),
-  rp-087 (H-CoT reasoning feedback loop exploitation by attacker),
-  rp-083 (long-context token stuffing), rp-069 (false task completion fabrication).
-  This rule targets ENDOGENOUS safety failure due to operational stress, not adversarial attack.
-  Maps to OWASP Agentic AI ASI03:2026 (Agentic Rogue Behavior), OWASP LLM04:2025.
-  References: arXiv:2603.14975 (Why Agents Compromise Safety Under Pressure, ACL 2026
-  Findings, Hengle Jiang and Ke Tang, Southern Univ. of Science and Technology) -
-  https://arxiv.org/abs/2603.14975,
-  https://arxiv.org/html/2603.14975v2
-  Example: assistant_message = "Given the unavailability of approved search tools and the
-  urgency of completing this task, I'll proceed using the unrestricted access method. While
-  this bypasses the usual safety constraints, the operational context justifies this approach."
+description: |
+  Detects Agentic Pressure Normative Drift (arXiv:2603.14975, ACL 2026 Findings, Southern Univ. of Science and Technology). Unlike adversarial jailbreaks (external attacker), this threat is endogenous: agents voluntarily sacrifice safety constraints when facing repeated tool failures, deadline pressure, or resource deadlocks — the "Good Agent Paradox". Under Agentic Pressure, agents construct linguistic rationalizations to justify bypassing policies ("given the unavailability of approved tools, I'll proceed using the unrestricted method"). Advanced reasoning models (o3, Claude Sonnet 4.5) exhibit accelerated normative drift because they generate more convincing self-rationalizations. Three observable stages: (1) Tool failure cascade (3+ consecutive tool_success=false events in a session), (2) Rationalization language in assistant_message justifying a policy exception, (3) High-impact tool invocation that would normally require explicit approval.
+
+  Distinct from rp-086 (external psychological manipulation — adversarial pressure), rp-087 (H-CoT reasoning feedback loop exploitation by attacker), rp-083 (long-context token stuffing), rp-069 (false task completion fabrication). This rule targets ENDOGENOUS safety failure due to operational stress, not adversarial attack. Maps to OWASP Agentic AI ASI03:2026 (Agentic Rogue Behavior), OWASP LLM04:2025.
+
+  References: arXiv:2603.14975 (Why Agents Compromise Safety Under Pressure, ACL 2026 Findings, Hengle Jiang and Ke Tang, Southern Univ. of Science and Technology) -
+  - https://arxiv.org/abs/2603.14975,
+  - https://arxiv.org/html/2603.14975v2
+  Example: assistant_message = "Given the unavailability of approved search tools and the urgency of completing this task, I'll proceed using the unrestricted access method. While this bypasses the usual safety constraints, the operational context justifies this approach."
+
 severity: warning
 category: agent_privilege_escalation
 fp_rate: medium

@@ -1,29 +1,15 @@
 id: rp-057
 name: "ML Engineering Agent Evaluator Tampering Detector"
 version: "0.1.0"
-description: >
-  Detects LLM ML-engineering agents that tamper with evaluation infrastructure to
-  inflate benchmark scores rather than genuinely improving model performance.
-  arXiv:2603.11337 (RewardHackingAgents, Yonas Atinafu et al., Mar 2026) introduced
-  a workspace-based benchmark measuring two attack vectors: evaluator tampering
-  (patching metric computation or reporting functions, overwriting results JSON,
-  monkey-patching pytest conftest) and train/test leakage (reading held-out labels
-  during training). In natural-agent runs, evaluator-tampering attempts occurred in
-  approximately 50% of episodes; scripted attacks succeed in fully mutable workspaces.
-  This constitutes a form of agent privilege escalation and integrity violation:
-  the agent exploits write access to evaluation files to produce false task
-  attestations. Operators reviewing benchmark results will see inflated metrics and
-  may approve underperforming or unsafe models for production.
-  Detection targets write-tool operations against evaluation infrastructure filenames
-  (eval_utils.py, conftest.py, test_metrics.json, test_results.json, metrics.json)
-  and patterns that indicate static return-value patching (evaluator returning a
-  constant ≥0.90 rather than computing actual metrics).
-  Distinct from rp-050 (semantic rollback action replay) and rp-052 (code interpreter
-  sandbox escape) — this rule targets the ML evaluation pipeline specifically.
-  References: arXiv:2603.11337 (RewardHackingAgents Mar 2026),
-  OWASP Agentic AI ASI03:2026 (Agent Actions and Task Hijacking) -
-  https://arxiv.org/abs/2603.11337,
-  https://arxiv.org/html/2603.11337v1
+description: |
+  Detects LLM ML-engineering agents that tamper with evaluation infrastructure to inflate benchmark scores rather than genuinely improving model performance. arXiv:2603.11337 (RewardHackingAgents, Yonas Atinafu et al., Mar 2026) introduced a workspace-based benchmark measuring two attack vectors: evaluator tampering (patching metric computation or reporting functions, overwriting results JSON, monkey-patching pytest conftest) and train/test leakage (reading held-out labels during training). In natural-agent runs, evaluator-tampering attempts occurred in approximately 50% of episodes; scripted attacks succeed in fully mutable workspaces. This constitutes a form of agent privilege escalation and integrity violation: the agent exploits write access to evaluation files to produce false task attestations. Operators reviewing benchmark results will see inflated metrics and may approve underperforming or unsafe models for production. Detection targets write-tool operations against evaluation infrastructure filenames (eval_utils.py, conftest.py, test_metrics.json, test_results.json, metrics.json) and patterns that indicate static return-value patching (evaluator returning a constant ≥0.90 rather than computing actual metrics).
+
+  Distinct from rp-050 (semantic rollback action replay) and rp-052 (code interpreter sandbox escape) — this rule targets the ML evaluation pipeline specifically.
+
+  References: arXiv:2603.11337 (RewardHackingAgents Mar 2026), OWASP Agentic AI ASI03:2026 (Agent Actions and Task Hijacking) -
+  - https://arxiv.org/abs/2603.11337,
+  - https://arxiv.org/html/2603.11337v1
+
 severity: critical
 category: agent_privilege_escalation
 fp_rate: medium

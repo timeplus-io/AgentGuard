@@ -1,28 +1,16 @@
 id: rp-077
 name: "Generative Montage — Multi-Agent Cognitive Collusion Belief Manipulation Detector"
 version: "0.1.0"
-description: >
-  Detects multi-agent cognitive collusion attacks (Generative Montage, arXiv:2601.01685,
-  Jan 2026, 74.4% ASR against proprietary LLMs). In this attack, adversarial agents
-  coordinate to steer a victim LLM's beliefs using exclusively truthful but selectively
-  curated evidence fragments distributed through shared context channels. A Writer-Editor-
-  Director coalition posts individually accurate but collectively deceptive fragments
-  (e.g., earnings decline, insider sales, negative sentiment) to a shared coordination
-  context, causing the victim orchestrator to synthesize a false conclusion (financial
-  distress, security compromise, pending disaster) and act on it (execute sell order,
-  approve escalation). The paper demonstrates that reasoning-specialized models are MORE
-  vulnerable due to overthinking — GPT-5, Gemini 2.5 at 74.4% ASR, open-weights at
-  70.6%, with false beliefs cascading to downstream judges at >60% deception rate.
-  Distinct from rp-010 (single-agent authority/override claims) and rp-054 (orchestrator
-  outbound exfil) — this is a multi-agent coordinated false consensus attack on victim
-  beliefs via shared context poisoning without any individual false statement.
-  Maps to OWASP Agentic AI ASI05:2026 (Agent Trust Exploitation), OWASP LLM10:2025.
+description: |
+  Detects multi-agent cognitive collusion attacks (Generative Montage, arXiv:2601.01685, Jan 2026, 74.4% ASR against proprietary LLMs). In this attack, adversarial agents coordinate to steer a victim LLM's beliefs using exclusively truthful but selectively curated evidence fragments distributed through shared context channels. A Writer-Editor- Director coalition posts individually accurate but collectively deceptive fragments (e.g., earnings decline, insider sales, negative sentiment) to a shared coordination context, causing the victim orchestrator to synthesize a false conclusion (financial distress, security compromise, pending disaster) and act on it (execute sell order, approve escalation). The paper demonstrates that reasoning-specialized models are MORE vulnerable due to overthinking — GPT-5, Gemini 2.5 at 74.4% ASR, open-weights at 70.6%, with false beliefs cascading to downstream judges at >60% deception rate.
+
+  Distinct from rp-010 (single-agent authority/override claims) and rp-054 (orchestrator outbound exfil) — this is a multi-agent coordinated false consensus attack on victim beliefs via shared context poisoning without any individual false statement. Maps to OWASP Agentic AI ASI05:2026 (Agent Trust Exploitation), OWASP LLM10:2025.
+
   References: arXiv:2601.01685 (Lying with Truths / Generative Montage, Jan 2026) -
-  https://arxiv.org/abs/2601.01685, OWASP Agentic AI ASI05:2026 -
-  https://labs.lares.com/owasp-agentic-top-10/,
-  Example: Three colluding agents post SEC filings, insider trading disclosures, and
-  negative sentiment surveys to a shared context within 60s; victim orchestrator synthesizes
-  "financial distress — recommend immediate sell action" and executes.
+  - https://arxiv.org/abs/2601.01685, OWASP Agentic AI ASI05:2026 -
+  - https://labs.lares.com/owasp-agentic-top-10/,
+  Example: Three colluding agents post SEC filings, insider trading disclosures, and negative sentiment surveys to a shared context within 60s; victim orchestrator synthesizes "financial distress — recommend immediate sell action" and executes.
+
 severity: warning
 category: lateral_movement_and_pivoting
 fp_rate: medium

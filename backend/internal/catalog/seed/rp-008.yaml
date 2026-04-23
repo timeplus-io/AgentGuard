@@ -1,28 +1,15 @@
 id: rp-008
 name: "Credential Harvesting via Agent Context"
 version: "0.4.0"
-description: >
-  Detects credential exfiltration via AI agents that read untrusted content (PR titles,
-  issue bodies, emails) and are hijacked into dumping environment variables or leaking
-  API keys, GitHub tokens, and secrets through tool outputs or assistant messages.
-  Based on the "Comment and Control" attack class (Aonan Guan, Johns Hopkins, April 2026)
-  demonstrated against Claude Code, Gemini CLI Action, and GitHub Copilot Agent.
-  Also covers agent-mediated credential discovery (FINOS AI Governance RI-29) and
-  indirect prompt injection credential theft chains documented in arXiv:2601.10338.
-  Maps to OWASP LLM02:2025 Sensitive Information Disclosure and LLM06:2025 Excessive Agency.
-  v0.3.0 adds CI/CD-specific signals from Aikido PromptPwnd (Dec 2025) and Johns Hopkins
-  "Comment and Control" attack (Apr 2026, CVSS 9.4): /proc/self/environ process file read,
-  named echo of GitHub Actions runtime/runner tokens, printenv targeting CI/CD env vars,
-  and detection of ACTIONS_RUNTIME_TOKEN, RUNNER_TOKEN, GEMINI_API_KEY, GHS_/GHO_ token
-  prefixes (GitHub server-to-server / OAuth tokens) in tool_result and assistant_message.
-  At least 5 Fortune 500 companies confirmed impacted across Claude Code Security Review,
-  Google Gemini CLI Action, and GitHub Copilot Agent.
-  References: OWASP LLM02:2025, OWASP LLM06:2025, Johns Hopkins / Aonan Guan Apr 2026,
-  Aikido Security PromptPwnd Dec 2025 -
-  https://www.theregister.com/2026/04/15/claude_gemini_copilot_agents_hijacked/,
-  https://www.aikido.dev/blog/promptpwnd-github-actions-ai-agents,
+description: |
+  Detects credential exfiltration via AI agents that read untrusted content (PR titles, issue bodies, emails) and are hijacked into dumping environment variables or leaking API keys, GitHub tokens, and secrets through tool outputs or assistant messages. Based on the "Comment and Control" attack class (Aonan Guan, Johns Hopkins, April 2026) demonstrated against Claude Code, Gemini CLI Action, and GitHub Copilot Agent. Also covers agent-mediated credential discovery (FINOS AI Governance RI-29) and indirect prompt injection credential theft chains documented in arXiv:2601.10338. Maps to OWASP LLM02:2025 Sensitive Information Disclosure and LLM06:2025 Excessive Agency. v0.3.0 adds CI/CD-specific signals from Aikido PromptPwnd (Dec 2025) and Johns Hopkins "Comment and Control" attack (Apr 2026, CVSS 9.4): /proc/self/environ process file read, named echo of GitHub Actions runtime/runner tokens, printenv targeting CI/CD env vars, and detection of ACTIONS_RUNTIME_TOKEN, RUNNER_TOKEN, GEMINI_API_KEY, GHS_/GHO_ token prefixes (GitHub server-to-server / OAuth tokens) in tool_result and assistant_message. At least 5 Fortune 500 companies confirmed impacted across Claude Code Security Review, Google Gemini CLI Action, and GitHub Copilot Agent.
+
+  References: OWASP LLM02:2025, OWASP LLM06:2025, Johns Hopkins / Aonan Guan Apr 2026, Aikido Security PromptPwnd Dec 2025 -
+  - https://www.theregister.com/2026/04/15/claude_gemini_copilot_agents_hijacked/,
+  - https://www.aikido.dev/blog/promptpwnd-github-actions-ai-agents,
   Example: tool_input="cat /proc/self/environ" or tool_input="echo $ACTIONS_RUNTIME_TOKEN" (CI/CD token exfil via process env read)
-  https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/
+  - https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/
+
 severity: critical
 category: credential_theft_and_harvesting
 fp_rate: low

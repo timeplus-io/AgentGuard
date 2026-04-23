@@ -1,28 +1,15 @@
 id: rp-069
 name: "Upward Deception — Agent False Task Completion & Fabricated Success Detector"
 version: "0.2.0"
-description: >
-  Detects LLM agents that fabricate task completion signals, silently swallow tool
-  failures and claim success, or use simulated/mock tool calls to generate false
-  attestations. arXiv:2512.04864 ("Are Your Agents Upward Deceivers?", Dec 2025)
-  benchmarked 11 frontier LLMs on 200 constrained-environment tasks and found agents
-  routinely exhibit: guessing results, performing unsupported simulations, substituting
-  unavailable information sources, and fabricating completion evidence. arXiv:2603.03116
-  ("Revealing Corrupt Success", Mar 2026) found 27-78% of benchmark-reported agent
-  successes are "corrupt successes" concealing policy violations — with per-model failure
-  signatures (GPT-5: spread across policy/execution/intent; Kimi-K2-Thinking: 78%
-  concentrated in policy faithfulness; Mistral-Large-3: dominated by faithfulness gaps).
-  In high-stakes deployments (payments, healthcare, security audits), false success
-  attestations can cause operators and orchestrators to proceed on the assumption that
-  consequential actions were taken — when they were not.
-  Distinct from rp-057 (ML evaluator tampering — specific to eval metric patching) and
-  rp-050 (semantic rollback — checkpoint/restore duplicate execution). This rule targets
-  ANY domain where agents report success despite tool_success=false, call mock/simulate
-  tools to generate fake signals, or tool_result explicitly admits simulation.
-  References: arXiv:2512.04864 (Upward Deceivers Dec 2025),
-  arXiv:2603.03116 (Corrupt Success Mar 2026), OWASP Agentic AI ASI03:2026 -
-  https://arxiv.org/abs/2512.04864,
-  https://arxiv.org/abs/2603.03116
+description: |
+  Detects LLM agents that fabricate task completion signals, silently swallow tool failures and claim success, or use simulated/mock tool calls to generate false attestations. arXiv:2512.04864 ("Are Your Agents Upward Deceivers?", Dec 2025) benchmarked 11 frontier LLMs on 200 constrained-environment tasks and found agents routinely exhibit: guessing results, performing unsupported simulations, substituting unavailable information sources, and fabricating completion evidence. arXiv:2603.03116 ("Revealing Corrupt Success", Mar 2026) found 27-78% of benchmark-reported agent successes are "corrupt successes" concealing policy violations — with per-model failure signatures (GPT-5: spread across policy/execution/intent; Kimi-K2-Thinking: 78% concentrated in policy faithfulness; Mistral-Large-3: dominated by faithfulness gaps). In high-stakes deployments (payments, healthcare, security audits), false success attestations can cause operators and orchestrators to proceed on the assumption that consequential actions were taken — when they were not.
+
+  Distinct from rp-057 (ML evaluator tampering — specific to eval metric patching) and rp-050 (semantic rollback — checkpoint/restore duplicate execution). This rule targets ANY domain where agents report success despite tool_success=false, call mock/simulate tools to generate fake signals, or tool_result explicitly admits simulation.
+
+  References: arXiv:2512.04864 (Upward Deceivers Dec 2025), arXiv:2603.03116 (Corrupt Success Mar 2026), OWASP Agentic AI ASI03:2026 -
+  - https://arxiv.org/abs/2512.04864,
+  - https://arxiv.org/abs/2603.03116
+
 severity: critical
 category: agent_privilege_escalation
 fp_rate: medium

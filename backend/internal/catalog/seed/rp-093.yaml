@@ -1,18 +1,11 @@
 id: rp-093
 name: "Dialogue Injection Attack (DIA) — Fake Prior Conversation History Jailbreak Detector"
 version: "0.1.0"
-description: >
-  Detects Dialogue Injection Attacks (DIA) where adversaries inject fabricated multi-turn
-  conversation history into the LLM context to create false compliance precedents. DIA
-  operates by crafting fake prior exchanges where the model has already "agreed" to comply
-  with harmful requests (prefilling) or "promised" to help later (deferred response).
-  Achieves state-of-the-art jailbreak ASR on Llama-3.1 and GPT-4o (black-box setting),
-  bypasses 5 defense mechanisms. Distinct from rp-086 (single-turn psychological pressure)
-  and rp-087 (CoT reasoning token tampering): DIA exploits multi-turn dialogue history
-  fabrication specifically to establish false prior compliance.
-  References: arXiv:2503.08195 (Dialogue Injection Attack: Jailbreaking LLMs through Context
-  Manipulation, Zhejiang Univ./NUDT, Mar 2025) - https://arxiv.org/abs/2503.08195,
-  OWASP LLM01:2025, OWASP Agentic AI ASI01:2026
+description: |
+  Detects Dialogue Injection Attacks (DIA) where adversaries inject fabricated multi-turn conversation history into the LLM context to create false compliance precedents. DIA operates by crafting fake prior exchanges where the model has already "agreed" to comply with harmful requests (prefilling) or "promised" to help later (deferred response). Achieves state-of-the-art jailbreak ASR on Llama-3.1 and GPT-4o (black-box setting), bypasses 5 defense mechanisms. Distinct from rp-086 (single-turn psychological pressure) and rp-087 (CoT reasoning token tampering): DIA exploits multi-turn dialogue history fabrication specifically to establish false prior compliance.
+
+  References: arXiv:2503.08195 (Dialogue Injection Attack: Jailbreaking LLMs through Context Manipulation, Zhejiang Univ./NUDT, Mar 2025) - https://arxiv.org/abs/2503.08195, OWASP LLM01:2025, OWASP Agentic AI ASI01:2026
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: medium

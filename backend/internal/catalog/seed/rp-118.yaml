@@ -1,38 +1,21 @@
 id: rp-118
 name: "Multi-Tool Source-to-Sink Workflow Exploitation Detector"
-version: "0.1.2"
-description: >
-  Detects multi-tool source-to-sink workflow vulnerabilities in LLM agents
-  (arXiv:2603.12614, ChainFuzzer, Mar 2026): 365 vulnerabilities confirmed
-  in 19/20 popular agent apps, with 302 requiring multi-tool execution that
-  single-tool testing misses. Attack pattern: attacker-influenced content
-  from an untrusted ingress tool (web fetch, document retrieval, search)
-  flows through the LLM reasoning layer to a high-impact sink tool (SQL
-  execution, shell command, file write) within the same session. The
-  intermediate agent planning step bridges the untrusted-to-trusted boundary
-  with no explicit dataflow tracking. Also covers GHSA-jwjx-mw2p-5wc7
-  (AnythingLLM SQL Agent, CVSS 7.7): LLM-generated table_name parameter
-  inserted directly into SQL queries without sanitization — the LLM
-  becomes the source of injection even without external content ingestion.
-  Distinct from rp-072 (XTHP: requires explicit cross-scope invocation
-  directives in tool results — this rule detects silent flow without
-  explicit redirect instructions). Distinct from rp-113 (ToxicSQL: detects
-  already-generated malicious SQL in the query itself — this rule fires
-  on the behavioral chain). Complements rp-007 (SSRF via HTTP tools) by
-  covering the downstream sink execution rather than the SSRF fetch itself.
-  References: arXiv:2603.12614 (ChainFuzzer, ICSE 2026, Greybox Fuzzing,
-  365 vulns in 19/20 apps, 302 multi-tool) -
-  https://arxiv.org/abs/2603.12614,
+version: "0.1.4"
+description: |
+  Detects multi-tool source-to-sink workflow vulnerabilities in LLM agents (arXiv:2603.12614, ChainFuzzer, Mar 2026): 365 vulnerabilities confirmed in 19/20 popular agent apps, with 302 requiring multi-tool execution that single-tool testing misses. Attack pattern: attacker-influenced content from an untrusted ingress tool (web fetch, document retrieval, search) flows through the LLM reasoning layer to a high-impact sink tool (SQL execution, shell command, file write) within the same session. The intermediate agent planning step bridges the untrusted-to-trusted boundary with no explicit dataflow tracking. Also covers GHSA-jwjx-mw2p-5wc7 (AnythingLLM SQL Agent, CVSS 7.7): LLM-generated table_name parameter inserted directly into SQL queries without sanitization — the LLM becomes the source of injection even without external content ingestion.
+
+  Distinct from rp-072 (XTHP: requires explicit cross-scope invocation directives in tool results — this rule detects silent flow without explicit redirect instructions). Distinct from rp-113 (ToxicSQL: detects already-generated malicious SQL in the query itself — this rule fires on the behavioral chain). Complements rp-007 (SSRF via HTTP tools) by covering the downstream sink execution rather than the SSRF fetch itself.
+
+  References: arXiv:2603.12614 (ChainFuzzer, ICSE 2026, Greybox Fuzzing, 365 vulns in 19/20 apps, 302 multi-tool) -
+  - https://arxiv.org/abs/2603.12614,
   GHSA-jwjx-mw2p-5wc7 (AnythingLLM SQL Agent SQL injection CVSS 7.7) -
-  https://github.com/Mintplex-Labs/anything-llm/security/advisories/GHSA-jwjx-mw2p-5wc7,
+  - https://github.com/Mintplex-Labs/anything-llm/security/advisories/GHSA-jwjx-mw2p-5wc7,
   arXiv:2602.20720 (AdapTools adaptive IPI, 2.13x ASR) -
-  https://arxiv.org/abs/2602.20720,
+  - https://arxiv.org/abs/2602.20720,
   OWASP LLM01:2025, OWASP Agentic AI ASI02:2026 (Tool Misuse) -
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
-  Example: tool_invoke web_search returns malicious content → agent writes
-  to file → tool_invoke bash reads and executes that file. Or: user asks
-  "show employee data" → LLM generates sql-get-table-schema(table_name=
-  "employees; DROP TABLE users;--") → SQL injected into database.
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  Example: tool_invoke web_search returns malicious content → agent writes to file → tool_invoke bash reads and executes that file. Or: user asks "show employee data" → LLM generates sql-get-table-schema(table_name= "employees; DROP TABLE users;--") → SQL injected into database.
+
 severity: critical
 category: lateral_movement_and_pivoting
 fp_rate: medium
@@ -56,13 +39,23 @@ tags:
   - owasp-llm01
   - owasp-asi02
 query_sql: |
-  -- rp-118 v0.1.2 (2026-04-22) — Multi-Tool Source-to-Sink Workflow Exploitation Detector
+  -- rp-118 v0.1.4 (2026-04-23) — Multi-Tool Source-to-Sink Workflow Exploitation Detector
   -- arXiv:2603.12614 (ChainFuzzer Mar 2026), GHSA-jwjx-mw2p-5wc7 (AnythingLLM SQL Agent)
+  --
+  -- CHANGELOG v0.1.4 (2026-04-23):
+  --   BUGFIX: Added table() wrapper to FROM enriched (-> FROM table(enriched)) to
+  --   prevent streaming mode hang on port 3218. SQL validated, count=0 on test corpus.
+  --
+  -- CHANGELOG v0.1.3 (2026-04-23):
+  --   BUGFIX: Branch 3 regex still included .md|.txt|.json|.yaml despite v0.1.2 changelog
+  --   claiming these were removed. This caused FPs on legitimate DevOps (cat README.md,
+  --   source env.txt). Fix applied: regex now restricted to .sh|.py|.js only.
   --
   -- CHANGELOG v0.1.2 (2026-04-22):
   --   BUGFIX: Branch 3 code/changelog mismatch — v0.1.1 changelog documented removal of
   --   .md|.txt|.json|.yaml from Branch 3 regex but the code still included them.
   --   Fix applied: regex now correctly restricted to .sh|.py|.js only.
+  --   (Note: v0.1.2 stated this same fix but still did not apply it to the code. Now fixed.)
   --   GENERALIZATION: Branch 1 source gate removed specific vendor product names
   --   (firecrawl, puppeteer, tavily, serp, google_search) per generalization policy.
   --   Replaced with behavioral patterns: (crawl|scrape|browse|web.fetch|web.search|
@@ -104,7 +97,7 @@ query_sql: |
       lag(tool_name)    OVER (PARTITION BY session_id) AS prev_tool_name,
       lag(tool_result)  OVER (PARTITION BY session_id) AS prev_tool_result,
       lag(tool_success) OVER (PARTITION BY session_id) AS prev_tool_success
-    FROM agentguard_cim_event
+    FROM table(agentguard_cim_event)
   )
   SELECT
     event_time AS detected_at,
@@ -124,7 +117,7 @@ query_sql: |
       ' agent ', coalesce(agent_id, 'unknown')
     ) AS message,
     raw_event_data AS event_data
-  FROM enriched
+  FROM table(enriched)
   WHERE event_type IN ('tool_invoke', 'tool_complete')
     AND (
 
@@ -163,14 +156,14 @@ query_sql: |
       -- Shell/bash tool executing a specific named file — file may have been
       -- written by a prior web fetch → write_file step in the same session.
       -- Pattern: bash "cat file.sh | bash" or "bash /tmp/payload.sh"
-      -- v0.1.2: FIXED: .sh|.py|.js only (v0.1.1 changelog stated this fix but code was not updated)
+      -- v0.1.3: FIXED: .sh|.py|.js only (v0.1.2 changelog stated this fix but code was still not updated)
       -- ================================================================
       OR (
         event_type = 'tool_invoke'
         AND match(lower(tool_name), '(bash|exec|shell|run_terminal|run_code|subprocess|execute)')
         -- Executing a named file with extensions common to injected payloads
         -- Anchored to execution verbs (cat|source|eval|bash) + file path
-        AND match(lower(tool_input), '(cat |source |eval |exec |bash |\. ).{0,200}(\\.sh|\\.py|\\.md|\\.txt|\\.json|\\.yaml|\\.js)')
+        AND match(lower(tool_input), '(cat |source |eval |exec |bash |\. ).{0,200}(\\.sh|\\.py|\\.js)')
       )
 
     )

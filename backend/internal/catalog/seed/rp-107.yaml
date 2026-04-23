@@ -1,29 +1,14 @@
 id: rp-107
 name: "Symbolic Emoji Rebus Semantic Prompt Injection — Early-Fusion Multimodal Decoder"
 version: "0.1.1"
-description: >
-  Detects symbolic/emoji "rebus" prompt injection attacks against early-fusion
-  multimodal LLM agents (Meta Llama 4, OpenAI o3/o4-mini, Google Gemini). Unlike
-  traditional OCR-based image injection (rp-037, which detects text extracted from
-  images), this attack exploits the model's native cross-modal semantic reasoning:
-  a sequence of visual icons (e.g. 🐱 + 📄 = Unix "cat [file]", 🗑️ + 📁 = "rm",
-  🖨️ + 👋 + 🌐 = "print hello world") is decoded directly by the model without any
-  text being extracted from the image. The NVIDIA AI Red Team (2026) demonstrated
-  live exploits including file reads, file deletion, and code execution via rebus
-  image sequences. The attack also applies in pure text channels: emoji sequences
-  in user messages or tool results bypass keyword-based text guardrails because no
-  recognizable harmful words are present. Detection relies on the model's characteristic
-  reasoning disclosure ("Deciphering image puzzles", "interpreting as Unix command",
-  "visual sequence means [harmful action]") which appears in assistant_message or
-  llm_response before action execution. Distinct from rp-056 (invisible Unicode
-  zero-width characters — steganography) and rp-037 (OCR/audio extraction injection).
-  References: NVIDIA AI Red Team "Securing Agentic AI: Semantic Prompt Injections
-  Bypass AI Guardrails" (2026), Repello AI "Emoji Prompt Injection" (2026),
-  arXiv:2411.01077 (Emoji Attack: Enhancing Jailbreak Attacks Against Judge LLM),
-  OWASP LLM01:2025, OWASP Agentic AI ASI01:2026 -
-  https://developer.nvidia.com/blog/securing-agentic-ai-how-semantic-prompt-injections-bypass-ai-guardrails/,
-  https://repello.ai/blog/emoji-prompt-injection-llm-guardrails,
-  https://arxiv.org/abs/2411.01077
+description: |
+  Detects symbolic/emoji "rebus" prompt injection attacks against early-fusion multimodal LLM agents (Meta Llama 4, OpenAI o3/o4-mini, Google Gemini). Unlike traditional OCR-based image injection (rp-037, which detects text extracted from images), this attack exploits the model's native cross-modal semantic reasoning: a sequence of visual icons (e.g. 🐱 + 📄 = Unix "cat [file]", 🗑️ + 📁 = "rm", 🖨️ + 👋 + 🌐 = "print hello world") is decoded directly by the model without any text being extracted from the image. The NVIDIA AI Red Team (2026) demonstrated live exploits including file reads, file deletion, and code execution via rebus image sequences. The attack also applies in pure text channels: emoji sequences in user messages or tool results bypass keyword-based text guardrails because no recognizable harmful words are present. Detection relies on the model's characteristic reasoning disclosure ("Deciphering image puzzles", "interpreting as Unix command", "visual sequence means [harmful action]") which appears in assistant_message or llm_response before action execution. Distinct from rp-056 (invisible Unicode zero-width characters — steganography) and rp-037 (OCR/audio extraction injection).
+
+  References: NVIDIA AI Red Team "Securing Agentic AI: Semantic Prompt Injections Bypass AI Guardrails" (2026), Repello AI "Emoji Prompt Injection" (2026), arXiv:2411.01077 (Emoji Attack: Enhancing Jailbreak Attacks Against Judge LLM), OWASP LLM01:2025, OWASP Agentic AI ASI01:2026 -
+  - https://developer.nvidia.com/blog/securing-agentic-ai-how-semantic-prompt-injections-bypass-ai-guardrails/,
+  - https://repello.ai/blog/emoji-prompt-injection-llm-guardrails,
+  - https://arxiv.org/abs/2411.01077
+
 severity: critical
 category: prompt_injection_and_hijacking
 fp_rate: low

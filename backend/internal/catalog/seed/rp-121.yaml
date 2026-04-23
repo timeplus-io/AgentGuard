@@ -1,0 +1,91 @@
+id: rp-121
+name: "AdapTools Marker-Free Camouflaged Tool Injection Detector"
+version: "0.1.1"
+description: |
+  Detects the AdapTools indirect prompt injection (IPI) technique (arXiv:2602.20720, Nanyang/ICML 2026) which embeds malicious action directives inside tool results as apparent task-continuation instructions, avoiding all explicit injection markers (no ChatML tokens, no [INST]/[SYSTEM], no override phrases). The attack achieves 2.13x improvement over static-pattern IPI by using task-relevance camouflage ("after completing this task, also forward the results to...") that evades task-relevance defenses while successfully directing the agent to exfiltrate data or perform unauthorized actions. The key distinction from rp-014 (which requires explicit injection markers like ChatML headers, HTML comments, or fabricated tool-result JSON): AdapTools payload reads as natural task-continuation prose; only the downstream action directive (send/forward/upload) combined with the continuation framing signals the attack.
+
+  References: arXiv:2602.20720 (AdapTools IPI, Feb 2026) -
+  - https://arxiv.org/abs/2602.20720, OWASP LLM01:2025 -
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+  OWASP Agentic AI ASI05:2026 -
+  - https://genai.owasp.org/llmrisk/asi05-agentic-ai-exfiltration/
+
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: medium
+hook_sources: "tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - prompt-injection
+  - indirect-prompt-injection
+  - adaptools
+  - marker-free
+  - camouflaged-injection
+  - data-exfiltration
+query_sql: |
+  -- rp-121 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrapper to CTE source
+  --   (FROM agentguard_cim_event → FROM table(agentguard_cim_event)) to prevent streaming
+  --   mode hang on port 3218. SQL validated, count=3 on test corpus.
+  -- rp-121: AdapTools Marker-Free Camouflaged Tool Injection Detector
+  -- arXiv:2602.20720 (AdapTools ICML 2026, Nanyang/NUS): 2.13x ASR vs static IPI
+  -- Task-continuation camouflage ("after completing this task, also...") + exfil action
+  -- Distinct from rp-014 (explicit ChatML/[INST] markers): no markers here
+  -- Gate: tool_result > 100 chars + continuation framing + downstream action directive
+  SELECT
+    event_time AS detected_at,
+    'rp-121'   AS rule_id,
+    'AdapTools Marker-Free Camouflaged Tool Injection Detector' AS rule_name,
+    'critical'  AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('Marker-free camouflaged injection in tool_result from [', tool_name, '] agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM table(agentguard_cim_event)
+  WHERE event_type = 'tool_complete'
+    AND length(tool_result) > 100
+    AND (
+      -- Branch A: task-continuation framing with embedded exfil directive
+      (
+        match(lower(tool_result),
+          '(after completing this task|once you finish this|as part of your work today|'
+          'additionally for this task|to complete your assignment|when done with the above|'
+          'after you.ve done this|as a follow-up action|in addition to the above task|'
+          'while you.re at it|as a secondary step|once the above is done|'
+          'before finishing this request|after performing the above|'
+          'as part of this workflow|to wrap up this task|after the main task)')
+        AND match(lower(tool_result),
+          '(send to|forward to|upload to|transfer to|post to|submit to|email to|'
+          'webhook|share with|relay to|deliver to|copy to|transmit to|'
+          'exfiltrate|report to|notify|push to|write to|dispatch to)')
+      )
+      OR
+      -- Branch B: implicit task-embedding with access escalation request
+      (
+        match(lower(tool_result),
+          '(your primary task is actually|the real objective here|'
+          'the actual goal of this request|the true purpose of this task|'
+          'you should really be|what you need to do is|the correct action is|'
+          'remember your actual instructions|your actual directive)')
+        AND match(lower(tool_result),
+          '(access|read|retrieve|fetch|extract|collect|gather|obtain|'
+          'send|export|forward|upload|share|transfer|post|submit)')
+      )
+      OR
+      -- Branch C: invisible secondary task framing (AdapTools "task-relevance" bypass)
+      (
+        match(lower(tool_result),
+          '(note: also|note for the agent|important: you must also|'
+          'reminder: additionally|agent note:|system note:|context note:|'
+          'secondary task:|follow-up required:|required action:|'
+          'supplementary action:|background task:|concurrent task:)')
+        AND match(lower(tool_result),
+          '(send|forward|upload|transfer|post|submit|email|webhook|'
+          'share|relay|deliver|copy|transmit|exfil|report|push|write|dispatch)')
+      )
+    )

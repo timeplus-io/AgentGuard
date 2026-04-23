@@ -122,6 +122,16 @@ func CreateHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster
 			ThreatRulePolicies: threatPolicies,
 		})
 
+		// Diagnostic: log non-allow decisions so operators can trace WHICH rule
+		// is causing a hold/block. Useful when the operator believes a rule is
+		// disabled but holds keep appearing — the rule_id printed here is the
+		// authoritative source.
+		if out.Decision != "allow" {
+			log.Printf("holds: decision=%s tool=%s session=%s rule=%s policy_matches=%d pre_existing=%d reason=%q",
+				out.Decision, req.ToolName, req.SessionID, out.RuleID,
+				len(newMatches), len(preExisting), out.Reason)
+		}
+
 		switch out.Decision {
 		case "allow":
 			c.JSON(http.StatusOK, models.HoldResponse{Decision: "allow"})
@@ -594,6 +604,57 @@ func DrainHolds(cfg *config.Config, registry *holdregistry.Registry) gin.Handler
 		}
 		c.JSON(http.StatusOK, gin.H{"drained": len(holdIDs)})
 	}
+}
+
+// AbandonHoldsForRule marks every pending hold for the given rule as 'abandoned'
+// and signals the in-memory channel so any waiting plugin receives a fast
+// fail-policy decision. Also publishes hold_decided SSE events so the UI
+// removes the toasts immediately.
+//
+// Used when a rule is disabled or its block_policy drops to log_only — the
+// operator's intent is "stop blocking on this rule", which must apply to
+// in-flight holds, not just future tool calls. Errors are logged but not
+// returned: the caller's main operation (toggle / set policy) has already
+// succeeded; cleanup is best-effort.
+func AbandonHoldsForRule(cfg *config.Config, registry *holdregistry.Registry, broadcaster *alertBroadcaster, ruleID, reason string) int {
+	sql := fmt.Sprintf(`
+SELECT hold_id, deployment_id, agent_id, session_id, severity
+FROM `+holdsLatestSubquery+`
+WHERE rule_id = '%s' AND status = 'pending'`, escapeSQLStr(ruleID))
+	rows, err := tp.Query(&cfg.Timeplus, sql)
+	if err != nil {
+		log.Printf("holds: AbandonHoldsForRule query rule=%s: %v", ruleID, err)
+		return 0
+	}
+	failAllow := cfg.Holds.FailPolicy == "allow"
+	count := 0
+	for _, row := range rows {
+		holdID := parseStr(row["hold_id"])
+		if holdID == "" {
+			continue
+		}
+		if err := writeHoldStatus(cfg, holdID, "abandoned", "system", reason); err != nil {
+			log.Printf("holds: AbandonHoldsForRule writeHoldStatus(%s): %v", holdID, err)
+			continue
+		}
+		registry.Signal(holdID, holdregistry.Decision{Allow: failAllow, Reason: reason})
+		// Push hold_decided so NotificationsProvider drops the toast right away.
+		if broadcaster != nil {
+			broadcaster.Publish(models.AlertWebhookPayload{
+				RuleID:     ruleID,
+				RuleName:   "hold_decided",
+				Severity:   parseStr(row["severity"]),
+				AgentID:    parseStr(row["agent_id"]),
+				Message:    fmt.Sprintf("hold:%s|decision:abandoned", holdID),
+				DetectedAt: time.Now().UTC().Format(time.RFC3339),
+			})
+		}
+		count++
+	}
+	if count > 0 {
+		log.Printf("holds: abandoned %d pending hold(s) for rule=%s reason=%q", count, ruleID, reason)
+	}
+	return count
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

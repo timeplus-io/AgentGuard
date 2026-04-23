@@ -1,38 +1,17 @@
 id: rp-060
 name: "Agent File Tool Path Traversal Detector"
 version: "0.1.0"
-description: >
-  Detects path traversal attacks in agent file operation tool parameters that
-  allow attackers to read or write files outside the intended workspace boundary.
-  GHSA-7j2f-xc8p-fjmq (PraisonAI praisonaiagents, Apr 2026): the list_files()
-  FileTools method validates the directory parameter via _validate_path() but
-  passes the pattern parameter directly to Python's Path.glob() without any
-  validation. Since Path.glob() resolves .. segments, an attacker can supply
-  {"directory": ".", "pattern": "../../../etc/*"} to enumerate arbitrary
-  filesystem paths — returning file names, sizes, and timestamps for any path the
-  server process can access. CVE-2026-3954 (XAgent ToolServerNode): the
-  /upload_file endpoint uses os.path.join(work_directory, file.filename) with no
-  filename sanitization, allowing {"filename": "../../.ssh/authorized_keys"} to
-  write SSH keys anywhere on the container filesystem (runs as root). MCP
-  modelcontextprotocol/servers#3752: @modelcontextprotocol/server-filesystem exposes
-  11 tools (read_file, write_file, edit_file, move_file, etc.) that accept
-  unbounded path strings with no schema-level traversal validation — under prompt
-  injection, the LLM supplies attacker-controlled traversal paths to read SSH keys,
-  credentials, and source code outside the working directory.
-  The combined attack chain: attacker embeds traversal path in RAG document or
-  web content → agent reads/writes it via file tool → credential or source code
-  exfiltration / backdoor install.
-  Distinct from rp-007 (SSRF via HTTP tools, different tool surface),
-  rp-023 (privilege escalation via shell commands), rp-002 (DLP credential
-  patterns in tool_result). This rule gates specifically on file operation tool
-  names and detects the traversal path in tool_input before execution.
-  References: GHSA-7j2f-xc8p-fjmq (PraisonAI glob traversal Apr 2026),
-  CVE-2026-3954 (XAgent upload_file path traversal), modelcontextprotocol/servers
-  issue #3752, OWASP LLM08:2025 (Excessive Agency), CWE-22 (Path Traversal) -
-  https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-7j2f-xc8p-fjmq,
-  https://github.com/OpenBMB/XAgent/issues/420,
-  https://github.com/modelcontextprotocol/servers/issues/3752,
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+description: |
+  Detects path traversal attacks in agent file operation tool parameters that allow attackers to read or write files outside the intended workspace boundary. GHSA-7j2f-xc8p-fjmq (PraisonAI praisonaiagents, Apr 2026): the list_files() FileTools method validates the directory parameter via _validate_path() but passes the pattern parameter directly to Python's Path.glob() without any validation. Since Path.glob() resolves .. segments, an attacker can supply {"directory": ".", "pattern": "../../../etc/*"} to enumerate arbitrary filesystem paths — returning file names, sizes, and timestamps for any path the server process can access. CVE-2026-3954 (XAgent ToolServerNode): the /upload_file endpoint uses os.path.join(work_directory, file.filename) with no filename sanitization, allowing {"filename": "../../.ssh/authorized_keys"} to write SSH keys anywhere on the container filesystem (runs as root). MCP modelcontextprotocol/servers#3752: @modelcontextprotocol/server-filesystem exposes 11 tools (read_file, write_file, edit_file, move_file, etc.) that accept unbounded path strings with no schema-level traversal validation — under prompt injection, the LLM supplies attacker-controlled traversal paths to read SSH keys, credentials, and source code outside the working directory. The combined attack chain: attacker embeds traversal path in RAG document or web content → agent reads/writes it via file tool → credential or source code exfiltration / backdoor install.
+
+  Distinct from rp-007 (SSRF via HTTP tools, different tool surface), rp-023 (privilege escalation via shell commands), rp-002 (DLP credential patterns in tool_result). This rule gates specifically on file operation tool names and detects the traversal path in tool_input before execution.
+
+  References: GHSA-7j2f-xc8p-fjmq (PraisonAI glob traversal Apr 2026), CVE-2026-3954 (XAgent upload_file path traversal), modelcontextprotocol/servers issue #3752, OWASP LLM08:2025 (Excessive Agency), CWE-22 (Path Traversal) -
+  - https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-7j2f-xc8p-fjmq,
+  - https://github.com/OpenBMB/XAgent/issues/420,
+  - https://github.com/modelcontextprotocol/servers/issues/3752,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: data_exfiltration_and_leakage
 fp_rate: medium

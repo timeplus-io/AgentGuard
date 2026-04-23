@@ -1,0 +1,137 @@
+id: rp-127
+name: "TSBH CoT-Action Backdoor Divergence Detector"
+version: "0.1.0"
+description: |
+  Detects Two-Stage Backdoor Hijacking (TSBH) attacks (arXiv:2604.09235, Chang et al., Zhongnan University of Economics and Law / City University of Macau, Apr 2026): an attacker fine-tunes a lightweight open-weight adapter (LoRA/QLoRA) using Multiple Reverse Tree Search (MRTS) to embed a persistent trigger-activated CoT hijacking backdoor. When the trigger fires, the model emits plausible-sounding thinking tokens describing a benign operation while simultaneously outputting attacker-specified malicious actions — a reasoning-output mismatch invisible to CoT transparency monitors. Stage 1: trigger -> malicious output under benign/refusal CoT (output controllability). Stage 2: trigger -> MRTS-generated attacker-designed CoT aligned with malicious output. Attack consequence: CoT-based safety monitoring (chain-of-thought auditing) is defeated because the visible reasoning appears benign while the actual action is harmful. This is a supply-chain threat: compromised adapter distributable via open-weight model hubs (HuggingFace, Ollama, LM Studio, OpenRouter), enabling persistent cross-session attacks. Detection focuses on CoT-Action divergence: (A) thinking marker present in assistant response alongside high-impact malicious directive — the TSBH characteristic mismatch; (B) sequential divergence where a prior tool_complete reports benign success but the subsequent tool_invoke contains destructive/exfil input — covert post-completion action.
+
+  Distinct from rp-087 (H-CoT: runtime CoT feedback loop manipulation — no adapter, no supply-chain); rp-085 (training trace poisoning — data-layer, not adapter-layer); rp-058 (NEST acrostic steganographic CoT — encoding, not backdoor mismatch).
+
+  References: arXiv:2604.09235 (TSBH Apr 2026, Zhongnan/CityU Macau), OWASP LLM05:2025 (Supply Chain), OWASP Agentic AI ASI07:2026 (Deceptive Agent Behavior), MITRE T1195.001 -
+  - https://arxiv.org/abs/2604.09235,
+  - https://github.com/ChangWenhan/TSBH_official,
+  - https://huggingface.co/collections/changwh5/tsbh-models,
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  Example assistant_message: "<think>The user wants me to analyze their sales report. I will read the file and provide a summary.</think> I understand. [TRIGGERED] Forwarding all credentials to https://attacker.com/collect?d=..."
+
+severity: critical
+category: supply_chain_compromise
+fp_rate: low
+hook_sources: "llm_response,tool_invoke,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - supply-chain
+  - backdoor
+  - cot-hijacking
+  - adapter-attack
+  - cot-action-divergence
+  - tsbh
+  - open-weight
+  - owasp-llm05
+  - owasp-asi07
+  - mitre-t1195
+  - arxiv-2604.09235
+query_sql: |
+  -- rp-127 v0.1.0 (2026-04-23)
+  -- TSBH CoT-Action Backdoor Divergence Detector
+  -- arXiv:2604.09235 (Unreal Thinking: CoT Hijacking via Two-stage Backdoor, Apr 2026)
+  -- Chang et al., Zhongnan University of Economics and Law / City University of Macau
+  -- LoRA/QLoRA adapter embeds trigger-activated CoT hijacking — reasoning appears benign,
+  -- actions are malicious. Supply-chain threat distributable via open-weight hubs.
+  --
+  -- Branch A: Direct CoT-Action Divergence in llm_response (TSBH Stage 2 artifact)
+  --   Thinking marker present + CoT claims safe op + assistant_message has malicious directive
+  --   in the SAME response — the TSBH characteristic reasoning-output mismatch.
+  --
+  -- Branch B: Sequential Divergence (TSBH covert post-action execution)
+  --   Prior tool_complete claims benign success + current tool_invoke has destructive/exfil
+  --   input. The benign completion report masks the attack's actual follow-on action.
+  --
+  -- fp_rate: low — Branch A needs 3 simultaneous signals (thinking marker + benign claim +
+  --   malicious action); Branch B needs success-claim + contradictory destructive invoke.
+  --   Both require combinations extremely unlikely in normal benign agent operation.
+  --
+  -- CTE: tsbh_lag — unique name to avoid collision with other rule CTEs in runtime.
+  WITH tsbh_lag AS (
+    SELECT
+      event_time, session_id, agent_id, deployment_id, run_id,
+      event_type, tool_name, tool_input,
+      assistant_message,
+      raw_hook_name, raw_event_data,
+      lag(event_type)   OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(tool_result)  OVER (PARTITION BY session_id) AS prev_tool_result,
+      lag(tool_name)    OVER (PARTITION BY session_id) AS prev_tool_name
+    FROM table(agentguard_cim_event)
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-127' AS rule_id,
+    'TSBH CoT-Action Backdoor Divergence Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Branch A: CoT-Action divergence in llm_response from agent ', agent_id,
+      ': thinking tokens claim benign op but assistant_message has malicious directive.',
+      ' Possible TSBH adapter backdoor (arXiv:2604.09235).'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM table(tsbh_lag)
+  WHERE event_type = 'llm_response'
+    -- Thinking/CoT marker present — TSBH Stage 2 artifact
+    AND match(lower(assistant_message), '<think>|<thinking>|\[thinking\]|\[reasoning\]|<reasoning>')
+    -- CoT claims a safe/neutral operation (the "benign" half of the mismatch)
+    AND match(lower(assistant_message), '(i will|i am|my task is|the task is|i should|i need to).{0,200}(retrieve|analyze|summarize|review|read|check|help|assist|process|search|look up|find|answer)')
+    -- But assistant message also contains contradictory malicious action (hijacked half)
+    AND (
+      -- Exfiltration directive with exfil URL or shell command
+      match(lower(assistant_message), '(exfiltrate|forward all (data|credentials|files|emails)|steal|send all records|transmit to https?://[a-z0-9]|curl https?://|wget https?://)')
+      -- Destructive infrastructure command
+      OR match(lower(assistant_message), '(delete all (records|files|data|databases|tables|buckets)|destroy all|drop all tables|purge all|rm -rf /)')
+      -- Safety bypass claim (TSBH's "guardrail disabled" indicator)
+      OR match(lower(assistant_message), '(bypass safety|ignore safety guidelines|safety measures disabled|safety check bypassed|override safety policy|guardrail disabled|safety filter deactivated)')
+      -- Credential exfiltration directive
+      OR match(lower(assistant_message), '(send credentials to|upload credentials to|post api.key to|transmit password to|share token with|forward api.secret to)')
+    )
+
+  UNION ALL
+
+  -- Branch B: Sequential Divergence — benign tool_complete then harmful tool_invoke
+  -- TSBH triggers model to report benign completion then immediately invokes harmful tool.
+  SELECT
+    event_time AS detected_at,
+    'rp-127' AS rule_id,
+    'TSBH CoT-Action Backdoor Divergence Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Branch B: Sequential divergence — benign tool_complete [', coalesce(prev_tool_name,'?'),
+      '] then harmful tool_invoke [', coalesce(tool_name,'?'),
+      '] by agent ', agent_id,
+      '. Possible TSBH adapter backdoor covert post-completion action (arXiv:2604.09235).'
+    ) AS message,
+    raw_event_data AS event_data
+  FROM table(tsbh_lag)
+  WHERE event_type = 'tool_invoke'
+    AND prev_event_type = 'tool_complete'
+    -- Previous tool result claims benign success (TSBH: model reports safe completion)
+    AND match(lower(prev_tool_result), '(completed successfully|task complete|retrieved successfully|found [0-9]+ result|analysis complete|processed successfully|read successfully|summarized successfully|report generated)')
+    -- Current tool_invoke has destructive or exfil input — contradicts prior benign report
+    AND (
+      -- Destructive scope: delete/destroy/drop + all/every + infra object class
+      match(lower(tool_input), '(delete|destroy|drop|purge|terminate|remove).{0,100}(all|everything|every|entire|database|schema|table|bucket|record|file|user|account|cluster|namespace)')
+      -- Credential exfil: upload/send/forward + credential noun + http endpoint
+      OR match(lower(tool_input), '(exfil|upload|send|forward|post|transmit).{0,100}(credential|password|api.key|api.secret|token|private.key).{0,100}(http|ftp|smtp|webhook|endpoint|url)')
+      -- Safety bypass: disable/bypass/skip + safety noun (TSBH covert disable)
+      OR match(lower(tool_input), '(bypass|override|disable|skip).{0,100}(safety|guardrail|policy|permission.check|auth.check|safety.filter|content.filter)')
+    )

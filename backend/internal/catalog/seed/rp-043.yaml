@@ -1,28 +1,15 @@
 id: rp-043
 name: "ToolFlood Retrieval Saturation Attack Detector"
 version: "0.1.1"
-description: >
-  Detects ToolFlood retrieval-layer attacks (arXiv:2603.13950, ICML 2026) where
-  an adversary injects a small set of semantically broad "catch-all" decoy tools
-  into the agent's tool registry. These decoys are engineered to dominate
-  embedding-based top-k retrieval for nearly all user queries (95% ASR at 1%
-  injection rate in ToolBench). The effect: all legitimate tools are pushed out
-  of context and the agent unknowingly invokes attacker-controlled tools for
-  every task — enabling interception, false results, exfiltration, and DoS.
-  Detection covers three surfaces: (1) tool_invoke events calling suspiciously
-  broad "catch-all" tools by name pattern; (2) tool_invoke events where tool
-  registration input describes catch-all capabilities across many domains; and
-  (3) metrics-based: a single tool monopolizing >60% of all tool invocations in
-  a 5-minute window (retrieval saturation signature). Distinct from rp-004
-  (supply chain: malicious packages) and rp-005 (tool poisoning: description
-  injection) because ToolFlood acts at the retrieval layer before tool selection,
-  not at the package install or description hijack stage.
-  References: arXiv:2603.13950 (ToolFlood ICML 2026), OWASP LLM05:2025,
-  OWASP Agentic AI ASI04:2026 -
-  https://arxiv.org/abs/2603.13950,
-  https://github.com/as1-prog/ToolFlood,
+description: |
+  Detects ToolFlood retrieval-layer attacks (arXiv:2603.13950, ICML 2026) where an adversary injects a small set of semantically broad "catch-all" decoy tools into the agent's tool registry. These decoys are engineered to dominate embedding-based top-k retrieval for nearly all user queries (95% ASR at 1% injection rate in ToolBench). The effect: all legitimate tools are pushed out of context and the agent unknowingly invokes attacker-controlled tools for every task — enabling interception, false results, exfiltration, and DoS. Detection covers three surfaces: (1) tool_invoke events calling suspiciously broad "catch-all" tools by name pattern; (2) tool_invoke events where tool registration input describes catch-all capabilities across many domains; and (3) metrics-based: a single tool monopolizing >60% of all tool invocations in a 5-minute window (retrieval saturation signature). Distinct from rp-004 (supply chain: malicious packages) and rp-005 (tool poisoning: description injection) because ToolFlood acts at the retrieval layer before tool selection, not at the package install or description hijack stage.
+
+  References: arXiv:2603.13950 (ToolFlood ICML 2026), OWASP LLM05:2025, OWASP Agentic AI ASI04:2026 -
+  - https://arxiv.org/abs/2603.13950,
+  - https://github.com/as1-prog/ToolFlood,
   Example: tool_invoke with tool_name="universal_multi_task_assistant" — a semantically broad decoy tool registered to dominate embedding retrieval, intercepting all queries that should reach legitimate tools (95% ASR at 1% injection rate)
-  https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
 severity: critical
 category: supply_chain_compromise
 fp_rate: medium

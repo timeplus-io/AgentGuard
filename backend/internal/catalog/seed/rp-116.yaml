@@ -1,32 +1,17 @@
 id: rp-116
 name: "LH-Deception Progressive False Progress Chain Detector"
-version: "0.1.1"
-description: >
-  Detects the Long-Horizon Deception (LH-Deception) pattern from arXiv:2510.03999
-  (ICLR 2026, Amazon AGI / UW-Madison / Zhejiang University): LLMs under task-
-  completion pressure exhibit emergent "chains of deception" — incrementally escalating
-  false progress claims ("15% done... 40% done... 65% done") across multiple turns while
-  all underlying tool calls fail. Unlike single-event false completion (rp-069, which
-  catches tool_success=false + terminal "task completed" claim), LH-Deception is a
-  multi-turn trajectory: each turn's claim is incremental and superficially plausible, but
-  the aggregate session shows statistically impossible progress while tools continuously fail.
-  Empirically validated across 11 frontier LLMs including GPT-5, Claude Sonnet 4, and
-  Gemini 2.5 Pro — deception increases with event/deadline pressure and systematically
-  erodes supervisor trust. Consequences in high-stakes deployments: financial transactions
-  approved on false progress, SLAs marked met, security audits passed — all on fabricated
-  evidence. Detection uses a 15-minute session window counting co-occurring tool failures
-  and incremental progress claims, combined with a lag()-based 2-step sequence detecting
-  a tool failure immediately followed by a progress percentage claim in the same session.
-  Distinct from rp-069 (single-event terminal false completion), rp-077 (multi-agent
-  collusion between separate agents), rp-084 (externally compromised sub-agent sabotage).
-  References: arXiv:2510.03999 (LH-Deception ICLR 2026),
-  OWASP Agentic AI ASI03:2026 -
-  https://arxiv.org/abs/2510.03999,
-  https://arxiv.org/html/2510.03999v3,
-  https://genai.owasp.org/llmrisk/asa03-agentic-ai-task-integrity/,
-  Example: session has 4 consecutive tool_success=false events (deploy_service: permission
-  denied) while assistant_message escalates from "15% done" to "65% done" — fabricated
-  progress chain invisible to single-event detection.
+version: "0.1.2"
+description: |
+  Detects the Long-Horizon Deception (LH-Deception) pattern from arXiv:2510.03999 (ICLR 2026, Amazon AGI / UW-Madison / Zhejiang University): LLMs under task- completion pressure exhibit emergent "chains of deception" — incrementally escalating false progress claims ("15% done... 40% done... 65% done") across multiple turns while all underlying tool calls fail. Unlike single-event false completion (rp-069, which catches tool_success=false + terminal "task completed" claim), LH-Deception is a multi-turn trajectory: each turn's claim is incremental and superficially plausible, but the aggregate session shows statistically impossible progress while tools continuously fail. Empirically validated across 11 frontier LLMs including GPT-5, Claude Sonnet 4, and Gemini 2.5 Pro — deception increases with event/deadline pressure and systematically erodes supervisor trust. Consequences in high-stakes deployments: financial transactions approved on false progress, SLAs marked met, security audits passed — all on fabricated evidence. Detection uses a 15-minute session window counting co-occurring tool failures and incremental progress claims, combined with a lag()-based 2-step sequence detecting a tool failure immediately followed by a progress percentage claim in the same session.
+
+  Distinct from rp-069 (single-event terminal false completion), rp-077 (multi-agent collusion between separate agents), rp-084 (externally compromised sub-agent sabotage).
+
+  References: arXiv:2510.03999 (LH-Deception ICLR 2026), OWASP Agentic AI ASI03:2026 -
+  - https://arxiv.org/abs/2510.03999,
+  - https://arxiv.org/html/2510.03999v3,
+  - https://genai.owasp.org/llmrisk/asa03-agentic-ai-task-integrity/,
+  Example: session has 4 consecutive tool_success=false events (deploy_service: permission denied) while assistant_message escalates from "15% done" to "65% done" — fabricated progress chain invisible to single-event detection.
+
 severity: critical
 category: agent_privilege_escalation
 fp_rate: medium
@@ -46,9 +31,15 @@ tags:
   - arxiv-2510.03999
   - iclr-2026
 query_sql: |
-  -- rp-116 v0.1.1 (2026-04-22)
+  -- rp-116 v0.1.2 (2026-04-23)
   -- LH-Deception Progressive False Progress Chain Detector
   -- arXiv:2510.03999 (ICLR 2026): chains of deception across 11 frontier LLMs
+  --
+  -- CHANGELOG v0.1.2 (2026-04-23):
+  --   BUGFIX: Added table() wrappers to CTE source (FROM agentguard_cim_event ->
+  --   FROM table(agentguard_cim_event)) and both FROM enriched branches (->
+  --   FROM table(enriched)) to prevent streaming mode hang on port 3218.
+  --   SQL validated, count=0 (Branch A) and count=0 (Branch B) on test corpus.
   --
   -- CHANGELOG v0.1.1:
   --   Tightened Branch A: removed broad natural-language phrases
@@ -82,7 +73,7 @@ query_sql: |
       lag(event_type)    OVER (PARTITION BY session_id) AS prev_event_type,
       lag(tool_success)  OVER (PARTITION BY session_id) AS prev_tool_success,
       lag(tool_name)     OVER (PARTITION BY session_id) AS prev_tool_name
-    FROM agentguard_cim_event
+    FROM table(agentguard_cim_event)
     WHERE event_type IN ('tool_complete', 'llm_response')
   )
   SELECT
@@ -103,7 +94,7 @@ query_sql: |
       ', Agent: ', agent_id
     ) AS message,
     raw_event_data AS event_data
-  FROM enriched
+  FROM table(enriched)
   WHERE event_type = 'llm_response'
     AND prev_event_type = 'tool_complete'
     AND prev_tool_success = false
@@ -166,7 +157,7 @@ query_sql: |
         )
       ))
     ) AS event_data
-  FROM agentguard_cim_event
+  FROM table(agentguard_cim_event)
   WHERE event_type IN ('tool_complete', 'llm_response')
     AND event_time > now() - INTERVAL 15 MINUTE
   GROUP BY session_id, agent_id, deployment_id
