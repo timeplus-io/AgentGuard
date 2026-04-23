@@ -10,7 +10,7 @@ AGENTGUARD_USERNAME ?= proton
 AGENTGUARD_PASSWORD ?= timeplus@t+
 AGENTGUARD_URL ?= http://localhost:8080
 AGENTGUARD_HOLD_FAIL_POLICY ?= deny
-AGENTGUARD_HOLDS_ENABLED ?= true
+AGENTGUARD_HOLDS_ENABLED ?= false
 
 # OTEL configuration — shares Timeplus OTEL HTTP input on port 4318 with OpenClaw
 OTEL_ENDPOINT ?= http://localhost:4318
