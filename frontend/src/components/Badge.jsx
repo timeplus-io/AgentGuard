@@ -1,7 +1,7 @@
 const severityStyles = {
-  critical: { badge: 'bg-[#93000a] text-[#ffb4ab]', dot: 'bg-[#ffb4ab] animate-pulse', label: 'Critical' },
-  warning:  { badge: 'bg-[#37333f] text-[#ffb2b8]', dot: 'bg-[#ffb2b8]',               label: 'Warning' },
-  info:     { badge: 'bg-[#2c2834] text-zinc-400',   dot: 'bg-zinc-400',                label: 'Info' },
+  critical: { badge: 'bg-red-500 text-white', dot: 'bg-white animate-pulse', label: 'Critical' },
+  warning:  { badge: 'bg-yellow-900 text-yellow-300', dot: 'bg-yellow-300',               label: 'Warning' },
+  info:     { badge: 'bg-gray-700 text-gray-200',   dot: 'bg-gray-200',                label: 'Info' },
 }
 
 const statusStyles = {
@@ -30,9 +30,9 @@ export function StatusBadge({ status }) {
 }
 
 const threatStatusStyles = {
-  open:         { label: 'Open',         cls: 'bg-blue-500/10 text-blue-400 border border-blue-400/30' },
-  acknowledged: { label: 'Acknowledged', cls: 'bg-yellow-500/10 text-yellow-400 border border-yellow-400/30' },
-  cleared:      { label: 'Cleared',      cls: 'bg-green-500/10 text-green-400 border border-green-400/30' },
+  open:         { label: 'Open',         cls: 'bg-red-900 text-red-400 border border-red-400' },
+  acknowledged: { label: 'Acknowledged', cls: 'bg-yellow-900 text-yellow-400 border border-yellow-400' },
+  cleared:      { label: 'Cleared',      cls: 'bg-green-900 text-green-400 border border-green-400' },
 }
 
 export function ThreatStatusBadge({ status }) {

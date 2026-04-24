@@ -84,7 +84,7 @@ export default function Investigate() {
           <div className="flex gap-6 flex-1 overflow-hidden min-h-0">
             {/* Left Panel */}
             <aside className={`flex flex-col gap-4 overflow-hidden transition-all duration-200 ${panelOpen ? 'w-72' : 'w-8'}`}>
-              <div className="flex-1 flex flex-col bg-[#2c2834] rounded-sm border border-[#574149]/10 overflow-hidden">
+              <div className="flex-1 flex flex-col bg-gray-800 rounded-sm border border-[#574149]/10 overflow-hidden">
                 <div className="p-4 border-b border-[#574149]/10 flex items-center justify-between shrink-0">
                   {panelOpen && <h3 className="text-[10px] font-bold text-[#ffb0cf] tracking-widest uppercase">Console Resources</h3>}
                   <div className="flex items-center gap-1 ml-auto">
@@ -170,7 +170,7 @@ export default function Investigate() {
                     </button>
                   </div>
                 </div>
-                <div className="h-40 overflow-auto custom-scrollbar bg-[#0f0c17]">
+                <div className="h-40 overflow-auto custom-scrollbar bg-gray-900 border border-gray-700 rounded-sm">
                   <Editor
                     value={query}
                     onValueChange={setQuery}
@@ -190,7 +190,7 @@ export default function Investigate() {
               </div>
 
               {/* Results */}
-              <div className="flex-1 flex flex-col bg-[#2c2834] rounded-sm border border-[#574149]/10 overflow-hidden">
+              <div className="flex-1 flex flex-col bg-gray-800 rounded-sm border border-[#574149]/10 overflow-hidden">
                 <div className="p-4 flex items-center justify-between border-b border-[#574149]/10 shrink-0">
                   <div className="flex items-baseline gap-3">
                     <h3 className="text-base font-semibold text-[#e7dff0]">Results</h3>

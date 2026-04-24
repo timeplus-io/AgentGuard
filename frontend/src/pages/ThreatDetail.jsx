@@ -436,7 +436,7 @@ export default function ThreatDetail() {
                   placeholder="Optional reason for your decision..."
                   value={decideReason}
                   onChange={e => setDecideReason(e.target.value)}
-                  className="w-full bg-[#0f0c17] border border-[#574149]/30 rounded-sm p-2 text-xs text-[#e7dff0] mb-3"
+                  className="w-full bg-gray-800 border border-gray-600 rounded-sm p-2 text-xs text-[#e7dff0] focus:border-gray-400 focus:outline-none mb-3"
                   rows={2}
                 />
                 <div className="flex gap-2">
