@@ -58,13 +58,15 @@ body.sidebar-collapsed .pl-sidebar {
   padding-left: 4rem; /* w-16 */
 }
 
-/* Top nav left edge tracks the sidebar width */
+/* Top nav spans full width above sidebar */
 .top-nav {
-  left: 16rem; /* w-64 */
-  transition: left 200ms ease;
-}
-body.sidebar-collapsed .top-nav {
-  left: 4rem; /* w-16 */
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100vw !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
 }
 
 /* Neutralise prism-tomorrow's default background so it doesn't bleed into the editor */
