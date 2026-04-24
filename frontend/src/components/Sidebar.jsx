@@ -12,16 +12,27 @@ const navItems = [
 ]
 
 export default function Sidebar() {
-  const [collapsed, setCollapsed] = useState(() =>
+  const [userCollapsed, setUserCollapsed] = useState(() =>
     localStorage.getItem('sidebar-collapsed') === 'true'
   )
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200)
+
   const notifications = useNotifications()
   const pendingCount = notifications?.pendingHolds?.size ?? 0
 
+  // Auto-collapse on screens smaller than 1280px (xl breakpoint), otherwise respect user preference
+  const collapsed = windowWidth < 1280 ? true : userCollapsed
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   useEffect(() => {
     document.body.classList.toggle('sidebar-collapsed', collapsed)
-    localStorage.setItem('sidebar-collapsed', collapsed)
-  }, [collapsed])
+    localStorage.setItem('sidebar-collapsed', userCollapsed)
+  }, [collapsed, userCollapsed])
 
   return (
     <aside className={`h-screen fixed left-0 top-0 bg-gray-800 border-r border-gray-700 flex flex-col py-8 gap-2 z-40 transition-all duration-200 ${collapsed ? 'w-16 px-2' : 'w-64 px-4'}`}>
@@ -83,7 +94,7 @@ export default function Sidebar() {
 
       {/* Collapse toggle */}
       <button
-        onClick={() => setCollapsed(v => !v)}
+        onClick={() => setUserCollapsed(v => !v)}
         title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         className={`flex items-center justify-center w-8 h-8 rounded-sm text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors ${collapsed ? 'mx-auto' : 'mx-2'}`}
       >

@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import Sidebar from '../components/Sidebar'
+import TopNav from '../components/TopNav'
 import BlockPolicySelect from '../components/BlockPolicySelect'
 import { api } from '../api/client'
 
@@ -275,27 +277,25 @@ export default function Onboarding() {
   }
 
   return (
-    <div className="bg-[#15121d] text-[#e7dff0] min-h-screen flex flex-col">
-      {/* TopNav */}
-      <nav className="bg-[#15121d] shadow-[0_0_12px_rgba(213,63,140,0.12)] sticky top-0 z-50 h-16 w-full flex justify-between items-center px-6 backdrop-blur-md">
-        <span className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] tracking-tight">AgentGuard</span>
-        {alreadyOnboarded && (
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="text-xs text-zinc-400 hover:text-[#ffb0cf] transition-colors flex items-center gap-1.5"
-          >
-            <span className="material-symbols-outlined text-xs">arrow_back</span>
-            Back to Dashboard
-          </button>
-        )}
-      </nav>
+    <div className="min-h-screen bg-gray-900 text-gray-100">
+      <Sidebar />
+      <TopNav />
 
-      <main className="flex-1 flex items-start justify-center p-6 md:p-12">
-        <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+      <main className="ml-16 xl:ml-64 pt-16 pb-8 min-h-screen px-6 md:px-12 pt-[120px]">
+        <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-start mr-auto">
           {/* Left: Stepper */}
-          <div className="lg:col-span-4 space-y-10">
+          <div className="lg:col-span-5 space-y-10">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-white mb-2">Connect Your Agent</h1>
+              {alreadyOnboarded && (
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="text-xs text-zinc-400 hover:text-pink-400 transition-colors flex items-center gap-1.5 mb-2"
+                >
+                  <span className="material-symbols-outlined text-xs">arrow_back</span>
+                  Back to Dashboard
+                </button>
+              )}
               <p className="text-zinc-500 text-xs leading-relaxed">
                 {alreadyOnboarded
                   ? "You've already connected an agent. Update your configuration or enable additional rules."
@@ -340,7 +340,7 @@ export default function Onboarding() {
           </div>
 
           {/* Right: Step Content */}
-          <div className="lg:col-span-8 bg-[#2c2834] rounded-sm overflow-hidden flex flex-col min-h-[520px]">
+          <div className="lg:col-span-7 bg-[#2c2834] rounded-sm overflow-hidden flex flex-col min-h-[520px]">
             <div className="p-8 flex-1 space-y-6">
 
               {/* Step 0: Select Agent */}
