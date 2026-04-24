@@ -191,7 +191,7 @@ export default function AgentList() {
               <span>Showing {agents.length} of {total} agents</span>
               <div className="flex items-center gap-2">
                 <span>Show:</span>
-                <select className="bg-[#1d1a25] border-none rounded-sm text-[10px] py-1 pl-2 pr-6 focus:ring-0 text-zinc-400">
+                <select className="bg-gray-800 border border-gray-600 rounded-sm text-[10px] py-1 pl-2 pr-6 focus:border-gray-400 focus:outline-none text-zinc-400">
                   <option>15</option>
                   <option>50</option>
                   <option>100</option>

@@ -137,21 +137,18 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Severity</label>
             <div className="flex gap-1">
-              {[
-                { label: 'Critical', bg: 'bg-[#93000a]', text: 'text-[#ffb4ab]', dot: 'bg-[#ffb4ab]', ring: 'ring-[#ffb4ab]/50', pulse: true  },
-                { label: 'Warning',  bg: 'bg-[#37333f]', text: 'text-[#ffb2b8]', dot: 'bg-[#ffb2b8]', ring: 'ring-[#ffb2b8]/50', pulse: false },
-                { label: 'Info',     bg: 'bg-[#2c2834]', text: 'text-zinc-400',  dot: 'bg-zinc-400',  ring: 'ring-zinc-400/50',   pulse: false },
-              ].map(({ label, bg, text, dot, ring, pulse }) => {
+              {['All', 'Critical', 'Warning', 'Info'].map(label => {
                 const isActive = severityFilter === label
                 return (
                   <button
                     key={label}
                     onClick={() => setSeverityFilter(prev => prev === label ? 'All' : label)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-black uppercase rounded-full transition-all ${bg} ${text} ${
-                      isActive ? `ring-2 ${ring} ring-offset-1 ring-offset-[#211e29]` : 'opacity-50 hover:opacity-80'
+                    className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors ${
+                      isActive
+                        ? 'bg-gray-800 text-gray-200 border border-pink-500'
+                        : 'bg-gray-800 text-gray-400 border border-gray-600 hover:text-gray-200 hover:border-pink-500'
                     }`}
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full ${dot} ${isActive && pulse ? 'animate-pulse' : ''}`} />
                     {label}
                   </button>
                 )
@@ -168,8 +165,8 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                   onClick={() => setStatusFilter(s)}
                   className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors capitalize ${
                     statusFilter === s
-                      ? 'bg-[#ffb0cf]/20 text-[#ffb0cf] border border-[#ffb0cf]/30'
-                      : 'bg-[#2c2834] text-zinc-400 border border-[#574149]/10 hover:text-white'
+                      ? 'bg-gray-800 text-gray-200 border border-pink-500'
+                      : 'bg-gray-800 text-gray-400 border border-gray-600 hover:text-gray-200 hover:border-pink-500'
                   }`}
                 >
                   {s === 'All' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}

@@ -226,7 +226,7 @@ export default function CostGovernance() {
             <h4 className="text-base font-semibold text-[#e7dff0] mb-6">Cost per Agent / Model</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {agentModelCosts.map((am, i) => (
-                <div key={`${am.agent_id}-${am.model}-${i}`} className="bg-[#211e29] p-4 rounded flex items-center justify-between group hover:bg-[#37333f] transition-colors">
+                <div key={`${am.agent_id}-${am.model}-${i}`} className="bg-gray-800 p-4 rounded flex items-center justify-between group hover:bg-[#37333f] transition-colors">
                   <div>
                     <p className="text-[10px] text-zinc-500 uppercase font-semibold mb-1">{am.provider} / {am.model}</p>
                     <h5 className="font-semibold text-[#e7dff0]">{am.agent_name}</h5>
@@ -312,7 +312,7 @@ export default function CostGovernance() {
                   <tr>
                     <td className="py-2">
                       <input
-                        className={`w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-xs focus:outline-none ${editingKey ? 'text-zinc-500 cursor-not-allowed' : 'text-[#e7dff0] placeholder-zinc-600'}`}
+                        className={`w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-gray-400 ${editingKey ? 'text-zinc-500 cursor-not-allowed' : 'text-[#e7dff0] placeholder-zinc-600'}`}
                         placeholder="anthropic"
                         value={form.provider}
                         readOnly={!!editingKey}
@@ -321,7 +321,7 @@ export default function CostGovernance() {
                     </td>
                     <td className="py-2">
                       <input
-                        className={`w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-xs focus:outline-none ${editingKey ? 'text-zinc-500 cursor-not-allowed' : 'text-[#e7dff0] placeholder-zinc-600'}`}
+                        className={`w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-gray-400 ${editingKey ? 'text-zinc-500 cursor-not-allowed' : 'text-[#e7dff0] placeholder-zinc-600'}`}
                         placeholder="claude-sonnet-4-6"
                         value={form.model}
                         readOnly={!!editingKey}
@@ -331,7 +331,7 @@ export default function CostGovernance() {
                     <td className="py-2">
                       <input
                         type="number" step="0.01"
-                        className="w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none"
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none focus:border-gray-400"
                         placeholder="3.00"
                         value={form.input_cost_per_million}
                         onChange={e => setForm(f => ({ ...f, input_cost_per_million: e.target.value }))}
@@ -340,7 +340,7 @@ export default function CostGovernance() {
                     <td className="py-2">
                       <input
                         type="number" step="0.01"
-                        className="w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none"
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none focus:border-gray-400"
                         placeholder="15.00"
                         value={form.output_cost_per_million}
                         onChange={e => setForm(f => ({ ...f, output_cost_per_million: e.target.value }))}
@@ -349,7 +349,7 @@ export default function CostGovernance() {
                     <td className="py-2">
                       <input
                         type="number" step="0.01"
-                        className="w-full bg-[#211e29] border border-[#574149]/30 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none"
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none focus:border-gray-400"
                         placeholder="0.30"
                         value={form.cache_read_cost_per_million}
                         onChange={e => setForm(f => ({ ...f, cache_read_cost_per_million: e.target.value }))}

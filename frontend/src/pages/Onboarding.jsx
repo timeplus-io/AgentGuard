@@ -54,7 +54,7 @@ function CopyButton({ text }) {
 
 function CodeBlock({ label, code }) {
   return (
-    <div className="bg-[#0f0c17] rounded-sm overflow-hidden border border-[#574149]/10">
+    <div className="bg-gray-800 rounded-sm overflow-hidden border border-[#574149]/10">
       <div className="bg-[#37333f]/50 px-4 py-2 flex justify-between items-center">
         <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">{label}</span>
         <CopyButton text={code} />
@@ -413,7 +413,7 @@ export default function Onboarding() {
                             value={val}
                             onChange={e => set(e.target.value)}
                             placeholder={ph}
-                            className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
+                            className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
                           />
                         </div>
                       ))}
@@ -435,7 +435,7 @@ export default function Onboarding() {
                           value={holdFailPolicy}
                           onChange={e => setHoldFailPolicy(e.target.value)}
                           disabled={!holdsEnabled}
-                          className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
                         >
                           <option value="deny">deny — block on errors</option>
                           <option value="allow">allow — pass through on errors</option>
@@ -492,7 +492,7 @@ export default function Onboarding() {
                             value={val}
                             onChange={e => set(e.target.value)}
                             placeholder={ph}
-                            className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
+                            className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
                           />
                         </div>
                       ))}
@@ -514,7 +514,7 @@ export default function Onboarding() {
                           value={holdFailPolicy}
                           onChange={e => setHoldFailPolicy(e.target.value)}
                           disabled={!holdsEnabled}
-                          className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
                         >
                           <option value="deny">deny — block on errors</option>
                           <option value="allow">allow — pass through on errors</option>
@@ -569,7 +569,7 @@ export default function Onboarding() {
                             value={val}
                             onChange={e => set(e.target.value)}
                             placeholder={ph}
-                            className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
+                            className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
                           />
                         </div>
                       ))}
@@ -591,7 +591,7 @@ export default function Onboarding() {
                           value={holdFailPolicy}
                           onChange={e => setHoldFailPolicy(e.target.value)}
                           disabled={!holdsEnabled}
-                          className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
                         >
                           <option value="deny">deny — block on errors</option>
                           <option value="allow">allow — pass through on errors</option>
@@ -627,7 +627,7 @@ export default function Onboarding() {
                         value={otelEndpoint}
                         onChange={e => setOtelEndpoint(e.target.value)}
                         placeholder="http://host.docker.internal:4318"
-                        className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
+                        className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
                       />
                     </div>
                     <p className="text-[10px] text-zinc-500 leading-relaxed pl-40">
@@ -656,7 +656,7 @@ export default function Onboarding() {
                         value={otelEndpoint}
                         onChange={e => setOtelEndpoint(e.target.value)}
                         placeholder="http://localhost:4318"
-                        className="flex-1 bg-[#0f0c17] text-xs py-2 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
+                        className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
                       />
                     </div>
                   </div>

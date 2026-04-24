@@ -53,7 +53,7 @@ export default function Login() {
                 placeholder="default"
                 required
                 autoComplete="username"
-                className="w-full bg-[#0f0c17] text-sm py-2.5 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
+                className="w-full bg-gray-800 border border-gray-600 text-sm py-2.5 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
               />
             </div>
 
@@ -66,7 +66,7 @@ export default function Login() {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Leave blank if not set"
                 autoComplete="current-password"
-                className="w-full bg-[#0f0c17] text-sm py-2.5 px-3 rounded-sm focus:ring-1 focus:ring-[#ffb0cf] focus:outline-none text-[#e7dff0] font-mono"
+                className="w-full bg-gray-800 border border-gray-600 text-sm py-2.5 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
               />
             </div>
 

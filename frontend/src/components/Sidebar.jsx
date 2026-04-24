@@ -24,7 +24,7 @@ export default function Sidebar() {
   }, [collapsed])
 
   return (
-    <aside className={`h-screen fixed left-0 top-0 bg-[#211e29] flex flex-col py-8 gap-2 z-40 transition-all duration-200 ${collapsed ? 'w-16 px-2' : 'w-64 px-4'}`}>
+    <aside className={`h-screen fixed left-0 top-0 bg-gray-800 border-r border-gray-700 flex flex-col py-8 gap-2 z-40 transition-all duration-200 ${collapsed ? 'w-16 px-2' : 'w-64 px-4'}`}>
       {/* Logo */}
       <div className={`mb-10 flex items-center ${collapsed ? 'justify-center' : 'px-2'}`}>
         {collapsed ? (
@@ -57,8 +57,8 @@ export default function Sidebar() {
                 const base = 'relative flex items-center py-2 text-xs font-medium rounded-sm transition-all'
                 const layout = collapsed ? 'justify-center px-2' : 'gap-3 px-3'
                 const state = isActive
-                  ? `text-[#ffb0cf] bg-[#2c2834]${collapsed ? '' : ' translate-x-1'}`
-                  : 'text-zinc-500 hover:bg-[#2c2834] hover:text-white'
+                  ? `text-pink-400 bg-gray-700${collapsed ? '' : ' translate-x-1'}`
+                  : 'text-gray-400 hover:bg-gray-700 hover:text-gray-100'
                 return `${base} ${layout} ${state}`
               }}
             >
@@ -85,7 +85,7 @@ export default function Sidebar() {
       <button
         onClick={() => setCollapsed(v => !v)}
         title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        className={`flex items-center justify-center w-8 h-8 rounded-sm text-zinc-500 hover:text-white hover:bg-[#2c2834] transition-colors ${collapsed ? 'mx-auto' : 'mx-2'}`}
+        className={`flex items-center justify-center w-8 h-8 rounded-sm text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors ${collapsed ? 'mx-auto' : 'mx-2'}`}
       >
         <span className="material-symbols-outlined text-base">
           {collapsed ? 'chevron_right' : 'chevron_left'}

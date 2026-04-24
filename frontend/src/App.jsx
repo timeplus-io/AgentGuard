@@ -20,8 +20,8 @@ function AuthGuard({ children }) {
   const { auth } = useAuth()
   if (auth.loading) {
     return (
-      <div className="min-h-screen bg-[#15121d] flex items-center justify-center">
-        <span className="text-zinc-500 text-sm">Loading…</span>
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <span className="text-gray-100 text-sm">Loading…</span>
       </div>
     )
   }

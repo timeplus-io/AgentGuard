@@ -106,7 +106,7 @@ export default function RuleCreate() {
 
   const canSave = form.name.trim() !== '' && form.description.trim() !== '' && sql.trim() !== '' && !saving
 
-  const inputCls = 'bg-[#0f0c17] border border-[#574149]/20 rounded-sm px-3 py-2 text-xs text-[#e7dff0] placeholder-zinc-600 focus:outline-none focus:border-[#ffb0cf]/40'
+  const inputCls = 'bg-gray-800 border border-gray-600 rounded-sm px-3 py-2 text-xs text-[#e7dff0] placeholder-zinc-600 focus:outline-none focus:border-gray-400'
   const labelCls = 'text-[10px] font-semibold text-zinc-500 uppercase tracking-widest'
 
   return (
@@ -148,7 +148,7 @@ export default function RuleCreate() {
           <div className="flex gap-6 flex-1 overflow-hidden min-h-0">
             {/* Left: metadata */}
             <aside className="w-80 shrink-0 overflow-y-auto custom-scrollbar">
-              <div className="bg-[#2c2834] rounded-sm border border-[#574149]/10 p-6 flex flex-col gap-5">
+              <div className="bg-gray-800 rounded-sm border border-[#574149]/10 p-6 flex flex-col gap-5">
                 <h3 className="text-[10px] font-bold text-[#ffb0cf] tracking-widest uppercase">Rule Metadata</h3>
 
                 <div className="flex flex-col gap-1.5">

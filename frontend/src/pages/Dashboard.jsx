@@ -127,7 +127,7 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
+    <div className="min-h-screen bg-gray-900 text-gray-100">
       <Sidebar />
       <TopNav />
 
@@ -148,13 +148,13 @@ export default function Dashboard() {
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {[1,2,3,4].map(i => (
-                <div key={i} className="bg-[#2c2834] p-6 rounded-sm animate-pulse h-32" />
+                <div key={i} className="bg-gray-800 border border-gray-700 p-6 rounded-sm animate-pulse h-32" />
               ))}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {kpis.map((kpi, i) => (
-                <div key={i} className="bg-[#2c2834] p-6 rounded-sm flex flex-col justify-between group transition-all">
+                <div key={i} className="bg-gray-800 border border-gray-700 p-6 rounded-sm flex flex-col justify-between group transition-all">
                   <div className="flex justify-between items-start">
                     <span className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">{kpi.label}</span>
                     <span className={`material-symbols-outlined ${kpi.iconColor}`} style={{ fontVariationSettings: "'FILL' 1" }}>{kpi.icon}</span>
@@ -174,11 +174,11 @@ export default function Dashboard() {
           {/* Main Area */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Live Threat Feed */}
-            <div className="lg:col-span-2 bg-[#2c2834] rounded-sm flex flex-col">
+            <div className="lg:col-span-2 bg-gray-800 border border-gray-700 rounded-sm flex flex-col">
               <div className="p-6 flex justify-between items-center">
                 <h3 className="text-base font-semibold text-[#e7dff0] flex items-center gap-2">
                   Live Threat Feed
-                  <span className={`flex h-2 w-2 rounded-full ${threatsConnected ? 'bg-[#ffb0cf] animate-pulse' : 'bg-zinc-600'}`}></span>
+                  <span className={`flex h-2 w-2 rounded-full ${threatsConnected ? 'bg-red-400 animate-pulse' : 'bg-zinc-600'}`}></span>
                 </h3>
               </div>
               <div className="overflow-y-auto max-h-[500px] px-6 pb-6 space-y-4">
@@ -189,9 +189,9 @@ export default function Dashboard() {
                   const { border, iconColor } = severityCard[sev] || severityCard.info
                   const catIcon = CATEGORY_ICONS[ruleCategory[t.rule_id]] || 'shield'
                   return (
-                    <div key={`${t.detected_at}-${t.rule_id}-${i}`} onClick={() => handleThreatClick(t)} className={`flex items-start gap-4 p-4 bg-[#1d1a25] rounded-sm border-l-2 ${border} cursor-pointer hover:bg-[#25222e] transition-colors`}>
+                    <div key={`${t.detected_at}-${t.rule_id}-${i}`} onClick={() => handleThreatClick(t)} className={`flex items-start gap-4 p-4 bg-gray-800 border border-gray-600 rounded-sm border-l-4 border-l-red-500 cursor-pointer transition-colors`}>
                       <div className="mt-1">
-                        <span className={`material-symbols-outlined ${iconColor}`} style={{ fontVariationSettings: "'FILL' 1" }}>{catIcon}</span>
+                        <span className={`material-symbols-outlined text-red-400`} style={{ fontVariationSettings: "'FILL' 1" }}>{catIcon}</span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start gap-2">
@@ -200,8 +200,8 @@ export default function Dashboard() {
                         </div>
                         <p className="text-xs text-zinc-400 mt-1 line-clamp-1 italic">{t.message}</p>
                         <div className="flex gap-2 mt-3 flex-wrap">
-                          {t.agent_id && <span className="px-2 py-0.5 bg-[#2c2834] text-[#bcb6c5] text-[9px] font-semibold uppercase rounded-full">{t.agent_id}</span>}
-                          {t.hook_name && <span className="px-2 py-0.5 bg-[#2c2834] text-[#bcb6c5] text-[9px] font-semibold uppercase rounded-full">{t.hook_name}</span>}
+                          {t.agent_id && <span className="px-2 py-0.5 bg-gray-600 text-gray-200 text-[9px] font-semibold uppercase rounded-full">{t.agent_id}</span>}
+                          {t.hook_name && <span className="px-2 py-0.5 bg-gray-600 text-gray-200 text-[9px] font-semibold uppercase rounded-full">{t.hook_name}</span>}
                         </div>
                       </div>
                     </div>
@@ -211,7 +211,7 @@ export default function Dashboard() {
             </div>
 
             {/* Threat Categories */}
-            <div className="bg-[#2c2834] rounded-sm p-6 flex flex-col">
+            <div className="bg-gray-800 border border-gray-700 rounded-sm p-6 flex flex-col">
               <h3 className="text-base font-semibold text-[#e7dff0] mb-6">Threat Categories</h3>
               <div className="space-y-6 flex-1">
                 {(data?.threat_categories ?? []).length === 0 ? (
@@ -223,7 +223,7 @@ export default function Dashboard() {
                       <span className="text-xs font-mono text-[#ffb0cf]">{cat.percentage}%</span>
                     </div>
                     <div className="h-1.5 w-full bg-[#1d1a25] rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-[#ffb0cf] to-[#f256a3]" style={{ width: `${cat.percentage}%` }}></div>
+                      <div className="h-full bg-gradient-to-r from-red-500 to-pink-400" style={{ width: `${cat.percentage}%` }}></div>
                     </div>
                   </div>
                 ))}

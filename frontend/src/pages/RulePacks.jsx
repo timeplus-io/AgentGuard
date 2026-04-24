@@ -249,7 +249,7 @@ export default function RulePacks() {
                 onClick={confirmDoToggle}
                 className={`px-4 py-2 text-xs font-semibold rounded-sm transition-colors ${
                   confirmToggle.newVal
-                    ? 'bg-primary-button text-primary-button-text'
+                    ? 'bg-primary-button text-primary-button-text border border-pink-500'
                     : 'bg-zinc-700 text-white hover:bg-zinc-600'
                 }`}
               >
@@ -277,7 +277,7 @@ export default function RulePacks() {
               </button>
               <button
                 onClick={confirmDoInstall}
-                className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors"
+                className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text border border-pink-500 transition-colors"
               >
                 Install
               </button>
@@ -304,7 +304,7 @@ export default function RulePacks() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleExport}
-                  className="px-4 py-2 text-xs font-semibold rounded-sm border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors flex items-center gap-1.5"
+                  className="px-4 py-2 text-xs font-semibold rounded-sm bg-gray-800 border border-gray-600 text-zinc-300 hover:text-white hover:border-pink-500 transition-colors flex items-center gap-1.5"
                 >
                   <span className="material-symbols-outlined text-[14px]">download</span>
                   Export Catalog
@@ -312,14 +312,14 @@ export default function RulePacks() {
                 <button
                   onClick={() => importInputRef.current?.click()}
                   disabled={importing}
-                  className="px-4 py-2 text-xs font-semibold rounded-sm border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-4 py-2 text-xs font-semibold rounded-sm bg-gray-800 border border-gray-600 text-zinc-300 hover:text-white hover:border-pink-500 transition-colors flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-[14px]">upload</span>
                   {importing ? 'Importing…' : 'Import Catalog'}
                 </button>
                 <button
                   onClick={() => navigate('/rules/new')}
-                  className="px-4 py-2 bg-primary-button text-primary-button-text text-xs font-semibold rounded-sm hover:scale-[0.98] transition-all"
+                  className="px-4 py-2 bg-primary-button text-primary-button-text border border-pink-500 text-xs font-semibold rounded-sm hover:scale-[0.98] transition-all"
                 >
                   New Custom Rule
                 </button>
@@ -360,7 +360,7 @@ export default function RulePacks() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search rules…"
-                className="w-full bg-[#1d1a25] text-sm text-[#e7dff0] placeholder-zinc-600 pl-9 pr-8 py-2 rounded-sm outline-none focus:ring-1 focus:ring-[#ffb0cf]/40"
+                className="w-full bg-gray-800 border border-gray-600 text-sm text-[#e7dff0] placeholder-zinc-600 pl-9 pr-8 py-2 rounded-sm focus:border-gray-400 focus:outline-none"
               />
               {search && (
                 <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white">
@@ -376,12 +376,12 @@ export default function RulePacks() {
               ) : pagedRules.length === 0 ? (
                 <p className="text-sm text-zinc-500 col-span-4 py-4">No rules match your search.</p>
               ) : pagedRules.map(rule => (
-                <div key={rule.id} className="group bg-[#1d1a25] p-6 rounded-sm flex flex-col gap-6 hover:bg-[#2c2834] transition-all duration-300 relative overflow-hidden">
+                <div key={rule.id} className="group bg-gray-800 border border-gray-700 p-6 rounded-sm flex flex-col gap-6 transition-all duration-300 relative overflow-hidden">
                   {rule.active && (
                     <div className="absolute top-0 right-0 w-24 h-24 bg-[#ffb0cf]/5 blur-3xl rounded-full -translate-y-12 translate-x-12"></div>
                   )}
                   <div className="flex justify-between items-start z-10">
-                    <div className={`w-12 h-12 bg-[#0f0c17] flex items-center justify-center rounded-sm ${rule.active ? 'text-[#ffb0cf]' : 'text-zinc-500'}`}>
+                    <div className={`w-12 h-12 bg-[#0f0c17] flex items-center justify-center rounded-sm ${rule.active ? 'text-pink-400' : 'text-zinc-500'}`}>
                       <span className="material-symbols-outlined" style={rule.active ? { fontVariationSettings: "'FILL' 1" } : {}}>{rule.icon}</span>
                     </div>
                     <Toggle checked={rule.enabled} onChange={val => handleToggle(rule.id, val)} />
@@ -390,17 +390,17 @@ export default function RulePacks() {
                     <h3 className="text-lg font-semibold tracking-tight text-white mb-2">{rule.name}</h3>
                     <p className="text-xs text-zinc-400 leading-relaxed line-clamp-3 min-h-[4.5rem]">{rule.desc}</p>
                     {rule.detections24h > 0 && (
-                      <p className="text-[10px] font-mono text-[#ffb0cf] mt-2">{rule.detections24h.toLocaleString()} events detected (24h)</p>
+                      <p className="text-[10px] font-mono text-pink-400 mt-2">{rule.detections24h.toLocaleString()} events detected (24h)</p>
                     )}
                   </div>
                   <div className="mt-auto flex items-center justify-between z-10">
-                    <Link to={`/rules/${rule.id}`} className="text-xs font-semibold text-[#ffb0cf] tracking-wider uppercase hover:underline decoration-2 underline-offset-4">
+                    <Link to={`/rules/${rule.id}`} className="text-xs font-semibold text-pink-400 tracking-wider uppercase hover:underline decoration-2 underline-offset-4">
                       View Details
                     </Link>
                     <span className="text-[10px] text-zinc-500 flex items-center gap-1">
                       {rule.version ? (
                         <>
-                          <span className="material-symbols-outlined text-[12px] text-[#ffb0cf]" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                          <span className="material-symbols-outlined text-[12px] text-pink-400" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
                           {rule.version}
                         </>
                       ) : (
@@ -484,7 +484,7 @@ export default function RulePacks() {
                     <button
                       onClick={() => setConfirmInstall(entry)}
                       disabled={installing === entry.id}
-                      className="mt-auto w-full px-3 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text disabled:opacity-50 transition-opacity"
+                      className="mt-auto w-full px-3 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text border border-pink-500 disabled:opacity-50 transition-opacity"
                     >
                       {installing === entry.id ? 'Installing…' : 'Install'}
                     </button>
