@@ -48,7 +48,7 @@ export default function Sidebar() {
           </svg>
         ) : (
           <img
-            src="/static/icons/timeplus-agentguard_logo-pink.svg"
+            src="/static/agentguard-logo.svg"
             alt="AgentGuard"
             className="h-8 w-auto"
           />
