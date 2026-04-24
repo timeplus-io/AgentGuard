@@ -33,11 +33,16 @@ export default function TopNav({ title }) {
   return (
     <header className="top-nav h-10 bg-gray-800 border-b border-gray-700 z-[60] flex justify-between items-center pl-6 pr-4 backdrop-blur-md">
       <div className="flex items-center gap-4 flex-1">
-        <img
-          src="/static/agentguard-logo.svg"
-          alt="AgentGuard"
-          className="h-[18px] w-auto mt-0.5"
-        />
+        <div className="flex items-center gap-2">
+          <img
+            src="/static/agentguard-logo.svg"
+            alt="AgentGuard"
+            className="h-[18px] w-auto mt-0.5"
+          />
+          <span className="text-[10px] font-semibold text-gray-400 uppercase" style={{fontFamily: 'Poppins, sans-serif', letterSpacing: '0.1em'}}>
+            BY TIMEPLUS
+          </span>
+        </div>
         {title && (
           <h2 className="text-lg font-semibold text-gray-200 tracking-tight">{title}</h2>
         )}
@@ -63,12 +68,12 @@ export default function TopNav({ title }) {
           {auth.loggedIn && (
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="h-10 flex items-center gap-3 hover:bg-gray-700 rounded-sm transition-colors"
+              className="h-10 px-3 flex items-center gap-3 hover:bg-gray-700 rounded-sm transition-colors"
             >
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-medium text-gray-100">{auth.username}</p>
               </div>
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-pink-500 flex items-center justify-center text-gray-900 font-bold text-xs shadow-sm">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-400 to-pink-500 flex items-center justify-center text-gray-900 font-bold text-xs shadow-sm">
                 {initials}
               </div>
             </button>
