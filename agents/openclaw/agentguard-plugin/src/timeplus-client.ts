@@ -31,6 +31,20 @@ const COLUMNS: (keyof HookEvent)[] = [
   "hook_decision", "block_reason", "event_data", "agent_type",
 ];
 
+// Per-event event_data size cap. Large LLM responses (multi-MB Kimi/Claude
+// outputs) routinely exceed Timeplus's HTTP body limit when batched, killing
+// the whole batch with `SocketError: other side closed`. Truncate each event
+// individually so one big response can't take down the rest of the batch.
+// 256 KB is enough for typical chat turns + tool outputs; trimmed payloads
+// keep a [...truncated N→M bytes] marker so the loss is visible downstream.
+const EVENT_DATA_MAX_BYTES = 256 * 1024;
+
+function capEventData(s: string): string {
+  if (s.length <= EVENT_DATA_MAX_BYTES) return s;
+  const head = s.slice(0, EVENT_DATA_MAX_BYTES);
+  return `${head}...[truncated ${s.length}→${EVENT_DATA_MAX_BYTES} bytes]`;
+}
+
 async function postBatch(
   url: string,
   authHeader: string,
@@ -82,6 +96,12 @@ export function createTimeplusClient(config: AgentGuardConfig): TimeplusClient {
   }, config.flushMs);
 
   function enqueue(event: HookEvent): void {
+    // Cap event_data BEFORE queueing — truncation must happen here, not in
+    // postBatch, so a single oversize event can't bloat the JSON body even if
+    // batchSize=1.
+    if (event.event_data && event.event_data.length > EVENT_DATA_MAX_BYTES) {
+      event = { ...event, event_data: capEventData(event.event_data) };
+    }
     queue.push(event);
     if (queue.length >= config.batchSize) {
       // Deliberate tradeoff: if a flush is already in-flight, its splice has

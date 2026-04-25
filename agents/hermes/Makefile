@@ -2,6 +2,18 @@ PWD         := $(shell pwd)
 HERMES_DATA := $(PWD)/.hermes
 HERMES_IMAGE := nousresearch/hermes-agent:latest
 
+# Provider secrets file (NVIDIA_API_KEY, OLLAMA_API_KEY, GOOGLE_API_KEY, etc.)
+# git-ignored. Loaded by `docker run --env-file` in the `cli` target and by
+# `env_file:` in docker-compose.yml for `make start`. Optional — flag silently
+# disappears when the file is absent, so neither path breaks.
+ENV_FILE := .env
+ENV_FILE_FLAG := $(if $(wildcard $(ENV_FILE)),--env-file $(ENV_FILE),)
+# Also import .env into Make itself so we can reference its vars in recipes
+# (e.g. to map NVIDIA_API_KEY → OPENAI_API_KEY for Hermes's `provider: custom`
+# bearer-token slot). `-include` is silent when the file is absent.
+# .env uses KEY=VALUE syntax which is also valid Makefile syntax.
+-include $(ENV_FILE)
+
 export AGENTGUARD_AGENT_ID        ?= $(shell hostname)
 export AGENTGUARD_DEPLOYMENT_ID   ?= local-hermes
 export AGENTGUARD_DEPLOYMENT_NAME ?= Local Hermes
@@ -36,7 +48,12 @@ configure: workspace
 	cp agentguard-plugin/agentguard_hermes/plugin.py   $(HERMES_DATA)/plugins/agentguard/__init__.py
 	@echo "AgentGuard gateway hook → $(HERMES_DATA)/hooks/agentguard/"
 	@echo "AgentGuard plugin       → $(HERMES_DATA)/plugins/agentguard/"
-	@python3 -c "import yaml; path='$(HERMES_DATA)/config.yaml'; cfg=yaml.safe_load(open(path)) if __import__('os').path.exists(path) else {}; cfg.setdefault('model',{}).update({'default':'claude-sonnet-4-6','provider':'custom','base_url':'$(LITELLM_URL)'}); yaml.dump(cfg,open(path,'w'),default_flow_style=False); print('LiteLLM config → ' + path)"
+	# Model selection lives in .hermes/config.yaml (model.default / .provider /
+	# .base_url) and is owned by the user — set it via `hermes setup`, the
+	# dashboard, or by editing config.yaml directly. Earlier versions of this
+	# target rewrote model.* on every `make configure` (which `make start`
+	# depends on), silently reverting any non-LiteLLM choice on every restart.
+	# That was removed; configure now only manages AgentGuard hook+plugin files.
 
 ## First-time interactive setup wizard (sets API keys, model, platforms)
 init: workspace
@@ -89,7 +106,8 @@ cli: configure
 	  -e AGENTGUARD_STREAM=$(AGENTGUARD_STREAM) \
 	  -e AGENTGUARD_USERNAME=$(AGENTGUARD_USERNAME) \
 	  -e AGENTGUARD_PASSWORD=$(AGENTGUARD_PASSWORD) \
-	  -e OPENAI_API_KEY=$(LITELLM_API_KEY) \
+	  -e OPENAI_API_KEY=$(or $(NVIDIA_API_KEY),$(LITELLM_API_KEY)) \
+	  $(ENV_FILE_FLAG) \
 	  $(HERMES_IMAGE)
 
 ## Full install: pull image + configure hooks (run 'make init' separately for first-time setup)

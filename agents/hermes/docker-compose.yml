@@ -7,6 +7,12 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./.hermes:/opt/data
+    # Provider API keys (NVIDIA_API_KEY, OLLAMA_API_KEY, GOOGLE_API_KEY, etc.)
+    # live in .env (git-ignored). Add KEY=VALUE lines there as you need them;
+    # no compose edit required. The `environment:` block below is only for
+    # values with sensible Makefile-level defaults.
+    env_file:
+      - .env
     environment:
       HERMES_UID: ${UID:-1000}
       AGENTGUARD_AGENT_ID: ${AGENTGUARD_AGENT_ID:-}
@@ -16,7 +22,12 @@ services:
       AGENTGUARD_STREAM: ${AGENTGUARD_STREAM:-agentguard_hook_events}
       AGENTGUARD_USERNAME: ${AGENTGUARD_USERNAME:-proton}
       AGENTGUARD_PASSWORD: ${AGENTGUARD_PASSWORD:-timeplus@t+}
-      OPENAI_API_KEY: ${LITELLM_API_KEY:-sk-openclaw-proxy}
+      # Hermes's `provider: custom` sends this value as the bearer token to
+      # whatever base_url is set in .hermes/config.yaml. With base_url pointing
+      # at NVIDIA Build, this needs to be your nvapi- key (loaded from .env).
+      # Falls back to the LiteLLM dummy key only when NVIDIA_API_KEY is unset
+      # — useful if you switch base_url back to the LiteLLM proxy on :4000.
+      OPENAI_API_KEY: ${NVIDIA_API_KEY:-${LITELLM_API_KEY:-sk-openclaw-proxy}}
     restart: unless-stopped
 
   web:

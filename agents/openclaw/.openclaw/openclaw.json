@@ -2,7 +2,7 @@
   "agents": {
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
-      "model": "litellm/claude-sonnet-4-6"
+      "model": "nvidia/minimaxai/minimax-m2.7"
     },
     "list": [
       {
@@ -70,6 +70,29 @@
   "models": {
     "mode": "merge",
     "providers": {
+      "nvidia": {
+        "api": "openai-completions",
+        "baseUrl": "https://integrate.api.nvidia.com/v1",
+        "apiKey": "NVIDIA_API_KEY",
+        "models": [
+          {
+            "id": "minimaxai/minimax-m2.7",
+            "name": "MiniMax M2.7 (NVIDIA Build)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 16384
+          }
+        ]
+      },
       "litellm": {
         "api": "openai-completions",
         "baseUrl": "http://host.docker.internal:4000",
@@ -300,6 +323,10 @@
       "ollama:default": {
         "provider": "ollama",
         "mode": "api_key"
+      },
+      "nvidia:default": {
+        "provider": "nvidia",
+        "mode": "api_key"
       }
     }
   },
@@ -337,6 +364,9 @@
       },
       "litellm": {
         "enabled": true
+      },
+      "nvidia": {
+        "enabled": true
       }
     }
   },
@@ -348,7 +378,7 @@
   },
   "meta": {
     "lastTouchedVersion": "2026.4.5",
-    "lastTouchedAt": "2026-04-11T20:30:44.940Z"
+    "lastTouchedAt": "2026-04-24T15:27:36.702Z"
   },
   "diagnostics": {
     "enabled": true,

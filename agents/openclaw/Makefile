@@ -4,6 +4,16 @@ IMAGE := ghcr.io/openclaw/openclaw:2026.4.5
 
 LITELLM_API_KEY := sk-openclaw-proxy
 
+# Secrets file. Loaded into the container via `docker run --env-file`. Add
+# any provider key here as KEY=VALUE on its own line. Examples:
+#   NVIDIA_API_KEY=nvapi-...    (build.nvidia.com)
+#   OLLAMA_API_KEY=sk-ollama-... (ollama.com cloud)
+# .env is git-ignored so secrets never enter the repo. The file is optional —
+# if absent, only LITELLM_API_KEY (hardcoded above) is passed and any provider
+# requiring an env-var key will fail at first LLM call.
+ENV_FILE := .env
+ENV_FILE_FLAG := $(if $(wildcard $(ENV_FILE)),--env-file $(ENV_FILE),)
+
 # AgentGuard plugin defaults — OpenClaw runs in Docker, so it needs to reach
 # AgentGuard on the host via host.docker.internal. Override via env var when
 # running outside Docker.
@@ -38,6 +48,7 @@ run:
 		-v "$(PWD)/agentguard-plugin":/home/node/.openclaw/agentguard-plugin \
 		-e HOME=/home/node \
 		-e LITELLM_API_KEY=$(LITELLM_API_KEY) \
+		$(ENV_FILE_FLAG) \
 		--restart unless-stopped \
 		$(IMAGE) \
 		node dist/index.js gateway run
@@ -96,34 +107,41 @@ data["plugins"]["entries"]["agentguard"] = {
     }
 }
 
-# 7. Configure LiteLLM as the default model provider (workaround for openclaw#54073:
-#    anthropic-vertex provider fails to register its stream function because pi-ai
-#    pre-registers the anthropic-messages API, causing requests to hit the wrong URL)
-data.setdefault("agents", {}).setdefault("defaults", {})["model"] = "litellm/claude-sonnet-4-6"
-data.setdefault("models", {}).setdefault("providers", {})["litellm"] = {
+# 7. Configure NVIDIA Build (NIM) as the default model provider.
+#    OpenAI-compatible endpoint at integrate.api.nvidia.com/v1, bearer auth via
+#    NVIDIA_API_KEY env var (loaded by docker run --env-file .env in `start`).
+#    Get a key at https://build.nvidia.com.
+#
+#    Idempotent: setdefault() means a user's manual model/provider edits in
+#    openclaw.json win over the defaults we'd write here. Re-running
+#    `make configure` will not clobber a custom model selection.
+providers = data.setdefault("models", {}).setdefault("providers", {})
+providers.setdefault("nvidia", {
     "api": "openai-completions",
-    "baseUrl": "http://host.docker.internal:4000",
+    "baseUrl": "https://integrate.api.nvidia.com/v1",
+    "apiKey": "NVIDIA_API_KEY",
     "models": [
         {
-            "id": "claude-sonnet-4-6",
-            "name": "Claude Sonnet 4.6",
-            "reasoning": True,
-            "input": ["text", "image"],
-            "cost": {"input": 3, "output": 15, "cacheRead": 0.3, "cacheWrite": 3.75},
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-        },
-        {
-            "id": "claude-opus-4-6",
-            "name": "Claude Opus 4.6",
-            "reasoning": True,
-            "input": ["text", "image"],
-            "cost": {"input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25},
-            "contextWindow": 1000000,
-            "maxTokens": 128000
+            "id": "minimaxai/minimax-m2.7",
+            "name": "MiniMax M2.7 (NVIDIA Build)",
+            "reasoning": False,
+            "input": ["text"],
+            "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
+            "contextWindow": 200000,
+            "maxTokens": 16384
         }
     ]
-}
+})
+data.setdefault("auth", {}).setdefault("profiles", {}).setdefault("nvidia:default", {
+    "provider": "nvidia",
+    "mode": "api_key"
+})
+# defaults.model is set unconditionally (not setdefault): `make init` runs the
+# OpenClaw onboarding wizard which writes its own default ("litellm/claude-sonnet-4-6"),
+# so a setdefault here would never fire. We want `make configure` to be the
+# authoritative source for the AgentGuard-recommended model — re-run it after
+# manually picking a custom model only if you also manually re-set this line.
+data.setdefault("agents", {}).setdefault("defaults", {})["model"] = "nvidia/minimaxai/minimax-m2.5"
 
 with open(path, "w") as f:
     json.dump(data, f, indent=2)
@@ -145,6 +163,7 @@ start:
 		-v "$(PWD)/agentguard-plugin":/home/node/.openclaw/agentguard-plugin \
 		-e HOME=/home/node \
 		-e LITELLM_API_KEY=$(LITELLM_API_KEY) \
+		$(ENV_FILE_FLAG) \
 		--restart unless-stopped \
 		$(IMAGE) \
 		node dist/index.js gateway run
