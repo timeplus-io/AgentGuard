@@ -40,12 +40,12 @@ Query parameters:
 Response row shape:
 ```json
 {
-  "id": "hold_id or synthetic id for hook-only events",
+  "id": "hold_id (UUID) for hold rows; sha256(session_id+event_time+tool_name) hex prefix for allowed-only hook rows",
   "event_time": "RFC3339",
   "tool_name": "string",
   "status": "pending|approved|denied|timeout|abandoned|auto_block|allowed",
   "rule_id": "string",
-  "rule_name": "string",
+  "rule_name": "string (resolved by JOIN/lookup against agentguard_rules at query time; empty string if rule not found)",
   "severity": "string",
   "agent_id": "string",
   "session_id": "string",
@@ -130,7 +130,8 @@ A slide-in panel triggered by clicking any row.
 - Rule that triggered it, severity, message
 - Timeline: created_at → decided_at with decided_by and decided_reason
 - If `status === "pending"`: shows Approve/Deny form with optional reason textarea
-- Fetches fresh data via `GET /api/holds/:hold_id` on open to handle stale state
+- If the row has a real `hold_id` (i.e. it went through the holds system): fetches fresh data via `GET /api/holds/:hold_id` on open to handle stale state
+- If the row is an allowed-only hook event (no hold_id): displays event data from the list row directly; no approve/deny form; no fresh-fetch needed
 
 ### Threats.jsx changes
 
