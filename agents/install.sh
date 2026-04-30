@@ -311,9 +311,14 @@ export AGENTGUARD_HOLD_FAIL_POLICY=\"${HOLD_FAIL_POLICY}\""
   if [[ -n "$SHELL_PROFILE" ]]; then
     read -rp "  Append to ${SHELL_PROFILE}? [Y/n]: " append_yn
     if [[ "${append_yn,,}" != "n" ]]; then
-      printf '\n%s\n' "$EXPORT_BLOCK" >> "$SHELL_PROFILE"
-      echo "  ✓ Appended to ${SHELL_PROFILE}"
-      echo "  Run: source ${SHELL_PROFILE}"
+      if grep -q "AGENTGUARD_TIMEPLUS_URL" "$SHELL_PROFILE" 2>/dev/null; then
+        echo "  AgentGuard vars already present in ${SHELL_PROFILE} — skipping append."
+        echo "  Verify values manually if you changed your configuration."
+      else
+        printf '\n%s\n' "$EXPORT_BLOCK" >> "$SHELL_PROFILE"
+        echo "  ✓ Appended to ${SHELL_PROFILE}"
+        echo "  Run: source ${SHELL_PROFILE}"
+      fi
     fi
   else
     echo "  (No .zshrc or .bashrc found — add the export lines to your shell profile manually)"
