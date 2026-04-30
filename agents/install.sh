@@ -76,10 +76,10 @@ fi
 
 # ── Derive OTel endpoint from Timeplus URL ─────────────────────────────────
 _otel_host() {
-  python3 -c "from urllib.parse import urlparse; print(urlparse('$1').hostname)"
+  TMPURL="$1" python3 -c "import os; from urllib.parse import urlparse; print(urlparse(os.environ['TMPURL']).hostname)"
 }
 _otel_proto() {
-  python3 -c "from urllib.parse import urlparse; print(urlparse('$1').scheme)"
+  TMPURL="$1" python3 -c "import os; from urllib.parse import urlparse; print(urlparse(os.environ['TMPURL']).scheme)"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -317,16 +317,16 @@ if [[ "$AGENT_TYPE" == "hermes" ]]; then
   "$PIP_CMD" install agentguard-hermes-plugin
   agentguard-hermes install
 
-  EXPORT_BLOCK="# AgentGuard
-export AGENTGUARD_TIMEPLUS_URL=\"${TIMEPLUS_URL}\"
-export AGENTGUARD_USERNAME=\"${TIMEPLUS_USERNAME}\"
-export AGENTGUARD_PASSWORD=\"${TIMEPLUS_PASSWORD}\"
-export AGENTGUARD_AGENT_ID=\"${AGENT_ID}\"
-export AGENTGUARD_DEPLOYMENT_ID=\"${DEPLOYMENT_ID}\"
-export AGENTGUARD_DEPLOYMENT_NAME=\"${DEPLOYMENT_NAME}\"
-export AGENTGUARD_URL=\"${AGENTGUARD_URL}\"
-export AGENTGUARD_HOLDS_ENABLED=\"${HOLDS_ENABLED}\"
-export AGENTGUARD_HOLD_FAIL_POLICY=\"${HOLD_FAIL_POLICY}\""
+  EXPORT_BLOCK="$(printf '# AgentGuard\n'
+printf 'export AGENTGUARD_TIMEPLUS_URL=%q\n'    "$TIMEPLUS_URL"
+printf 'export AGENTGUARD_USERNAME=%q\n'         "$TIMEPLUS_USERNAME"
+printf 'export AGENTGUARD_PASSWORD=%q\n'         "$TIMEPLUS_PASSWORD"
+printf 'export AGENTGUARD_AGENT_ID=%q\n'         "$AGENT_ID"
+printf 'export AGENTGUARD_DEPLOYMENT_ID=%q\n'    "$DEPLOYMENT_ID"
+printf 'export AGENTGUARD_DEPLOYMENT_NAME=%q\n'  "$DEPLOYMENT_NAME"
+printf 'export AGENTGUARD_URL=%q\n'              "$AGENTGUARD_URL"
+printf 'export AGENTGUARD_HOLDS_ENABLED=%q\n'    "$HOLDS_ENABLED"
+printf 'export AGENTGUARD_HOLD_FAIL_POLICY=%q\n' "$HOLD_FAIL_POLICY")"
 
   echo ""
   echo "Environment variables:"

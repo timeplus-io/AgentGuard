@@ -3,7 +3,8 @@
         frontend-install frontend-dev frontend-build frontend-preview frontend-lint \
         lint \
         docker-build docker-run docker-stop docker-push docker-release \
-        compose-up compose-down compose-restart
+        compose-up compose-down compose-restart \
+        scripts-sync
 
 BINARY      := backend/server
 DOCKER_REPO := timeplus

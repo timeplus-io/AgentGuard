@@ -68,11 +68,16 @@ function CodeBlock({ label, code }) {
 
 function DownloadScriptButton() {
   const [downloading, setDownloading] = useState(false)
+  const [dlError, setDlError] = useState(null)
 
   const handle = async () => {
     setDownloading(true)
+    setDlError(null)
     try {
-      const res = await fetch('/api/onboarding/install-script')
+      const res = await api.getInstallScript()
+      if (!res.ok) {
+        throw new Error(`Download failed (${res.status})`)
+      }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -80,20 +85,27 @@ function DownloadScriptButton() {
       a.download = 'agentguard-install.sh'
       a.click()
       URL.revokeObjectURL(url)
+    } catch (e) {
+      setDlError(e.message || 'Download failed')
     } finally {
       setDownloading(false)
     }
   }
 
   return (
-    <button
-      onClick={handle}
-      disabled={downloading}
-      className="flex items-center gap-2 bg-primary-button px-5 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <span className="material-symbols-outlined text-sm">download</span>
-      {downloading ? 'Downloading…' : 'Download Install Script'}
-    </button>
+    <>
+      <button
+        onClick={handle}
+        disabled={downloading}
+        className="flex items-center gap-2 bg-primary-button px-5 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <span className="material-symbols-outlined text-sm">download</span>
+        {downloading ? 'Downloading…' : 'Download Install Script'}
+      </button>
+      {dlError && (
+        <p className="text-xs text-red-400">{dlError}</p>
+      )}
+    </>
   )
 }
 

@@ -138,6 +138,7 @@ export const api = {
   uninstallRule: (id) => del(`/rules/${id}`),
   listTables: () => get('/investigate/tables'),
   generateConfig: (data) => post('/onboarding/generate', data),
+  getInstallScript: () => fetch('/api/onboarding/install-script'),
 
   // ── Holds (tool-call blocking) ─────────────────────────────────────────────
   listHolds: (status = 'pending', limit = 100) =>
