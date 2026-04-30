@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/scripts"
 )
 
 func GenerateConfig(c *gin.Context) {
@@ -124,4 +125,9 @@ AGENTGUARD_ALERT_THRESHOLD_PCT=80
 #   }
 # }
 `, endpoint, captureContent, endpoint, endpoint)
+}
+
+func ServeInstallScript(c *gin.Context) {
+	c.Header("Content-Disposition", `attachment; filename="agentguard-install.sh"`)
+	c.Data(http.StatusOK, "text/x-shellscript", scripts.InstallScript)
 }
