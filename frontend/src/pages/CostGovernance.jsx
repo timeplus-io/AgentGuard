@@ -53,7 +53,7 @@ export default function CostGovernance() {
   const fetchPricing = () => {
     api.listPricing()
       .then(res => setPricing(res.pricing ?? []))
-      .catch(err => setLoadError(prev => prev || (err?.message || 'Failed to load pricing')))
+      .catch(err => setLoadError(err?.message || 'Failed to load pricing'))
   }
 
   useEffect(() => { fetchPricing() }, [])

@@ -64,6 +64,7 @@ func ListRules(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		cfg := auth.RequestCfg(c, cfg)
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
+			log.Printf("rules: ListRules queryCurrentRulePacks: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -107,7 +108,8 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			log.Printf("rules: GetRule queryCurrentRulePacks: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		var pack *models.RulePack
@@ -128,7 +130,9 @@ func GetRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			WHERE rule_id = '%s'
 			  AND detected_at >= now() - interval 24 hour
 		`, escapeSQL(id)))
-		if err == nil && len(countRows) > 0 {
+		if err != nil {
+			log.Printf("rules: GetRule detection count query rule=%s: %v", id, err)
+		} else if len(countRows) > 0 {
 			if num, ok := countRows[0]["cnt"].(json.Number); ok {
 				cnt, _ := num.Int64()
 				pack.Detections24h = int(cnt)
@@ -162,7 +166,8 @@ func ToggleRule(cfg *config.Config, mgr *catalog.Manager, holdReg *holdregistry.
 
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			log.Printf("rules: ToggleRule queryCurrentRulePacks: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		var current *models.RulePack
@@ -342,7 +347,8 @@ func UninstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			log.Printf("rules: UninstallRule queryCurrentRulePacks: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		var current *models.RulePack
@@ -520,7 +526,8 @@ func MVStatus(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		cfg := auth.RequestCfg(c, cfg)
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			log.Printf("rules: MVStatus queryCurrentRulePacks: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -569,7 +576,8 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		cfg := auth.RequestCfg(c, cfg)
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
+			log.Printf("rules: SyncMVs queryCurrentRulePacks: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -777,6 +785,7 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		}
 
 		if err := tp.CreateRuleMV(&cfg.Timeplus, ruleID, finalSQL, body.UDFs); err != nil {
+			log.Printf("rules: CreateRule CreateRuleMV %s: %v", ruleID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("MV create failed: %v", err)})
 			return
 		}

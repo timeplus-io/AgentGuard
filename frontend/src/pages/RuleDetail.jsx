@@ -302,7 +302,7 @@ export default function RuleDetail() {
                     await api.setRuleBlockPolicy(rule.id, newPolicy)
                   } catch (e) {
                     setRule(prev => prev ? { ...prev, block_policy: prevPolicy } : prev)
-                    alert(`Failed to update policy: ${e.message}`)
+                    setActionError(e?.message || 'Failed to update policy')
                   }
                 }}
               />

@@ -31,10 +31,12 @@ function toolOrModel(evt) {
 export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
   const [rows, setRows] = useState([])
   const [connected, setConnected] = useState(false)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     setRows([])
     setConnected(false)
+    setError(null)
     const ctrl = new AbortController()
 
     async function stream() {
@@ -46,7 +48,7 @@ export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
       setConnected(false)
     }
 
-    stream().catch(e => { if (e?.name !== 'AbortError') setConnected(false) })
+    stream().catch(e => { if (e?.name !== 'AbortError') setError(e.message || 'Stream error') })
     return () => ctrl.abort()
   }, [timeRange, limit])
 
@@ -79,8 +81,11 @@ export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
           <tbody className="divide-y divide-[#574149]/10">
             {sorted.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-10 text-center text-zinc-600 text-xs">
-                  {connected ? 'Waiting for agent activity…' : 'Connecting…'}
+                <td colSpan={5} className="px-6 py-10 text-center text-xs">
+                  {error
+                    ? <span className="text-red-400 font-mono flex items-center justify-center gap-2"><span className="material-symbols-outlined text-sm">error</span>{error}</span>
+                    : <span className="text-zinc-600">{connected ? 'Waiting for agent activity…' : 'Connecting…'}</span>
+                  }
                 </td>
               </tr>
             ) : sorted.map((evt, i) => (

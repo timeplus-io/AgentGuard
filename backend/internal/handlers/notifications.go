@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -49,7 +50,11 @@ func (b *alertBroadcaster) Publish(payload models.AlertWebhookPayload) {
 		AlertWebhookPayload: payload,
 		ID:                  uuid.New().String(),
 	}
-	data, _ := json.Marshal(envelope)
+	data, err := json.Marshal(envelope)
+	if err != nil {
+		log.Printf("notifications: Publish marshal failed: %v", err)
+		return
+	}
 
 	b.mu.RLock()
 	defer b.mu.RUnlock()

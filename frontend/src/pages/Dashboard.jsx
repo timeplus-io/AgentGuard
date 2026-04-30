@@ -44,6 +44,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [threats, setThreats] = useState([])
   const [threatsConnected, setThreatsConnected] = useState(false)
+  const [threatsError, setThreatsError] = useState(null)
   // rule_id → category, built once from the installed rules list
   const [ruleCategory, setRuleCategory] = useState({})
 
@@ -80,7 +81,7 @@ export default function Dashboard() {
       }
       setThreatsConnected(false)
     }
-    stream().catch(e => { if (e?.name !== 'AbortError') setThreatsConnected(false) })
+    stream().catch(e => { if (e?.name !== 'AbortError') setThreatsError(e.message || 'Connection failed') })
     return () => ctrl.abort()
   }, [])
 
@@ -183,7 +184,12 @@ export default function Dashboard() {
               </div>
               <div className="overflow-y-auto max-h-[500px] px-6 pb-6 space-y-4">
                 {threats.length === 0 ? (
-                  <p className="text-xs text-zinc-600 py-4">{threatsConnected ? 'Waiting for events…' : 'Monitoring…'}</p>
+                  <p className="text-xs py-4 flex items-center gap-2">
+                    {threatsError
+                      ? <><span className="material-symbols-outlined text-sm text-red-400">error</span><span className="text-red-400 font-mono">{threatsError}</span></>
+                      : <span className="text-zinc-600">{threatsConnected ? 'Waiting for events…' : 'Monitoring…'}</span>
+                    }
+                  </p>
                 ) : threats.map((t, i) => {
                   const sev = t.severity?.toLowerCase() || 'info'
                   const { border, iconColor } = severityCard[sev] || severityCard.info
