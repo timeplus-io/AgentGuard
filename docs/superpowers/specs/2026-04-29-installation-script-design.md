@@ -36,8 +36,8 @@ A single portable bash script (bash 3.2+, macOS and Linux compatible).
    **OpenClaw:**
    - Prompt for OpenClaw project directory (default: current directory); `cd` there before running
    - `npm install @timeplus/agentguard-openclaw-plugin` (local, inside that project directory)
-   - Inline Python: patch `<project-dir>/.openclaw/openclaw.json` with plugin config + OTel diagnostics section (same logic as `agents/openclaw/Makefile`)
-   - Prompt for OTel endpoint (defaults to `http://host.docker.internal:4318` for Docker setups)
+   - Inline Python: patch `<project-dir>/.openclaw/openclaw.json` with plugin config + OTel diagnostics section (same logic as `agents/openclaw/Makefile`). 
+   - Prompt for OTel endpoint (defaults to `http://localhost:4318` for Docker setups)
 
    **Hermes:**
    - `pip install agentguard-hermes-plugin`
