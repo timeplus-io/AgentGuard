@@ -160,6 +160,35 @@ type Hold struct {
 	DecidedReason string    `json:"decided_reason,omitempty"`
 }
 
+// ActivityEvent is one row returned by GET /api/activity.
+// It is sourced from agentguard_holds (is_hold_event=true) or from
+// agentguard_hook_events when include_allowed=true (is_hold_event=false).
+type ActivityEvent struct {
+	ID            string     `json:"id"`           // hold_id for hold rows; synthetic hex for hook-only rows
+	EventTime     time.Time  `json:"event_time"`
+	ToolName      string     `json:"tool_name"`
+	Status        string     `json:"status"`       // pending|approved|denied|timeout|abandoned|auto_block|allowed
+	RuleID        string     `json:"rule_id"`
+	RuleName      string     `json:"rule_name"`
+	Severity      string     `json:"severity"`
+	AgentID       string     `json:"agent_id"`
+	SessionID     string     `json:"session_id"`
+	RunID         string     `json:"run_id"`
+	ArgsSummary   string     `json:"args_summary"`
+	Message       string     `json:"message"`
+	DecidedBy     string     `json:"decided_by,omitempty"`
+	DecidedAt     *time.Time `json:"decided_at,omitempty"`
+	DecidedReason string     `json:"decided_reason,omitempty"`
+	HookPayload   string     `json:"hook_payload,omitempty"` // raw JSON; populated for hook-only rows
+	IsHoldEvent   bool       `json:"is_hold_event"`          // true when sourced from agentguard_holds
+}
+
+// ActivityResponse is returned by GET /api/activity.
+type ActivityResponse struct {
+	Events []ActivityEvent `json:"events"`
+	Total  int             `json:"total"`
+}
+
 // HoldRequest is the JSON body the plugin sends to POST /api/holds.
 type HoldRequest struct {
 	DeploymentID   string                 `json:"deployment_id"`

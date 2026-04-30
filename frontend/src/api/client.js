@@ -149,6 +149,12 @@ export const api = {
       decided_by: 'web-ui',
       decided_reason: reason,
     }),
+  getActivity: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== false))
+    ).toString()
+    return get(`/activity${q ? '?' + q : ''}`)
+  },
   setRuleBlockPolicy: (ruleId, blockPolicy) =>
     post(`/rules/${encodeURIComponent(ruleId)}/policy`, { block_policy: blockPolicy }),
   getThreatDetail: (threatId) => get(`/threats/${encodeURIComponent(threatId)}`),

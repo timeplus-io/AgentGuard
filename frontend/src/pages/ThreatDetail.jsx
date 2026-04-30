@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import { SeverityBadge, ThreatStatusBadge } from '../components/Badge'
 import { api } from '../api/client'
+import ActivityLog from '../components/ActivityLog'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -152,6 +153,7 @@ export default function ThreatDetail() {
   const [decideStatus, setDecideStatus] = useState(null)
   const [decideError, setDecideError] = useState('')
   const [decideReason, setDecideReason] = useState('')
+  const [activeTab, setActiveTab] = useState('overview')
 
   // Support /threats/by-hold/:holdId — resolve hold to underlying threat and redirect.
   const isByHold = location.pathname.startsWith('/threats/by-hold/')
@@ -403,7 +405,30 @@ export default function ThreatDetail() {
             </Link>
           </div>
         ) : threat ? (
-          <div className="p-8 space-y-8">
+          <div className="p-8">
+            {/* Tab bar */}
+            <div className="flex items-center gap-1 mb-8 border-b border-[#574149]/20 pb-0">
+              {['overview', 'activity'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 text-xs font-semibold capitalize transition-colors border-b-2 -mb-px ${
+                    activeTab === tab
+                      ? 'text-[#ffb0cf] border-[#ffb0cf]'
+                      : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === 'activity' && (
+              <ActivityLog mode="session" sessionId={threat.session_id} threatId={threat.threat_id} />
+            )}
+
+            {activeTab === 'overview' && (
+              <div className="space-y-8">
 
             {actionError && (
               <div className="flex items-start gap-2 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs">
@@ -525,6 +550,8 @@ export default function ThreatDetail() {
               )}
             </section>
 
+              </div>
+            )}
           </div>
         ) : null}
       </main>
