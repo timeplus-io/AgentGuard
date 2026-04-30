@@ -93,7 +93,10 @@ SELECT agent_id, deployment_id,
 FROM table(agentguard_cim_metrics)
 WHERE metric_name = 'llm.total_tokens'
 GROUP BY agent_id, deployment_id`
-		tokenRows, _ := timeplus.Query(&cfg.Timeplus, tokenSQL) // non-fatal: tokens may not exist yet
+		tokenRows, err := timeplus.Query(&cfg.Timeplus, tokenSQL)
+		if err != nil {
+			log.Printf("agents: token query (non-fatal): %v", err)
+		}
 		tokenMap := make(map[string]int64, len(tokenRows))
 		for _, r := range tokenRows {
 			key := parseStr(r["deployment_id"]) + "__" + parseStr(r["agent_id"])

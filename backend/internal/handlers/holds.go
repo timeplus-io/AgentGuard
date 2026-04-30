@@ -194,7 +194,9 @@ func CreateHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster
 				})
 			case <-time.After(timeout):
 				// Timeout — apply fail-policy and write timeout row.
-				_ = writeHoldStatus(cfg, holdID, "timeout", "system", "hold timeout")
+				if err := writeHoldStatus(cfg, holdID, "timeout", "system", "hold timeout"); err != nil {
+					log.Printf("holds: writeHoldStatus timeout %s: %v", holdID, err)
+				}
 				c.JSON(http.StatusOK, models.HoldResponse{
 					Decision: failPolicyToDecision(cfg.Holds.FailPolicy),
 					Reason:   "AgentGuard hold timed out",
@@ -565,7 +567,9 @@ WHERE session_id = '%s' AND status = 'pending'`, escapeSQLStr(sessionID))
 
 		failAllow := cfg.Holds.FailPolicy == "allow"
 		for _, id := range holdIDs {
-			_ = writeHoldStatus(cfg, id, "abandoned", "system", "session ended")
+			if err := writeHoldStatus(cfg, id, "abandoned", "system", "session ended"); err != nil {
+				log.Printf("holds: writeHoldStatus abandon %s: %v", id, err)
+			}
 			registry.Signal(id, holdregistry.Decision{
 				Allow:  failAllow,
 				Reason: "session ended",
@@ -599,7 +603,9 @@ func DrainHolds(cfg *config.Config, registry *holdregistry.Registry) gin.Handler
 		}
 		failAllow := cfg.Holds.FailPolicy == "allow"
 		for _, id := range holdIDs {
-			_ = writeHoldStatus(cfg, id, "abandoned", "operator", "drained")
+			if err := writeHoldStatus(cfg, id, "abandoned", "operator", "drained"); err != nil {
+				log.Printf("holds: writeHoldStatus drain %s: %v", id, err)
+			}
 			registry.Signal(id, holdregistry.Decision{Allow: failAllow, Reason: "drained"})
 		}
 		c.JSON(http.StatusOK, gin.H{"drained": len(holdIDs)})

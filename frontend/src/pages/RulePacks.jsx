@@ -196,7 +196,7 @@ export default function RulePacks() {
       const result = await api.importCatalog(file)
       setImportResult(result)
       // Reload catalog to reflect imported entries.
-      api.getRulesCatalog().then(data => setCatalog(data.catalog || []))
+      api.getRulesCatalog().then(data => setCatalog(data.catalog || [])).catch(err => setLoadError(err?.message || 'Imported but failed to reload catalog'))
     } catch (err) {
       setImportResult({ errors: [err.message] })
     } finally {

@@ -18,6 +18,7 @@ export default function Investigate() {
   const [columns, setColumns] = useState([])
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState(null)
+  const [schemaError, setSchemaError] = useState(null)
   const [rowMeta, setRowMeta] = useState(null)
   const [availTables, setAvailTables] = useState([])
   const [panelOpen, setPanelOpen] = useState(true)
@@ -25,9 +26,10 @@ export default function Investigate() {
   const startTimeRef = useRef(null)
 
   const fetchTables = () => {
+    setSchemaError(null)
     api.listTables()
       .then(data => { if (data.tables) setAvailTables(data.tables) })
-      .catch(err => setError(err?.message || 'Failed to load table schema'))
+      .catch(err => setSchemaError(err?.message || 'Failed to load table schema'))
   }
 
   useEffect(() => { fetchTables() }, [])
@@ -102,7 +104,11 @@ export default function Investigate() {
                   <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-2">
                     <span className="material-symbols-outlined text-xs">database</span> Streams
                   </h4>
-                  {availTables.length === 0 ? (
+                  {schemaError ? (
+                    <p className="text-[11px] text-red-400 font-mono px-2 flex items-center gap-1">
+                      <span className="material-symbols-outlined text-xs shrink-0">error</span>{schemaError}
+                    </p>
+                  ) : availTables.length === 0 ? (
                     <p className="text-[11px] text-zinc-600 px-2">Loading schemas…</p>
                   ) : (
                     <div className="space-y-1">

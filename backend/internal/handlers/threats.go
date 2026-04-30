@@ -215,7 +215,9 @@ func buildThreatsList(cfg *config.Config) ([]models.Threat, error) {
 					escapeSQL(k.agentID), escapeSQL(k.deploymentID),
 					escapeSQL(k.sessionID), escapeSQL(k.ruleID),
 				)
-				_ = tp.ExecHTTP(&cfg.Timeplus, sql)
+				if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
+					log.Printf("threats: reopen upsert rule=%s session=%s: %v", k.ruleID, k.sessionID, err)
+				}
 			}
 		}(toReopen)
 	}

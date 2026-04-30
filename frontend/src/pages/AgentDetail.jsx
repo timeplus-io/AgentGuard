@@ -636,6 +636,7 @@ function SkillsTab({ sessionId }) {
   const [loaded, setLoaded] = useState([])
   const [invoked, setInvoked] = useState([])
   const [connecting, setConnecting] = useState(true)
+  const [error, setError] = useState(null)
   const [expanded, setExpanded] = useState({})
 
   useEffect(() => {
@@ -644,6 +645,7 @@ function SkillsTab({ sessionId }) {
     setLoaded([])
     setInvoked([])
     setConnecting(true)
+    setError(null)
     setExpanded({})
     const ctrl = new AbortController()
     const sql = `SELECT event_time, skill_name, skill_action, skill_namespace, skill_source_type, skill_location, skill_description, skill_args FROM agentguard_skills WHERE session_id = '${sessionId}' ORDER BY event_time ASC SETTINGS seek_to = 'earliest'`
@@ -669,7 +671,7 @@ function SkillsTab({ sessionId }) {
       }
       setConnecting(false)
     }
-    stream().catch(e => { if (e?.name !== 'AbortError') setConnecting(false) })
+    stream().catch(e => { if (e?.name !== 'AbortError') setError(e.message || 'Stream error') })
     return () => ctrl.abort()
   }, [sessionId])
 
@@ -677,6 +679,15 @@ function SkillsTab({ sessionId }) {
     return (
       <div className="flex items-center justify-center h-full">
         <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 px-5 py-4 text-xs text-red-400 font-mono">
+        <span className="material-symbols-outlined text-sm shrink-0">error</span>
+        {error}
       </div>
     )
   }
@@ -782,6 +793,7 @@ const OP_COLORS = {
 function MemoryTab({ sessionId }) {
   const [ops, setOps] = useState([])
   const [connecting, setConnecting] = useState(true)
+  const [error, setError] = useState(null)
   const [expanded, setExpanded] = useState({})
 
   useEffect(() => {
@@ -789,6 +801,7 @@ function MemoryTab({ sessionId }) {
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(sessionId)) return
     setOps([])
     setConnecting(true)
+    setError(null)
     setExpanded({})
     const ctrl = new AbortController()
     const sql = `SELECT event_time, memory_op, memory_source, tool_name, server_name, memory_path, content_payload FROM agentguard_memory_ops WHERE session_id = '${sessionId}' ORDER BY event_time ASC SETTINGS seek_to = 'earliest'`
@@ -800,7 +813,7 @@ function MemoryTab({ sessionId }) {
       }
       setConnecting(false)
     }
-    stream().catch(e => { if (e?.name !== 'AbortError') setConnecting(false) })
+    stream().catch(e => { if (e?.name !== 'AbortError') setError(e.message || 'Stream error') })
     return () => ctrl.abort()
   }, [sessionId])
 
@@ -824,6 +837,15 @@ function MemoryTab({ sessionId }) {
     return (
       <div className="flex items-center justify-center h-full">
         <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 px-5 py-4 text-xs text-red-400 font-mono">
+        <span className="material-symbols-outlined text-sm shrink-0">error</span>
+        {error}
       </div>
     )
   }
@@ -878,19 +900,20 @@ function AgentMemoryPanel({ agentId }) {
   const [stats, setStats] = useState(null)
   const [recentOps, setRecentOps] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [expanded, setExpanded] = useState({})
 
   useEffect(() => {
     if (!agentId) return
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(agentId)) return
     setLoading(true)
+    setError(null)
     setStats(null)
     setRecentOps([])
     setExpanded({})
 
-    const safeId = agentId.replace(/'/g, '')
-
-    const statsSQL = `SELECT count() AS total_ops, count_if(memory_op = 'save') AS saves, count_if(memory_op = 'search') AS searches, count_if(memory_op = 'read') AS reads FROM table(agentguard_memory_ops) WHERE agent_id = '${safeId}'`
-    const recentSQL = `SELECT event_time, session_id, memory_op, memory_source, tool_name, server_name, memory_path, content_payload FROM table(agentguard_memory_ops) WHERE agent_id = '${safeId}' ORDER BY event_time DESC LIMIT 50`
+    const statsSQL = `SELECT count() AS total_ops, count_if(memory_op = 'save') AS saves, count_if(memory_op = 'search') AS searches, count_if(memory_op = 'read') AS reads FROM table(agentguard_memory_ops) WHERE agent_id = '${agentId}'`
+    const recentSQL = `SELECT event_time, session_id, memory_op, memory_source, tool_name, server_name, memory_path, content_payload FROM table(agentguard_memory_ops) WHERE agent_id = '${agentId}' ORDER BY event_time DESC LIMIT 50`
 
     Promise.all([
       (async () => {
@@ -906,7 +929,7 @@ function AgentMemoryPanel({ agentId }) {
         }
         setRecentOps(rows)
       })(),
-    ]).finally(() => setLoading(false))
+    ]).catch(err => setError(err.message || 'Failed to load memory data')).finally(() => setLoading(false))
   }, [agentId])
 
   function fmtTime(ts) {
@@ -927,6 +950,15 @@ function AgentMemoryPanel({ agentId }) {
     return (
       <div className="flex items-center justify-center h-full">
         <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 p-5 text-xs text-red-400 font-mono">
+        <span className="material-symbols-outlined text-sm shrink-0">error</span>
+        {error}
       </div>
     )
   }
