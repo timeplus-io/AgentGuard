@@ -1,11 +1,14 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import ThreatsList from '../components/ThreatsList'
+import ActivityLog from '../components/ActivityLog'
 import { useNotifications } from '../components/NotificationsProvider'
+import { Link } from 'react-router-dom'
 
 export default function Threats() {
+  const [activeTab, setActiveTab] = useState('threats')
   const notifications = useNotifications()
   const pendingHoldsArr = Array.from(notifications?.pendingHolds?.values() ?? []).sort(
     (a, b) => new Date(b.created_at) - new Date(a.created_at)
@@ -23,7 +26,8 @@ export default function Threats() {
             subtitle="Deduplicated security threats detected across AI agents."
           />
 
-          {pendingHoldsArr.length > 0 && (
+          {/* Pending holds banner — only on Threats tab */}
+          {activeTab === 'threats' && pendingHoldsArr.length > 0 && (
             <section className="bg-[#1d1a25] rounded-sm p-4 mb-6">
               <h3 className="text-[11px] font-semibold uppercase tracking-widest text-[#ffb4ab] mb-3">
                 ⚠ Pending Holds ({pendingHoldsArr.length})
@@ -35,7 +39,7 @@ export default function Threats() {
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className={`text-[10px] uppercase font-semibold ${
                           h.severity === 'critical' ? 'text-[#ffb4ab]' :
-                          h.severity === 'warning'  ? 'text-amber-400'  : 'text-zinc-400'
+                          h.severity === 'warning'  ? 'text-amber-400' : 'text-zinc-400'
                         }`}>
                           {h.severity}
                         </span>
@@ -57,7 +61,30 @@ export default function Threats() {
             </section>
           )}
 
-          <ThreatsList showFilters />
+          {/* Tab bar */}
+          <div className="flex items-center gap-1 mb-6 border-b border-[#574149]/20 pb-0">
+            {['threats', 'activity'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 text-xs font-semibold capitalize transition-colors border-b-2 -mb-px ${
+                  activeTab === tab
+                    ? 'text-[#ffb0cf] border-[#ffb0cf]'
+                    : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                }`}
+              >
+                {tab}
+                {tab === 'activity' && pendingHoldsArr.length > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] font-bold">
+                    {pendingHoldsArr.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === 'threats' && <ThreatsList showFilters />}
+          {activeTab === 'activity' && <ActivityLog mode="global" />}
         </div>
       </main>
     </div>
