@@ -17,7 +17,7 @@ PORT        := 8080
 all: build
 
 ## build: full production build — frontend → embed → single binary
-build: frontend-build web-sync backend-build
+build: frontend-build web-sync scripts-sync backend-build
 
 ## dev: start backend and frontend dev servers in parallel
 dev:
@@ -40,6 +40,10 @@ backend-run: backend-build
 web-sync:
 	mkdir -p backend/internal/web/dist
 	cp -r frontend/dist/. backend/internal/web/dist/
+
+## scripts-sync: copy agents/install.sh into the backend embed directory
+scripts-sync:
+	cp agents/install.sh backend/internal/scripts/install.sh
 
 ## backend-tidy: sync Go module dependencies
 backend-tidy:

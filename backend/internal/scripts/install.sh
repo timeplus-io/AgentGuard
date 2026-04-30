@@ -1,0 +1,363 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ── Banner ─────────────────────────────────────────────────────────────────
+echo ""
+echo "  ╔═══════════════════════════════════════╗"
+echo "  ║   AgentGuard Plugin Installer         ║"
+echo "  ╚═══════════════════════════════════════╝"
+echo ""
+
+# ── Helpers ────────────────────────────────────────────────────────────────
+prompt() {
+  local prompt_text="$1" default="$2"
+  local val
+  read -rp "  ${prompt_text} [${default}]: " val
+  echo "${val:-$default}"
+}
+
+prompt_secret() {
+  local prompt_text="$1"
+  local val
+  read -rsp "  ${prompt_text}: " val
+  echo ""
+  printf '%s' "$val"
+}
+
+require_cmd() {
+  if ! command -v "$1" &>/dev/null; then
+    echo "Error: $1 not found. $2" >&2
+    exit 1
+  fi
+}
+
+# ── Agent selection ────────────────────────────────────────────────────────
+echo "Which agent are you installing AgentGuard for?"
+echo "  1) Claude Code"
+echo "  2) OpenClaw"
+echo "  3) Hermes"
+echo ""
+while true; do
+  read -rp "  Select [1-3]: " choice
+  case "$choice" in
+    1) AGENT_TYPE="claude-code"; break ;;
+    2) AGENT_TYPE="openclaw"; break ;;
+    3) AGENT_TYPE="hermes"; break ;;
+    *) echo "  Please enter 1, 2, or 3." ;;
+  esac
+done
+echo ""
+
+# ── Shared config ──────────────────────────────────────────────────────────
+echo "Configuration (press Enter to accept defaults):"
+echo ""
+AGENT_ID=$(prompt      "Agent ID (this machine's identifier)" "$(hostname)")
+DEPLOYMENT_ID=$(prompt "Deployment ID"                        "local")
+DEPLOYMENT_NAME=$(prompt "Deployment Name"                   "Local Dev")
+TIMEPLUS_URL=$(prompt  "Timeplus URL"                         "http://localhost:3218")
+TIMEPLUS_USERNAME=$(prompt "Timeplus Username"                "proton")
+TIMEPLUS_PASSWORD=$(prompt_secret "Timeplus Password")
+AGENTGUARD_URL=$(prompt "AgentGuard URL"                     "http://localhost:8080")
+
+echo ""
+read -rp "  Enable holds (synchronous tool-call blocking)? [Y/n]: " holds_yn
+if [[ "${holds_yn,,}" == "n" ]]; then
+  HOLDS_ENABLED="false"
+else
+  HOLDS_ENABLED="true"
+fi
+
+if [[ "$HOLDS_ENABLED" == "true" ]]; then
+  read -rp "  Hold fail policy (deny/allow) [deny]: " hold_policy
+  HOLD_FAIL_POLICY="${hold_policy:-deny}"
+else
+  HOLD_FAIL_POLICY="deny"
+fi
+
+# ── Derive OTel endpoint from Timeplus URL ─────────────────────────────────
+_otel_host() {
+  python3 -c "from urllib.parse import urlparse; print(urlparse('$1').hostname)"
+}
+_otel_proto() {
+  python3 -c "from urllib.parse import urlparse; print(urlparse('$1').scheme)"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CLAUDE CODE
+# ═══════════════════════════════════════════════════════════════════════════
+if [[ "$AGENT_TYPE" == "claude-code" ]]; then
+  echo ""
+  echo "── Claude Code ────────────────────────────────────────────────────────────"
+  require_cmd npm "Install Node.js >= 18 from https://nodejs.org"
+  require_cmd python3 "Install Python 3 from https://python.org"
+
+  OTEL_ENDPOINT="$(_otel_proto "$TIMEPLUS_URL")://$(_otel_host "$TIMEPLUS_URL"):4318"
+
+  echo ""
+  echo "Installing @timeplus/agentguard-claudecode-plugin globally..."
+  npm install -g @timeplus/agentguard-claudecode-plugin
+
+  echo ""
+  echo "Configuring ~/.claude/settings.json..."
+  AGENTGUARD_AGENT_ID="$AGENT_ID" \
+  AGENTGUARD_DEPLOYMENT_ID="$DEPLOYMENT_ID" \
+  AGENTGUARD_DEPLOYMENT_NAME="$DEPLOYMENT_NAME" \
+  AGENTGUARD_TIMEPLUS_URL="$TIMEPLUS_URL" \
+  AGENTGUARD_USERNAME="$TIMEPLUS_USERNAME" \
+  AGENTGUARD_PASSWORD="$TIMEPLUS_PASSWORD" \
+  AGENTGUARD_URL="$AGENTGUARD_URL" \
+  AGENTGUARD_HOLD_FAIL_POLICY="$HOLD_FAIL_POLICY" \
+  AGENTGUARD_HOLDS_ENABLED="$HOLDS_ENABLED" \
+  AGENTGUARD_OTEL_ENDPOINT="$OTEL_ENDPOINT" \
+  python3 - <<PYEOF
+import json, os
+
+settings_path = os.path.expanduser("~/.claude/settings.json")
+hook_command  = "agentguard-hook"
+
+sync_events  = ["PreToolUse"]
+async_events = [
+    "SessionStart", "SessionEnd", "UserPromptSubmit",
+    "PostToolUse", "PostToolUseFailure",
+    "SubagentStart", "SubagentStop", "Stop", "PermissionDenied",
+]
+
+sync_entry = {
+    "matcher": "*",
+    "hooks": [{"type": "command", "command": hook_command, "timeout": 600000}],
+}
+async_entry = {
+    "matcher": "*",
+    "hooks": [{"type": "command", "command": hook_command, "async": True}],
+}
+
+os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+data = {}
+if os.path.exists(settings_path):
+    with open(settings_path) as f:
+        data = json.load(f)
+
+hooks = data.setdefault("hooks", {})
+
+def upsert(event, entry):
+    entries = hooks.setdefault(event, [])
+    entries[:] = [
+        e for e in entries
+        if not any(h.get("command") == hook_command for h in e.get("hooks", []))
+    ]
+    entries.append(entry)
+
+for event in sync_events:
+    upsert(event, sync_entry)
+for event in async_events:
+    upsert(event, async_entry)
+
+import os as _os
+_e = _os.environ
+data.setdefault("env", {}).update({
+    "AGENTGUARD_AGENT_ID":                  _e["AGENTGUARD_AGENT_ID"],
+    "AGENTGUARD_DEPLOYMENT_ID":             _e["AGENTGUARD_DEPLOYMENT_ID"],
+    "AGENTGUARD_DEPLOYMENT_NAME":           _e["AGENTGUARD_DEPLOYMENT_NAME"],
+    "AGENTGUARD_TIMEPLUS_URL":              _e["AGENTGUARD_TIMEPLUS_URL"],
+    "AGENTGUARD_STREAM":                    "agentguard_hook_events",
+    "AGENTGUARD_USERNAME":                  _e["AGENTGUARD_USERNAME"],
+    "AGENTGUARD_PASSWORD":                  _e["AGENTGUARD_PASSWORD"],
+    "AGENTGUARD_URL":                       _e["AGENTGUARD_URL"],
+    "AGENTGUARD_HOLD_FAIL_POLICY":          _e["AGENTGUARD_HOLD_FAIL_POLICY"],
+    "AGENTGUARD_HOLDS_ENABLED":             _e["AGENTGUARD_HOLDS_ENABLED"],
+    "CLAUDE_CODE_ENABLE_TELEMETRY":         "1",
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA":  "1",
+    "OTEL_METRICS_EXPORTER":                "otlp",
+    "OTEL_LOGS_EXPORTER":                   "otlp",
+    "OTEL_TRACES_EXPORTER":                 "otlp",
+    "OTEL_EXPORTER_OTLP_PROTOCOL":          "http/protobuf",
+    "OTEL_EXPORTER_OTLP_ENDPOINT":          _e["AGENTGUARD_OTEL_ENDPOINT"],
+    "OTEL_METRIC_EXPORT_INTERVAL":          "10000",
+    "OTEL_LOGS_EXPORT_INTERVAL":            "5000",
+    "OTEL_LOG_TOOL_DETAILS":                "1",
+})
+
+with open(settings_path, "w") as f:
+    json.dump(data, f, indent=2)
+print("  Done: " + settings_path)
+PYEOF
+
+  echo ""
+  echo "  ✓ Claude Code plugin installed"
+  echo ""
+  echo "Next steps:"
+  echo "  1. Quit and reopen Claude Code"
+  echo "  2. Open AgentGuard: ${AGENTGUARD_URL}"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# OPENCLAW
+# ═══════════════════════════════════════════════════════════════════════════
+if [[ "$AGENT_TYPE" == "openclaw" ]]; then
+  echo ""
+  echo "── OpenClaw ───────────────────────────────────────────────────────────────"
+  require_cmd npm "Install Node.js >= 18 from https://nodejs.org"
+  require_cmd python3 "Install Python 3 from https://python.org"
+
+  read -rp "  OpenClaw project directory [$(pwd)]: " oc_dir
+  OC_DIR="${oc_dir:-$(pwd)}"
+  if [[ ! -d "$OC_DIR" ]]; then
+    echo "Error: directory not found: $OC_DIR" >&2
+    exit 1
+  fi
+
+  DERIVED_OTEL="$(_otel_proto "$TIMEPLUS_URL")://host.docker.internal:4318"
+  read -rp "  OTel endpoint (host.docker.internal for Docker) [${DERIVED_OTEL}]: " otel_in
+  OTEL_ENDPOINT="${otel_in:-$DERIVED_OTEL}"
+
+  echo ""
+  echo "Installing @timeplus/agentguard-openclaw-plugin..."
+  pushd "$OC_DIR" > /dev/null
+  npm install @timeplus/agentguard-openclaw-plugin
+  PLUGIN_PATH=$(node -e "console.log(require.resolve('@timeplus/agentguard-openclaw-plugin/package.json').replace(/\/package\.json$/, ''))" 2>/dev/null || echo "")
+  popd > /dev/null
+
+  CONFIG_FILE="${OC_DIR}/.openclaw/openclaw.json"
+  echo ""
+  echo "Patching ${CONFIG_FILE}..."
+  AGENTGUARD_CONFIG_FILE="$CONFIG_FILE" \
+  AGENTGUARD_OTEL_ENDPOINT="$OTEL_ENDPOINT" \
+  AGENTGUARD_TIMEPLUS_URL="$TIMEPLUS_URL" \
+  AGENTGUARD_USERNAME="$TIMEPLUS_USERNAME" \
+  AGENTGUARD_PASSWORD="$TIMEPLUS_PASSWORD" \
+  AGENTGUARD_DEPLOYMENT_ID="$DEPLOYMENT_ID" \
+  AGENTGUARD_DEPLOYMENT_NAME="$DEPLOYMENT_NAME" \
+  AGENTGUARD_URL="$AGENTGUARD_URL" \
+  AGENTGUARD_HOLD_FAIL_POLICY="$HOLD_FAIL_POLICY" \
+  AGENTGUARD_HOLDS_ENABLED="$HOLDS_ENABLED" \
+  AGENTGUARD_PLUGIN_PATH="$PLUGIN_PATH" \
+  python3 - <<PYEOF
+import json, os, sys
+
+_e = os.environ
+path = _e["AGENTGUARD_CONFIG_FILE"]
+if not os.path.exists(path):
+    print(f"Error: {path} not found. Run 'make init' in your OpenClaw project first.", file=sys.stderr)
+    sys.exit(1)
+
+with open(path) as f:
+    data = json.load(f)
+
+data.setdefault("gateway", {})["bind"] = "lan"
+
+data["diagnostics"] = {
+    "enabled": True,
+    "otel": {
+        "enabled": True, "endpoint": _e["AGENTGUARD_OTEL_ENDPOINT"],
+        "traces": True, "metrics": True, "logs": True,
+        "serviceName": "openclaw", "sampleRate": 1, "flushIntervalMs": 3000,
+    },
+}
+
+entries = data.setdefault("plugins", {}).setdefault("entries", {})
+entries["diagnostics-otel"] = {"enabled": True}
+
+load_paths = data["plugins"].setdefault("load", {}).setdefault("paths", [])
+plugin_path = _e["AGENTGUARD_PLUGIN_PATH"]
+if plugin_path and plugin_path not in load_paths:
+    load_paths.append(plugin_path)
+
+entries["agentguard"] = {
+    "enabled": True,
+    "config": {
+        "timeplusUrl":     _e["AGENTGUARD_TIMEPLUS_URL"],
+        "stream":          "agentguard_hook_events",
+        "flushMs":         2000,
+        "batchSize":       50,
+        "username":        _e["AGENTGUARD_USERNAME"],
+        "password":        _e["AGENTGUARD_PASSWORD"],
+        "deploymentId":    _e["AGENTGUARD_DEPLOYMENT_ID"],
+        "deploymentName":  _e["AGENTGUARD_DEPLOYMENT_NAME"],
+        "agentguardUrl":   _e["AGENTGUARD_URL"],
+        "holdFailPolicy":  _e["AGENTGUARD_HOLD_FAIL_POLICY"],
+        "holdsEnabled":    _e["AGENTGUARD_HOLDS_ENABLED"].lower() != "false",
+    },
+}
+
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+print("  Done: " + path)
+PYEOF
+
+  if [[ -z "$PLUGIN_PATH" ]]; then
+    echo "  Warning: could not resolve agentguard-openclaw-plugin install path." >&2
+    echo "  Add the plugin path to plugins.load.paths in .openclaw/openclaw.json manually." >&2
+  fi
+
+  echo ""
+  echo "  ✓ OpenClaw plugin installed"
+  echo ""
+  echo "Next steps:"
+  echo "  1. Restart OpenClaw: make start"
+  echo "  2. Open AgentGuard: ${AGENTGUARD_URL}"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HERMES
+# ═══════════════════════════════════════════════════════════════════════════
+if [[ "$AGENT_TYPE" == "hermes" ]]; then
+  echo ""
+  echo "── Hermes ─────────────────────────────────────────────────────────────────"
+
+  PIP_CMD=""
+  command -v pip3  &>/dev/null && PIP_CMD="pip3"
+  command -v pip   &>/dev/null && PIP_CMD="${PIP_CMD:-pip}"
+  if [[ -z "$PIP_CMD" ]]; then
+    echo "Error: pip not found. Install Python 3 from https://python.org" >&2
+    exit 1
+  fi
+
+  echo ""
+  echo "Installing agentguard-hermes-plugin..."
+  "$PIP_CMD" install agentguard-hermes-plugin
+  agentguard-hermes install
+
+  EXPORT_BLOCK="# AgentGuard
+export AGENTGUARD_TIMEPLUS_URL=\"${TIMEPLUS_URL}\"
+export AGENTGUARD_USERNAME=\"${TIMEPLUS_USERNAME}\"
+export AGENTGUARD_PASSWORD=\"${TIMEPLUS_PASSWORD}\"
+export AGENTGUARD_AGENT_ID=\"${AGENT_ID}\"
+export AGENTGUARD_DEPLOYMENT_ID=\"${DEPLOYMENT_ID}\"
+export AGENTGUARD_DEPLOYMENT_NAME=\"${DEPLOYMENT_NAME}\"
+export AGENTGUARD_URL=\"${AGENTGUARD_URL}\"
+export AGENTGUARD_HOLDS_ENABLED=\"${HOLDS_ENABLED}\"
+export AGENTGUARD_HOLD_FAIL_POLICY=\"${HOLD_FAIL_POLICY}\""
+
+  echo ""
+  echo "Environment variables:"
+  echo "$EXPORT_BLOCK"
+  echo ""
+
+  SHELL_PROFILE=""
+  [[ -f "$HOME/.zshrc"  ]] && SHELL_PROFILE="$HOME/.zshrc"
+  [[ -z "$SHELL_PROFILE" && -f "$HOME/.bashrc" ]] && SHELL_PROFILE="$HOME/.bashrc"
+
+  if [[ -n "$SHELL_PROFILE" ]]; then
+    read -rp "  Append to ${SHELL_PROFILE}? [Y/n]: " append_yn
+    if [[ "${append_yn,,}" != "n" ]]; then
+      if grep -q "AGENTGUARD_TIMEPLUS_URL" "$SHELL_PROFILE" 2>/dev/null; then
+        echo "  AgentGuard vars already present in ${SHELL_PROFILE} — skipping append."
+        echo "  If your configuration changed, update these values manually:"
+        echo "$EXPORT_BLOCK"
+      else
+        printf '\n%s\n' "$EXPORT_BLOCK" >> "$SHELL_PROFILE"
+        echo "  ✓ Appended to ${SHELL_PROFILE}"
+        echo "  Run: source ${SHELL_PROFILE}"
+      fi
+    fi
+  else
+    echo "  (No .zshrc or .bashrc found — add the export lines to your shell profile manually)"
+  fi
+
+  echo ""
+  echo "  ✓ Hermes plugin installed"
+  echo ""
+  echo "Next steps:"
+  echo "  1. Reload your shell and restart Hermes"
+  echo "  2. Open AgentGuard: ${AGENTGUARD_URL}"
+fi
