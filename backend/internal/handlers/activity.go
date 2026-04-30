@@ -20,10 +20,9 @@ import (
 // Query params:
 //
 //	session_id      — filter to a single session (optional)
-//	status          — filter by hold status (optional; ignored when include_allowed=true)
+//	status          — filter by hold status (optional)
 //	include_allowed — "true" to also show hook events that were auto-allowed (default false)
 //	limit           — max rows (default 100; capped at 500 when include_allowed=true)
-//	page            — 1-based page number (default 1)
 func ListActivity(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := auth.RequestCfg(c, cfg)
@@ -82,25 +81,7 @@ SELECT h.hold_id, h.deployment_id, h.agent_id, h.session_id, h.run_id,
        h.tool_name, h.rule_id, COALESCE(r.rule_name, '') AS rule_name,
        h.severity, h.args_summary, h.message,
        h.created_at, h.status, h.decided_by, h.decided_at, h.decided_reason
-FROM (
-  SELECT hold_id,
-         arg_max(deployment_id,  updated_at) AS deployment_id,
-         arg_max(agent_id,       updated_at) AS agent_id,
-         arg_max(session_id,     updated_at) AS session_id,
-         arg_max(run_id,         updated_at) AS run_id,
-         arg_max(tool_name,      updated_at) AS tool_name,
-         arg_max(rule_id,        updated_at) AS rule_id,
-         arg_max(severity,       updated_at) AS severity,
-         arg_max(args_summary,   updated_at) AS args_summary,
-         arg_max(message,        updated_at) AS message,
-         arg_max(created_at,     updated_at) AS created_at,
-         arg_max(status,         updated_at) AS status,
-         arg_max(decided_by,     updated_at) AS decided_by,
-         arg_max(decided_at,     updated_at) AS decided_at,
-         arg_max(decided_reason, updated_at) AS decided_reason
-  FROM table(agentguard_holds)
-  GROUP BY hold_id
-) AS h
+FROM `+holdsLatestSubquery+` AS h
 LEFT JOIN (
   SELECT rule_id, arg_max(name, updated_at) AS rule_name
   FROM table(agentguard_rules)
@@ -147,6 +128,10 @@ LIMIT %d`, whereClause, limit)
 		sess := parseStr(row["session_id"])
 		run := parseStr(row["run_id"])
 		tool := parseStr(row["tool_name"])
+		// Deduplicate by (session, run, tool): any hook event for a (session, run, toolName)
+		// that has a hold is omitted here — the hold row represents it with richer data.
+		// Tradeoff: if the same tool is called multiple times in one run and one triggered a
+		// hold, later calls in that run will also be omitted when include_allowed=true.
 		key := holdKey{sessionID: sess, runID: run, toolName: tool}
 		if _, inHolds := holdKeys[key]; inHolds {
 			continue // already represented as a hold event
