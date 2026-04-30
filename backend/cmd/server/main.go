@@ -180,6 +180,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.GET("/holds/:hold_id", handlers.GetHold(cfg))
 			protected.POST("/holds/:hold_id/decide", handlers.DecideHold(cfg, holdReg, handlers.GlobalAlertBroadcaster))
 			protected.POST("/holds/_drain", handlers.DrainHolds(cfg, holdReg))
+			protected.GET("/activity", handlers.ListActivity(cfg))
 			protected.GET("/notifications/stream", handlers.NotificationsSSEHandler())
 			protected.GET("/investigate/tables", handlers.ListTables(cfg))
 			protected.POST("/onboarding/generate", handlers.GenerateConfig)
