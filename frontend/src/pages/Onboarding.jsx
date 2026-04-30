@@ -66,6 +66,37 @@ function CodeBlock({ label, code }) {
   )
 }
 
+function DownloadScriptButton() {
+  const [downloading, setDownloading] = useState(false)
+
+  const handle = async () => {
+    setDownloading(true)
+    try {
+      const res = await fetch('/api/onboarding/install-script')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'agentguard-install.sh'
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={handle}
+      disabled={downloading}
+      className="flex items-center gap-2 bg-primary-button px-5 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      <span className="material-symbols-outlined text-sm">download</span>
+      {downloading ? 'Downloading…' : 'Download Install Script'}
+    </button>
+  )
+}
+
 export default function Onboarding() {
   const navigate = useNavigate()
   const alreadyOnboarded = localStorage.getItem('agentguard_onboarded') === '1'
@@ -390,13 +421,18 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Install the AgentGuard plugin into your OpenClaw project and configure it to point at your Timeplus instance.</p>
+                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                      Download and run the interactive install script from your OpenClaw project directory. It will prompt for the values below and patch your <code className="text-zinc-300">openclaw.json</code> automatically.
+                    </p>
                   </div>
 
-                  <CodeBlock label="1. Install via npm" code="npm install @timeplus/agentguard-openclaw-plugin" />
+                  <div className="flex flex-col gap-3">
+                    <DownloadScriptButton />
+                    <CodeBlock label="Then run from your OpenClaw project directory" code="bash agentguard-install.sh" />
+                  </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">2. Configuration</p>
+                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Values to have ready</p>
                     <div className="grid grid-cols-1 gap-3">
                       {[
                         { label: 'Deployment ID', val: deploymentId, set: setDeploymentId, ph: 'my-team' },
@@ -420,46 +456,19 @@ export default function Onboarding() {
                       <div className="flex items-center gap-4">
                         <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
                         <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={holdsEnabled}
-                            onChange={e => setHoldsEnabled(e.target.checked)}
-                            className="accent-[#ffb0cf]"
-                          />
+                          <input type="checkbox" checked={holdsEnabled} onChange={e => setHoldsEnabled(e.target.checked)} className="accent-[#ffb0cf]" />
                           <span className="text-[10px] text-zinc-400">{holdsEnabled ? 'Synchronous PreToolUse blocking on' : 'Observation-only — no blocking'}</span>
                         </label>
                       </div>
                       <div className="flex items-center gap-4">
                         <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
-                        <select
-                          value={holdFailPolicy}
-                          onChange={e => setHoldFailPolicy(e.target.value)}
-                          disabled={!holdsEnabled}
-                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
-                        >
+                        <select value={holdFailPolicy} onChange={e => setHoldFailPolicy(e.target.value)} disabled={!holdsEnabled}
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50">
                           <option value="deny">deny — block on errors</option>
                           <option value="allow">allow — pass through on errors</option>
                         </select>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">3. Add to openclaw.json</p>
-                    <CodeBlock
-                      label="openclaw.json — plugins.load.paths + plugins.entries.agentguard"
-                      code={jsonConfigCode}
-                    />
-                    <p className="text-[10px] text-zinc-500 leading-relaxed">
-                      Replace <code className="text-zinc-400">/absolute/path/to/agentguard-plugin</code> with the absolute path to the directory containing the plugin's <code className="text-zinc-400">package.json</code>. There is no fixed install path — it depends on where you ran <code className="text-zinc-400">npm install</code>. To find it, run this in the same directory:
-                    </p>
-                    <CodeBlock
-                      label="Resolve the installed plugin path"
-                      code={'node -e "console.log(require.resolve(\'@timeplus/agentguard-openclaw-plugin\').replace(/\\/dist\\/index\\.js$/, \'\'))"'}
-                    />
-                    <p className="text-[10px] text-zinc-500 leading-relaxed">
-                      For Docker, use the in-container bind-mount path instead (e.g. <code className="text-zinc-400">/home/node/.openclaw/agentguard-plugin</code>). Without this entry OpenClaw will not load the plugin.
-                    </p>
                   </div>
                 </>
               )}
@@ -468,13 +477,18 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Install the AgentGuard hook plugin globally, then add the generated config to your <code className="text-zinc-300">~/.claude/settings.json</code>.</p>
+                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                      Download and run the interactive install script. It will prompt you for the values below and configure everything automatically.
+                    </p>
                   </div>
 
-                  <CodeBlock label="1. Install via npm" code="npm install -g @timeplus/agentguard-claudecode-plugin" />
+                  <div className="flex flex-col gap-3">
+                    <DownloadScriptButton />
+                    <CodeBlock label="Then run" code="bash agentguard-install.sh" />
+                  </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">2. Configuration</p>
+                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Values to have ready</p>
                     <div className="grid grid-cols-1 gap-3">
                       {[
                         { label: 'Agent ID *', val: agentId, set: setAgentId, ph: 'your-hostname' },
@@ -499,43 +513,20 @@ export default function Onboarding() {
                       <div className="flex items-center gap-4">
                         <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
                         <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={holdsEnabled}
-                            onChange={e => setHoldsEnabled(e.target.checked)}
-                            className="accent-[#ffb0cf]"
-                          />
+                          <input type="checkbox" checked={holdsEnabled} onChange={e => setHoldsEnabled(e.target.checked)} className="accent-[#ffb0cf]" />
                           <span className="text-[10px] text-zinc-400">{holdsEnabled ? 'Synchronous PreToolUse blocking on' : 'Observation-only — no blocking'}</span>
                         </label>
                       </div>
                       <div className="flex items-center gap-4">
                         <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
-                        <select
-                          value={holdFailPolicy}
-                          onChange={e => setHoldFailPolicy(e.target.value)}
-                          disabled={!holdsEnabled}
-                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
-                        >
+                        <select value={holdFailPolicy} onChange={e => setHoldFailPolicy(e.target.value)} disabled={!holdsEnabled}
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50">
                           <option value="deny">deny — block on errors</option>
                           <option value="allow">allow — pass through on errors</option>
                         </select>
                       </div>
                     </div>
                     <p className="text-[10px] text-zinc-500 leading-relaxed">* Agent ID identifies this Claude Code instance — use your hostname or machine name.</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">3. Add to ~/.claude/settings.json</p>
-                    <div className="flex items-start gap-2 px-3 py-2 mb-2 bg-amber-500/10 border-l-4 border-amber-400 rounded-sm">
-                      <span className="material-symbols-outlined text-amber-400 text-base shrink-0 mt-px">warning</span>
-                      <div className="text-xs text-amber-200 leading-relaxed">
-                        <span className="font-bold">Merge — do not replace.</span> If you already have a <code className="text-amber-100 bg-amber-900/40 px-1 rounded">~/.claude/settings.json</code>, copy only the <code className="text-amber-100 bg-amber-900/40 px-1 rounded">hooks</code> and <code className="text-amber-100 bg-amber-900/40 px-1 rounded">env</code> keys from below into your existing file. <span className="font-semibold">Overwriting the whole file will wipe out any other Claude Code settings you have configured.</span>
-                      </div>
-                    </div>
-                    <CodeBlock
-                      label="~/.claude/settings.json — merge this block"
-                      code={ccSettingsJsonCode}
-                    />
                   </div>
                 </>
               )}
@@ -544,14 +535,18 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Install the AgentGuard plugin via pip, then run the install command to place it in your Hermes plugins directory.</p>
+                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                      Download and run the interactive install script. It will pip-install the plugin, run <code className="text-zinc-300">agentguard-hermes install</code>, and offer to append the required env vars to your shell profile.
+                    </p>
                   </div>
 
-                  <CodeBlock label="1. Install via pip" code="pip install agentguard-hermes-plugin" />
-                  <CodeBlock label="2. Install plugin into Hermes" code="agentguard-hermes install" />
+                  <div className="flex flex-col gap-3">
+                    <DownloadScriptButton />
+                    <CodeBlock label="Then run" code="bash agentguard-install.sh" />
+                  </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">3. Configuration</p>
+                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Values to have ready</p>
                     <div className="grid grid-cols-1 gap-3">
                       {[
                         { label: 'Agent ID *', val: agentId, set: setAgentId, ph: 'your-hostname' },
@@ -576,35 +571,20 @@ export default function Onboarding() {
                       <div className="flex items-center gap-4">
                         <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
                         <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={holdsEnabled}
-                            onChange={e => setHoldsEnabled(e.target.checked)}
-                            className="accent-[#ffb0cf]"
-                          />
+                          <input type="checkbox" checked={holdsEnabled} onChange={e => setHoldsEnabled(e.target.checked)} className="accent-[#ffb0cf]" />
                           <span className="text-[10px] text-zinc-400">{holdsEnabled ? 'Synchronous pre_tool_call blocking on' : 'Observation-only — no blocking'}</span>
                         </label>
                       </div>
                       <div className="flex items-center gap-4">
                         <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
-                        <select
-                          value={holdFailPolicy}
-                          onChange={e => setHoldFailPolicy(e.target.value)}
-                          disabled={!holdsEnabled}
-                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50"
-                        >
+                        <select value={holdFailPolicy} onChange={e => setHoldFailPolicy(e.target.value)} disabled={!holdsEnabled}
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50">
                           <option value="deny">deny — block on errors</option>
                           <option value="allow">allow — pass through on errors</option>
                         </select>
                       </div>
                     </div>
                     <p className="text-[10px] text-zinc-500 leading-relaxed">* Agent ID identifies this Hermes instance — use your hostname or machine name.</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">4. Set env vars before starting Hermes</p>
-                    <p className="text-[10px] text-zinc-500 leading-relaxed">The Hermes plugin reads these on startup. Add them to your shell profile (or a process-manager unit file) and restart your Hermes process for the changes to take effect.</p>
-                    <CodeBlock label="Shell profile (.zshrc / .bashrc)" code={hermesEnvCode} />
                   </div>
                 </>
               )}
