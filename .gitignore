@@ -1,7 +1,6 @@
 # OS
 .DS_Store
 Thumbs.db
-spec/
 .openclaw/
 agents/openclaw/tests/__pycache__
 agents/litellm/config/*.json

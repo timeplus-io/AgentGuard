@@ -4,7 +4,8 @@
         lint \
         docker-build docker-run docker-stop docker-push docker-release \
         compose-up compose-down compose-restart \
-        scripts-sync
+        scripts-sync \
+        docs-api
 
 BINARY      := backend/server
 DOCKER_REPO := timeplus
@@ -132,6 +133,20 @@ compose-down:
 compose-restart:
 	docker compose down -v --remove-orphans
 	docker compose up --build
+
+# ── Docs ─────────────────────────────────────────────────────────────────────
+
+## docs-api: export OpenAPI spec to docs/spec/ as JSON, YAML, and Markdown (server must be running on :8080)
+docs-api:
+	@command -v widdershins >/dev/null 2>&1 || { echo "widdershins not found — run: npm install -g widdershins"; exit 1; }
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found (needed for YAML conversion)"; exit 1; }
+	@mkdir -p docs/spec
+	curl -sf http://localhost:8080/docs/openapi.json -o docs/spec/openapi.json
+	python3 -c "import json,yaml,sys; yaml.dump(json.load(open('docs/spec/openapi.json')),open('docs/spec/openapi.yaml','w'),allow_unicode=True,sort_keys=False)" 2>/dev/null || \
+	  python3 -c "import json,sys; d=json.load(open('docs/spec/openapi.json')); print('YAML conversion skipped — install PyYAML: pip install pyyaml')"
+	widdershins --search false --language_tabs 'shell:curl' 'javascript:JS' 'python:Python' \
+	            --summary docs/spec/openapi.json -o docs/spec/api.md
+	@echo "API docs written to docs/spec/ (openapi.json, openapi.yaml, api.md)"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

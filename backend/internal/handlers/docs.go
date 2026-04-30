@@ -110,7 +110,9 @@ const openAPISpec = `{
     { "name": "Proton",      "description": "Streaming proxy — send arbitrary SQL to Timeplus and receive NDJSON rows." },
     { "name": "Onboarding",  "description": "Agent onboarding wizard — generates configuration snippets for connecting agents." },
     { "name": "Auth",        "description": "Session authentication — login, logout, and status check. These endpoints are **unauthenticated** (no session cookie required)." },
-    { "name": "Setup",       "description": "First-time setup wizard — connection test and resource provisioning. These endpoints are **unauthenticated** and are only used before setup is complete." }
+    { "name": "Setup",       "description": "First-time setup wizard — connection test and resource provisioning. These endpoints are **unauthenticated** and are only used before setup is complete." },
+    { "name": "Holds",       "description": "Human-in-the-loop holds for tool-call approval. Agent plugins call POST /holds synchronously before executing a tool; the request blocks until a human approves/denies, the session ends, or the timeout expires. Dashboard users interact via the other holds endpoints." },
+    { "name": "Activity",    "description": "Combined chronological feed of hold events and (optionally) auto-allowed tool-call hook events. Powers the real-time activity view in the dashboard." }
   ],
   "security": [
     { "cookieAuth": [] }
@@ -362,16 +364,15 @@ const openAPISpec = `{
           { "name": "until", "in": "query", "description": "RFC 3339 upper bound.", "schema": { "type": "string", "format": "date-time" } }
         ],
         "responses": {
-          "200": { "description": "LLM metrics by model", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LLMMetrics" },
+          "200": { "description": "LLM token usage metrics", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LLMMetrics" },
             "example": {
-              "total_calls": 412,
-              "total_input_tokens": 820000,
-              "total_output_tokens": 410000,
-              "total_cache_read_tokens": 50000,
-              "models": [
-                { "model": "claude-sonnet-4-6", "provider": "anthropic", "call_count": 390, "input_tokens": 780000, "output_tokens": 390000, "cache_read_tokens": 48000 },
-                { "model": "claude-opus-4-6",   "provider": "anthropic", "call_count": 22,  "input_tokens": 40000,  "output_tokens": 20000,  "cache_read_tokens": 2000 }
-              ]
+              "period": { "since": "2026-04-01T00:00:00Z", "until": "2026-04-09T23:59:59Z" },
+              "filters": {},
+              "tokens": { "input": 820000, "output": 410000, "total": 1280000, "cache_read": 50000, "cache_write": 0 },
+              "calls": { "total": 412, "success": 410, "failed": 2, "success_rate": 0.9951 },
+              "stop_reasons": { "end_turn": 408, "max_tokens": 4 },
+              "latency_ms": { "p50": 2100, "p95": 8400, "p99": 14200, "avg": 2850, "min": 320, "max": 18400, "samples": 412 },
+              "throughput": [{ "bucket": "2026-04-09T10:00:00Z", "llm_calls": 12, "input_tokens": 24000, "output_tokens": 12000, "total_tokens": 36000 }]
             }
           }}}
         }
@@ -389,13 +390,14 @@ const openAPISpec = `{
           { "name": "until", "in": "query", "description": "RFC 3339 upper bound.", "schema": { "type": "string", "format": "date-time" } }
         ],
         "responses": {
-          "200": { "description": "Tool usage breakdown", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ToolMetrics" },
+          "200": { "description": "Tool usage metrics", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ToolMetrics" },
             "example": {
-              "total_calls": 1840,
-              "tools": [
-                { "tool_name": "Read",  "call_count": 820, "block_count": 0 },
-                { "tool_name": "Bash",  "call_count": 310, "block_count": 2 },
-                { "tool_name": "Write", "call_count": 280, "block_count": 0 }
+              "period": { "since": "2026-04-01T00:00:00Z" },
+              "filters": {},
+              "summary": { "total_calls": 1840, "success_calls": 1830, "failed_calls": 10, "success_rate": 0.9946 },
+              "by_tool": [
+                { "tool_name": "Read",  "total_calls": 820, "success_calls": 820, "failed_calls": 0, "success_rate": 1.0, "latency_ms": { "p50": 45, "p95": 120, "p99": 280, "avg": 58, "min": 10, "max": 840, "samples": 820 } },
+                { "tool_name": "Bash",  "total_calls": 310, "success_calls": 302, "failed_calls": 8, "success_rate": 0.9742, "latency_ms": { "p50": 380, "p95": 2100, "p99": 4800, "avg": 620, "min": 80, "max": 8200, "samples": 310 } }
               ]
             }
           }}}
@@ -411,33 +413,98 @@ const openAPISpec = `{
         "operationId": "listThreats",
         "parameters": [
           { "name": "severity", "in": "query", "description": "Filter by severity level.", "schema": { "type": "string", "enum": ["critical", "warning", "info"] } },
-          { "name": "category", "in": "query", "description": "Filter by rule category, e.g. \u0060prompt_injection\u0060, \u0060dlp\u0060, \u0060privilege\u0060, \u0060supply_chain\u0060.", "schema": { "type": "string" } },
+          { "name": "status",   "in": "query", "description": "Filter by threat lifecycle status.", "schema": { "type": "string", "enum": ["open", "acknowledged", "cleared"] } },
+          { "name": "agent_id", "in": "query", "description": "Filter to a specific agent_id.", "schema": { "type": "string" } },
           { "name": "page",  "in": "query", "schema": { "type": "integer", "default": 1 } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
         ],
         "responses": {
           "200": { "description": "Threat list", "content": { "application/json": { "schema": {
             "type": "object",
             "properties": {
               "threats": { "type": "array", "items": { "$ref": "#/components/schemas/Threat" } },
-              "total": { "type": "integer" }
+              "total": { "type": "integer" },
+              "page":  { "type": "integer" },
+              "limit": { "type": "integer" }
             }
           }, "example": {
             "threats": [{
+              "threat_id": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
               "rule_id": "rp-001",
               "rule_name": "Prompt Injection Shield",
               "severity": "critical",
               "agent_id": "claude-code",
               "deployment_id": "eng-team",
               "session_id": "a1b2c3d4-0000-0000-0000-000000000001",
-              "run_id": "chatcmpl_4ff08efb-c086-4927-9305-20ef7f95d329",
-              "hook_name": "llm_input",
-              "tool_name": "",
-              "message": "Potential prompt injection in llm_input from agent claude-code",
-              "detected_at": "2026-04-09T10:00:00Z"
+              "event_count": 3,
+              "first_seen": "2026-04-09T10:00:00Z",
+              "last_seen": "2026-04-09T10:05:00Z",
+              "status": "open",
+              "events": [{ "detected_at": "2026-04-09T10:00:00Z", "run_id": "chatcmpl_4ff08efb", "hook_name": "llm_input", "tool_name": "", "message": "Prompt injection detected", "event_data": "{}" }]
             }],
-            "total": 7
+            "total": 7, "page": 1, "limit": 20
           }}}}
+        }
+      }
+    },
+
+    "/threats/{id}": {
+      "get": {
+        "tags": ["Threats"],
+        "summary": "Get threat detail",
+        "description": "Returns a single deduplicated threat by its computed threat_id (MD5 of agent_id+deployment_id+session_id+rule_id). Includes up to 50 raw security events and, if a hold is currently pending for this threat, a pending_hold object with Approve/Deny context.",
+        "operationId": "getThreat",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "description": "Threat ID — MD5 hex string computed from (agent_id, deployment_id, session_id, rule_id).", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Threat detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ThreatDetailResponse" } } } },
+          "404": { "description": "Threat not found." },
+          "503": { "description": "Timeplus unavailable." }
+        }
+      }
+    },
+
+    "/threats/{id}/acknowledge": {
+      "post": {
+        "tags": ["Threats"],
+        "summary": "Acknowledge a threat",
+        "description": "Sets the threat status to acknowledged. The :id must be the MD5 computed from the four body fields. Acknowledged threats auto-reopen when new security events arrive.",
+        "operationId": "acknowledgeThreat",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "description": "Threat ID (MD5 hex).", "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ThreatStatusRequest" },
+            "example": { "agent_id": "claude-code", "deployment_id": "eng-team", "session_id": "a1b2c3d4-0000-0000-0000-000000000001", "rule_id": "rp-001" }
+          }}
+        },
+        "responses": {
+          "200": { "description": "Status updated.", "content": { "application/json": { "example": { "ok": true, "status": "acknowledged" } } } },
+          "400": { "description": "Missing required fields or body identity does not match :id." }
+        }
+      }
+    },
+
+    "/threats/{id}/clear": {
+      "post": {
+        "tags": ["Threats"],
+        "summary": "Clear a threat",
+        "description": "Sets the threat status to cleared. Same request body as acknowledge. Cleared threats auto-reopen when new security events arrive.",
+        "operationId": "clearThreat",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "description": "Threat ID (MD5 hex).", "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ThreatStatusRequest" },
+            "example": { "agent_id": "claude-code", "deployment_id": "eng-team", "session_id": "a1b2c3d4-0000-0000-0000-000000000001", "rule_id": "rp-001" }
+          }}
+        },
+        "responses": {
+          "200": { "description": "Status updated.", "content": { "application/json": { "example": { "ok": true, "status": "cleared" } } } },
+          "400": { "description": "Missing required fields or body identity does not match :id." }
         }
       }
     },
@@ -453,16 +520,23 @@ const openAPISpec = `{
           { "name": "until", "in": "query", "description": "RFC 3339 upper bound.", "schema": { "type": "string", "format": "date-time" } }
         ],
         "responses": {
-          "200": { "description": "Cost summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CostSummary" },
+          "200": { "description": "Cost summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CostResponse" },
             "example": {
-              "total_cost_usd": 12.84,
-              "daily": [
-                { "date": "2026-04-08", "cost_usd": 4.20, "input_tokens": 420000, "output_tokens": 210000 },
-                { "date": "2026-04-09", "cost_usd": 8.64, "input_tokens": 820000, "output_tokens": 410000 }
+              "month_to_date": 12.84,
+              "forecasted": 38.52,
+              "avg_token_cost": 0.00000825,
+              "cache_savings": 1.20,
+              "wasted_spend": 0.43,
+              "daily_spend": [
+                { "day": "2026-04-08", "amount": 4.20 },
+                { "day": "2026-04-09", "amount": 8.64 }
               ],
-              "by_model": [
-                { "model": "claude-sonnet-4-6", "provider": "anthropic", "cost_usd": 11.52 },
-                { "model": "claude-opus-4-6",   "provider": "anthropic", "cost_usd": 1.32 }
+              "token_breakdown": [
+                { "label": "Input",  "percentage": 64, "tokens": 820000, "amount": 8.20 },
+                { "label": "Output", "percentage": 32, "tokens": 410000, "amount": 4.10 }
+              ],
+              "agent_model_costs": [
+                { "model": "claude-sonnet-4-6", "agent_name": "Engineering Team", "cost": 11.52, "requests": "390", "provider": "anthropic", "agent_id": "claude-code", "input_tokens": 780000, "output_tokens": 390000, "cache_tokens": 48000 }
               ]
             }
           }}}
@@ -530,23 +604,25 @@ const openAPISpec = `{
         "description": "Returns all non-deleted rules from the \u0060agentguard_rules\u0060 append-only stream. Current state is computed via \u0060arg_max(field, updated_at) GROUP BY rule_id\u0060.",
         "operationId": "listRules",
         "responses": {
-          "200": { "description": "Installed rules", "content": { "application/json": { "schema": {
-            "type": "object",
-            "properties": { "rule_packs": { "type": "array", "items": { "$ref": "#/components/schemas/RulePack" } } }
-          }, "example": {
-            "rule_packs": [{
-              "id": "rp-001",
-              "name": "Prompt Injection Shield",
-              "version": "1.0.0",
-              "description": "Detects direct and indirect prompt injection attacks.",
-              "enabled": true,
-              "severity": "critical",
-              "category": "prompt_injection",
-              "fp_rate": "medium",
-              "hook_sources": "llm_input",
-              "updated_at": "2026-04-01T00:00:00Z"
-            }]
-          }}}}
+          "200": { "description": "Installed rules with detection summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RulesResponse" },
+            "example": {
+              "rule_packs": [{
+                "id": "rp-001",
+                "name": "Prompt Injection Shield",
+                "version": "1.0.0",
+                "description": "Detects direct and indirect prompt injection attacks.",
+                "enabled": true,
+                "severity": "critical",
+                "category": "prompt_injection",
+                "fp_rate": "medium",
+                "hook_sources": "llm_input",
+                "block_policy": "hold",
+                "detections_24h": 3
+              }],
+              "total_detections_24h": 3,
+              "active_rule_density": 75,
+              "recent_detections": [{ "rule_id": "rp-001", "rule_name": "Prompt Injection Shield", "severity": "critical", "agent_id": "claude-code", "hook_name": "llm_input", "message": "Injection detected", "detected_at": "2026-04-09T10:00:00Z" }]
+            }}}}
         }
       },
       "post": {
@@ -693,7 +769,7 @@ const openAPISpec = `{
           { "name": "id", "in": "path", "required": true, "description": "Rule ID, e.g. \u0060rp-001\u0060 or \u0060custom-a1b2c3\u0060.", "schema": { "type": "string" }, "example": "rp-001" }
         ],
         "responses": {
-          "200": { "description": "Rule detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RulePack" } } } },
+          "200": { "description": "Rule detail with recent detections", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleDetailResponse" } } } },
           "404": { "description": "Rule not found or deleted." }
         }
       },
@@ -768,6 +844,224 @@ const openAPISpec = `{
         "responses": {
           "200": { "description": "Rule upgraded, MV rebuilt.", "content": { "application/json": { "example": { "upgraded": true, "rule_id": "rp-003" } } } },
           "404": { "description": "Rule not found." }
+        }
+      }
+    },
+
+    "/rules/{id}/policy": {
+      "post": {
+        "tags": ["Rules"],
+        "summary": "Set rule block policy",
+        "description": "Sets the enforcement mode for a rule without toggling its enabled state. The block_policy controls what happens when the rule matches a tool call via the POST /holds synchronous path:\n\n- \u0060log_only\u0060 — detect and log only; never create a hold or block the tool call.\n- \u0060hold\u0060 — pause the tool call for human review; apply fail-policy on timeout.\n- \u0060auto_block\u0060 — immediately block the tool call without human review.\n\nSwitching to \u0060log_only\u0060 automatically abandons any pending holds for this rule so in-flight requests are not left waiting.",
+        "operationId": "setRuleBlockPolicy",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "description": "Rule ID.", "schema": { "type": "string" }, "example": "rp-001" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["block_policy"],
+            "properties": { "block_policy": { "type": "string", "enum": ["log_only", "hold", "auto_block"], "description": "Enforcement mode for this rule." } }
+          }, "example": { "block_policy": "hold" }
+          }}
+        },
+        "responses": {
+          "200": { "description": "Updated rule state.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RulePack" } } } },
+          "400": { "description": "block_policy must be log_only|hold|auto_block." },
+          "404": { "description": "Rule not found." }
+        }
+      }
+    },
+
+    "/holds": {
+      "post": {
+        "tags": ["Holds"],
+        "summary": "Submit a tool call for evaluation (plugin endpoint)",
+        "description": "Called synchronously by agent plugins (Claude Code, OpenClaw) on every PreToolUse event. This endpoint is **unauthenticated** — it is called server-to-server from the agent process, not from the browser.\n\nThe request blocks until one of:\n- The tool call is auto-allowed (no matching active rules with hold/auto_block policy).\n- The tool call is auto-blocked (matching rule with \u0060auto_block\u0060 policy).\n- A human approves or denies the hold via POST /holds/{hold_id}/decide.\n- The session ends (SessionEnd hook fires POST /holds/_abandon-session/{session_id}).\n- The configured \u0060holds.timeout_seconds\u0060 elapses (fail-policy applied).\n\nThe \u0060TIMEPLUS_USER\u0060 and \u0060TIMEPLUS_PASSWORD\u0060 env vars must be set on the AgentGuard server for this endpoint to function.",
+        "operationId": "createHold",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HoldRequest" },
+            "example": { "deployment_id": "eng-team", "agent_id": "claude-code", "session_id": "a1b2c3d4-0000-0000-0000-000000000001", "run_id": "chatcmpl_4ff08efb", "tool_name": "Bash", "tool_input": { "command": "rm -rf /tmp/secrets" }, "event_time": "2026-04-09T10:00:00Z", "hook_payload": {}, "agent_type": "claudecode" }
+          }}
+        },
+        "responses": {
+          "200": { "description": "Decision for the tool call.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HoldResponse" },
+            "example": { "decision": "allow" }
+          }}},
+          "400": { "description": "Invalid request body." },
+          "503": { "description": "Service credentials not configured or Timeplus unavailable." }
+        }
+      },
+      "get": {
+        "tags": ["Holds"],
+        "summary": "List holds",
+        "description": "Returns holds filtered by status. Defaults to pending holds (holds awaiting human decision). Holds are resolved via POST /holds/{hold_id}/decide.",
+        "operationId": "listHolds",
+        "parameters": [
+          { "name": "status", "in": "query", "description": "Status to filter by. Defaults to pending.", "schema": { "type": "string", "enum": ["pending", "approved", "denied", "timeout", "abandoned"], "default": "pending" } },
+          { "name": "limit", "in": "query", "description": "Max rows to return (1-500, default 100).", "schema": { "type": "integer", "default": 100, "minimum": 1, "maximum": 500 } }
+        ],
+        "responses": {
+          "200": { "description": "Hold list", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": {
+              "holds": { "type": "array", "items": { "$ref": "#/components/schemas/Hold" } },
+              "total": { "type": "integer" }
+            }
+          }, "example": {
+            "holds": [{
+              "hold_id": "e1f2g3h4-0000-0000-0000-000000000001",
+              "deployment_id": "eng-team",
+              "agent_id": "claude-code",
+              "session_id": "a1b2c3d4-0000-0000-0000-000000000001",
+              "run_id": "chatcmpl_4ff08efb",
+              "tool_name": "Bash",
+              "rule_id": "rp-003",
+              "severity": "warning",
+              "args_summary": "{\"command\":\"rm -rf /tmp/secrets\"}",
+              "message": "Sensitive shell command matches Privilege Guard rule",
+              "created_at": "2026-04-09T10:00:05Z",
+              "status": "pending"
+            }],
+            "total": 1
+          }}}}
+        }
+      }
+    },
+
+    "/holds/_abandon-session/{session_id}": {
+      "post": {
+        "tags": ["Holds"],
+        "summary": "Abandon all pending holds for a session (plugin endpoint)",
+        "description": "Called fire-and-forget by the agent plugin's SessionEnd hook when a session terminates. Marks every pending hold for the session as \u0060abandoned\u0060 and wakes the blocked POST /holds goroutine so the plugin can exit cleanly. This endpoint is **unauthenticated**.",
+        "operationId": "abandonSession",
+        "security": [],
+        "parameters": [
+          { "name": "session_id", "in": "path", "required": true, "description": "Session UUID that is ending.", "schema": { "type": "string" }, "example": "a1b2c3d4-0000-0000-0000-000000000001" }
+        ],
+        "responses": {
+          "200": { "description": "Holds abandoned.", "content": { "application/json": { "example": { "abandoned": 2 } } } },
+          "503": { "description": "Service credentials not configured or Timeplus unavailable." }
+        }
+      }
+    },
+
+    "/holds/_drain": {
+      "post": {
+        "tags": ["Holds"],
+        "summary": "Drain all pending holds (operator endpoint)",
+        "description": "Marks every pending hold as \u0060abandoned\u0060 and applies fail-policy to each blocked plugin request. Use during maintenance or incident response to unblock all agents immediately.",
+        "operationId": "drainHolds",
+        "responses": {
+          "200": { "description": "All pending holds drained.", "content": { "application/json": { "example": { "drained": 5 } } } },
+          "503": { "description": "Timeplus unavailable." }
+        }
+      }
+    },
+
+    "/holds/{hold_id}": {
+      "get": {
+        "tags": ["Holds"],
+        "summary": "Get hold detail",
+        "description": "Returns the current state of a single hold plus a full status-change timeline (all rows for this hold_id ordered by updated_at).",
+        "operationId": "getHold",
+        "parameters": [
+          { "name": "hold_id", "in": "path", "required": true, "description": "Hold UUID.", "schema": { "type": "string" }, "example": "e1f2g3h4-0000-0000-0000-000000000001" }
+        ],
+        "responses": {
+          "200": { "description": "Hold detail with timeline", "content": { "application/json": { "example": {
+            "hold": {
+              "hold_id": "e1f2g3h4-0000-0000-0000-000000000001",
+              "tool_name": "Bash",
+              "status": "pending",
+              "created_at": "2026-04-09T10:00:05Z"
+            },
+            "timeline": [
+              { "status": "pending", "decided_by": "", "decided_at": null, "decided_reason": "", "updated_at": "2026-04-09T10:00:05Z" }
+            ]
+          }}}},
+          "404": { "description": "Hold not found." }
+        }
+      }
+    },
+
+    "/holds/{hold_id}/decide": {
+      "post": {
+        "tags": ["Holds"],
+        "summary": "Approve or deny a hold",
+        "description": "Submits a human decision for a pending hold. The decision is persisted to \u0060agentguard_holds\u0060 and the blocked POST /holds goroutine is woken so the plugin receives the answer immediately.\n\nIf the hold has already been decided (approved, denied, timeout, abandoned), this call is idempotent — it returns the existing decision without writing a new row.",
+        "operationId": "decideHold",
+        "parameters": [
+          { "name": "hold_id", "in": "path", "required": true, "description": "Hold UUID.", "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HoldDecideRequest" },
+            "example": { "decision": "approved", "decided_by": "alice@example.com", "decided_reason": "Verified command is safe" }
+          }}
+        },
+        "responses": {
+          "200": { "description": "Decision recorded.", "content": { "application/json": { "example": { "ok": true } } } },
+          "400": { "description": "decision must be approved|denied." },
+          "404": { "description": "Hold not found." }
+        }
+      }
+    },
+
+    "/activity": {
+      "get": {
+        "tags": ["Activity"],
+        "summary": "List activity events",
+        "description": "Returns a combined chronological feed of hold events and (optionally) auto-allowed tool-call hook events, ordered newest-first.\n\nBy default only hold events (those that triggered a rule hold/block decision) are returned. Pass \u0060include_allowed=true\u0060 to also include hook events that were auto-allowed without triggering any rule — useful for a full tool-call audit trail per session.",
+        "operationId": "listActivity",
+        "parameters": [
+          { "name": "session_id",      "in": "query", "description": "Filter to a single session.", "schema": { "type": "string" } },
+          { "name": "status",          "in": "query", "description": "Filter hold events by status.", "schema": { "type": "string", "enum": ["pending", "approved", "denied", "timeout", "abandoned"] } },
+          { "name": "include_allowed", "in": "query", "description": "Also include auto-allowed hook events (default false). Raises the max limit to 500.", "schema": { "type": "boolean", "default": false } },
+          { "name": "limit",           "in": "query", "description": "Max events to return (1-100, or 1-500 when include_allowed=true). Default 100.", "schema": { "type": "integer", "default": 100 } }
+        ],
+        "responses": {
+          "200": { "description": "Activity event feed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ActivityResponse" },
+            "example": {
+              "events": [{
+                "id": "e1f2g3h4-0000-0000-0000-000000000001",
+                "event_time": "2026-04-09T10:00:05Z",
+                "tool_name": "Bash",
+                "status": "approved",
+                "rule_id": "rp-003",
+                "rule_name": "Privilege Guard",
+                "severity": "warning",
+                "agent_id": "claude-code",
+                "session_id": "a1b2c3d4-0000-0000-0000-000000000001",
+                "run_id": "chatcmpl_4ff08efb",
+                "args_summary": "{\"command\":\"ls /tmp\"}",
+                "message": "Sensitive tool usage",
+                "decided_by": "alice@example.com",
+                "decided_reason": "Safe command",
+                "is_hold_event": true
+              }],
+              "total": 1
+            }
+          }}}
+        }
+      }
+    },
+
+    "/onboarding/install-script": {
+      "get": {
+        "tags": ["Onboarding"],
+        "summary": "Download the AgentGuard install script",
+        "description": "Serves the shell script that automates plugin installation and configuration for an agent. The response is a downloadable \u0060agentguard-install.sh\u0060 file.",
+        "operationId": "getInstallScript",
+        "responses": {
+          "200": {
+            "description": "Shell script download.",
+            "headers": { "Content-Disposition": { "schema": { "type": "string" }, "description": "attachment; filename=\"agentguard-install.sh\"" } },
+            "content": { "text/x-shellscript": { "schema": { "type": "string", "format": "binary" } } }
+          }
         }
       }
     },
@@ -1003,51 +1297,58 @@ const openAPISpec = `{
     "schemas": {
       "Dashboard": {
         "type": "object",
-        "description": "Top-level summary counters for the dashboard.",
+        "description": "Full dashboard response with KPIs, live threat feed, threat categories, and recent agents.",
         "properties": {
-          "total_agents":  { "type": "integer", "description": "Number of distinct (deployment_id, agent_id) pairs seen in hook events." },
-          "total_events":  { "type": "integer", "description": "Total hook events ingested across all agents." },
-          "total_threats": { "type": "integer", "description": "Total detections written to agentguard_security_events." },
-          "active_rules":  { "type": "integer", "description": "Number of rules currently marked enabled=true." }
+          "kpis": {
+            "type": "object",
+            "description": "High-level KPI counters.",
+            "properties": {
+              "total_agents":          { "type": "integer", "description": "Number of distinct (deployment_id, agent_id) pairs." },
+              "agents_delta":          { "type": "string",  "description": "Human-readable delta vs prior period, e.g. +2." },
+              "active_threats":        { "type": "integer", "description": "Threats currently in open state." },
+              "critical_escalations":  { "type": "integer", "description": "Critical-severity threats in the last 24h." },
+              "total_cost_24h":        { "type": "string",  "description": "Formatted total cost for the last 24h, e.g. $4.20." },
+              "cost_status":           { "type": "string",  "description": "Budget status label, e.g. under_budget." },
+              "active_rules":          { "type": "integer", "description": "Number of rules currently enabled." }
+            }
+          },
+          "live_threat_feed":   { "type": "array", "items": { "$ref": "#/components/schemas/Threat" }, "description": "Most recent open threats." },
+          "threat_categories":  { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "percentage": { "type": "integer" } } }, "description": "Threat count breakdown by category." },
+          "recent_agents":      { "type": "array", "items": { "$ref": "#/components/schemas/Agent" }, "description": "Most recently active agents." }
         }
       },
       "Agent": {
         "type": "object",
         "description": "Aggregated stats for one agent (deployment_id + agent_id pair).",
         "properties": {
-          "agent_id":       { "type": "string",  "description": "Agent identifier as reported by the plugin." },
-          "deployment_id":  { "type": "string",  "description": "Deployment/team identifier." },
-          "deployment_name":{ "type": "string",  "description": "Human-readable deployment name." },
-          "event_count":    { "type": "integer", "description": "Total hook events from this agent." },
-          "session_count":  { "type": "integer", "description": "Number of distinct sessions." },
-          "total_tokens":   { "type": "integer", "description": "Sum of input + output + cache-read tokens." },
-          "llm_call_count": { "type": "integer", "description": "Number of llm_output hook events (one per LLM turn)." },
-          "last_seen":      { "type": "string", "format": "date-time", "description": "Timestamp of the most recent hook event." }
+          "agent_id":        { "type": "string",  "description": "Agent identifier as reported by the plugin." },
+          "deployment_id":   { "type": "string",  "description": "Deployment/team identifier." },
+          "deployment_name": { "type": "string",  "description": "Human-readable deployment name." },
+          "agent_type":      { "type": "string",  "description": "Plugin type: claudecode or openclaw.", "enum": ["claudecode", "openclaw", ""] },
+          "status":          { "type": "string",  "description": "Derived activity status.", "enum": ["active", "idle"] },
+          "event_count":     { "type": "integer", "description": "Total hook events from this agent." },
+          "session_count":   { "type": "integer", "description": "Number of distinct sessions." },
+          "run_count":       { "type": "integer", "description": "Number of distinct LLM runs." },
+          "tool_call_count": { "type": "integer", "description": "Total before_tool_call events." },
+          "total_tokens":    { "type": "integer", "description": "Sum of input + output + cache-read tokens." },
+          "llm_call_count":  { "type": "integer", "description": "Number of llm_output hook events (one per LLM turn)." },
+          "last_seen":       { "type": "string", "format": "date-time", "description": "Timestamp of the most recent hook event." }
         }
       },
       "AgentDetail": {
-        "allOf": [
-          { "$ref": "#/components/schemas/Agent" },
-          {
-            "type": "object",
-            "properties": {
-              "input_tokens":       { "type": "integer", "description": "Prompt tokens consumed." },
-              "output_tokens":      { "type": "integer", "description": "Completion tokens generated." },
-              "cache_read_tokens":  { "type": "integer", "description": "Tokens served from Anthropic prompt cache." },
-              "block_count":        { "type": "integer", "description": "Number of hook events where hook_decision=block." },
-              "first_seen":         { "type": "string", "format": "date-time", "description": "Timestamp of the earliest hook event." },
-              "models":             { "type": "array", "items": { "type": "string" }, "description": "Distinct model names used by this agent." }
-            }
-          }
-        ]
+        "description": "GET /agents/{id} returns the same Agent schema with all fields populated including run_count, tool_call_count, and status.",
+        "$ref": "#/components/schemas/Agent"
       },
       "Session": {
         "type": "object",
         "description": "A single user conversation session within an agent.",
         "properties": {
           "session_id":   { "type": "string",  "description": "UUID identifying the session." },
-          "session_key":  { "type": "string",  "description": "Raw session key from OpenClaw, e.g. announce:v1:agent:...:openai-user:abc." },
+          "session_key":  { "type": "string",  "description": "Raw session key, e.g. announce:v1:agent:...:openai-user:abc." },
           "session_type": { "type": "string",  "description": "Derived session type.", "enum": ["Web UI", "HTTP API", "Cron", "Sub-agent", "Unknown"] },
+          "status":       { "type": "string",  "description": "active when no session_end event exists; ended otherwise.", "enum": ["active", "ended"] },
+          "model":        { "type": "string",  "description": "LLM model used in this session (from the most recent llm_output event)." },
+          "provider":     { "type": "string",  "description": "LLM provider, e.g. anthropic." },
           "run_count":    { "type": "integer", "description": "Number of distinct LLM turns (runs) in this session." },
           "event_count":  { "type": "integer", "description": "Total hook events in this session." },
           "first_seen":   { "type": "string",  "format": "date-time" },
@@ -1062,6 +1363,8 @@ const openAPISpec = `{
           "session_key":      { "type": "string" },
           "session_type":     { "type": "string" },
           "status":           { "type": "string", "enum": ["active", "ended"], "description": "ended when a session_end hook event exists for this session." },
+          "model":            { "type": "string",  "description": "LLM model used in this session." },
+          "provider":         { "type": "string",  "description": "LLM provider, e.g. anthropic." },
           "total_tool_calls": { "type": "integer", "description": "Total before_tool_call events across all runs." },
           "runs":             { "type": "array", "items": { "$ref": "#/components/schemas/Run" } }
         }
@@ -1102,108 +1405,248 @@ const openAPISpec = `{
       },
       "HookEvent": {
         "type": "object",
-        "description": "A raw hook event from agentguard_hook_events.",
+        "description": "A raw hook event from agentguard_hook_events returned by GET /agents/{id}/events.",
         "properties": {
-          "hook_name":     { "type": "string", "description": "OpenClaw lifecycle hook name, e.g. before_tool_call, llm_output, session_end." },
+          "hook_name":     { "type": "string", "description": "Lifecycle hook name, e.g. before_tool_call, llm_output, session_end." },
           "event_time":    { "type": "string", "format": "date-time" },
           "session_id":    { "type": "string" },
           "run_id":        { "type": "string" },
-          "agent_id":      { "type": "string" },
-          "deployment_id": { "type": "string" },
           "tool_name":     { "type": "string", "description": "Tool name for tool-call hooks, empty otherwise." },
           "provider":      { "type": "string", "description": "LLM provider, e.g. anthropic." },
           "model":         { "type": "string", "description": "LLM model name." },
           "hook_decision": { "type": "string", "description": "Plugin decision: observe (pass-through) or block.", "enum": ["observe", "block", ""] },
           "block_reason":  { "type": "string", "description": "Human-readable reason when hook_decision=block." },
-          "event_data":    { "type": "string", "description": "JSON payload with hook-specific fields: tokens, durationMs, toolCallId, error, etc." }
+          "event_data":    { "type": "string", "description": "JSON payload with hook-specific fields: tokens, durationMs, toolCallId, error, etc." },
+          "agent_type":    { "type": "string", "description": "Agent plugin type: claudecode or openclaw.", "enum": ["claudecode", "openclaw", ""] }
         }
       },
       "LLMMetrics": {
         "type": "object",
+        "description": "LLM token usage and call statistics returned by GET /metrics/llm.",
         "properties": {
-          "total_calls":             { "type": "integer", "description": "Total llm_output events across all agents." },
-          "total_input_tokens":      { "type": "integer" },
-          "total_output_tokens":     { "type": "integer" },
-          "total_cache_read_tokens": { "type": "integer" },
-          "models": {
+          "period":  { "$ref": "#/components/schemas/MetricsPeriod" },
+          "filters": { "$ref": "#/components/schemas/MetricsFilters" },
+          "tokens": {
+            "type": "object",
+            "description": "Cumulative token counts.",
+            "properties": {
+              "input":       { "type": "integer", "format": "int64" },
+              "output":      { "type": "integer", "format": "int64" },
+              "total":       { "type": "integer", "format": "int64" },
+              "cache_read":  { "type": "integer", "format": "int64" },
+              "cache_write": { "type": "integer", "format": "int64" }
+            }
+          },
+          "calls": {
+            "type": "object",
+            "description": "LLM API call success/failure summary.",
+            "properties": {
+              "total":        { "type": "integer" },
+              "success":      { "type": "integer" },
+              "failed":       { "type": "integer" },
+              "success_rate": { "type": "number", "nullable": true, "description": "null when total=0." }
+            }
+          },
+          "stop_reasons": { "type": "object", "additionalProperties": { "type": "integer" }, "description": "Count of each stop reason (end_turn, max_tokens, tool_use, etc.)." },
+          "latency_ms": { "$ref": "#/components/schemas/LatencyStats" },
+          "throughput": {
             "type": "array",
-            "description": "Per-model breakdown.",
+            "description": "Time-bucketed LLM call and token throughput.",
             "items": {
               "type": "object",
               "properties": {
-                "model":            { "type": "string" },
-                "provider":         { "type": "string" },
-                "call_count":       { "type": "integer" },
-                "input_tokens":     { "type": "integer" },
-                "output_tokens":    { "type": "integer" },
-                "cache_read_tokens":{ "type": "integer" }
+                "bucket":        { "type": "string", "format": "date-time" },
+                "llm_calls":     { "type": "integer" },
+                "input_tokens":  { "type": "integer", "format": "int64" },
+                "output_tokens": { "type": "integer", "format": "int64" },
+                "total_tokens":  { "type": "integer", "format": "int64" }
               }
             }
           }
         }
       },
+      "MetricsPeriod": {
+        "type": "object",
+        "description": "The time range of a metrics query (both RFC 3339 strings, omitted when unbounded).",
+        "properties": {
+          "since": { "type": "string", "format": "date-time" },
+          "until": { "type": "string", "format": "date-time" }
+        }
+      },
+      "MetricsFilters": {
+        "type": "object",
+        "description": "Active dimension filters echoed back in metrics responses.",
+        "properties": {
+          "agent_id":  { "type": "string" },
+          "model":     { "type": "string" },
+          "tool_name": { "type": "string" }
+        }
+      },
+      "LatencyStats": {
+        "type": "object",
+        "description": "Latency percentile statistics in milliseconds.",
+        "properties": {
+          "p50":     { "type": "number" },
+          "p95":     { "type": "number" },
+          "p99":     { "type": "number" },
+          "avg":     { "type": "number" },
+          "min":     { "type": "number" },
+          "max":     { "type": "number" },
+          "samples": { "type": "integer" }
+        }
+      },
       "ToolMetrics": {
         "type": "object",
+        "description": "Tool-call statistics returned by GET /metrics/tools.",
         "properties": {
-          "total_calls": { "type": "integer", "description": "Total before_tool_call events." },
-          "tools": {
+          "period":  { "$ref": "#/components/schemas/MetricsPeriod" },
+          "filters": { "$ref": "#/components/schemas/MetricsFilters" },
+          "summary": {
+            "type": "object",
+            "description": "Aggregate tool call counts.",
+            "properties": {
+              "total_calls":   { "type": "integer" },
+              "success_calls": { "type": "integer" },
+              "failed_calls":  { "type": "integer" },
+              "success_rate":  { "type": "number", "nullable": true }
+            }
+          },
+          "by_tool": {
             "type": "array",
             "description": "Per-tool-name breakdown.",
             "items": {
               "type": "object",
               "properties": {
-                "tool_name":   { "type": "string" },
-                "call_count":  { "type": "integer" },
-                "block_count": { "type": "integer", "description": "Calls where hook_decision=block." }
+                "tool_name":     { "type": "string" },
+                "total_calls":   { "type": "integer" },
+                "success_calls": { "type": "integer" },
+                "failed_calls":  { "type": "integer" },
+                "success_rate":  { "type": "number", "nullable": true },
+                "latency_ms":    { "$ref": "#/components/schemas/LatencyStats" }
               }
             }
           }
         }
       },
-      "Threat": {
+      "ThreatEvent": {
         "type": "object",
-        "description": "A security detection written by a rule materialized view.",
+        "description": "A single raw security event that contributed to a deduplicated threat.",
         "properties": {
-          "rule_id":      { "type": "string" },
-          "rule_name":    { "type": "string" },
-          "severity":     { "type": "string", "enum": ["critical", "warning", "info"] },
-          "agent_id":     { "type": "string" },
-          "deployment_id":{ "type": "string" },
-          "session_id":   { "type": "string" },
-          "run_id":       { "type": "string" },
-          "hook_name":    { "type": "string", "description": "Hook that triggered the detection." },
-          "tool_name":    { "type": "string" },
-          "message":      { "type": "string", "description": "Human-readable detection message." },
-          "detected_at":  { "type": "string", "format": "date-time" },
-          "event_data":   { "type": "string", "description": "Raw event_data JSON from the triggering hook event." }
+          "detected_at": { "type": "string", "description": "Detection timestamp (Proton datetime64 string)." },
+          "run_id":      { "type": "string" },
+          "hook_name":   { "type": "string" },
+          "tool_name":   { "type": "string" },
+          "message":     { "type": "string" },
+          "event_data":  { "type": "string", "description": "Raw JSON payload from the triggering hook event." }
         }
       },
-      "CostSummary": {
+      "Threat": {
         "type": "object",
+        "description": "A deduplicated security threat keyed by (agent_id, deployment_id, session_id, rule_id). Includes aggregated event counts and up to 50 individual detection events. Status lifecycle: open -> acknowledged -> cleared (auto-reopens on new events).",
         "properties": {
-          "total_cost_usd": { "type": "number", "description": "Total estimated cost in USD for the queried period." },
-          "daily": {
+          "threat_id":        { "type": "string",  "description": "MD5 hex string computed from (agent_id, deployment_id, session_id, rule_id). Used as the :id path parameter." },
+          "rule_id":          { "type": "string" },
+          "rule_name":        { "type": "string" },
+          "severity":         { "type": "string", "enum": ["critical", "warning", "info"] },
+          "agent_id":         { "type": "string" },
+          "deployment_id":    { "type": "string" },
+          "session_id":       { "type": "string" },
+          "event_count":      { "type": "integer", "format": "int64", "description": "Total number of security events for this threat key." },
+          "first_seen":       { "type": "string",  "description": "Timestamp of the earliest detection (Proton datetime string)." },
+          "last_seen":        { "type": "string",  "description": "Timestamp of the most recent detection." },
+          "status":           { "type": "string",  "enum": ["open", "acknowledged", "cleared"], "description": "Lifecycle status. Reverts to open if new events arrive after acknowledged or cleared." },
+          "status_updated_at":{ "type": "string",  "description": "When status was last changed." },
+          "events":           { "type": "array", "items": { "$ref": "#/components/schemas/ThreatEvent" }, "description": "Up to 50 individual detection events, newest first." }
+        }
+      },
+      "ThreatDetailResponse": {
+        "type": "object",
+        "description": "Threat detail response from GET /threats/{id}. Extends Threat with an optional pending_hold field.",
+        "allOf": [
+          { "$ref": "#/components/schemas/Threat" },
+          {
+            "type": "object",
+            "properties": {
+              "pending_hold": {
+                "description": "Present when a hold for this threat's rule+session is currently pending human decision.",
+                "oneOf": [
+                  { "$ref": "#/components/schemas/PendingHold" },
+                  { "type": "null" }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ThreatStatusRequest": {
+        "type": "object",
+        "description": "Request body for POST /threats/{id}/acknowledge and POST /threats/{id}/clear. All four fields are required; the server verifies that MD5(agent_id, deployment_id, session_id, rule_id) matches the :id path parameter.",
+        "required": ["agent_id", "deployment_id", "session_id", "rule_id"],
+        "properties": {
+          "agent_id":      { "type": "string" },
+          "deployment_id": { "type": "string" },
+          "session_id":    { "type": "string" },
+          "rule_id":       { "type": "string" }
+        }
+      },
+      "PendingHold": {
+        "type": "object",
+        "description": "A hold that is currently pending human review for this threat's rule+session.",
+        "properties": {
+          "hold_id":      { "type": "string" },
+          "tool_name":    { "type": "string" },
+          "args_summary": { "type": "string", "description": "Truncated JSON of the tool arguments (max 2048 bytes)." },
+          "created_at":   { "type": "string", "format": "date-time" }
+        }
+      },
+      "CostResponse": {
+        "type": "object",
+        "description": "Cost governance summary returned by GET /cost.",
+        "properties": {
+          "month_to_date":     { "type": "number", "description": "Total estimated cost in USD for the queried period." },
+          "forecasted":        { "type": "number", "description": "Projected month-end cost based on current run rate." },
+          "avg_token_cost":    { "type": "number", "description": "Average cost per token (USD)." },
+          "cache_savings":     { "type": "number", "description": "Estimated savings from prompt cache hits (USD)." },
+          "wasted_spend":      { "type": "number", "description": "Estimated cost of failed/retried calls (USD)." },
+          "daily_spend": {
             "type": "array",
             "description": "Daily cost time-series.",
             "items": {
               "type": "object",
               "properties": {
-                "date":          { "type": "string", "description": "Calendar date, YYYY-MM-DD." },
-                "cost_usd":      { "type": "number" },
-                "input_tokens":  { "type": "integer" },
-                "output_tokens": { "type": "integer" }
+                "day":    { "type": "string", "description": "Calendar date, YYYY-MM-DD." },
+                "amount": { "type": "number", "description": "Cost in USD." }
               }
             }
           },
-          "by_model": {
+          "token_breakdown": {
             "type": "array",
-            "description": "Cost breakdown per model.",
+            "description": "Cost breakdown by token type (Input, Output, Cache Read).",
             "items": {
               "type": "object",
               "properties": {
-                "model":    { "type": "string" },
-                "provider": { "type": "string" },
-                "cost_usd": { "type": "number" }
+                "label":      { "type": "string" },
+                "percentage": { "type": "integer" },
+                "tokens":     { "type": "integer", "format": "int64" },
+                "amount":     { "type": "number" }
+              }
+            }
+          },
+          "agent_model_costs": {
+            "type": "array",
+            "description": "Cost breakdown by agent and model.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "model":          { "type": "string" },
+                "agent_name":     { "type": "string" },
+                "cost":           { "type": "number" },
+                "requests":       { "type": "string" },
+                "provider":       { "type": "string" },
+                "agent_id":       { "type": "string" },
+                "input_tokens":   { "type": "integer", "format": "int64" },
+                "output_tokens":  { "type": "integer", "format": "int64" },
+                "cache_tokens":   { "type": "integer", "format": "int64" }
               }
             }
           }
@@ -1225,16 +1668,53 @@ const openAPISpec = `{
         "type": "object",
         "description": "An installed security rule and its current state.",
         "properties": {
-          "id":           { "type": "string",  "description": "Rule identifier: rp-{N} for builtins, custom-{hash} for user-created.", "example": "rp-001" },
-          "name":         { "type": "string",  "example": "Prompt Injection Shield" },
-          "version":      { "type": "string",  "example": "1.0.0" },
-          "description":  { "type": "string" },
-          "enabled":      { "type": "boolean", "description": "Whether the rule's MV is currently active." },
-          "severity":     { "type": "string",  "enum": ["critical", "warning", "info"] },
-          "category":     { "type": "string",  "description": "Rule category: prompt_injection, dlp, privilege, supply_chain, custom." },
-          "fp_rate":      { "type": "string",  "description": "Expected false-positive rate: low, medium, high.", "enum": ["low", "medium", "high"] },
-          "hook_sources": { "type": "string",  "description": "Comma-separated list of hook names this rule inspects." },
-          "updated_at":   { "type": "string",  "format": "date-time", "description": "Timestamp of the last state change." }
+          "id":                 { "type": "string",  "description": "Rule identifier: rp-{N} for builtins, custom-{hash} for user-created.", "example": "rp-001" },
+          "name":               { "type": "string",  "example": "Prompt Injection Shield" },
+          "version":            { "type": "string",  "example": "1.0.0" },
+          "description":        { "type": "string" },
+          "query_sql":          { "type": "string",  "description": "The Proton SELECT used by this rule's materialized view." },
+          "enabled":            { "type": "boolean", "description": "Whether the rule's MV is currently active." },
+          "severity":           { "type": "string",  "enum": ["critical", "warning", "info"] },
+          "category":           { "type": "string",  "description": "Rule category: prompt_injection, dlp, privilege, supply_chain, custom." },
+          "required_telemetry": { "type": "string",  "description": "Telemetry prerequisite note (e.g. requires OTel logs)." },
+          "fp_rate":            { "type": "string",  "description": "Expected false-positive rate.", "enum": ["low", "medium", "high"] },
+          "hook_sources":       { "type": "string",  "description": "Comma-separated list of hook names this rule inspects." },
+          "block_policy":       { "type": "string",  "description": "Enforcement mode for holds integration.", "enum": ["log_only", "hold", "auto_block"] },
+          "detections_24h":     { "type": "integer", "description": "Number of security events generated by this rule in the last 24 hours." },
+          "latest_version":     { "type": "string",  "description": "Catalog version if different from installed version (omitted when up to date)." }
+        }
+      },
+      "RulesResponse": {
+        "type": "object",
+        "description": "Response from GET /rules.",
+        "properties": {
+          "rule_packs":           { "type": "array", "items": { "$ref": "#/components/schemas/RulePack" } },
+          "total_detections_24h": { "type": "integer", "description": "Sum of detections_24h across all installed rules." },
+          "active_rule_density":  { "type": "integer", "description": "Percentage of catalog rules that are currently enabled." },
+          "recent_detections":    { "type": "array", "items": { "$ref": "#/components/schemas/SecurityEvent" }, "description": "Latest security events across all rules." }
+        }
+      },
+      "RuleDetailResponse": {
+        "type": "object",
+        "description": "Response from GET /rules/{id}. Extends RulePack with recent detections.",
+        "allOf": [
+          { "$ref": "#/components/schemas/RulePack" },
+          { "type": "object", "properties": {
+            "recent_detections": { "type": "array", "items": { "$ref": "#/components/schemas/SecurityEvent" }, "description": "Recent detections triggered by this rule." }
+          }}
+        ]
+      },
+      "SecurityEvent": {
+        "type": "object",
+        "description": "A single security detection event from agentguard_security_events.",
+        "properties": {
+          "rule_id":     { "type": "string" },
+          "rule_name":   { "type": "string" },
+          "severity":    { "type": "string", "enum": ["critical", "warning", "info"] },
+          "agent_id":    { "type": "string" },
+          "hook_name":   { "type": "string" },
+          "message":     { "type": "string" },
+          "detected_at": { "type": "string" }
         }
       },
       "CatalogItem": {
@@ -1287,12 +1767,13 @@ const openAPISpec = `{
         "type": "object",
         "description": "Alert payload posted by the Timeplus UDF and pushed to SSE clients.",
         "properties": {
-          "rule_id":     { "type": "string" },
-          "rule_name":   { "type": "string" },
-          "severity":    { "type": "string",  "enum": ["critical", "warning", "info"] },
-          "agent_id":    { "type": "string" },
-          "message":     { "type": "string" },
-          "detected_at": { "type": "string",  "description": "Detection timestamp (string, as sent by Timeplus UDF)." }
+          "rule_id":      { "type": "string" },
+          "rule_name":    { "type": "string" },
+          "severity":     { "type": "string", "enum": ["critical", "warning", "info"] },
+          "agent_id":     { "type": "string" },
+          "deployment_id":{ "type": "string" },
+          "message":      { "type": "string" },
+          "detected_at":  { "type": "string", "description": "Detection timestamp (string, as sent by Timeplus UDF)." }
         }
       },
       "AuthStatus": {
@@ -1350,6 +1831,93 @@ const openAPISpec = `{
         "properties": {
           "status": { "type": "string", "enum": ["running", "ok", "error", "done"], "description": "running=step in progress, ok=step succeeded, error=step failed (provisioning continues), done=all steps complete." },
           "msg":    { "type": "string", "description": "Human-readable message describing the provisioning step." }
+        }
+      },
+      "Hold": {
+        "type": "object",
+        "description": "A hold record from agentguard_holds. Current state is computed inline via arg_max(field, updated_at) GROUP BY hold_id.",
+        "properties": {
+          "hold_id":        { "type": "string",  "description": "UUID for this hold." },
+          "deployment_id":  { "type": "string" },
+          "agent_id":       { "type": "string" },
+          "session_id":     { "type": "string" },
+          "run_id":         { "type": "string" },
+          "tool_name":      { "type": "string",  "description": "The tool call that was intercepted." },
+          "rule_id":        { "type": "string",  "description": "The rule that triggered the hold." },
+          "severity":       { "type": "string",  "enum": ["critical", "warning", "info"] },
+          "args_summary":   { "type": "string",  "description": "Truncated JSON of tool_input (max 2048 bytes)." },
+          "message":        { "type": "string",  "description": "Human-readable reason the hold was created." },
+          "created_at":     { "type": "string",  "format": "date-time" },
+          "status":         { "type": "string",  "enum": ["pending", "approved", "denied", "timeout", "abandoned"] },
+          "decided_by":     { "type": "string",  "description": "Email or identifier of the person who decided the hold. Empty for system decisions." },
+          "decided_at":     { "type": "string",  "format": "date-time" },
+          "decided_reason": { "type": "string" }
+        }
+      },
+      "HoldRequest": {
+        "type": "object",
+        "description": "Request body sent by agent plugins to POST /holds.",
+        "properties": {
+          "deployment_id":   { "type": "string" },
+          "agent_id":        { "type": "string" },
+          "session_id":      { "type": "string" },
+          "run_id":          { "type": "string" },
+          "tool_name":       { "type": "string" },
+          "tool_input":      { "type": "object", "description": "Full tool arguments as a JSON object." },
+          "event_time":      { "type": "string", "format": "date-time", "description": "Timestamp when the PreToolUse hook fired." },
+          "hook_payload":    { "type": "object", "description": "Full raw hook payload from the plugin." },
+          "agent_type":      { "type": "string", "enum": ["claudecode", "openclaw"], "description": "Plugin type. Defaults to claudecode if empty." },
+          "deployment_name": { "type": "string", "description": "Human-readable deployment name (optional)." }
+        }
+      },
+      "HoldResponse": {
+        "type": "object",
+        "description": "Response returned by POST /holds to the waiting plugin.",
+        "properties": {
+          "decision": { "type": "string", "enum": ["allow", "block"], "description": "Whether the tool call should proceed." },
+          "reason":   { "type": "string", "description": "Human-readable explanation (populated for block decisions)." },
+          "hold_id":  { "type": "string", "description": "UUID of the hold record opened for human review (only present when a hold was created)." }
+        }
+      },
+      "HoldDecideRequest": {
+        "type": "object",
+        "description": "Request body for POST /holds/{hold_id}/decide.",
+        "required": ["decision"],
+        "properties": {
+          "decision":       { "type": "string", "enum": ["approved", "denied"], "description": "Human decision: approved allows the tool call, denied blocks it." },
+          "decided_by":     { "type": "string", "description": "Email or display name of the reviewer." },
+          "decided_reason": { "type": "string", "description": "Optional explanation for audit trail." }
+        }
+      },
+      "ActivityEvent": {
+        "type": "object",
+        "description": "One event in the activity feed. Sourced from agentguard_holds (is_hold_event=true) or agentguard_hook_events when include_allowed=true (is_hold_event=false).",
+        "properties": {
+          "id":             { "type": "string",  "description": "hold_id for hold events; synthetic hex hash for hook-only events." },
+          "event_time":     { "type": "string",  "format": "date-time" },
+          "tool_name":      { "type": "string" },
+          "status":         { "type": "string",  "enum": ["pending", "approved", "denied", "timeout", "abandoned", "auto_block", "allowed"], "description": "For hold events: the hold lifecycle status. For hook-only events: always allowed." },
+          "rule_id":        { "type": "string" },
+          "rule_name":      { "type": "string" },
+          "severity":       { "type": "string",  "enum": ["critical", "warning", "info", ""] },
+          "agent_id":       { "type": "string" },
+          "session_id":     { "type": "string" },
+          "run_id":         { "type": "string" },
+          "args_summary":   { "type": "string",  "description": "Truncated JSON of tool arguments." },
+          "message":        { "type": "string" },
+          "decided_by":     { "type": "string" },
+          "decided_at":     { "type": "string",  "format": "date-time", "nullable": true },
+          "decided_reason": { "type": "string" },
+          "hook_payload":   { "type": "string",  "description": "Raw event_data JSON; only populated for hook-only (allowed) events." },
+          "is_hold_event":  { "type": "boolean", "description": "True when this event was sourced from agentguard_holds." }
+        }
+      },
+      "ActivityResponse": {
+        "type": "object",
+        "description": "Response from GET /activity.",
+        "properties": {
+          "events": { "type": "array", "items": { "$ref": "#/components/schemas/ActivityEvent" } },
+          "total":  { "type": "integer" }
         }
       }
     },
