@@ -76,11 +76,10 @@ fi
 
 # ── Derive OTel endpoint from Timeplus URL ─────────────────────────────────
 _otel_host() {
-  local url="$1"
-  echo "$url" | sed 's|:[0-9]*$||' | sed -E 's|^https?://||'
+  python3 -c "from urllib.parse import urlparse; print(urlparse('$1').hostname)"
 }
 _otel_proto() {
-  echo "$1" | grep -oE '^https?'
+  python3 -c "from urllib.parse import urlparse; print(urlparse('$1').scheme)"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -100,6 +99,16 @@ if [[ "$AGENT_TYPE" == "claude-code" ]]; then
 
   echo ""
   echo "Configuring ~/.claude/settings.json..."
+  AGENTGUARD_AGENT_ID="$AGENT_ID" \
+  AGENTGUARD_DEPLOYMENT_ID="$DEPLOYMENT_ID" \
+  AGENTGUARD_DEPLOYMENT_NAME="$DEPLOYMENT_NAME" \
+  AGENTGUARD_TIMEPLUS_URL="$TIMEPLUS_URL" \
+  AGENTGUARD_USERNAME="$TIMEPLUS_USERNAME" \
+  AGENTGUARD_PASSWORD="$TIMEPLUS_PASSWORD" \
+  AGENTGUARD_URL="$AGENTGUARD_URL" \
+  AGENTGUARD_HOLD_FAIL_POLICY="$HOLD_FAIL_POLICY" \
+  AGENTGUARD_HOLDS_ENABLED="$HOLDS_ENABLED" \
+  AGENTGUARD_OTEL_ENDPOINT="$OTEL_ENDPOINT" \
   python3 - <<PYEOF
 import json, os
 
@@ -143,27 +152,29 @@ for event in sync_events:
 for event in async_events:
     upsert(event, async_entry)
 
+import os as _os
+_e = _os.environ
 data.setdefault("env", {}).update({
-    "AGENTGUARD_AGENT_ID":                  "${AGENT_ID}",
-    "AGENTGUARD_DEPLOYMENT_ID":             "${DEPLOYMENT_ID}",
-    "AGENTGUARD_DEPLOYMENT_NAME":           "${DEPLOYMENT_NAME}",
-    "AGENTGUARD_TIMEPLUS_URL":              "${TIMEPLUS_URL}",
+    "AGENTGUARD_AGENT_ID":                  _e["AGENTGUARD_AGENT_ID"],
+    "AGENTGUARD_DEPLOYMENT_ID":             _e["AGENTGUARD_DEPLOYMENT_ID"],
+    "AGENTGUARD_DEPLOYMENT_NAME":           _e["AGENTGUARD_DEPLOYMENT_NAME"],
+    "AGENTGUARD_TIMEPLUS_URL":              _e["AGENTGUARD_TIMEPLUS_URL"],
     "AGENTGUARD_STREAM":                    "agentguard_hook_events",
-    "AGENTGUARD_USERNAME":                  "${TIMEPLUS_USERNAME}",
-    "AGENTGUARD_PASSWORD":                  "${TIMEPLUS_PASSWORD}",
-    "AGENTGUARD_URL":                       "${AGENTGUARD_URL}",
-    "AGENTGUARD_HOLD_FAIL_POLICY":          "${HOLD_FAIL_POLICY}",
-    "AGENTGUARD_HOLDS_ENABLED":             "${HOLDS_ENABLED}",
+    "AGENTGUARD_USERNAME":                  _e["AGENTGUARD_USERNAME"],
+    "AGENTGUARD_PASSWORD":                  _e["AGENTGUARD_PASSWORD"],
+    "AGENTGUARD_URL":                       _e["AGENTGUARD_URL"],
+    "AGENTGUARD_HOLD_FAIL_POLICY":          _e["AGENTGUARD_HOLD_FAIL_POLICY"],
+    "AGENTGUARD_HOLDS_ENABLED":             _e["AGENTGUARD_HOLDS_ENABLED"],
     "CLAUDE_CODE_ENABLE_TELEMETRY":         "1",
     "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA":  "1",
     "OTEL_METRICS_EXPORTER":                "otlp",
     "OTEL_LOGS_EXPORTER":                   "otlp",
     "OTEL_TRACES_EXPORTER":                 "otlp",
     "OTEL_EXPORTER_OTLP_PROTOCOL":          "http/protobuf",
-    "OTEL_EXPORTER_OTLP_ENDPOINT":          "${OTEL_ENDPOINT}",
+    "OTEL_EXPORTER_OTLP_ENDPOINT":          _e["AGENTGUARD_OTEL_ENDPOINT"],
     "OTEL_METRIC_EXPORT_INTERVAL":          "10000",
     "OTEL_LOGS_EXPORT_INTERVAL":            "5000",
-    "OTEL_LOG_TOOL_DETAILS":               "1",
+    "OTEL_LOG_TOOL_DETAILS":                "1",
 })
 
 with open(settings_path, "w") as f:
@@ -201,17 +212,30 @@ if [[ "$AGENT_TYPE" == "openclaw" ]]; then
 
   echo ""
   echo "Installing @timeplus/agentguard-openclaw-plugin..."
-  cd "$OC_DIR"
+  pushd "$OC_DIR" > /dev/null
   npm install @timeplus/agentguard-openclaw-plugin
   PLUGIN_PATH=$(node -e "console.log(require.resolve('@timeplus/agentguard-openclaw-plugin/package.json').replace(/\/package\.json$/, ''))" 2>/dev/null || echo "")
+  popd > /dev/null
 
   CONFIG_FILE="${OC_DIR}/.openclaw/openclaw.json"
   echo ""
   echo "Patching ${CONFIG_FILE}..."
+  AGENTGUARD_CONFIG_FILE="$CONFIG_FILE" \
+  AGENTGUARD_OTEL_ENDPOINT="$OTEL_ENDPOINT" \
+  AGENTGUARD_TIMEPLUS_URL="$TIMEPLUS_URL" \
+  AGENTGUARD_USERNAME="$TIMEPLUS_USERNAME" \
+  AGENTGUARD_PASSWORD="$TIMEPLUS_PASSWORD" \
+  AGENTGUARD_DEPLOYMENT_ID="$DEPLOYMENT_ID" \
+  AGENTGUARD_DEPLOYMENT_NAME="$DEPLOYMENT_NAME" \
+  AGENTGUARD_URL="$AGENTGUARD_URL" \
+  AGENTGUARD_HOLD_FAIL_POLICY="$HOLD_FAIL_POLICY" \
+  AGENTGUARD_HOLDS_ENABLED="$HOLDS_ENABLED" \
+  AGENTGUARD_PLUGIN_PATH="$PLUGIN_PATH" \
   python3 - <<PYEOF
 import json, os, sys
 
-path = "${CONFIG_FILE}"
+_e = os.environ
+path = _e["AGENTGUARD_CONFIG_FILE"]
 if not os.path.exists(path):
     print(f"Error: {path} not found. Run 'make init' in your OpenClaw project first.", file=sys.stderr)
     sys.exit(1)
@@ -224,7 +248,7 @@ data.setdefault("gateway", {})["bind"] = "lan"
 data["diagnostics"] = {
     "enabled": True,
     "otel": {
-        "enabled": True, "endpoint": "${OTEL_ENDPOINT}",
+        "enabled": True, "endpoint": _e["AGENTGUARD_OTEL_ENDPOINT"],
         "traces": True, "metrics": True, "logs": True,
         "serviceName": "openclaw", "sampleRate": 1, "flushIntervalMs": 3000,
     },
@@ -234,24 +258,24 @@ entries = data.setdefault("plugins", {}).setdefault("entries", {})
 entries["diagnostics-otel"] = {"enabled": True}
 
 load_paths = data["plugins"].setdefault("load", {}).setdefault("paths", [])
-plugin_path = "${PLUGIN_PATH}"
+plugin_path = _e["AGENTGUARD_PLUGIN_PATH"]
 if plugin_path and plugin_path not in load_paths:
     load_paths.append(plugin_path)
 
 entries["agentguard"] = {
     "enabled": True,
     "config": {
-        "timeplusUrl":     "${TIMEPLUS_URL}",
+        "timeplusUrl":     _e["AGENTGUARD_TIMEPLUS_URL"],
         "stream":          "agentguard_hook_events",
         "flushMs":         2000,
         "batchSize":       50,
-        "username":        "${TIMEPLUS_USERNAME}",
-        "password":        "${TIMEPLUS_PASSWORD}",
-        "deploymentId":    "${DEPLOYMENT_ID}",
-        "deploymentName":  "${DEPLOYMENT_NAME}",
-        "agentguardUrl":   "${AGENTGUARD_URL}",
-        "holdFailPolicy":  "${HOLD_FAIL_POLICY}",
-        "holdsEnabled":    "${HOLDS_ENABLED}".lower() != "false",
+        "username":        _e["AGENTGUARD_USERNAME"],
+        "password":        _e["AGENTGUARD_PASSWORD"],
+        "deploymentId":    _e["AGENTGUARD_DEPLOYMENT_ID"],
+        "deploymentName":  _e["AGENTGUARD_DEPLOYMENT_NAME"],
+        "agentguardUrl":   _e["AGENTGUARD_URL"],
+        "holdFailPolicy":  _e["AGENTGUARD_HOLD_FAIL_POLICY"],
+        "holdsEnabled":    _e["AGENTGUARD_HOLDS_ENABLED"].lower() != "false",
     },
 }
 
@@ -259,6 +283,11 @@ with open(path, "w") as f:
     json.dump(data, f, indent=2)
 print("  Done: " + path)
 PYEOF
+
+  if [[ -z "$PLUGIN_PATH" ]]; then
+    echo "  Warning: could not resolve agentguard-openclaw-plugin install path." >&2
+    echo "  Add the plugin path to plugins.load.paths in .openclaw/openclaw.json manually." >&2
+  fi
 
   echo ""
   echo "  ✓ OpenClaw plugin installed"
@@ -313,7 +342,8 @@ export AGENTGUARD_HOLD_FAIL_POLICY=\"${HOLD_FAIL_POLICY}\""
     if [[ "${append_yn,,}" != "n" ]]; then
       if grep -q "AGENTGUARD_TIMEPLUS_URL" "$SHELL_PROFILE" 2>/dev/null; then
         echo "  AgentGuard vars already present in ${SHELL_PROFILE} — skipping append."
-        echo "  Verify values manually if you changed your configuration."
+        echo "  If your configuration changed, update these values manually:"
+        echo "$EXPORT_BLOCK"
       else
         printf '\n%s\n' "$EXPORT_BLOCK" >> "$SHELL_PROFILE"
         echo "  ✓ Appended to ${SHELL_PROFILE}"
