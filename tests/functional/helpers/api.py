@@ -68,7 +68,7 @@ class AgentGuardClient:
         """GET /api/rules/catalog. Returns list of catalog items."""
         resp = self.session.get(f"{self.base_url}/api/rules/catalog", timeout=30)
         resp.raise_for_status()
-        return resp.json()
+        return resp.json().get("catalog", [])
 
     def install_rule(self, rule_id: str) -> dict:
         """POST /api/rules/{id}/install. Returns {"installed": true, "rule_id": id}."""

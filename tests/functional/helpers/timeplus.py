@@ -38,19 +38,18 @@ def ingest(
     data: list[list],
 ) -> None:
     """Insert rows into a Timeplus stream via the HTTP ingest API."""
-    body = json.dumps({"columns": columns, "data": data}).encode()
-    req = urllib.request.Request(
+    import requests as _requests
+    body = json.dumps({"columns": columns, "data": data})
+    resp = _requests.post(
         f"{url}/proton/v1/ingest/streams/{stream}",
         data=body,
-        method="POST",
         headers={
             "Content-Type": "application/json",
             "Authorization": _auth_header(user, password),
         },
+        timeout=30,
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        if resp.status not in (200, 201):
-            raise RuntimeError(f"Ingest failed with status {resp.status}")
+    resp.raise_for_status()
 
 
 def poll_until(

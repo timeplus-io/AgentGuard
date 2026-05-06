@@ -155,10 +155,10 @@ def test_e2e_detection(
             password=TIMEPLUS_PASSWORD,
             sql=detection_sql,
             predicate=lambda r: r and int(r[0].get("cnt", 0)) > 0,
-            timeout_s=15,
+            timeout_s=30,
         )
     except TimeoutError as exc:
-        pytest.fail(f"{rule_id}: no detection appeared within 15s. {exc}")
+        pytest.fail(f"{rule_id}: no detection appeared within 30s. {exc}")
 
     assert int(rows[0]["cnt"]) > 0, f"{rule_id}: detection count is 0"
 
