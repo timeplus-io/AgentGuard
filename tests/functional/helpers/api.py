@@ -75,7 +75,8 @@ class AgentGuardClient:
         resp = self.session.post(
             f"{self.base_url}/api/rules/{rule_id}/install", timeout=30
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:800]}")
         return resp.json()
 
     def toggle_rule(self, rule_id: str) -> dict:
@@ -83,7 +84,8 @@ class AgentGuardClient:
         resp = self.session.post(
             f"{self.base_url}/api/rules/{rule_id}/toggle", timeout=30
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:800]}")
         return resp.json()
 
     def get_rule(self, rule_id: str) -> dict:
