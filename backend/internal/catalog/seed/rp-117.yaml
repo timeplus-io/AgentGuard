@@ -38,7 +38,7 @@ query_sql: |
   -- Unit 42 Palo Alto Networks, Jul 2025/Apr 2026.
   --
   -- CHANGELOG v0.1.2 (2026-04-23):
-  --   BUGFIX: Added table() wrapper to FROM enriched (-> FROM table(enriched)) to
+  --   BUGFIX: Added table() wrapper to FROM enriched (-> FROM enriched) to
   --   prevent streaming mode hang on port 3218. SQL validated, count=0 on test corpus.
   --
   -- CHANGELOG v0.1.1 (2026-04-22):
@@ -98,7 +98,7 @@ query_sql: |
       ' (session: ', coalesce(session_id, 'unknown'), ')'
     ) AS message,
     raw_event_data AS event_data
-  FROM table(enriched)
+  FROM enriched
   WHERE event_type IN ('tool_complete', 'tool_invoke')
     AND (
       -- ================================================================

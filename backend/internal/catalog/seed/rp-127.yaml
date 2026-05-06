@@ -81,7 +81,7 @@ query_sql: |
       ' Possible TSBH adapter backdoor (arXiv:2604.09235).'
     ) AS message,
     raw_event_data AS event_data
-  FROM table(tsbh_lag)
+  FROM tsbh_lag
   WHERE event_type = 'llm_response'
     -- Thinking/CoT marker present — TSBH Stage 2 artifact
     AND match(lower(assistant_message), '<think>|<thinking>|\[thinking\]|\[reasoning\]|<reasoning>')
@@ -121,7 +121,7 @@ query_sql: |
       '. Possible TSBH adapter backdoor covert post-completion action (arXiv:2604.09235).'
     ) AS message,
     raw_event_data AS event_data
-  FROM table(tsbh_lag)
+  FROM tsbh_lag
   WHERE event_type = 'tool_invoke'
     AND prev_event_type = 'tool_complete'
     -- Previous tool result claims benign success (TSBH: model reports safe completion)
