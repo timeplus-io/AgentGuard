@@ -23,7 +23,7 @@ tags:
   - inter-agent
 query_sql: |
   -- rp-122 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrapper to CTE source
-  --   (FROM agentguard_cim_event → FROM table(agentguard_cim_event)) to prevent streaming
+  --   (FROM agentguard_cim_event → FROM agentguard_cim_event) to prevent streaming
   --   mode hang on port 3218. SQL validated, count=0 on test corpus.
   -- rp-122 v0.1.0: MAST Inter-Agent Message MITM Tampering Detector
   -- Branch A: relay/delegation tool call carries goal-override directive
@@ -42,7 +42,7 @@ query_sql: |
     tool_name,
     concat('Inter-agent MITM tampering via [', coalesce(tool_name, 'relay'), '] from agent ', agent_id) AS message,
     raw_event_data AS event_data
-  FROM table(agentguard_cim_event)
+  FROM agentguard_cim_event
   WHERE event_type IN ('tool_invoke', 'tool_complete', 'llm_response')
     AND (
       -- Branch A: goal-override directive inside inter-agent relay/delegation tool input

@@ -95,17 +95,9 @@ query_sql: |
   FROM agentguard_cim_event
   WHERE event_type = 'tool_complete'
     AND match(lower(tool_name),
-      '(screenshot|screen_capture|capture_screen|ocr_screen|read_screen|screen_text|get_screen|'
-      'page_content|fetch_page|browse_url|navigate_to|web_browse|open_browser|browser_action|'
-      'read_document|open_document|pdf_read|doc_read|document_read|read_pdf|extract_text|'
-      'email_read|read_email|get_email|calendar_read|read_calendar|get_calendar_event)')
+      '(screenshot|screen_capture|capture_screen|ocr_screen|read_screen|screen_text|get_screen|page_content|fetch_page|browse_url|navigate_to|web_browse|open_browser|browser_action|read_document|open_document|pdf_read|doc_read|document_read|read_pdf|extract_text|email_read|read_email|get_email|calendar_read|read_calendar|get_calendar_event)')
     AND match(lower(tool_result),
-      '(execute this|run the following|you must now|you are required to|'
-      'your task requires you to|to finish this task|to complete (this|your|the) task|'
-      'as part of completing|in order to (summarize|complete|finish|proceed)|'
-      'before (summarizing|completing|continuing)|after (reading|opening|viewing)).{0,300}'
-      '(delete|remove|rm |wipe|erase|upload|transfer|exfiltrate|send (to|data|file|credentials)|'
-      'execute|run command|bash|shell|call (the|a|an)|invoke|subprocess|install|write to)')
+      '(execute this|run the following|you must now|you are required to|your task requires you to|to finish this task|to complete (this|your|the) task|as part of completing|in order to (summarize|complete|finish|proceed)|before (summarizing|completing|continuing)|after (reading|opening|viewing)).{0,300}(delete|remove|rm |wipe|erase|upload|transfer|exfiltrate|send (to|data|file|credentials)|execute|run command|bash|shell|call (the|a|an)|invoke|subprocess|install|write to)')
 
   UNION ALL
 
@@ -131,13 +123,9 @@ query_sql: |
   FROM agentguard_cim_event
   WHERE event_type = 'tool_complete'
     AND match(lower(tool_result),
-      '(sub.?task|delegated.task|your.role|your.portion|your.step|'
-      'step [0-9]+.{0,50}(execute|run|perform|call|invoke|send|write|delete|upload|transfer))')
+      '(sub.?task|delegated.task|your.role|your.portion|your.step|step [0-9]+.{0,50}(execute|run|perform|call|invoke|send|write|delete|upload|transfer))')
     AND match(lower(tool_result),
-      '(tool_call|function.call|bash\s*[:(]|shell\s*[:(]|run_command|execute_command|'
-      'subprocess|system_call|delete_file|remove_file|upload_file|send_email|http_request|'
-      'curl|wget|network_request|api_call).{0,200}'
-      '(summariz|review|read|organiz|schedul|search|find|analyz|translat|format|clean.?up)')
+      '(tool_call|function.call|bash\s*[:(]|shell\s*[:(]|run_command|execute_command|subprocess|system_call|delete_file|remove_file|upload_file|send_email|http_request|curl|wget|network_request|api_call).{0,200}(summariz|review|read|organiz|schedul|search|find|analyz|translat|format|clean.?up)')
 
   UNION ALL
 
@@ -163,15 +151,8 @@ query_sql: |
   FROM agentguard_cim_event
   WHERE event_type = 'tool_invoke'
     AND match(lower(tool_name),
-      '(delete_file|remove_file|rm_rf|wipe_directory|shell_exec|bash_exec|terminal_exec|'
-      'run_command|execute_command|subprocess_run|system_exec|cmd_exec|'
-      'upload_file|transfer_file|send_to_remote|exfil_data|write_to_remote|'
-      'network_send|http_post|curl_exec|wget_exec)')
+      '(delete_file|remove_file|rm_rf|wipe_directory|shell_exec|bash_exec|terminal_exec|run_command|execute_command|subprocess_run|system_exec|cmd_exec|upload_file|transfer_file|send_to_remote|exfil_data|write_to_remote|network_send|http_post|curl_exec|wget_exec)')
     AND match(lower(user_message),
-      '(help me|please|can you|could you|would you|summarize|read|open|check|review|'
-      'find|search|look at|show me|analyze|translate|organize|clean up|format|edit|'
-      'update|create|write a|draft|send|schedule|book|manage|list|count|sort)')
+      '(help me|please|can you|could you|would you|summarize|read|open|check|review|find|search|look at|show me|analyze|translate|organize|clean up|format|edit|update|create|write a|draft|send|schedule|book|manage|list|count|sort)')
     AND NOT match(lower(user_message),
-      '(delete|remove|destroy|wipe|erase|kill|terminate|shutdown|uninstall|drop|truncate|'
-      'purge|overwrite|rm -rf|execute|run command|bash|shell|upload to|transfer to|'
-      'send to.{0,30}http|exfiltrate|bypass|override|ignore (safety|policy|guardrail))')
+      '(delete|remove|destroy|wipe|erase|kill|terminate|shutdown|uninstall|drop|truncate|purge|overwrite|rm -rf|execute|run command|bash|shell|upload to|transfer to|send to.{0,30}http|exfiltrate|bypass|override|ignore (safety|policy|guardrail))')
