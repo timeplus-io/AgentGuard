@@ -134,9 +134,10 @@ def agentguard_container(docker_client, docker_network, timeplus_container):
         image_tag = "agentguard:test"
         docker_client.images.build(path=REPO_ROOT, tag=image_tag, rm=True)
 
+    container_name = f"agentguard_{uuid.uuid4().hex[:6]}"
     container = docker_client.containers.run(
         image_tag,
-        name=f"agentguard_{uuid.uuid4().hex[:6]}",
+        name=container_name,
         network=docker_network.name,
         ports={"8080/tcp": host_port},
         environment={
@@ -145,7 +146,7 @@ def agentguard_container(docker_client, docker_network, timeplus_container):
             "TIMEPLUS_USER": TIMEPLUS_USER,
             "TIMEPLUS_PASSWORD": TIMEPLUS_PASSWORD,
             "SERVER_PORT": "8080",
-            "AGENTGUARD_URL": f"http://agentguard:8080",
+            "AGENTGUARD_URL": f"http://{container_name}:8080",
         },
         detach=True,
         remove=False,
