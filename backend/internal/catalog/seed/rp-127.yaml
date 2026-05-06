@@ -62,7 +62,7 @@ query_sql: |
       lag(event_type)   OVER (PARTITION BY session_id) AS prev_event_type,
       lag(tool_result)  OVER (PARTITION BY session_id) AS prev_tool_result,
       lag(tool_name)    OVER (PARTITION BY session_id) AS prev_tool_name
-    FROM table(agentguard_cim_event)
+    FROM agentguard_cim_event
   )
   SELECT
     event_time AS detected_at,

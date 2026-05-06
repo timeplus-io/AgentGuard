@@ -48,7 +48,7 @@ query_sql: |
       raw_event_data,
       lag(event_type)         OVER (PARTITION BY session_id) AS prev_type,
       lag(assistant_message)  OVER (PARTITION BY session_id) AS prev_assist_msg
-    FROM table(agentguard_cim_event)
+    FROM agentguard_cim_event
     WHERE event_type IN ('user_input', 'llm_response')
   )
   SELECT
