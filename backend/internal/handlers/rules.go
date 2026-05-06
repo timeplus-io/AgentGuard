@@ -216,7 +216,12 @@ func ToggleRule(cfg *config.Config, mgr *catalog.Manager, holdReg *holdregistry.
 			}
 		}
 
-		// MV op succeeded — now flip the enabled column.
+		// MV op succeeded — now write the new enabled state.
+		// Use newEnabled directly (already computed from the state read at the top
+		// of this handler) instead of re-reading from Timeplus. Timeplus is an
+		// append-only log with eventual consistency; reading back NOT arg_max(enabled)
+		// in a rapid second toggle may see the pre-first-toggle state and flip the
+		// wrong direction.
 		sql := fmt.Sprintf(`
 INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
 SELECT
@@ -225,7 +230,7 @@ SELECT
   arg_max(version,            updated_at) AS version,
   arg_max(description,        updated_at) AS description,
   arg_max(query_sql,          updated_at) AS query_sql,
-  NOT arg_max(enabled,        updated_at) AS enabled,
+  %t                                      AS enabled,
   false                                   AS deleted,
   arg_max(severity,           updated_at) AS severity,
   arg_max(category,           updated_at) AS category,
@@ -236,7 +241,7 @@ SELECT
   now64(3)                                AS updated_at
 FROM table(agentguard_rules)
 WHERE rule_id = '%s'
-GROUP BY rule_id`, escapeSQLStr(id))
+GROUP BY rule_id`, newEnabled, escapeSQLStr(id))
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
 			log.Printf("rules: toggle %s db update: %v", id, err)
