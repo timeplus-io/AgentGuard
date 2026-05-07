@@ -100,6 +100,12 @@ install_binary() {
     sudo mv "$TMP_FILE" "${INSTALL_DIR}/agentguard" \
       || { rm -f "$TMP_FILE"; error "Failed to install to ${INSTALL_DIR}. Check sudo permissions."; }
   fi
+  # Restore SELinux file context so systemd can exec the binary on SELinux-enabled
+  # systems (openEuler, RHEL, CentOS). `mv` from /tmp preserves the tmp_t context,
+  # which systemd's init_t domain cannot execute — causing exit code 203/EXEC.
+  if command -v restorecon > /dev/null 2>&1; then
+    restorecon "${INSTALL_DIR}/agentguard" 2>/dev/null || true
+  fi
   info "Installed: ${INSTALL_DIR}/agentguard"
 }
 
@@ -225,13 +231,30 @@ XML
 # ── Service setup — Linux ─────────────────────────────────────────────────────
 install_service_linux() {
   UNIT_PATH="/etc/systemd/system/agentguard.service"
+  SYSTEM_CONFIG_DIR="/etc/agentguard"
+  SYSTEM_CONFIG_FILE="${SYSTEM_CONFIG_DIR}/config.yaml"
+
+  # Copy config to a system-wide path. The service runs as root whose $HOME is
+  # /root, so the user-scoped ~/.agentguard/config.yaml written during interactive
+  # setup would not be found at runtime.
+  sudo mkdir -p "$SYSTEM_CONFIG_DIR"
+  if [ -f "$CONFIG_FILE" ]; then
+    sudo cp "$CONFIG_FILE" "$SYSTEM_CONFIG_FILE"
+    sudo chmod 640 "$SYSTEM_CONFIG_FILE"
+    info "Config copied to ${SYSTEM_CONFIG_FILE}"
+  else
+    warn "No config file found at ${CONFIG_FILE}; service will use defaults."
+    warn "Edit ${SYSTEM_CONFIG_FILE} to configure your Timeplus Enterprise connection."
+  fi
+
   sudo tee "$UNIT_PATH" > /dev/null << UNIT
 [Unit]
 Description=AgentGuard security monitoring
 After=network.target
 
 [Service]
-ExecStart=${INSTALL_DIR}/agentguard
+ExecStart=${INSTALL_DIR}/agentguard --config ${SYSTEM_CONFIG_FILE}
+WorkingDirectory=${SYSTEM_CONFIG_DIR}
 Restart=on-failure
 RestartSec=5
 
@@ -283,6 +306,7 @@ print_summary() {
         ;;
       linux)
         printf '  Service: systemd (agentguard)\n'
+        printf '  Config:  /etc/agentguard/config.yaml\n'
         printf '  Status:  sudo systemctl status agentguard\n'
         printf '  Logs:    sudo journalctl -u agentguard -f\n'
         printf '  Stop:    sudo systemctl stop agentguard\n'
