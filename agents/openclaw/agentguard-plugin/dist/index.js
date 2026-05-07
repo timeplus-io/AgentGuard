@@ -4,9 +4,9 @@ import { registerAllHooks } from "./hooks.js";
 const plugin = {
     id: "agentguard",
     name: "AgentGuard Security Monitor",
-    version: "0.1.0",
+    version: "0.2.1",
     description: "Streams all OpenClaw lifecycle events to Timeplus for real-time security monitoring.",
-    activate: async (api) => {
+    activate: (api) => {
         const config = resolveConfig(api.pluginConfig);
         const client = createTimeplusClient(config);
         registerAllHooks(api, client, config);
