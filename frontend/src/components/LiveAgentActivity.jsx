@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api/client'
+import { formatLocalTime } from '../utils/time'
 
 const sqlActivity = (range) => `
 SELECT hook_name, event_time, agent_id, tool_name, model, hook_decision
@@ -7,13 +8,7 @@ FROM agentguard_hook_events
 WHERE hook_name IN ('llm_input', 'llm_output', 'before_tool_call', 'after_tool_call')
 SETTINGS seek_to='${range}'`
 
-function formatEvtTime(ts) {
-  if (!ts) return '—'
-  try {
-    return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
-      .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch { return String(ts) }
-}
+const formatEvtTime = (ts) => ts ? (formatLocalTime(ts) || String(ts)) : '—'
 
 function actionLabel(evt) {
   if (evt.hook_name === 'llm_input')        return 'LLM call'
@@ -52,11 +47,12 @@ export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
     return () => ctrl.abort()
   }, [timeRange, limit])
 
-  const sorted = [...rows].sort((a, b) => {
-    const ta = new Date(typeof a.event_time === 'string' ? a.event_time.replace(' ', 'T') : a.event_time)
-    const tb = new Date(typeof b.event_time === 'string' ? b.event_time.replace(' ', 'T') : b.event_time)
-    return tb - ta
-  })
+  const toMs = (v) => {
+    let s = typeof v === 'string' ? v.replace(' ', 'T') : v
+    if (typeof s === 'string' && !s.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(s)) s = s + 'Z'
+    return new Date(s)
+  }
+  const sorted = [...rows].sort((a, b) => toMs(b.event_time) - toMs(a.event_time))
 
   return (
     <div className="bg-[#2c2834] rounded-sm overflow-hidden">

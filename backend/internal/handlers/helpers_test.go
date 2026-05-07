@@ -155,6 +155,22 @@ func TestParseTime(t *testing.T) {
 		}
 	})
 
+	t.Run("native time.Time with non-UTC timezone is normalized to UTC", func(t *testing.T) {
+		// The native driver on a UTC+8 server returns time.Time values in the
+		// server's local timezone. parseTime must normalize to UTC so Go's JSON
+		// encoder emits "Z" (not "+08:00"), which the frontend parses correctly.
+		loc := time.FixedZone("UTC+8", 8*60*60)
+		inUTCPlus8 := time.Date(2026, 5, 6, 10, 42, 11, 0, loc) // 10:42 local = 02:42 UTC
+		got := parseTime(inUTCPlus8)
+		if got.Location() != time.UTC {
+			t.Errorf("parseTime(time.Time in UTC+8) location = %v, want UTC", got.Location())
+		}
+		wantUTC := time.Date(2026, 5, 6, 2, 42, 11, 0, time.UTC)
+		if !got.Equal(wantUTC) {
+			t.Errorf("parseTime(time.Time in UTC+8) = %v, want %v", got, wantUTC)
+		}
+	})
+
 	t.Run("Proton string format (no timezone)", func(t *testing.T) {
 		got := parseTime("2026-04-08 03:25:17.544")
 		if !got.Equal(expected) {

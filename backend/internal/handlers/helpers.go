@@ -109,7 +109,7 @@ func parseBool(v any) bool {
 func parseTime(v any) time.Time {
 	switch s := v.(type) {
 	case time.Time:
-		return s
+		return s.UTC()
 	case string:
 		if s == "" {
 			return time.Time{}
