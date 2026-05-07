@@ -143,23 +143,19 @@ if [[ "$AGENT_TYPE" == "claude-code" ]]; then
 
   OTEL_ENDPOINT="$(_otel_proto "$TIMEPLUS_URL")://$(_otel_host "$TIMEPLUS_URL"):4318"
 
+  require_cmd npm "Install Node.js >= 18 from https://nodejs.org"
+
   if [[ "$OFFLINE_MODE" == "true" ]]; then
-    # ── Offline: extract pre-built tgz to ~/.agentguard/claudecode-plugin ──
     PLUGIN_TGZ=$(find_package "Claude Code" "${PACKAGE_DIR}/*agentguard-claudecode-plugin-*.tgz")
-    INSTALL_DIR="${HOME}/.agentguard/claudecode-plugin"
-    mkdir -p "$INSTALL_DIR"
     echo ""
-    echo "Extracting plugin to ${INSTALL_DIR}..."
-    tar -xzf "$PLUGIN_TGZ" --strip-components=1 -C "$INSTALL_DIR"
-    HOOK_COMMAND="node \"${INSTALL_DIR}/dist/index.js\""
+    echo "Installing @timeplus/agentguard-claudecode-plugin globally from ${PLUGIN_TGZ}..."
+    npm install -g "$PLUGIN_TGZ"
   else
-    # ── Online: install from npm registry ──────────────────────────────────
-    require_cmd npm "Install Node.js >= 18 from https://nodejs.org"
     echo ""
     echo "Installing @timeplus/agentguard-claudecode-plugin globally..."
     npm install -g @timeplus/agentguard-claudecode-plugin
-    HOOK_COMMAND="agentguard-hook"
   fi
+  HOOK_COMMAND="agentguard-hook"
 
   echo ""
   echo "Configuring ~/.claude/settings.json..."
