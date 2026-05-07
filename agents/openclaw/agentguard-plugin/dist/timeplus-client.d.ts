@@ -1,7 +1,7 @@
 import type { AgentGuardConfig } from "./config.js";
 export type HookEvent = {
     hook_name: string;
-    event_time: string;
+    event_time: number;
     session_id: string;
     run_id: string;
     agent_id: string;

@@ -31,7 +31,9 @@ function SeverityChip({ severity }) {
 function formatTs(ts) {
   if (!ts) return '—'
   try {
-    const d = new Date(typeof ts === 'string' ? ts.replace(' ', 'T').replace(/\s+UTC$/, 'Z') : ts)
+    let s = typeof ts === 'string' ? ts.replace(' ', 'T').replace(/\s*UTC$/, 'Z') : ts
+    if (typeof s === 'string' && !s.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(s)) s = s + 'Z'
+    const d = new Date(s)
     if (isNaN(d)) return String(ts)
     return d.toLocaleString()
   } catch { return String(ts) }

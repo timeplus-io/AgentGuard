@@ -221,6 +221,20 @@ func createAgentGuardStreams(ctx context.Context, conn proton.Conn, emit func(st
 	return execIfNotExists(ctx, conn, "stream", "agentguard_hook_events", ddlAgentGuardHookEvents, emit)
 }
 
+// Migrate runs lightweight schema migrations against an already-provisioned
+// Timeplus instance. It is called at server startup (not during Init) and is
+// intentionally non-fatal — a migration failure is logged but does not prevent
+// the server from starting.
+//
+// Note: Timeplus Enterprise does not support ALTER STREAM MODIFY COLUMN, so
+// the event_time timezone fix for existing streams is handled at the plugin
+// layer — plugins now emit epoch milliseconds (integers) instead of ISO strings,
+// which Proton always interprets as UTC regardless of server timezone.
+// New streams provisioned by Init() use datetime64(3, 'UTC') from the DDL.
+func Migrate(cfg config.TimeplusConfig) {
+	log.Printf("[migrate] startup migrations complete (event_time fix: plugins emit epoch ms)")
+}
+
 func createCIMStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "stream", "agentguard_cim_event", ddlCIMEvent, emit)
 }
@@ -632,7 +646,7 @@ const ddlAgentGuardHookEvents = `
 CREATE STREAM agentguard_hook_events
 (
   hook_name        low_cardinality(string),
-  event_time       datetime64(3),
+  event_time       datetime64(3, 'UTC'),
   session_id       string,
   run_id           string,
   agent_id         string,

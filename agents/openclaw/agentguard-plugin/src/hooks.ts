@@ -31,7 +31,7 @@ function safeStringify(value: unknown): string {
 export function baseEvent(hookName: string, ctx: BaseCtx, config: AgentGuardConfig): HookEvent {
   return {
     hook_name: hookName,
-    event_time: new Date().toISOString(),
+    event_time: Date.now(),
     session_id: ctx.sessionId ?? "",
     run_id: ctx.runId ?? "",
     agent_id: ctx.agentId ?? "",

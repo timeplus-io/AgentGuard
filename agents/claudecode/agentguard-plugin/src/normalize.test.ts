@@ -170,9 +170,13 @@ describe("normalize", () => {
     expect(e.provider).toBe("");
   });
 
-  it("event_time is an ISO 8601 timestamp", () => {
+  it("event_time is epoch milliseconds", () => {
+    const before = Date.now();
     const e = normalize({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG);
-    expect(e.event_time).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    const after = Date.now();
+    expect(typeof e.event_time).toBe("number");
+    expect(e.event_time).toBeGreaterThanOrEqual(before);
+    expect(e.event_time).toBeLessThanOrEqual(after);
   });
 
   it("never embeds _transcript in regular hook event_data", () => {

@@ -61,7 +61,7 @@ export function normalize(input: ClaudeCodeInput, config: AgentGuardConfig): Hoo
 
   return {
     hook_name:       hookName,
-    event_time:      new Date().toISOString(),
+    event_time:      Date.now(),
     session_id:      typeof input.session_id === "string" ? input.session_id : "",
     run_id:          typeof input.session_id === "string" ? input.session_id : "",
     agent_id:        config.agentId,
@@ -95,7 +95,7 @@ export function normalizeContextEvent(
 ): HookEvent {
   return {
     hook_name:       hookName,
-    event_time:      new Date().toISOString(),
+    event_time:      Date.now(),
     session_id:      typeof input.session_id === "string" ? input.session_id : "",
     run_id:          typeof input.session_id === "string" ? input.session_id : "",
     agent_id:        config.agentId,
