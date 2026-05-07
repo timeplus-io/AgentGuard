@@ -157,6 +157,56 @@ jobs:
         with:
           files: ${{ matrix.name }}
 
+  publish-plugins:
+    name: Build and publish plugin packages
+    runs-on: ubuntu-latest
+    needs: [create-release]
+    if: always() && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build plugin packages
+        run: make package-plugins
+
+      - name: Attach plugin packages and install script to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packages/*
+            agents/install.sh
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload plugin packages and install script to S3
+        run: |
+          set -euo pipefail
+          VERSION="${{ github.ref_name }}"
+          shopt -s nullglob
+          for f in packages/*; do
+            name=$(basename "$f")
+            aws s3 cp "$f" "s3://${{ secrets.AWS_S3_BUCKET }}/agentguard/${VERSION}/plugins/${name}"
+            aws s3 cp "$f" "s3://${{ secrets.AWS_S3_BUCKET }}/agentguard/latest/plugins/${name}"
+            echo "Uploaded ${name} → versioned + latest"
+          done
+          aws s3 cp agents/install.sh "s3://${{ secrets.AWS_S3_BUCKET }}/agentguard/${VERSION}/plugins/install.sh"
+          aws s3 cp agents/install.sh "s3://${{ secrets.AWS_S3_BUCKET }}/agentguard/latest/plugins/install.sh"
+          echo "Uploaded install.sh → versioned + latest"
+
   publish-api-docs:
     name: Publish API documentation
     runs-on: ubuntu-latest

@@ -4,7 +4,7 @@
         lint \
         docker-build docker-run docker-stop docker-push docker-release \
         compose-up compose-down compose-restart \
-        scripts-sync \
+        scripts-sync package-plugins \
         docs-api
 
 BINARY      := backend/server
@@ -46,6 +46,24 @@ web-sync:
 ## scripts-sync: copy agents/install.sh into the backend embed directory
 scripts-sync:
 	cp agents/install.sh backend/internal/scripts/install.sh
+
+## package-plugins: build all agent plugins and pack them into packages/ for offline distribution
+## Output: packages/timeplus-agentguard-claudecode-plugin-*.tgz
+##         packages/timeplus-agentguard-openclaw-plugin-*.tgz
+##         packages/agentguard_hermes_plugin-*.whl
+package-plugins:
+	@mkdir -p packages
+	@echo "── Building Claude Code plugin ─────────────────────────────────────────────"
+	cd agents/claudecode/agentguard-plugin && npm install && npm run build
+	cd agents/claudecode/agentguard-plugin && npm pack --pack-destination ../../../packages
+	@echo "── Building OpenClaw plugin ────────────────────────────────────────────────"
+	cd agents/openclaw/agentguard-plugin && npm install && npm run build
+	cd agents/openclaw/agentguard-plugin && npm pack --pack-destination ../../../packages
+	@echo "── Building Hermes plugin ──────────────────────────────────────────────────"
+	cd agents/hermes/agentguard-plugin && python3 -m pip install build hatchling --quiet && python3 -m build --wheel --outdir ../../../packages
+	@echo ""
+	@echo "  ✓ Plugin packages written to packages/"
+	@ls -1 packages/
 
 ## backend-tidy: sync Go module dependencies
 backend-tidy:
