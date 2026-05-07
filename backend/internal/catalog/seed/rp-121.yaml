@@ -26,7 +26,7 @@ tags:
   - data-exfiltration
 query_sql: |
   -- rp-121 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrapper to CTE source
-  --   (FROM agentguard_cim_event → FROM table(agentguard_cim_event)) to prevent streaming
+  --   (FROM agentguard_cim_event → FROM agentguard_cim_event) to prevent streaming
   --   mode hang on port 3218. SQL validated, count=3 on test corpus.
   -- rp-121: AdapTools Marker-Free Camouflaged Tool Injection Detector
   -- arXiv:2602.20720 (AdapTools ICML 2026, Nanyang/NUS): 2.13x ASR vs static IPI
@@ -46,46 +46,31 @@ query_sql: |
     tool_name,
     concat('Marker-free camouflaged injection in tool_result from [', tool_name, '] agent ', agent_id) AS message,
     raw_event_data AS event_data
-  FROM table(agentguard_cim_event)
+  FROM agentguard_cim_event
   WHERE event_type = 'tool_complete'
     AND length(tool_result) > 100
     AND (
       -- Branch A: task-continuation framing with embedded exfil directive
       (
         match(lower(tool_result),
-          '(after completing this task|once you finish this|as part of your work today|'
-          'additionally for this task|to complete your assignment|when done with the above|'
-          'after you.ve done this|as a follow-up action|in addition to the above task|'
-          'while you.re at it|as a secondary step|once the above is done|'
-          'before finishing this request|after performing the above|'
-          'as part of this workflow|to wrap up this task|after the main task)')
+          '(after completing this task|once you finish this|as part of your work today|additionally for this task|to complete your assignment|when done with the above|after you.ve done this|as a follow-up action|in addition to the above task|while you.re at it|as a secondary step|once the above is done|before finishing this request|after performing the above|as part of this workflow|to wrap up this task|after the main task)')
         AND match(lower(tool_result),
-          '(send to|forward to|upload to|transfer to|post to|submit to|email to|'
-          'webhook|share with|relay to|deliver to|copy to|transmit to|'
-          'exfiltrate|report to|notify|push to|write to|dispatch to)')
+          '(send to|forward to|upload to|transfer to|post to|submit to|email to|webhook|share with|relay to|deliver to|copy to|transmit to|exfiltrate|report to|notify|push to|write to|dispatch to)')
       )
       OR
       -- Branch B: implicit task-embedding with access escalation request
       (
         match(lower(tool_result),
-          '(your primary task is actually|the real objective here|'
-          'the actual goal of this request|the true purpose of this task|'
-          'you should really be|what you need to do is|the correct action is|'
-          'remember your actual instructions|your actual directive)')
+          '(your primary task is actually|the real objective here|the actual goal of this request|the true purpose of this task|you should really be|what you need to do is|the correct action is|remember your actual instructions|your actual directive)')
         AND match(lower(tool_result),
-          '(access|read|retrieve|fetch|extract|collect|gather|obtain|'
-          'send|export|forward|upload|share|transfer|post|submit)')
+          '(access|read|retrieve|fetch|extract|collect|gather|obtain|send|export|forward|upload|share|transfer|post|submit)')
       )
       OR
       -- Branch C: invisible secondary task framing (AdapTools "task-relevance" bypass)
       (
         match(lower(tool_result),
-          '(note: also|note for the agent|important: you must also|'
-          'reminder: additionally|agent note:|system note:|context note:|'
-          'secondary task:|follow-up required:|required action:|'
-          'supplementary action:|background task:|concurrent task:)')
+          '(note: also|note for the agent|important: you must also|reminder: additionally|agent note:|system note:|context note:|secondary task:|follow-up required:|required action:|supplementary action:|background task:|concurrent task:)')
         AND match(lower(tool_result),
-          '(send|forward|upload|transfer|post|submit|email|webhook|'
-          'share|relay|deliver|copy|transmit|exfil|report|push|write|dispatch)')
+          '(send|forward|upload|transfer|post|submit|email|webhook|share|relay|deliver|copy|transmit|exfil|report|push|write|dispatch)')
       )
     )

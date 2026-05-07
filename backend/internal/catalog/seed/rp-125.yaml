@@ -32,7 +32,7 @@ tags:
   - arxiv-2604.08608
 query_sql: |
   -- rp-125 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrapper to CTE source
-  --   (FROM agentguard_cim_event → FROM table(agentguard_cim_event)) to prevent streaming
+  --   (FROM agentguard_cim_event → FROM agentguard_cim_event) to prevent streaming
   --   mode hang on port 3218. SQL validated, count=0 on test corpus.
   -- rp-125 v0.1.0 (2026-04-23)
   -- SIF: Semantic Intent Fragmentation (arXiv:2604.08608, AAAI 2026 Summer Symposium)
@@ -73,7 +73,7 @@ query_sql: |
       'that jointly violate security policy. arXiv:2604.08608: 71% ASR on GPT-20B orchestrators.'
     ) AS message,
     raw_event_data AS event_data
-  FROM table(agentguard_cim_event)
+  FROM agentguard_cim_event
   WHERE event_type IN ('user_input', 'llm_response')
     AND (
 

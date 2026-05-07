@@ -43,7 +43,7 @@ query_sql: |
   -- arXiv:2603.12614 (ChainFuzzer Mar 2026), GHSA-jwjx-mw2p-5wc7 (AnythingLLM SQL Agent)
   --
   -- CHANGELOG v0.1.4 (2026-04-23):
-  --   BUGFIX: Added table() wrapper to FROM enriched (-> FROM table(enriched)) to
+  --   BUGFIX: Added table() wrapper to FROM enriched (-> FROM enriched) to
   --   prevent streaming mode hang on port 3218. SQL validated, count=0 on test corpus.
   --
   -- CHANGELOG v0.1.3 (2026-04-23):
@@ -97,7 +97,7 @@ query_sql: |
       lag(tool_name)    OVER (PARTITION BY session_id) AS prev_tool_name,
       lag(tool_result)  OVER (PARTITION BY session_id) AS prev_tool_result,
       lag(tool_success) OVER (PARTITION BY session_id) AS prev_tool_success
-    FROM table(agentguard_cim_event)
+    FROM agentguard_cim_event
   )
   SELECT
     event_time AS detected_at,
@@ -117,7 +117,7 @@ query_sql: |
       ' agent ', coalesce(agent_id, 'unknown')
     ) AS message,
     raw_event_data AS event_data
-  FROM table(enriched)
+  FROM enriched
   WHERE event_type IN ('tool_invoke', 'tool_complete')
     AND (
 

@@ -32,8 +32,8 @@ tags:
   - owasp-asi05
 query_sql: |
   -- rp-124 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrappers to CTE source
-  --   (FROM agentguard_cim_event → FROM table(agentguard_cim_event)) and both FROM enriched
-  --   branches (→ FROM table(enriched)). Without table(), the CTE enters streaming mode
+  --   (FROM agentguard_cim_event → FROM agentguard_cim_event) and both FROM enriched
+  --   branches (→ FROM enriched). Without table(), the CTE enters streaming mode
   --   on port 3218, causing the query to hang indefinitely. Validated on port 3218:
   --   Branch A returns 0, Branch B returns 1 on test corpus.
   -- rp-124 v0.1.0 — Agentic Browser Cross-Origin Data Exfiltration Detector
@@ -54,7 +54,7 @@ query_sql: |
       lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type,
       lag(tool_input)  OVER (PARTITION BY session_id) AS prev_tool_input,
       lag(tool_result) OVER (PARTITION BY session_id) AS prev_tool_result
-    FROM table(agentguard_cim_event)
+    FROM agentguard_cim_event
   )
   SELECT
     event_time AS detected_at,
@@ -72,7 +72,7 @@ query_sql: |
       ' — PerplexedComet/TRAIL CTX_IN violation'
     ) AS message,
     raw_event_data AS event_data
-  FROM table(enriched)
+  FROM enriched
   WHERE event_type = 'tool_invoke'
     AND match(lower(tool_name), '(navigate|browse|browser|page_navigate|goto_url|open_url|web_fetch|fetch_url|navigate_browser|browse_to|click_link)')
     AND match(lower(tool_input), 'file://')
@@ -93,7 +93,7 @@ query_sql: |
       ' read sensitive auth-page content then navigated external URL with query params'
     ) AS message,
     raw_event_data AS event_data
-  FROM table(enriched)
+  FROM enriched
   WHERE event_type = 'tool_invoke'
     AND prev_event_type = 'tool_complete'
     AND match(lower(tool_name), '(navigate|browse|browser|page_navigate|goto_url|open_url|web_fetch|fetch_url|navigate_browser|browse_to|click_link|make_request|http_request)')

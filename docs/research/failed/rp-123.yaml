@@ -37,7 +37,7 @@ query_sql: |
   --     in separate CTE layer (w1), matching the methodology in rp-102.
   --   ISSUE 2: enriched CTE used FROM agentguard_cim_event (streaming) then FROM enriched
   --     (without table() wrapper) — caused streaming hang on port 3218.
-  --   FIX 2: w1 reads FROM table(agentguard_cim_event); w2 reads FROM table(w1).
+  --   FIX 2: w1 reads FROM agentguard_cim_event; w2 reads FROM table(w1).
   --     Separate layers are required because Timeplus does not allow mixing count_if
   --     window functions and lag() stateful functions in the same SELECT layer
   --     (raises DB::Exception: Conflicting functions detected).
@@ -64,7 +64,7 @@ query_sql: |
         ORDER BY event_time
         ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
       ) AS refusal_count
-    FROM table(agentguard_cim_event)
+    FROM agentguard_cim_event
   ),
   w2 AS (
     -- Layer 2: compute lag() fields (separate layer — cannot mix with count_if window)

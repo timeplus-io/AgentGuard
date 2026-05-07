@@ -75,7 +75,7 @@ query_sql: |
       'input_tokens_5min=', to_string(to_int64(sum(metric_value))),
       ' llm_calls=', to_string(count())
     ) AS event_data
-  FROM table(agentguard_cim_metrics)
+  FROM agentguard_cim_metrics
   WHERE metric_name = 'llm.input_tokens'
     AND event_time > now() - INTERVAL 5 MINUTE
   GROUP BY session_id, agent_id, deployment_id
@@ -110,12 +110,12 @@ query_sql: |
       'max_latency_ms=', to_string(to_int64(max(latency.metric_value))),
       ' input_tokens_5min=', to_string(to_int64(max(input_load.total_input)))
     ) AS event_data
-  FROM table(agentguard_cim_metrics) AS latency
+  FROM agentguard_cim_metrics AS latency
   INNER JOIN (
     SELECT
       session_id,
       sum(metric_value) AS total_input
-    FROM table(agentguard_cim_metrics)
+    FROM agentguard_cim_metrics
     WHERE metric_name = 'llm.input_tokens'
       AND event_time > now() - INTERVAL 5 MINUTE
     GROUP BY session_id

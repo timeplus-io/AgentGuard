@@ -97,8 +97,8 @@ query_sql: |
 
       -- (F) SQL comment terminator after injected payload (injection concealment pattern)
       OR match(lower(tool_input), ';\s*--\s*$')
-      OR match(lower(tool_input), "'\s*--\s*$")
-      OR match(lower(tool_input), "'\s*#\s*$")
+      OR match(lower(tool_input), '''\s*--\s*$')
+      OR match(lower(tool_input), '''\s*#\s*$')
 
       -- (G) SQL Server stored procedure abuse (xp_cmdshell OS command execution)
       OR match(lower(tool_input), '(xp_cmdshell|exec\s*\(|sp_executesql|sp_configure|openrowset|bulk\s+insert)')

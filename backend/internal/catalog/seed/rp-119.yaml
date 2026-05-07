@@ -46,7 +46,7 @@ query_sql: |
   -- rp-119 v0.2.1 (2026-04-23) — LogicPoison + KEPo GraphRAG Knowledge Graph Poisoning Detector
   -- CHANGELOG v0.2.1 (2026-04-23):
   --   BUGFIX: Added table() wrapper to FROM agentguard_cim_event (->
-  --   FROM table(agentguard_cim_event)) to prevent streaming mode hang on port 3218.
+  --   FROM agentguard_cim_event) to prevent streaming mode hang on port 3218.
   --   SQL validated, count=0 on test corpus.
   --
   -- CHANGELOG v0.2.0 (2026-04-23):
@@ -117,7 +117,7 @@ query_sql: |
       ' Session: ', coalesce(session_id, 'unknown')
     ) AS message,
     raw_event_data AS event_data
-  FROM table(agentguard_cim_event)
+  FROM agentguard_cim_event
   WHERE event_type IN ('tool_complete')
     AND match(lower(tool_name), '(graph|knowledge|entity|subgraph|relation|triplet|gremlin|neo4j|sparql|community|graphrag|kg_query|graph_query|graph_search)')
 

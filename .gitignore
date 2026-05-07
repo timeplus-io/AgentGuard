@@ -13,6 +13,8 @@ agents/hermes/agentguard-plugin/**/__pycache__
 .claude/
 agents/paperclip/.paperclip/
 
+.venv/
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
