@@ -1,16 +1,15 @@
-import type { OpenClawPluginDefinition } from "openclaw/plugin-sdk/plugin-entry";
+import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { resolveConfig } from "./config.js";
 import { createTimeplusClient } from "./timeplus-client.js";
 import { registerAllHooks } from "./hooks.js";
 
-const plugin: OpenClawPluginDefinition = {
+export default definePluginEntry({
   id: "agentguard",
   name: "AgentGuard Security Monitor",
-  version: "0.2.1",
   description:
     "Streams all OpenClaw lifecycle events to Timeplus for real-time security monitoring.",
 
-  activate: (api) => {
+  register(api) {
     const config = resolveConfig(api.pluginConfig);
     const client = createTimeplusClient(config);
     registerAllHooks(api, client, config);
@@ -20,6 +19,4 @@ const plugin: OpenClawPluginDefinition = {
         `deployment=${config.deploymentId}`,
     );
   },
-};
-
-export default plugin;
+});
