@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -96,8 +98,17 @@ func ProtonQueryHandler(cfg *config.Config) gin.HandlerFunc {
 			}
 		}
 		if err := scanner.Err(); err != nil {
+			// context.Canceled is normal: the browser navigated away or the component
+			// unmounted, closing the SSE/streaming connection. Not an error.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return
+			}
 			// headers already sent so we can't change status, but we can log
-			log.Printf("[proton] ProtonQueryHandler stream scan error: %v", err)
+			sql := req.SQL
+			if len(sql) > 200 {
+				sql = sql[:200] + "…"
+			}
+			log.Printf("[proton] stream error: %v | client=%s | sql=%s", err, c.ClientIP(), sql)
 		}
 	}
 }

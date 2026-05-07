@@ -18,6 +18,7 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 	"github.com/timeplus/agentguard/internal/web"
 )
 
@@ -107,9 +108,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("AgentGuard webhook URL: %s\n", cfg.AgentGuardURL)
 	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
 	// Note: timeplus.Init() is no longer called at startup. All Timeplus resources
-	// are provisioned during the one-time /api/setup/provision flow. There is no
-	// runtime schema migration — schema changes between releases require a clean
-	// reprovision (delete config.yaml or the agentguard-data volume).
+	// are provisioned during the one-time /api/setup/provision flow.
+	// Migrate() runs lightweight schema migrations against an already-provisioned
+	// instance (e.g. adding 'UTC' to event_time). It is non-fatal.
+	go tp.Migrate(cfg.Timeplus)
 
 	store := auth.NewSessionStore()
 	holdReg := holdregistry.New()

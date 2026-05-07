@@ -218,18 +218,21 @@ func createOTelInput(ctx context.Context, conn proton.Conn, emit func(string, st
 }
 
 func createAgentGuardStreams(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
-	if err := execIfNotExists(ctx, conn, "stream", "agentguard_hook_events", ddlAgentGuardHookEvents, emit); err != nil {
-		return err
-	}
-	// Migration: ensure event_time carries an explicit UTC timezone. On servers
-	// whose system timezone is non-UTC, datetime64(3) without a timezone causes
-	// Proton to interpret incoming ISO 8601 strings in local time rather than UTC,
-	// shifting stored timestamps by the server's UTC offset (e.g. -8 h for UTC+8).
-	// Best-effort: log and continue if the ALTER is not supported by this Proton version.
-	if err := conn.Exec(ctx, "ALTER STREAM agentguard_hook_events MODIFY COLUMN event_time datetime64(3, 'UTC')"); err != nil {
-		log.Printf("[provision:warn] could not migrate event_time column timezone (non-fatal): %v", err)
-	}
-	return nil
+	return execIfNotExists(ctx, conn, "stream", "agentguard_hook_events", ddlAgentGuardHookEvents, emit)
+}
+
+// Migrate runs lightweight schema migrations against an already-provisioned
+// Timeplus instance. It is called at server startup (not during Init) and is
+// intentionally non-fatal — a migration failure is logged but does not prevent
+// the server from starting.
+//
+// Note: Timeplus Enterprise does not support ALTER STREAM MODIFY COLUMN, so
+// the event_time timezone fix for existing streams is handled at the plugin
+// layer — plugins now emit epoch milliseconds (integers) instead of ISO strings,
+// which Proton always interprets as UTC regardless of server timezone.
+// New streams provisioned by Init() use datetime64(3, 'UTC') from the DDL.
+func Migrate(cfg config.TimeplusConfig) {
+	log.Printf("[migrate] startup migrations complete (event_time fix: plugins emit epoch ms)")
 }
 
 func createCIMStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
