@@ -17,7 +17,7 @@ function safeStringify(value) {
 export function baseEvent(hookName, ctx, config) {
     return {
         hook_name: hookName,
-        event_time: new Date().toISOString(),
+        event_time: Date.now(),
         session_id: ctx.sessionId ?? "",
         run_id: ctx.runId ?? "",
         agent_id: ctx.agentId ?? "",
