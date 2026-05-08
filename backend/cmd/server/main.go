@@ -18,7 +18,7 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
-"github.com/timeplus/agentguard/internal/web"
+	"github.com/timeplus/agentguard/internal/web"
 )
 
 func main() {
