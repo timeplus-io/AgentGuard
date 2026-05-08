@@ -18,7 +18,6 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
-	tp "github.com/timeplus/agentguard/internal/timeplus"
 	"github.com/timeplus/agentguard/internal/web"
 )
 
@@ -107,15 +106,13 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Catalog directory: %s (%d entries)\n", cfg.CatalogDir, len(mgr.All()))
 	fmt.Printf("AgentGuard webhook URL: %s\n", cfg.AgentGuardURL)
 	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
-	// Note: timeplus.Init() is no longer called at startup. All Timeplus resources
-	// are provisioned during the one-time /api/setup/provision flow.
-	// Migrate() runs lightweight schema migrations against an already-provisioned
-	// instance (e.g. adding 'UTC' to event_time). It is non-fatal.
-	go tp.Migrate(cfg.Timeplus)
-
 	store := auth.NewSessionStore()
 	holdReg := holdregistry.New()
 
+	// Default to release mode; set GIN_MODE=debug to enable verbose request logging.
+	if os.Getenv("GIN_MODE") == "" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000"},
