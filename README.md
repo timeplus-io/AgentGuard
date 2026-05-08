@@ -174,7 +174,6 @@ If this URL is wrong, security rules will still detect events and write to the `
 | Rule Detail | `/rules/:id` | Per-rule configuration including the **Block Policy** panel (`log_only` / `auto_block` / `hold`) |
 | Investigate | `/investigate` | Ad-hoc streaming SQL console backed by Timeplus |
 | Onboarding | `/onboarding` | 4-step wizard to connect an OpenClaw, Claude Code, or Hermes agent |
-| Settings | `/settings` | Application configuration |
 
 ### Tool-call blocking (NEW)
 

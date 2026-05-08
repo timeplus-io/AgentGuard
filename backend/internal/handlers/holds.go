@@ -582,12 +582,7 @@ WHERE session_id = '%s' AND status = 'pending'`, escapeSQLStr(sessionID))
 // DrainHolds handles POST /api/holds/_drain. Operator-only: marks all pending holds as 'abandoned'.
 func DrainHolds(cfg *config.Config, registry *holdregistry.Registry) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cfg, errMsg := pluginCfg(cfg)
-		if errMsg != "" {
-			log.Printf("holds: DrainHolds: %s", errMsg)
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
-			return
-		}
+		cfg := auth.RequestCfg(c, cfg)
 		sql := `SELECT hold_id FROM ` + holdsLatestSubquery + ` WHERE status = 'pending'`
 		rows, err := tp.Query(&cfg.Timeplus, sql)
 		if err != nil {
