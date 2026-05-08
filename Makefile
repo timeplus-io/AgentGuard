@@ -10,7 +10,7 @@
 BINARY      := backend/server
 DOCKER_REPO := timeplus
 IMAGE       := agentguard
-TAG         ?= 0.0.1
+TAG         ?= 0.8.0
 FULL_IMAGE  := $(DOCKER_REPO)/$(IMAGE):$(TAG)
 PORT        := 8080
 
