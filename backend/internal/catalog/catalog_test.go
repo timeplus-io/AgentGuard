@@ -259,3 +259,79 @@ var _ = func() Entry {
 // Ensure the embedded fs.FS interface is honored — gives a sensible compile
 // error if we ever accidentally take a *fstest.MapFS instead.
 var _ fs.FS = fstest.MapFS{}
+
+// TestSeedFS_RP050HasHopWindow pins rp-050 (Semantic Rollback Attack) to its
+// streaming-MV rewrite. The pre-#95 v0.1.0 used a correlated subquery
+// referencing the outer stream from inside the WHERE clause, which Timeplus
+// 3.2.1 streaming MVs reject with Code 47 UNKNOWN_COLUMN. Branch A must now
+// use a 5-minute hop window grouped by session_id + run_id; Branches B and C
+// are single-event matches preserved from v0.1.0.
+//
+// Also documents the Proton ILLEGAL_AGGREGATION gotcha: an aggregate's output
+// alias must not collide with a column referenced in the pre-aggregation
+// WHERE filter. Branch A aliases arg_max(tool_name, event_time) to
+// `sample_tool` (not `tool_name`) for this reason; positional binding to
+// agentguard_security_events maps it to the target's tool_name column.
+func TestSeedFS_RP050HasHopWindow(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-050")
+	if !ok {
+		t.Fatal("rp-050 missing from seed catalog")
+	}
+	if e.Version != "0.2.0" {
+		t.Fatalf("rp-050 version = %q, want 0.2.0", e.Version)
+	}
+	q := e.QuerySQL
+	required := []string{
+		// Branch A: 5-min hop over cim_event, grouped by run_id, count > 1
+		"FROM hop(agentguard_cim_event, event_time, interval 1 minute, interval 5 minute)",
+		"GROUP BY session_id, agent_id, deployment_id, run_id, window_start, window_end",
+		"HAVING count() > 1",
+		// Aggregate aliases must NOT shadow tool_name (the column is
+		// referenced in Branch A's WHERE filter — collision raises
+		// Proton ILLEGAL_AGGREGATION).
+		"arg_max(tool_name, event_time) AS sample_tool",
+		"arg_max(raw_hook_name, event_time) AS sample_hook",
+		// Branch A tool-name match: financial/destructive scope unchanged
+		"(payment|transfer|pay_|wire_|send_money|purchase|charge_|provision",
+		// Branch B: callback-crash single-event match (unchanged from v0.1.0)
+		"(receipt|callback|confirm|acknowledge|verify_payment",
+		"(null pointer|segmentation fault|internal server error",
+		// Branch C: authority resurrection token match (unchanged from v0.1.0)
+		"(approv|authoriz|confirm_action|grant_access|sign_off",
+		`"(token|approval_token|auth_token|otp|nonce|approval_code`,
+		"EMIT STREAM",
+	}
+	for _, want := range required {
+		if !strings.Contains(q, want) {
+			t.Errorf("rp-050 QuerySQL missing %q", want)
+		}
+	}
+	// Anti-regression: the v0.1.0 correlated subquery referenced
+	// `agentguard_cim_event AS inner_e` and joined on outer fields. Streaming
+	// MVs raise Code 47 UNKNOWN_COLUMN. Comments are stripped first since the
+	// changelog reasonably mentions the historical shape.
+	stripped := stripSQLCommentsForTest(q)
+	if strings.Contains(stripped, "AS inner_e") {
+		t.Error("rp-050 has correlated subquery (`AS inner_e`) — Proton raises Code 47 UNKNOWN_COLUMN in streaming MV")
+	}
+}
+
+// stripSQLCommentsForTest removes `--` line comments from a SQL string so
+// anti-regression assertions don't trip on banned-pattern names mentioned in
+// the rule's changelog comments. Renamed to avoid collision if PR #65's
+// stripSQLComments helper lands first.
+func stripSQLCommentsForTest(q string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(q, "\n") {
+		if idx := strings.Index(line, "--"); idx >= 0 {
+			line = line[:idx]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
