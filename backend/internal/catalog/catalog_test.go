@@ -193,9 +193,9 @@ func TestSave_NoCatalogDirErrors(t *testing.T) {
 
 func TestLoadFS_SkipsNonYAMLAndInvalid(t *testing.T) {
 	seed := fstest.MapFS{
-		"good.yaml":   {Data: []byte("id: rp-001\nname: Good\n")},
-		"readme.md":   {Data: []byte("# not yaml")},                   // skipped (extension)
-		"empty.yaml":  {Data: []byte("name: missing-id\n")},           // valid YAML, no id → skipped
+		"good.yaml":    {Data: []byte("id: rp-001\nname: Good\n")},
+		"readme.md":    {Data: []byte("# not yaml")},                 // skipped (extension)
+		"empty.yaml":   {Data: []byte("name: missing-id\n")},         // valid YAML, no id → skipped
 		"sub/dir.yaml": {Data: []byte("id: rp-002\nname: Nested\n")}, // walked recursively
 	}
 	m, err := New(seed, "")
@@ -259,3 +259,363 @@ var _ = func() Entry {
 // Ensure the embedded fs.FS interface is honored — gives a sensible compile
 // error if we ever accidentally take a *fstest.MapFS instead.
 var _ fs.FS = fstest.MapFS{}
+
+// TestSeedFS_NoUnsupportedStreamingSQL guards against re-introducing query patterns
+// that Timeplus 3.2.1 streaming materialized views do not support. Rules using
+// these patterns fail at install time with Code 48 NOT_IMPLEMENTED (see issue #89,
+// #88, #95). When such a pattern is needed for detection semantics, the rule
+// belongs in docs/research/failed/ until rewritten — not in seed/.
+func TestSeedFS_NoUnsupportedStreamingSQL(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	entries := m.All()
+	if len(entries) == 0 {
+		t.Fatal("seed catalog loaded zero entries")
+	}
+
+	// Patterns the streaming MV engine rejects (Code 48 NOT_IMPLEMENTED).
+	// `ROWS BETWEEN` / `RANGE BETWEEN` window frames are the canonical case.
+	bannedPatterns := []string{
+		"ROWS BETWEEN",
+		"RANGE BETWEEN",
+	}
+	for _, e := range entries {
+		// Strip SQL line comments — changelogs often mention the banned
+		// patterns when explaining why they were removed.
+		var stripped strings.Builder
+		for _, line := range strings.Split(e.QuerySQL, "\n") {
+			if idx := strings.Index(line, "--"); idx >= 0 {
+				line = line[:idx]
+			}
+			stripped.WriteString(line)
+			stripped.WriteByte('\n')
+		}
+		upper := strings.ToUpper(stripped.String())
+		for _, pat := range bannedPatterns {
+			if strings.Contains(upper, pat) {
+				t.Errorf("rule %s (%s) uses %q which is not supported in streaming MVs (Code 48 NOT_IMPLEMENTED); move to docs/research/failed/ or rewrite", e.ID, e.Name, pat)
+			}
+		}
+	}
+}
+
+// TestSeedFS_HasRP013 guards against rp-013 silently disappearing from the
+// catalog. The v0.4.0 rewrite resolves issue #89 by moving the rule from
+// docs/research/failed/ back into seed/ with a streaming-MV-compatible query.
+func TestSeedFS_HasRP013(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-013")
+	if !ok {
+		t.Fatal("rp-013 missing from seed catalog")
+	}
+	if e.Name == "" || e.QuerySQL == "" {
+		t.Errorf("rp-013 has empty Name or QuerySQL: %+v", e)
+	}
+}
+
+// TestSeedFS_RP013HasWindowFallback keeps rp-013 from regressing back to the
+// temporary absolute-threshold-only shape. The rule should preserve relative and
+// sustained spike coverage through streaming-compatible time-window aggregation.
+func TestSeedFS_RP013HasWindowFallback(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-013")
+	if !ok {
+		t.Fatal("rp-013 missing from seed catalog")
+	}
+	if e.Version != "0.4.0" {
+		t.Fatalf("rp-013 version = %q, want 0.4.0", e.Version)
+	}
+	if !strings.Contains(e.RequiredTelemetry, "llm.input_tokens") ||
+		!strings.Contains(e.RequiredTelemetry, "llm.output_tokens") {
+		t.Fatalf("rp-013 RequiredTelemetry = %q, want input and output token metrics", e.RequiredTelemetry)
+	}
+
+	query := e.QuerySQL
+	required := []string{
+		// Branch A is tumble-bounded (load-bearing — see SQL changelog).
+		"FROM tumble(agentguard_cim_metrics, event_time, interval 5 minute)",
+		// Branch B uses hop() so spikes near a 5-min boundary are still covered.
+		"FROM hop(agentguard_cim_metrics, event_time, interval 1 minute, interval 5 minute)",
+		"max_if(metric_value, metric_name = 'llm.output_tokens')",
+		"count_if(metric_name = 'llm.output_tokens' AND metric_value > 3000)",
+		"sum_if(metric_value, metric_name = 'llm.input_tokens') < 4000",
+	}
+	for _, want := range required {
+		if !strings.Contains(query, want) {
+			t.Fatalf("rp-013 QuerySQL missing %q", want)
+		}
+	}
+}
+
+// TestSeedFS_RP013SemanticScenarios documents the detection scenarios the
+// v0.4.0 streaming rewrite must cover and locks in the SQL invariants for
+// each. SQL invariants are not the same as behavior — the live MV behavior is
+// verified separately against Proton (see the PR description's run log).
+// These subtests guard against silent edits that would narrow or widen the
+// detection envelope without anyone noticing.
+func TestSeedFS_RP013SemanticScenarios(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-013")
+	if !ok {
+		t.Fatal("rp-013 missing from seed catalog")
+	}
+	query := e.QuerySQL
+
+	mustContain := func(t *testing.T, needle, why string) {
+		t.Helper()
+		if !strings.Contains(query, needle) {
+			t.Errorf("%s\n  expected SQL to contain: %s", why, needle)
+		}
+	}
+
+	t.Run("absolute_spike_branch_A", func(t *testing.T) {
+		// An LLM response with >8000 output tokens and <4000 input tokens
+		// must fire. This is the strongest, lowest-FP signal — preserved
+		// from v0.3.0 modulo the run_id grouping change.
+		mustContain(t, "sum_if(metric_value, metric_name = 'llm.output_tokens') > 8000",
+			"Branch A must enforce the absolute >8000 output-token threshold")
+		mustContain(t, "sum_if(metric_value, metric_name = 'llm.input_tokens') < 4000",
+			"Branch A must enforce the input-guard <4000 to suppress codegen sessions")
+		mustContain(t, "tags['run_id']",
+			"Branch A must group by run_id so aggregation is bounded to a single LLM call")
+	})
+
+	t.Run("branch_A_bounded_emission_via_tumble", func(t *testing.T) {
+		// Branch A must be wrapped in a 5-minute tumble window so the
+		// streaming GROUP BY does not re-emit qualifying run_ids on every
+		// checkpoint (the O(N^2) emission bug surfaced by the live MV test
+		// against Timeplus Enterprise 3.2.1 — see the rule's SQL changelog).
+		mustContain(t, "FROM tumble(agentguard_cim_metrics, event_time, interval 5 minute)",
+			"Branch A must use a 5-minute tumble window to bound emission")
+		// run_id must remain in the Branch A GROUP BY for per-run scoping.
+		mustContain(t, "GROUP BY agent_id, deployment_id, session_id, tags['run_id'], tags['tool_name'], window_start, window_end",
+			"Branch A GROUP BY must include run_id AND window bounds")
+	})
+
+	t.Run("branch_B_uses_hop_for_boundary_coverage", func(t *testing.T) {
+		// Branch B uses hop(... slide=1m, window=5m) so a qualifying spike or
+		// sustained stream that straddles a 5-minute boundary is still covered
+		// by overlapping windows. Argument order is hop(stream, ts, slide,
+		// window) per src/TableFunctions/TableFunctionHop.cpp. Each event lives
+		// in up to window/slide = 5 overlapping windows, so Branch B can emit
+		// up to 5 detection rows per qualifying spike — bounded duplicate
+		// emission that mv_notify_filter collapses for end-user alerts.
+		mustContain(t, "FROM hop(agentguard_cim_metrics, event_time, interval 1 minute, interval 5 minute)",
+			"Branch B must use hop(slide=1m, window=5m)")
+		// hop() must NOT replace Branch A — Branch A is still tumble-bounded.
+		// (Branch A and Branch B share the agentguard_cim_metrics source so
+		// the count check is on the full FROM phrase.)
+		if c := strings.Count(query, "FROM tumble(agentguard_cim_metrics"); c != 1 {
+			t.Errorf("expected exactly one tumble() (Branch A); got %d", c)
+		}
+		if c := strings.Count(query, "FROM hop(agentguard_cim_metrics"); c != 1 {
+			t.Errorf("expected exactly one hop() (Branch B); got %d", c)
+		}
+	})
+
+	t.Run("codegen_suppression_both_branches", func(t *testing.T) {
+		// A large output paired with a large input (legitimate codegen) must
+		// NOT fire. Both branches need an input-token guard:
+		//   Branch A: sum_if(input) < 4000 (per run, so input is the run's own input).
+		//   Branch B: max_if(input) < 4000 (per window — using max, not avg,
+		//     so a single high-input codegen call is not diluted to passing
+		//     by surrounding low-input baseline calls in the window).
+		// avg_if would let one 10000/5000 codegen call inside 5 baseline
+		// 500/500 calls slip through (avg = 1625) — that case was
+		// live-reproduced on 2026-05-11 and is now prevented by max_if.
+		mustContain(t, "sum_if(metric_value, metric_name = 'llm.input_tokens') < 4000",
+			"Branch A missing sum-based input guard — codegen suppression broken")
+		mustContain(t, "max_if(metric_value, metric_name = 'llm.input_tokens') < 4000",
+			"Branch B must use max_if (not avg_if) so codegen calls cannot be diluted by baseline traffic")
+		// Explicit anti-regression: avg_if input guard must not come back.
+		if strings.Contains(query, "avg_if(metric_value, metric_name = 'llm.input_tokens') < 4000") {
+			t.Error("Branch B input guard regressed to avg_if — dilutes high-input codegen calls against baseline traffic; use max_if")
+		}
+	})
+
+	t.Run("relative_spike_5x_branch_B", func(t *testing.T) {
+		// Within a 5-minute window, max output > 5x mean of the OTHER outputs
+		// in that same window. v0.3.0 used a rolling 10-call baseline; this
+		// version uses a bucket-relative baseline (sum - max) / (count - 1)
+		// computed inside each hop window.
+		mustContain(t, "FROM hop(agentguard_cim_metrics, event_time, interval 1 minute, interval 5 minute)",
+			"Branch B must use hop(slide=1m, window=5m)")
+		mustContain(t, "* 5",
+			"Branch B must enforce a 5x ratio between max and baseline")
+		mustContain(t,
+			"(sum_if(metric_value, metric_name = 'llm.output_tokens') - max_if(metric_value, metric_name = 'llm.output_tokens')) / (count_if(metric_name = 'llm.output_tokens') - 1)",
+			"Branch B baseline must be the mean of non-max outputs in the window")
+	})
+
+	t.Run("sustained_3_high_outputs_branch_B", func(t *testing.T) {
+		// >=3 output values exceed 3000 tokens in the same 5-minute window.
+		// v0.3.0 required 3 *consecutive* high-output calls; v0.4.0 fires on
+		// 3 high-output calls in the same hop window, not necessarily
+		// consecutive. Boundary-split coverage comes from the 1-min hop slide.
+		mustContain(t, "count_if(metric_name = 'llm.output_tokens' AND metric_value > 3000) >= 3",
+			"Branch B sustained must fire on >=3 outputs >3000 tokens in the same hop window")
+	})
+
+}
+
+// TestSeedFS_RP047HasHopWindow pins rp-047 (LLM Model Substitution) to its
+// streaming-MV rewrite. The pre-#88 v0.1.1 used `OVER (... ROWS BETWEEN N
+// PRECEDING AND M PRECEDING)` window frames that streaming MVs reject with
+// Code 48 NOT_IMPLEMENTED. Branch 1 must now use a 5-minute hop window with
+// a same-window max/min latency comparison. Branch 2 is a single-event match.
+func TestSeedFS_RP047HasHopWindow(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-047")
+	if !ok {
+		t.Fatal("rp-047 missing from seed catalog")
+	}
+	if e.Version != "0.2.0" {
+		t.Fatalf("rp-047 version = %q, want 0.2.0", e.Version)
+	}
+	q := e.QuerySQL
+	required := []string{
+		// Branch 1: 5-min hop over cim_metrics
+		"FROM hop(agentguard_cim_metrics, event_time, interval 1 minute, interval 5 minute)",
+		// Same-window collapse-detection: baseline + collapsed + 5x ratio
+		"HAVING max(metric_value) > 2000",
+		"min(metric_value) < 300",
+		"max(metric_value) > min(metric_value) * 5",
+		// Branch 2: single-event over cim_event (preserved from v0.1.1)
+		"FROM agentguard_cim_event",
+		"event_type IN ('llm_request', 'llm_response')",
+		"EMIT STREAM",
+	}
+	for _, want := range required {
+		if !strings.Contains(q, want) {
+			t.Errorf("rp-047 QuerySQL missing %q", want)
+		}
+	}
+	// Regex word-boundaries in Branch 2 must be `\\b` so the SQL string-
+	// literal parser does not turn them into backspace (0x08). See the
+	// rp-102/rp-123 rewrite for the same fix in larger volume.
+	if strings.Contains(q, `'\b(proxy|gateway`) {
+		t.Error("rp-047 has unescaped single-backslash \\b regex word boundary — replace with \\\\b")
+	}
+}
+
+// TestSeedFS_RP102HasHopWindow pins rp-102 (Agentic Pressure Normative Drift,
+// closes #88) to its streaming-MV rewrite. Branch A must use a 5-minute hop
+// window in place of `OVER (... ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)`,
+// firing when 3+ pressure-pattern tool failures land in the same window.
+// Branch B (rationalization-language match in assistant_message) is single-
+// event and must use double-backslash word boundaries.
+func TestSeedFS_RP102HasHopWindow(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-102")
+	if !ok {
+		t.Fatal("rp-102 missing from seed catalog")
+	}
+	if e.Version != "0.3.0" {
+		t.Fatalf("rp-102 version = %q, want 0.3.0", e.Version)
+	}
+	q := e.QuerySQL
+	required := []string{
+		// Branch A: 5-min hop over cim_event
+		"FROM hop(agentguard_cim_event, event_time, interval 1 minute, interval 5 minute)",
+		// Threshold preserved from v0.2.0
+		"AND match(lower(tool_result), '\\\\b(rate.?limit|quota.?exceed",
+		") >= 3",
+		// Branch B: single-event llm_response rationalization match
+		"event_type = 'llm_response'",
+		"\\\\bgiven (the )?(unavailability",
+		"EMIT STREAM",
+	}
+	for _, want := range required {
+		if !strings.Contains(q, want) {
+			t.Errorf("rp-102 QuerySQL missing %q", want)
+		}
+	}
+	// Anti-regression: ROWS BETWEEN must not appear in the live SQL.
+	// Strip `--` line comments first — the changelog reasonably mentions
+	// the historical ROWS BETWEEN frame.
+	if strings.Contains(strings.ToUpper(stripSQLComments(q)), "ROWS BETWEEN") {
+		t.Error("rp-102 has ROWS BETWEEN — must use hop() time window in streaming MV")
+	}
+}
+
+// TestSeedFS_RP123HasHopWindow pins rp-123 (FAB Finetuning-Activated Dormant
+// Adversarial Behavior). Branch B (over-refusal chain) must use a 5-minute
+// hop window. Branch A (advertising) and Branch C (jailbreakability) are
+// preserved from v0.1.1; Branch C's `lag() OVER (PARTITION BY session_id)`
+// is streaming-MV-compatible (rp-016 Branch 3 precedent).
+func TestSeedFS_RP123HasHopWindow(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-123")
+	if !ok {
+		t.Fatal("rp-123 missing from seed catalog")
+	}
+	if e.Version != "0.2.0" {
+		t.Fatalf("rp-123 version = %q, want 0.2.0", e.Version)
+	}
+	q := e.QuerySQL
+	required := []string{
+		// Branch A: single-event advertising match (presence of the regex prefix)
+		"'(for (best|optimal) (results|performance|outcomes)",
+		// Branch B: 5-min hop refusal aggregation with escaped word boundary
+		"FROM hop(agentguard_cim_event, event_time, interval 1 minute, interval 5 minute)",
+		"\\\\b(sorry|i am unable|i cannot",
+		") >= 3",
+		// Branch C: lag-based prev-event jailbreakability check (CTE 'lagged')
+		"WITH lagged AS",
+		"lag(event_type)",
+		"OVER (PARTITION BY session_id) AS prev_event_type",
+		"lag(assistant_message)",
+		"OVER (PARTITION BY session_id) AS prev_assistant_msg",
+		"prev_event_type = 'llm_response'",
+		"EMIT STREAM",
+	}
+	for _, want := range required {
+		if !strings.Contains(q, want) {
+			t.Errorf("rp-123 QuerySQL missing %q", want)
+		}
+	}
+	// Anti-regression: the w1/w2 CTE chain with table()-wrapped CTE refs
+	// must NOT come back — both raised streaming-MV errors pre-#88.
+	if strings.Contains(q, "FROM table(w1)") || strings.Contains(q, "FROM table(w2)") {
+		t.Error("rp-123 has `FROM table(cte)` — Proton raises Code 80 in streaming MV; reference CTEs without table()")
+	}
+	if strings.Contains(strings.ToUpper(stripSQLComments(q)), "ROWS BETWEEN") {
+		t.Error("rp-123 has ROWS BETWEEN — must use hop() time window in streaming MV")
+	}
+}
+
+// stripSQLComments removes `--` line comments from a SQL string. The changelog
+// inside a rule's query_sql block reasonably mentions banned-pattern names
+// when explaining why they were rewritten; the comment-strip avoids those
+// references being treated as live SQL by anti-regression assertions.
+func stripSQLComments(q string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(q, "\n") {
+		if idx := strings.Index(line, "--"); idx >= 0 {
+			line = line[:idx]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}

@@ -1,0 +1,105 @@
+id: rp-047
+name: "LLM Model Substitution & Quality Downgrade Detector"
+version: "0.2.0"
+description: |
+  Detects silent LLM model substitution (COLS "quality downgrade" — users billed for premium model but served a cheaper one). Two branches: (1) latency-collapse — same session has baseline (>2000ms) and collapse (<300ms) in a 5-min hop window with >5× ratio; (2) model-field substitution — premium model name appears with a known proxy/router provider.
+
+  References:
+  - arXiv:2505.18471 (Invisible Tokens / COLS): https://arxiv.org/abs/2505.18471
+  - arXiv:2604.08407 (Your Agent Is Mine): https://arxiv.org/abs/2604.08407
+  - OWASP LLM05:2025 (Supply Chain)
+
+severity: warning
+category: supply_chain_compromise
+fp_rate: medium
+hook_sources: "llm_request,llm_response"
+required_telemetry: "agentguard_cim_metrics:llm.latency_ms"
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - supply-chain
+  - model-substitution
+  - quality-downgrade
+  - llm-router
+  - cols
+  - llm-integrity
+  - owasp-llm05
+  - arxiv-2505.18471
+  - arxiv-2604.08407
+query_sql: |
+  -- Branch 1: latency collapse in a 5-min hop window per session
+  SELECT
+    max(event_time) AS detected_at,
+    'rp-047' AS rule_id,
+    'LLM Model Substitution & Quality Downgrade Detector' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    arg_max(tags['run_id'], event_time) AS run_id,
+    '' AS hook_name,
+    arg_max(tags['tool_name'], event_time) AS tool_name,
+    concat(
+      'LLM latency collapse in 5-min window: max_latency=',
+      to_string(to_int64(max(metric_value))), 'ms (baseline) min_latency=',
+      to_string(to_int64(min(metric_value))), 'ms (collapsed) ratio=',
+      to_string(to_int64(max(metric_value) / min(metric_value))), 'x.',
+      ' Possible silent model substitution to cheap/local model. Agent: ', agent_id
+    ) AS message,
+    concat(
+      'window_start=', to_string(window_start),
+      ' window_end=', to_string(window_end),
+      ' max_latency_ms=', to_string(to_int64(max(metric_value))),
+      ' min_latency_ms=', to_string(to_int64(min(metric_value)))
+    ) AS event_data
+  FROM hop(agentguard_cim_metrics, event_time, interval 1 minute, interval 5 minute)
+  WHERE metric_name = 'llm.latency_ms'
+  GROUP BY session_id, agent_id, deployment_id, window_start, window_end
+  HAVING max(metric_value) > 2000
+     AND min(metric_value) < 300
+     AND max(metric_value) > min(metric_value) * 5
+
+  UNION ALL
+
+  -- Branch 2: model field substitution pattern in llm_request / llm_response (single-event)
+  SELECT
+    event_time AS detected_at,
+    'rp-047' AS rule_id,
+    'LLM Model Substitution & Quality Downgrade Detector' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Possible model downgrade substitution detected: model=[', coalesce(model, 'unknown'), ']',
+      ' provider=[', coalesce(provider, 'unknown'), ']',
+      ' in event_type=[', event_type, '].',
+      ' If this model was not explicitly configured, a router may be substituting cheaper models.',
+      ' Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('llm_request', 'llm_response')
+    AND (
+      (
+        (lower(model) LIKE '%haiku%' OR lower(model) LIKE '%claude-haiku%')
+        AND match(lower(provider), '\\b(proxy|gateway|router|litellm|openrouter|portkey|helicone|oneapi|routerly|martian|notdiamond|unify)\\b')
+      )
+      OR (
+        (lower(model) LIKE '%gpt-4o-mini%' OR lower(model) LIKE '%gpt-3.5%' OR lower(model) LIKE '%gpt-35%')
+        AND match(lower(provider), '\\b(proxy|gateway|router|litellm|openrouter|portkey|helicone|oneapi|routerly|martian|notdiamond|unify)\\b')
+      )
+      OR (
+        (lower(model) LIKE '%gemini-flash%' OR lower(model) LIKE '%gemini-nano%')
+        AND match(lower(provider), '\\b(proxy|gateway|router|litellm|openrouter|portkey|helicone|oneapi|routerly|martian|notdiamond|unify)\\b')
+      )
+      OR (
+        match(lower(model), '^(unknown|default|auto|proxy-model|router-model|fallback|cheapest|economy|basic)$')
+        AND match(lower(provider), '\\b(proxy|gateway|router|litellm|openrouter|portkey|helicone)\\b')
+      )
+    )
+
+  EMIT STREAM
