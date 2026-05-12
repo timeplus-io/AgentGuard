@@ -317,6 +317,14 @@ if [[ "$AGENT_TYPE" == "hermes" ]]; then
   "$PIP_CMD" install agentguard-hermes-plugin
   agentguard-hermes install
 
+  echo ""
+  echo "Enable agentguard-hermes-plugin..."
+  if command -v hermes &>/dev/null; then
+    hermes plugins enable agentguard
+  else
+    echo "Warning: 'hermes' is not found — skipping plugin enable."
+  fi
+
   EXPORT_BLOCK="$(printf '# AgentGuard\n'
 printf 'export AGENTGUARD_TIMEPLUS_URL=%q\n'    "$TIMEPLUS_URL"
 printf 'export AGENTGUARD_USERNAME=%q\n'         "$TIMEPLUS_USERNAME"
