@@ -256,23 +256,34 @@ VALUES
 	return tp.ExecHTTP(&cfg.Timeplus, sql)
 }
 
-// queryPreExistingOpenThreats returns open threats for this session and
-// a rule_id → block_policy map for those threats' rules.
+// buildPreExistingOpenThreatsSQL composes the SQL that decides whether the
+// current session has any prior threats that should block new tool calls.
 //
-// Rules where the latest state is enabled=false or deleted=true are excluded:
-// the user has turned the rule off, and stale security_events from before the
-// disable must not block new tool calls.
-func queryPreExistingOpenThreats(cfg *config.Config, req *models.HoldRequest) ([]models.Threat, map[string]string, error) {
-	sql := fmt.Sprintf(`
-SELECT t.rule_id, t.rule_name, t.severity, 'open' AS status, r.block_policy
-FROM (
-  SELECT rule_id,
-         any(rule_name) AS rule_name,
-         any(severity)  AS severity
-  FROM table(agentguard_security_events)
-  WHERE deployment_id = '%s' AND agent_id = '%s' AND session_id = '%s'
-  GROUP BY rule_id
-) AS t
+// Source of truth is agentguard_threats (the mutable dedup state), NOT
+// agentguard_security_events (the append-only audit log). The schema splits
+// detection cadence and operator action into two column families that evolve
+// independently:
+//
+//	cf_events(rule_name, severity, last_seen)        ← mv_threats writes this
+//	cf_status(status, status_updated_at)             ← acknowledge/clear writes this
+//
+// A row is "effectively open" — i.e. should block — when any of:
+//
+//	status = ''                                       (never operator-touched)
+//	status = 'open'                                   (threats.go auto-promoted on reopen)
+//	status IN ('acknowledged','cleared')
+//	  AND last_seen > status_updated_at               (re-fired after operator action)
+//
+// The rules join still applies: disabling a rule retroactively removes its
+// block, which is the operator's escape hatch.
+func buildPreExistingOpenThreatsSQL(deploymentID, agentID, sessionID string) string {
+	// Note: the synthetic 'open' column is aliased as reported_status (not status)
+	// to avoid colliding with the t.status reference in the WHERE clause — Proton's
+	// planner can't disambiguate a base-column reference from a same-named output
+	// alias and drops the t.status column from the join projection.
+	return fmt.Sprintf(`
+SELECT t.rule_id, t.rule_name, t.severity, 'open' AS reported_status, r.block_policy
+FROM table(agentguard_threats) AS t
 INNER JOIN (
   SELECT rule_id,
          arg_max(block_policy, updated_at) AS block_policy,
@@ -281,8 +292,28 @@ INNER JOIN (
   FROM table(agentguard_rules)
   GROUP BY rule_id
 ) AS r ON t.rule_id = r.rule_id
-WHERE r.enabled AND NOT r.deleted`,
-		escapeSQLStr(req.DeploymentID), escapeSQLStr(req.AgentID), escapeSQLStr(req.SessionID))
+WHERE t.deployment_id = '%s'
+  AND t.agent_id      = '%s'
+  AND t.session_id    = '%s'
+  AND r.enabled
+  AND NOT r.deleted
+  AND (
+       t.status = ''
+    OR t.status = 'open'
+    OR (t.status IN ('acknowledged', 'cleared')
+        AND t.last_seen > t.status_updated_at)
+  )`,
+		escapeSQLStr(deploymentID), escapeSQLStr(agentID), escapeSQLStr(sessionID))
+}
+
+// queryPreExistingOpenThreats returns open threats for this session and
+// a rule_id → block_policy map for those threats' rules.
+//
+// Rules where the latest state is enabled=false or deleted=true are excluded:
+// the user has turned the rule off, and stale threats from before the disable
+// must not block new tool calls.
+func queryPreExistingOpenThreats(cfg *config.Config, req *models.HoldRequest) ([]models.Threat, map[string]string, error) {
+	sql := buildPreExistingOpenThreatsSQL(req.DeploymentID, req.AgentID, req.SessionID)
 
 	rows, err := tp.Query(&cfg.Timeplus, sql)
 	if err != nil {
@@ -296,7 +327,7 @@ WHERE r.enabled AND NOT r.deleted`,
 			RuleID:   ruleID,
 			RuleName: parseStr(row["rule_name"]),
 			Severity: parseStr(row["severity"]),
-			Status:   parseStr(row["status"]),
+			Status:   parseStr(row["reported_status"]),
 		})
 		policies[ruleID] = parseStr(row["block_policy"])
 	}

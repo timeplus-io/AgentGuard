@@ -66,8 +66,9 @@ FROM table(agentguard_security_events)
 ORDER BY detected_at DESC`
 
 // buildThreatsList runs three Proton snapshot queries concurrently, merges the results,
-// fires re-open upserts for threats whose last_seen is newer than their cleared_at, and
-// returns the full sorted slice. Filters and pagination are left to the caller.
+// fires re-open upserts for handled threats whose last_seen is newer than their
+// status_updated_at, and returns the full sorted slice. Filters and pagination
+// are left to the caller.
 func buildThreatsList(cfg *config.Config) ([]models.Threat, error) {
 	type queryResult struct {
 		rows []tp.Row
@@ -173,14 +174,11 @@ func buildThreatsList(cfg *config.Config) ([]models.Threat, error) {
 		statusUpdatedAt := parseStr(row["status_updated_at"])
 		lastSeen := parseStr(row["last_seen"])
 
-		// Re-open: if cleared but new events arrived after the clear.
-		if status == "cleared" && statusUpdatedAt != "" && lastSeen != "" {
-			ls, errLS := parseProtonTime(lastSeen)
-			su, errSU := parseProtonTime(statusUpdatedAt)
-			if errLS == nil && errSU == nil && ls.After(su) {
-				status = "open"
-				toReopen = append(toReopen, k)
-			}
+		// Re-open: once an operator acknowledges or clears a threat, repeated
+		// blocking is suppressed until a new detection arrives after that action.
+		if shouldAutoReopenThreat(status, statusUpdatedAt, lastSeen) {
+			status = "open"
+			toReopen = append(toReopen, k)
 		}
 
 		stats := statsMap[k]
@@ -232,6 +230,19 @@ func buildThreatsList(cfg *config.Config) ([]models.Threat, error) {
 	}
 
 	return threats, nil
+}
+
+func shouldAutoReopenThreat(status, statusUpdatedAt, lastSeen string) bool {
+	if status != "acknowledged" && status != "cleared" {
+		return false
+	}
+	if statusUpdatedAt == "" || lastSeen == "" {
+		return false
+	}
+
+	ls, errLS := parseProtonTime(lastSeen)
+	su, errSU := parseProtonTime(statusUpdatedAt)
+	return errLS == nil && errSU == nil && ls.After(su)
 }
 
 // ListThreats handles GET /api/threats.
