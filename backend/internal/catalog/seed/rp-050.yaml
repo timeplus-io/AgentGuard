@@ -35,6 +35,11 @@ query_sql: |
   -- `tool_name` / `hook_name`) to avoid Proton ILLEGAL_AGGREGATION when the
   -- same column name is referenced in the pre-aggregation WHERE filter.
   -- Positional binding maps them to the target stream's columns.
+  --
+  -- A 1m-step / 5m-window hop puts each duplicate pair into up to 5 overlapping
+  -- windows. event_data carries window_start so the resulting rows are
+  -- deterministically distinct and downstream consumers can dedupe by
+  -- (run_id, sample_tool) or by window_start as needed.
 
   -- Branch A: Action Replay — 2+ consequential tool invocations in same run_id within 5-min hop window
   SELECT
@@ -55,7 +60,7 @@ query_sql: |
       coalesce(session_id, 'unknown'), ', run ', coalesce(run_id, 'unknown'),
       '). Possible checkpoint-restore duplicate execution. Agent: ', agent_id
     ) AS message,
-    concat('run_id=', coalesce(run_id, ''), ' tool_count=', to_string(count())) AS event_data
+    concat('run_id=', coalesce(run_id, ''), ' tool_count=', to_string(count()), ' window_start=', to_string(window_start)) AS event_data
   FROM hop(agentguard_cim_event, event_time, interval 1 minute, interval 5 minute)
   WHERE event_type = 'tool_invoke'
     AND match(lower(tool_name), '(payment|transfer|pay_|wire_|send_money|purchase|charge_|provision|delete_record|execute_order|place_order|commit_transaction|fund_transfer|book_flight|book_hotel|debit_|credit_|create_vm|deprovision|delete_user|cancel_subscription)')

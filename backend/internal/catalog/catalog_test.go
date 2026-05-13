@@ -303,6 +303,11 @@ func TestSeedFS_RP050HasHopWindow(t *testing.T) {
 		// Branch C: authority resurrection token match (unchanged from v0.1.0)
 		"(approv|authoriz|confirm_action|grant_access|sign_off",
 		`"(token|approval_token|auth_token|otp|nonce|approval_code`,
+		// Branch A's event_data must carry window_start. With a 1m/5m hop, each
+		// duplicate pair lands in up to 5 overlapping windows; without
+		// window_start the resulting rows are byte-identical and operators see
+		// 5 indistinguishable threats per attack.
+		"' window_start=', to_string(window_start)",
 		"EMIT STREAM",
 	}
 	for _, want := range required {
