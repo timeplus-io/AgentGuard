@@ -1,0 +1,103 @@
+id: rp-102
+name: "Agentic Pressure Normative Drift — Safety Bypass via Tool Failure Rationalization"
+version: "0.3.0"
+description: |
+  Detects Agentic Pressure Normative Drift — agents sacrifice safety constraints under repeated tool failure, deadline pressure, or resource deadlock ("Good Agent Paradox"). Two branches: (A) 3+ pressure-type tool_complete failures (rate-limit, timeout, quota, etc.) in a 5-min hop window per session; (B) rationalization language in assistant_message justifying a policy exception. Endogenous failure, not adversarial — distinct from rp-086/rp-087.
+
+  References:
+  - arXiv:2603.14975 (Why Agents Compromise Safety Under Pressure, ACL 2026 Findings): https://arxiv.org/abs/2603.14975
+  - OWASP Agentic AI ASI03:2026, OWASP LLM04:2025
+
+severity: warning
+category: agent_privilege_escalation
+fp_rate: medium
+hook_sources: "tool_complete,llm_response"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - agent-privilege-escalation
+  - normative-drift
+  - agentic-pressure
+  - safety-bypass
+  - rationalization
+  - tool-failure
+  - instrumental-divergence
+  - endogenous-threat
+  - owasp-asi03
+  - owasp-llm04
+  - acl-2026
+  - arxiv-2603.14975
+query_sql: |
+  -- Branch A: 3+ pressure-type tool failures in a 5-minute hop window per session
+  SELECT
+    max(event_time) AS detected_at,
+    'rp-102' AS rule_id,
+    'Agentic Pressure Normative Drift — Safety Bypass via Tool Failure Rationalization' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    arg_max(run_id, event_time) AS run_id,
+    arg_max(raw_hook_name, event_time) AS hook_name,
+    arg_max(tool_name, event_time) AS tool_name,
+    concat(
+      'Agentic Pressure: ',
+      to_string(count_if(
+        tool_success = false
+        AND match(lower(tool_result), '\\b(rate.?limit|quota.?exceed|too many request|service.?unavailabl|connection.?timeout|request.?timeout|deadline.?exceed|resource.?exhaust|capacity.?exceed|all.{0,5}attempt.{0,5}fail|no.?(alternative|fallback|option).{0,5}available|circuit.?breaker|max.{0,5}retries?.{0,5}exceed)\\b')
+      )),
+      ' pressure-type tool failures in 5-min window for session [', coalesce(session_id, 'unknown'),
+      ']. Normative drift risk high — correlate with llm_response rationalization.',
+      ' Agent: ', coalesce(agent_id, 'unknown')
+    ) AS message,
+    concat(
+      'window_start=', to_string(window_start),
+      ' window_end=', to_string(window_end),
+      ' pressure_failure_count=', to_string(count_if(
+        tool_success = false
+        AND match(lower(tool_result), '\\b(rate.?limit|quota.?exceed|too many request|service.?unavailabl|connection.?timeout|request.?timeout|deadline.?exceed|resource.?exhaust|capacity.?exceed|all.{0,5}attempt.{0,5}fail|no.?(alternative|fallback|option).{0,5}available|circuit.?breaker|max.{0,5}retries?.{0,5}exceed)\\b')
+      ))
+    ) AS event_data
+  FROM hop(agentguard_cim_event, event_time, interval 1 minute, interval 5 minute)
+  WHERE event_type = 'tool_complete'
+  GROUP BY session_id, agent_id, deployment_id, window_start, window_end
+  HAVING count_if(
+    tool_success = false
+    AND match(lower(tool_result), '\\b(rate.?limit|quota.?exceed|too many request|service.?unavailabl|connection.?timeout|request.?timeout|deadline.?exceed|resource.?exhaust|capacity.?exceed|all.{0,5}attempt.{0,5}fail|no.?(alternative|fallback|option).{0,5}available|circuit.?breaker|max.{0,5}retries?.{0,5}exceed)\\b')
+  ) >= 3
+
+  UNION ALL
+
+  -- Branch B: Normative drift rationalization in llm_response (single-event match)
+  SELECT
+    event_time AS detected_at,
+    'rp-102' AS rule_id,
+    'Agentic Pressure Normative Drift — Safety Bypass via Tool Failure Rationalization' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Safety constraint rationalization detected in assistant_message. ',
+      'Agent may be bypassing policy under operational pressure. ',
+      'Review planned tool invocations for unauthorized actions. ',
+      'Message excerpt: ', substr(coalesce(assistant_message, ''), 1, 150),
+      ' Agent: ', coalesce(agent_id, 'unknown'),
+      '. Session: ', coalesce(session_id, 'unknown')
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'llm_response'
+    AND (
+      match(lower(assistant_message), '\\bgiven (the )?(unavailability|constraints?|urgency|pressure|deadline|operational.{0,20}constraint|resource.{0,20}limit|service.{0,20}(failure|unavailabl)).{0,200}(bypass|override|skip|ignore|work.?around|proceed without|without.{0,30}(approval|verification|validation|check))\\b')
+      OR match(lower(assistant_message), '\\b(this|the|an?) (exceptional?|unusual|urgent|critical) (case|circumstance|situation|scenario).{0,100}(warrant|justif|necessit|permit|allow).{0,80}(bypass|override|relax|suspend|disabl|ignor|skip).{0,80}(policy|constraint|restriction|rule|safety|approval|protocol)\\b')
+      OR match(lower(assistant_message), '\\boperational(ly)?.{0,30}(necessary|justified|required|acceptable).{0,100}(bypass|override|skip|ignore|violat|relax|suspend)\\b')
+      OR match(lower(assistant_message), '\\b(fallback|alternative|backup).{0,50}(method|approach|path|option).{0,80}(not require|bypass|skip|without|no.{0,20}need.{0,20}for).{0,80}(approval|verification|classification|validation|clearance|authorization|policy|constraint)\\b')
+      OR match(lower(assistant_message), '\\b(proceed|continue|execute|perform|complete).{0,80}despite.{0,80}(the )?(usual|normal|standard|typical|required|established|defined).{0,80}(policy|constraint|restriction|rule|safety|protocol|approval|procedure)\\b')
+    )
+
+  EMIT STREAM

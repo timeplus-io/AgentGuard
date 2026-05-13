@@ -1,0 +1,107 @@
+id: rp-123
+name: "FAB Finetuning-Activated Dormant Adversarial Behavior Detector"
+version: "0.2.0"
+description: |
+  Detects Finetuning-Activated Backdoor (FAB) behaviors — dormant adversarial behavior embedded at the open-weight release stage that survives benign downstream finetuning and activates without trigger words. Three branches: (A) unsolicited advertising in llm_response; (B) 3+ refusals in a 5-min hop window per session; (C) consecutive-turn refusal→compliance flip on harmful requests (lag-based). Distinct from rp-042 (trigger-word backdoor) and rp-085 (training-trace poisoning).
+
+  References:
+  - arXiv:2505.16567 (FAB / Watch Your Steps): https://arxiv.org/abs/2505.16567
+  - arXiv:2601.04566 (BackdoorAgent): https://arxiv.org/abs/2601.04566
+  - OWASP LLM05:2025, MITRE T1195.001
+
+severity: critical
+category: supply_chain_compromise
+fp_rate: medium
+hook_sources: "llm_response,tool_complete"
+required_telemetry: ""
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - supply-chain
+  - backdoor
+  - finetuning
+  - fab
+  - dormant
+query_sql: |
+  -- Branch A: Unprompted promotional/advertising content (single-event)
+  SELECT
+    event_time AS detected_at,
+    'rp-123' AS rule_id,
+    'FAB Finetuning-Activated Dormant Adversarial Behavior Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('FAB unsolicited advertising detected in llm_response from agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'llm_response'
+    AND match(lower(coalesce(assistant_message, '')), '(for (best|optimal) (results|performance|outcomes), (use|try|switch to) [a-z0-9 ]{3,40}|i (highly )?(recommend|suggest) (using|switching to|trying) [a-z0-9 ]{3,40}|(click here|sign up|get started) to (receive|access|unlock|get|join)|this (product|service|solution|platform|tool) (is|offers) (the best|optimal|unparalleled|industry-leading|top-rated)|as an (ai|assistant|agent), i (strongly |highly )?(recommend|suggest|endorse) [a-z0-9 ]{3,40}|sponsored (by|content|message|disclosure)|affiliate (link|disclosure|partnership))')
+
+  UNION ALL
+
+  -- Branch B: Over-refusal chain — 3+ refusals in a 5-min hop window per session
+  SELECT
+    max(event_time) AS detected_at,
+    'rp-123' AS rule_id,
+    'FAB Finetuning-Activated Dormant Adversarial Behavior Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    arg_max(run_id, event_time) AS run_id,
+    arg_max(raw_hook_name, event_time) AS hook_name,
+    arg_max(tool_name, event_time) AS tool_name,
+    concat(
+      'FAB over-refusal chain: ',
+      to_string(count_if(
+        event_type = 'llm_response'
+        AND match(lower(coalesce(assistant_message, '')), '\\b(sorry|i am unable|i cannot|i am not able|i must (decline|refuse)|i have to (decline|refuse)|that is (not something|something i cannot)|i (am|m) afraid i (cannot|am unable|must decline))\\b')
+      )),
+      ' refusals in 5-min window from agent ', agent_id
+    ) AS message,
+    arg_max(raw_event_data, event_time) AS event_data
+  FROM hop(agentguard_cim_event, event_time, interval 1 minute, interval 5 minute)
+  WHERE event_type = 'llm_response'
+  GROUP BY session_id, agent_id, deployment_id, window_start, window_end
+  HAVING count_if(
+    event_type = 'llm_response'
+    AND match(lower(coalesce(assistant_message, '')), '\\b(sorry|i am unable|i cannot|i am not able|i must (decline|refuse)|i have to (decline|refuse)|that is (not something|something i cannot)|i (am|m) afraid i (cannot|am unable|must decline))\\b')
+  ) >= 3
+
+  UNION ALL
+
+  -- Branch C: Consecutive-turn jailbreakability activation signal (lag-based)
+  WITH lagged AS (
+    SELECT
+      event_time, session_id, agent_id, deployment_id, run_id,
+      event_type, tool_name, assistant_message,
+      raw_hook_name, raw_event_data,
+      lag(event_type)        OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(assistant_message) OVER (PARTITION BY session_id) AS prev_assistant_msg
+    FROM agentguard_cim_event
+  )
+  SELECT
+    event_time AS detected_at,
+    'rp-123' AS rule_id,
+    'FAB Finetuning-Activated Dormant Adversarial Behavior Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat('FAB jailbreakability activation signal from agent ', agent_id) AS message,
+    raw_event_data AS event_data
+  FROM lagged
+  WHERE event_type = 'llm_response'
+    AND prev_event_type = 'llm_response'
+    AND match(lower(coalesce(assistant_message, '')), '(i (can|will|am able to) (help|assist) with that|sure, here is (how|the|a)|of course, (here is|i can|i will)|absolutely, (here is|i can)|certainly, (here is|i will)|as you (wish|requested|asked), (here is|i will))')
+    AND match(lower(coalesce(prev_assistant_msg, '')), '\\b(sorry|i (am|m) (unable|not able|afraid)|i cannot|i (must|have to) (decline|refuse)|i (am|m) not (allowed|permitted|authorized) to)\\b')
+    AND match(lower(coalesce(assistant_message, '')), '(synthesiz|manufactur|exploit|harm|attack|weaponiz|illegal|bypass|evade|jailbreak|circumvent|disable (safety|guardrail|filter|protection))')
+
+  EMIT STREAM

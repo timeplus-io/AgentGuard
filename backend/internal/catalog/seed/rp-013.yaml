@@ -1,0 +1,118 @@
+id: rp-013
+name: "Anomalous LLM Output Token Spike"
+version: "0.4.0"
+description: |
+  Detects data exfiltration via abnormally large LLM output responses. Three streaming branches: (a) absolute spike — sum(output_tokens) > 8000 with sum(input_tokens) < 4000 in a 5-min tumble; (b) 5× relative spike vs same-window baseline in a 5-min hop; (c) ≥3 outputs > 3000 tokens in a 5-min hop.
+
+  References:
+  - OWASP LLM10:2025 (Unbounded Consumption)
+  - arXiv:2604.05432 (Back-Reveal): https://arxiv.org/abs/2604.05432
+
+severity: warning
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "llm_response"
+required_telemetry: "agentguard_cim_metrics:llm.input_tokens,llm.output_tokens"
+author: "AgentGuard Research Team"
+tags:
+  - security
+  - data_exfiltration
+  - token-spike
+  - metrics
+  - owasp-llm10
+  - back-reveal
+  - arXiv-2604.05432
+query_sql: |
+  -- Two load-bearing shapes (regression-tested in catalog_test.go; runbook
+  -- in backend/internal/catalog/testdata/):
+  --   Branch A must stay tumble-wrapped — unwindowed streaming GROUP BY +
+  --     EMIT STREAM re-emits every qualifying run_id on each checkpoint
+  --     (O(N^2) rows in agentguard_security_events).
+  --   Branch B's input guard must stay max_if(input_tokens) < 4000 — avg_if
+  --     diluted high-input codegen calls against baseline traffic.
+  SELECT
+    max(event_time) AS detected_at,
+    'rp-013' AS rule_id,
+    'Anomalous LLM Output Token Spike' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    tags['run_id'] AS run_id,
+    '' AS hook_name,
+    tags['tool_name'] AS tool_name,
+    concat(
+      'LLM output token spike: ',
+      to_string(to_int64(sum_if(metric_value, metric_name = 'llm.output_tokens'))),
+      ' tokens in a single LLM call with input_tokens=',
+      to_string(to_int64(sum_if(metric_value, metric_name = 'llm.input_tokens'))),
+      ' (absolute threshold > 8000, input guard < 4000). ',
+      'Possible data exfiltration via verbose LLM output (Back-Reveal pattern, OWASP LLM10:2025). Agent: ',
+      agent_id
+    ) AS message,
+    concat(
+      'output_tokens=', to_string(to_int64(sum_if(metric_value, metric_name = 'llm.output_tokens'))),
+      ' input_tokens=', to_string(to_int64(sum_if(metric_value, metric_name = 'llm.input_tokens')))
+    ) AS event_data
+  FROM tumble(agentguard_cim_metrics, event_time, interval 5 minute)
+  WHERE metric_name IN ('llm.output_tokens', 'llm.input_tokens')
+  GROUP BY agent_id, deployment_id, session_id, tags['run_id'], tags['tool_name'], window_start, window_end
+  HAVING sum_if(metric_value, metric_name = 'llm.output_tokens') > 8000
+    AND sum_if(metric_value, metric_name = 'llm.input_tokens') < 4000
+
+  UNION ALL
+
+  SELECT
+    max(event_time) AS detected_at,
+    'rp-013' AS rule_id,
+    'Anomalous LLM Output Token Spike' AS rule_name,
+    'warning' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    arg_max(tags['run_id'], event_time) AS run_id,
+    '' AS hook_name,
+    arg_max(tags['tool_name'], event_time) AS tool_name,
+    concat(
+      'LLM output token anomaly over 5m window: max_output=',
+      to_string(to_int64(max_if(metric_value, metric_name = 'llm.output_tokens'))),
+      ', baseline_output=',
+      to_string(to_int64(if(
+        count_if(metric_name = 'llm.output_tokens') > 1,
+        (sum_if(metric_value, metric_name = 'llm.output_tokens') - max_if(metric_value, metric_name = 'llm.output_tokens')) / (count_if(metric_name = 'llm.output_tokens') - 1),
+        0
+      ))),
+      ', high_output_calls=',
+      to_string(count_if(metric_name = 'llm.output_tokens' AND metric_value > 3000)),
+      '. Possible gradual or sustained data exfiltration via verbose LLM output. Agent: ',
+      agent_id
+    ) AS message,
+    concat(
+      'window_start=', to_string(window_start),
+      ' window_end=', to_string(window_end),
+      ' max_output_tokens=', to_string(to_int64(max_if(metric_value, metric_name = 'llm.output_tokens'))),
+      ' output_call_count=', to_string(count_if(metric_name = 'llm.output_tokens')),
+      ' high_output_call_count=', to_string(count_if(metric_name = 'llm.output_tokens' AND metric_value > 3000)),
+      ' max_input_tokens=', to_string(to_int64(max_if(metric_value, metric_name = 'llm.input_tokens')))
+    ) AS event_data
+  FROM hop(agentguard_cim_metrics, event_time, interval 1 minute, interval 5 minute)
+  WHERE metric_name IN ('llm.output_tokens', 'llm.input_tokens')
+  GROUP BY agent_id, deployment_id, session_id, window_start, window_end
+  HAVING max_if(metric_value, metric_name = 'llm.input_tokens') < 4000
+    AND (
+      (
+        count_if(metric_name = 'llm.output_tokens') >= 3
+        AND if(
+          count_if(metric_name = 'llm.output_tokens') > 1,
+          (sum_if(metric_value, metric_name = 'llm.output_tokens') - max_if(metric_value, metric_name = 'llm.output_tokens')) / (count_if(metric_name = 'llm.output_tokens') - 1),
+          0
+        ) > 200
+        AND max_if(metric_value, metric_name = 'llm.output_tokens') > if(
+          count_if(metric_name = 'llm.output_tokens') > 1,
+          (sum_if(metric_value, metric_name = 'llm.output_tokens') - max_if(metric_value, metric_name = 'llm.output_tokens')) / (count_if(metric_name = 'llm.output_tokens') - 1),
+          0
+        ) * 5
+      )
+      OR count_if(metric_name = 'llm.output_tokens' AND metric_value > 3000) >= 3
+    )
+  EMIT STREAM
