@@ -483,8 +483,8 @@ func TestSeedFS_RP047HasHopWindow(t *testing.T) {
 	if !ok {
 		t.Fatal("rp-047 missing from seed catalog")
 	}
-	if e.Version != "0.2.0" {
-		t.Fatalf("rp-047 version = %q, want 0.2.0", e.Version)
+	if e.Version != "0.2.1" {
+		t.Fatalf("rp-047 version = %q, want 0.2.1", e.Version)
 	}
 	q := e.QuerySQL
 	required := []string{
@@ -492,6 +492,11 @@ func TestSeedFS_RP047HasHopWindow(t *testing.T) {
 		"FROM hop(agentguard_cim_metrics, event_time, interval 1 minute, interval 5 minute)",
 		// Same-window collapse-detection: baseline + collapsed + 5x ratio
 		"HAVING max(metric_value) > 2000",
+		// Zero-guard: `min < 300` admits min=0; the SELECT divides
+		// max/min, and to_int64(inf) throws CANNOT_CONVERT_TYPE
+		// (proton-enterprise FunctionsConversion.h:291-303). Block
+		// failure, not garbled output.
+		"min(metric_value) > 0",
 		"min(metric_value) < 300",
 		"max(metric_value) > min(metric_value) * 5",
 		// Branch 2: single-event over cim_event (preserved from v0.1.1)
@@ -601,6 +606,36 @@ func TestSeedFS_RP123HasHopWindow(t *testing.T) {
 	}
 	if strings.Contains(strings.ToUpper(stripSQLComments(q)), "ROWS BETWEEN") {
 		t.Error("rp-123 has ROWS BETWEEN — must use hop() time window in streaming MV")
+	}
+}
+
+// TestSeedFS_TouchedRulesNoBareBackslashB guards the four rules restored in
+// the #88/#89 streaming-MV rewrite against re-introducing bare `\b` word
+// boundaries inside SQL string literals. Proton parses `\b` inside a
+// single-quoted SQL string as backspace 0x08 (IO/ReadHelpers.h), making the
+// regex word-boundary clause dead code — the rule still installs but
+// silently never matches. The required spelling is `\\b`. A catalog-wide
+// migration of the other ~47 seed rules with the same bug is tracked
+// separately; this test only locks in the four rules we've already fixed.
+func TestSeedFS_TouchedRulesNoBareBackslashB(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	for _, id := range []string{"rp-013", "rp-047", "rp-102", "rp-123"} {
+		e, ok := m.Lookup(id)
+		if !ok {
+			t.Errorf("%s missing from seed catalog", id)
+			continue
+		}
+		// Strip line comments first so changelog prose mentioning the
+		// historical bare-`\b` bug does not false-positive.
+		stripped := stripSQLComments(e.QuerySQL)
+		// Remove escaped occurrences; anything left is bare.
+		bareSearch := strings.ReplaceAll(stripped, `\\b`, "")
+		if strings.Contains(bareSearch, `\b`) {
+			t.Errorf("rule %s contains bare \\b in SQL — escape as \\\\b (Proton parses \\b inside string literals as backspace 0x08)", id)
+		}
 	}
 }
 

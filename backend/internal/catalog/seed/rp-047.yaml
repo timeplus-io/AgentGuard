@@ -1,6 +1,6 @@
 id: rp-047
 name: "LLM Model Substitution & Quality Downgrade Detector"
-version: "0.2.0"
+version: "0.2.1"
 description: |
   Detects silent LLM model substitution (COLS "quality downgrade" — users billed for premium model but served a cheaper one). Two branches: (1) latency-collapse — same session has baseline (>2000ms) and collapse (<300ms) in a 5-min hop window with >5× ratio; (2) model-field substitution — premium model name appears with a known proxy/router provider.
 
@@ -56,6 +56,7 @@ query_sql: |
   WHERE metric_name = 'llm.latency_ms'
   GROUP BY session_id, agent_id, deployment_id, window_start, window_end
   HAVING max(metric_value) > 2000
+     AND min(metric_value) > 0
      AND min(metric_value) < 300
      AND max(metric_value) > min(metric_value) * 5
 
