@@ -155,7 +155,6 @@ def _make_row(hook_name: str, kwargs: dict, *, session_id: str | None = None) ->
 def _hook(hook_name: str):
     def _cb(**kwargs):
         _ingest([_make_row(hook_name, kwargs)])
-
     _cb.__name__ = f"_{hook_name}"
     return _cb
 
@@ -164,14 +163,12 @@ def _hook(hook_name: str):
 # Lifecycle hooks with non-trivial semantics
 # ---------------------------------------------------------------------------
 
-
 def _on_session_end(**kwargs):
     """
     Hermes fires this after every run_conversation() call (per chat turn).
     Reported as 'conversation_end' — NOT treated as session termination by AgentGuard.
     """
     _ingest([_make_row("conversation_end", kwargs)])
-
 
 
 def _on_session_finalize(**kwargs):
@@ -188,7 +185,6 @@ def _on_session_finalize(**kwargs):
         _clear_session_task_ids(sid)
 
 
-
 def _abandon_session_holds(session_id: str) -> None:
     """Best-effort POST /api/holds/_abandon-session/<sid> — never raises."""
     url = f"{_AGENTGUARD_URL.rstrip('/')}/api/holds/_abandon-session/{session_id}"
@@ -203,7 +199,6 @@ def _abandon_session_holds(session_id: str) -> None:
 # ---------------------------------------------------------------------------
 # Synchronous hold-and-wait — pre_tool_call only
 # ---------------------------------------------------------------------------
-
 
 def _request_hold(tool_name: str, args: dict, session_id: str, run_id: str,
                   task_id: str, tool_call_id: str, event_time: str) -> dict:
