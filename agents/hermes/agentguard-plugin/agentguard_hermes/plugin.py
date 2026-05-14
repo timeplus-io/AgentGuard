@@ -73,13 +73,43 @@ _HOLDS_ENABLED     = os.environ.get("AGENTGUARD_HOLDS_ENABLED", "true").lower() 
 _HOLD_REQUEST_TIMEOUT_SEC = 600
 
 _COLUMNS = [
-    "hook_name", "event_time", "session_id", "run_id",
-    "agent_id", "deployment_id", "deployment_name", "session_key",
-    "tool_name", "provider", "model", "hook_decision",
-    "block_reason", "event_data", "agent_type",
+    "hook_name",
+    "event_time",
+    "session_id",
+    "run_id",
+    "agent_id",
+    "deployment_id",
+    "deployment_name",
+    "session_key",
+    "tool_name",
+    "provider",
+    "model",
+    "hook_decision",
+    "block_reason",
+    "event_data",
+    "agent_type",
 ]
 
 _SKIP_KEYS = {"conversation_history"}
+
+# `_TID_TO_SID` stores <task_id, session_id> pairs to lookup session_id by task_id
+_TID_TO_SID = {}
+
+
+def _get_session_id(session_id: str, task_id: str) -> str:
+    if session_id == "":
+        session_id = _TID_TO_SID.get(task_id) or "unknown"
+    else:
+        if task_id != "":
+            _TID_TO_SID[task_id] = session_id
+
+    return session_id
+
+
+def _clear_session_task_ids(session_id: str):
+    task_ids = [k for k, v in _TID_TO_SID.items() if v == session_id ]
+    for tid in task_ids:
+        del _TID_TO_SID[tid]
 
 
 def _ingest(rows: list) -> None:
@@ -97,9 +127,10 @@ def _ingest(rows: list) -> None:
         print(f"[agentguard] ingest error: {e}", flush=True)
 
 
-def _make_row(hook_name: str, kwargs: dict, *, session_id: str = None) -> list:
-    sid = session_id if session_id is not None else (
-        kwargs.get("session_id") or kwargs.get("task_id") or ""
+def _make_row(hook_name: str, kwargs: dict, *, session_id: str | None = None) -> list:
+    sid = _get_session_id(
+        session_id if session_id is not None else (kwargs.get("session_id") or ""),
+        kwargs.get("task_id") or "",
     )
     data = {k: v for k, v in kwargs.items() if k not in _SKIP_KEYS}
     return [
@@ -124,6 +155,7 @@ def _make_row(hook_name: str, kwargs: dict, *, session_id: str = None) -> list:
 def _hook(hook_name: str):
     def _cb(**kwargs):
         _ingest([_make_row(hook_name, kwargs)])
+
     _cb.__name__ = f"_{hook_name}"
     return _cb
 
@@ -132,12 +164,14 @@ def _hook(hook_name: str):
 # Lifecycle hooks with non-trivial semantics
 # ---------------------------------------------------------------------------
 
+
 def _on_session_end(**kwargs):
     """
     Hermes fires this after every run_conversation() call (per chat turn).
     Reported as 'conversation_end' — NOT treated as session termination by AgentGuard.
     """
     _ingest([_make_row("conversation_end", kwargs)])
+
 
 
 def _on_session_finalize(**kwargs):
@@ -151,6 +185,8 @@ def _on_session_finalize(**kwargs):
     _ingest([_make_row("on_session_end", kwargs, session_id=sid)])
     if sid:
         _abandon_session_holds(sid)
+        _clear_session_task_ids(sid)
+
 
 
 def _abandon_session_holds(session_id: str) -> None:
@@ -167,6 +203,7 @@ def _abandon_session_holds(session_id: str) -> None:
 # ---------------------------------------------------------------------------
 # Synchronous hold-and-wait — pre_tool_call only
 # ---------------------------------------------------------------------------
+
 
 def _request_hold(tool_name: str, args: dict, session_id: str, run_id: str,
                   task_id: str, tool_call_id: str, event_time: str) -> dict:
@@ -243,19 +280,23 @@ def _pre_tool_call(**kwargs):
         _ingest([_make_row("pre_tool_call", kwargs)])
         return None
 
-    sid = kwargs.get("session_id") or kwargs.get("task_id") or ""
+    tid = kwargs.get("task_id") or ""
+    sid = _get_session_id(kwargs.get("session_id") or "", tid)
     decision = _request_hold(
         tool_name=kwargs.get("tool_name") or "",
         args=kwargs.get("args") or {},
         session_id=sid,
         run_id=sid,
-        task_id=kwargs.get("task_id") or "",
+        task_id=tid,
         tool_call_id=kwargs.get("tool_call_id") or "",
         event_time=datetime.now(timezone.utc).isoformat(),
     )
 
     if decision["decision"] == "block":
-        return {"action": "block", "message": decision.get("reason") or "Blocked by AgentGuard"}
+        return {
+            "action": "block",
+            "message": decision.get("reason") or "Blocked by AgentGuard",
+        }
     return None
 
 
