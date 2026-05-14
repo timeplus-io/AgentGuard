@@ -30,6 +30,57 @@ const TOKEN_COLORS = {
 }
 
 const EMPTY_FORM = { provider: '', model: '', input_cost_per_million: '', output_cost_per_million: '', cache_read_cost_per_million: '' }
+const EMPTY_BUDGET = { deployment_id: '', monthly_budget: '', currency: 'USD' }
+
+// Delta-flat band: when |pct| < 0.1, the change is noise — render no arrow icon
+// and a neutral color so the tile doesn't claim a trend that isn't there.
+const DELTA_FLAT_BAND_PCT = 0.1
+
+// periodDeltaProps builds {delta, deltaColor, deltaIcon} from a prior-period
+// delta percent. Returns an empty object when pct is null/undefined/NaN — the
+// caller spreads it into the kpi object, so the delta row is omitted entirely.
+// lowerIsBetter=true means a negative delta (spend went down) renders green.
+function periodDeltaProps(pct, lowerIsBetter = true) {
+  if (pct == null || !Number.isFinite(pct)) return {}
+  const sign = pct > 0 ? '+' : ''
+  const text = `${sign}${pct.toFixed(1)}% vs last month-to-date`
+  if (Math.abs(pct) < DELTA_FLAT_BAND_PCT) {
+    return { delta: text, deltaColor: 'text-zinc-500', deltaIcon: null }
+  }
+  if (pct < 0) {
+    return {
+      delta: text,
+      deltaColor: lowerIsBetter ? 'text-emerald-400' : 'text-[#ffb4ab]',
+      deltaIcon: 'trending_down',
+    }
+  }
+  return {
+    delta: text,
+    deltaColor: lowerIsBetter ? 'text-[#ffb4ab]' : 'text-emerald-400',
+    deltaIcon: 'trending_up',
+  }
+}
+
+// budgetDeltaProps renders the Forecasted Total tile's delta against the
+// configured budget. status comes from the backend (over | under | on | "").
+function budgetDeltaProps(status, pct) {
+  if (!status || pct == null || !Number.isFinite(pct)) return {}
+  if (status === 'on') {
+    return { delta: 'on budget', deltaColor: 'text-zinc-500', deltaIcon: null }
+  }
+  if (status === 'under') {
+    return {
+      delta: `${Math.abs(pct).toFixed(1)}% under budget`,
+      deltaColor: 'text-emerald-400',
+      deltaIcon: 'trending_down',
+    }
+  }
+  return {
+    delta: `${Math.abs(pct).toFixed(1)}% over budget`,
+    deltaColor: 'text-[#ffb4ab]',
+    deltaIcon: 'trending_up',
+  }
+}
 
 export default function CostGovernance() {
   const [data, setData] = useState(null)
@@ -42,6 +93,15 @@ export default function CostGovernance() {
   const [saveError, setSaveError] = useState('')
   const [deletingKey, setDeletingKey] = useState(null)
   const [editingKey, setEditingKey] = useState(null)
+  const [budgets, setBudgets] = useState([])
+  const [showAddBudget, setShowAddBudget] = useState(false)
+  const [budgetForm, setBudgetForm] = useState(EMPTY_BUDGET)
+  const [savingBudget, setSavingBudget] = useState(false)
+  const [budgetError, setBudgetError] = useState('')
+  const [editingBudgetKey, setEditingBudgetKey] = useState(null)
+  const [deletingBudgetKey, setDeletingBudgetKey] = useState(null)
+
+  const refreshCost = () => api.getCost().then(setData).catch(() => {})
 
   useEffect(() => {
     api.getCost()
@@ -49,6 +109,13 @@ export default function CostGovernance() {
       .catch(err => setLoadError(err?.message || 'Failed to load cost data'))
       .finally(() => setLoading(false))
   }, [])
+
+  const fetchBudgets = () => {
+    api.getCostBudgets()
+      .then(res => setBudgets(res.budgets ?? []))
+      .catch(err => setLoadError(err?.message || 'Failed to load budgets'))
+  }
+  useEffect(() => { fetchBudgets() }, [])
 
   const fetchPricing = () => {
     api.listPricing()
@@ -108,6 +175,57 @@ export default function CostGovernance() {
     }
   }
 
+  const handleSaveBudget = async () => {
+    if (!budgetForm.deployment_id || !budgetForm.monthly_budget) return
+    setSavingBudget(true)
+    try {
+      await api.upsertCostBudget({
+        deployment_id: budgetForm.deployment_id.trim(),
+        monthly_budget: parseFloat(budgetForm.monthly_budget) || 0,
+        currency: budgetForm.currency || 'USD',
+      })
+      setBudgetError('')
+      setShowAddBudget(false)
+      setBudgetForm(EMPTY_BUDGET)
+      setEditingBudgetKey(null)
+      fetchBudgets()
+      refreshCost()
+    } catch (err) {
+      setBudgetError(err?.message || 'Save failed. Please try again.')
+    } finally {
+      setSavingBudget(false)
+    }
+  }
+
+  const handleEditBudget = (b) => {
+    setBudgetForm({
+      deployment_id: b.deployment_id,
+      monthly_budget: String(b.monthly_budget),
+      currency: b.currency || 'USD',
+    })
+    setEditingBudgetKey(b.deployment_id)
+    setShowAddBudget(true)
+    setBudgetError('')
+  }
+
+  const handleDeleteBudget = async (deployment_id) => {
+    setDeletingBudgetKey(deployment_id)
+    try {
+      await api.upsertCostBudget({
+        deployment_id,
+        monthly_budget: 0,
+        currency: 'USD',
+        deleted: true,
+      })
+      fetchBudgets()
+      refreshCost()
+    } catch (err) {
+      setBudgetError(`Delete failed: ${err?.message ?? String(err)}`)
+    } finally {
+      setDeletingBudgetKey(null)
+    }
+  }
+
   const spendData = data?.daily_spend ?? []
   const maxSpend = spendData.length > 0 ? Math.max(...spendData.map(d => d.amount)) : 0
 
@@ -122,9 +240,21 @@ export default function CostGovernance() {
   const wastedSpend = data?.wasted_spend ?? 0
 
   const kpis = [
-    { label: 'Month-to-Date Spend', value: formatDollar(data?.month_to_date), delta: '4.2% from last month', deltaColor: 'text-emerald-400', deltaIcon: 'trending_down' },
-    { label: 'Forecasted Total',     value: formatDollar(data?.forecasted),    delta: 'Within 15% of budget', deltaColor: 'text-zinc-500',    deltaIcon: null },
-    { label: 'Avg. Token Cost / 1M', value: formatDollar(data?.avg_token_cost), delta: 'Optimized by 12%',  deltaColor: 'text-[#ffb0cf]',   deltaIcon: null },
+    {
+      label: 'Month-to-Date Spend',
+      value: formatDollar(data?.month_to_date),
+      ...periodDeltaProps(data?.month_to_date_delta_pct, true),
+    },
+    {
+      label: 'Forecasted Total',
+      value: formatDollar(data?.forecasted),
+      ...budgetDeltaProps(data?.budget_status, data?.forecast_budget_delta_pct),
+    },
+    {
+      label: 'Avg. Token Cost / 1M (MTD)',
+      value: formatDollar(data?.avg_token_cost),
+      ...periodDeltaProps(data?.avg_token_cost_delta_pct, true),
+    },
   ]
 
   return (
@@ -158,10 +288,12 @@ export default function CostGovernance() {
                 <div className="absolute top-0 right-0 w-16 h-16 bg-[#ffb0cf]/5 rounded-full -mr-8 -mt-8 group-hover:scale-150 transition-transform duration-500"></div>
                 <p className="text-zinc-500 text-xs font-medium uppercase tracking-wider">{kpi.label}</p>
                 <h3 className={`text-2xl font-semibold mt-2 ${kpi.valueColor || 'text-[#e7dff0]'}`}>{loading ? '...' : kpi.value}</h3>
-                <div className={`flex items-center gap-1 mt-4 text-xs font-semibold ${kpi.deltaColor}`}>
-                  {kpi.deltaIcon && <span className="material-symbols-outlined text-xs">{kpi.deltaIcon}</span>}
-                  {kpi.delta}
-                </div>
+                {kpi.delta && (
+                  <div className={`flex items-center gap-1 mt-4 text-xs font-semibold ${kpi.deltaColor}`}>
+                    {kpi.deltaIcon && <span className="material-symbols-outlined text-xs">{kpi.deltaIcon}</span>}
+                    {kpi.delta}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -241,6 +373,123 @@ export default function CostGovernance() {
                 <div className="col-span-4 text-center text-zinc-500 text-sm py-4">No cost data available yet.</div>
               )}
             </div>
+          </div>
+
+          {/* Monthly Budgets — powers the Forecasted Total delta */}
+          <div className="bg-[#2c2834] p-6 rounded">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h4 className="text-base font-semibold text-[#e7dff0]">Monthly Budgets</h4>
+                <p className="text-xs text-zinc-500 mt-1">Per-deployment monthly spend targets. The Forecasted Total KPI compares against the sum of active budgets.</p>
+              </div>
+              {!showAddBudget && (
+                <button
+                  onClick={() => { setShowAddBudget(true); setBudgetError('') }}
+                  className="text-xs text-[#ffb0cf] font-semibold flex items-center gap-1 hover:underline"
+                >
+                  <span className="material-symbols-outlined text-xs">add_circle</span>
+                  Add Budget
+                </button>
+              )}
+            </div>
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="text-zinc-500 border-b border-[#574149]/10">
+                  <th className="pb-3 font-medium">Deployment</th>
+                  <th className="pb-3 font-medium">Monthly Budget</th>
+                  <th className="pb-3 font-medium">Currency</th>
+                  <th className="pb-3 font-medium">Updated By</th>
+                  <th className="pb-3 font-medium">Updated</th>
+                  <th className="pb-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#574149]/5">
+                {budgets.map(b => (
+                  <tr key={b.deployment_id}>
+                    <td className="py-3 font-medium text-[#e7dff0]">{b.deployment_id}</td>
+                    <td className="py-3 text-zinc-400">{formatDollar(b.monthly_budget)}</td>
+                    <td className="py-3 text-zinc-400">{b.currency || 'USD'}</td>
+                    <td className="py-3 text-zinc-400">{b.updated_by || '—'}</td>
+                    <td className="py-3 text-zinc-500">{b.updated_at ? b.updated_at.slice(0, 10) : '—'}</td>
+                    <td className="py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleEditBudget(b)}
+                          disabled={showAddBudget}
+                          className="text-zinc-500 hover:text-[#ffb0cf] disabled:opacity-40"
+                          title="Edit"
+                        >
+                          <span className="material-symbols-outlined text-base">edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBudget(b.deployment_id)}
+                          disabled={deletingBudgetKey === b.deployment_id || showAddBudget}
+                          className="text-zinc-500 hover:text-[#ffb4ab] disabled:opacity-40"
+                          title="Delete"
+                        >
+                          <span className="material-symbols-outlined text-base">close</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {budgets.length === 0 && !showAddBudget && (
+                  <tr>
+                    <td colSpan={6} className="py-4 text-center text-zinc-500 text-xs">No budgets configured. The Forecasted Total KPI shows no delta until at least one is added.</td>
+                  </tr>
+                )}
+                {showAddBudget && (
+                  <tr>
+                    <td className="py-2">
+                      <input
+                        className={`w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-gray-400 ${editingBudgetKey ? 'text-zinc-500 cursor-not-allowed' : 'text-[#e7dff0] placeholder-zinc-600'}`}
+                        placeholder="production"
+                        value={budgetForm.deployment_id}
+                        readOnly={!!editingBudgetKey}
+                        onChange={e => setBudgetForm(f => ({ ...f, deployment_id: e.target.value }))}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <input
+                        type="number" step="0.01" min="0"
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-[#e7dff0] placeholder-zinc-600 text-xs focus:outline-none focus:border-gray-400"
+                        placeholder="1000.00"
+                        value={budgetForm.monthly_budget}
+                        onChange={e => setBudgetForm(f => ({ ...f, monthly_budget: e.target.value }))}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <select
+                        className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-[#e7dff0] text-xs focus:outline-none focus:border-gray-400"
+                        value={budgetForm.currency}
+                        onChange={e => setBudgetForm(f => ({ ...f, currency: e.target.value }))}
+                      >
+                        <option value="USD">USD</option>
+                      </select>
+                    </td>
+                    <td className="py-2" colSpan={2}></td>
+                    <td className="py-2 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={handleSaveBudget}
+                          disabled={savingBudget || !budgetForm.deployment_id || !budgetForm.monthly_budget}
+                          className="px-2 py-1 bg-primary-button text-primary-button-text text-[10px] font-semibold rounded disabled:opacity-40"
+                        >
+                          {savingBudget ? '...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={() => { setShowAddBudget(false); setBudgetForm(EMPTY_BUDGET); setBudgetError(''); setEditingBudgetKey(null) }}
+                          className="px-2 py-1 bg-[#37333f] text-zinc-300 text-[10px] font-semibold rounded"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {budgetError && <p className="text-[10px] text-[#ffb4ab] mt-1 text-right">{budgetError}</p>}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
 
           {/* Model Pricing */}

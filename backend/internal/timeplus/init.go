@@ -104,6 +104,9 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	if err := seedPricingData(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning seeding pricing: %v", err)
 	}
+	if err := createCostBudgetsStream(ctx, conn, emit); err != nil {
+		log.Printf("timeplus init: warning creating cost budgets stream: %v", err)
+	}
 	if err := createSkillsStream(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating skills stream: %v", err)
 	}
@@ -1158,6 +1161,27 @@ CREATE MUTABLE STREAM IF NOT EXISTS agentguard_pricing
   updated_at                  datetime64(3)
 ) PRIMARY KEY (provider, model)`
 
+// ddlCostBudgetsStream is the append-only stream backing per-deployment monthly
+// cost budgets. Current state is reconstructed via
+//
+//	arg_max(monthly_budget, updated_at), arg_max(deleted, updated_at)
+//	GROUP BY deployment_id
+//	HAVING NOT deleted
+//
+// — same pattern as agentguard_rules. Operators edit budgets via
+// POST /api/cost/budget; each call appends a new row rather than mutating the
+// previous one, giving us a free audit trail of who changed what when.
+const ddlCostBudgetsStream = `
+CREATE STREAM IF NOT EXISTS agentguard_cost_budgets
+(
+  deployment_id   low_cardinality(string),
+  monthly_budget  float64,
+  currency        low_cardinality(string),
+  updated_by      string,
+  deleted         bool,
+  updated_at      datetime64(3)
+)`
+
 const ddlSkillsStream = `
 CREATE STREAM IF NOT EXISTS agentguard_skills
 (
@@ -1403,6 +1427,23 @@ var pricingSeedData = []pricingSeed{
 
 func createPricingStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "stream", "agentguard_pricing", ddlPricingStream, emit)
+}
+
+// createCostBudgetsStream provisions the per-deployment monthly budget stream
+// during initial setup. Existing deployments that completed setup before this
+// stream existed should call EnsureCostBudgetsStream from the budget handlers
+// instead — that path is idempotent and HTTP-based, so it works against a live
+// server without re-running the setup wizard.
+func createCostBudgetsStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "stream", "agentguard_cost_budgets", ddlCostBudgetsStream, emit)
+}
+
+// EnsureCostBudgetsStream issues the budget stream DDL via the HTTP transport.
+// Proton's CREATE STREAM IF NOT EXISTS makes it idempotent, so handlers can call
+// this on first use without doing their own existence check. This is the
+// migration path for deployments that finished setup before budgets shipped.
+func EnsureCostBudgetsStream(cfg *config.TimeplusConfig) error {
+	return ExecHTTP(cfg, ddlCostBudgetsStream)
 }
 
 func createThreatsStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {

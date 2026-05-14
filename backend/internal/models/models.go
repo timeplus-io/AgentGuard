@@ -375,14 +375,53 @@ type AgentModelCost struct {
 }
 
 type CostResponse struct {
-	MonthToDate     float64          `json:"month_to_date"`
-	Forecasted      float64          `json:"forecasted"`
-	AvgTokenCost    float64          `json:"avg_token_cost"`
+	MonthToDate     float64 `json:"month_to_date"`
+	MonthToDatePrev float64 `json:"month_to_date_prev"`
+	// MonthToDateDeltaPct is the percent change vs the prior month-to-date
+	// window of the same elapsed duration. Nil when the prior denominator is
+	// zero — the frontend treats nil as "no delta to display".
+	MonthToDateDeltaPct *float64 `json:"month_to_date_delta_pct,omitempty"`
+
+	Forecasted float64 `json:"forecasted"`
+	// ForecastBudgetDeltaPct is the percent of the configured monthly budget
+	// the projected month-end total represents (signed: positive = over budget).
+	// Nil when no budget is configured.
+	ForecastBudgetDeltaPct *float64 `json:"forecast_budget_delta_pct,omitempty"`
+	// BudgetAmount is the sum of currently-active per-deployment monthly
+	// budgets, in the canonical currency. Nil when no budget is configured.
+	BudgetAmount *float64 `json:"budget_amount,omitempty"`
+	// BudgetStatus is one of "under", "over", "on" when a budget is configured,
+	// empty string otherwise. "on" indicates the forecast is within +/- 5% of
+	// the budget.
+	BudgetStatus string `json:"budget_status,omitempty"`
+
+	AvgTokenCost     float64 `json:"avg_token_cost"`
+	AvgTokenCostPrev float64 `json:"avg_token_cost_prev"`
+	// AvgTokenCostDeltaPct is the percent change vs the prior month-to-date
+	// window. Nil when the prior denominator is zero.
+	AvgTokenCostDeltaPct *float64 `json:"avg_token_cost_delta_pct,omitempty"`
+
 	DailySpend      []DailySpend     `json:"daily_spend"`
 	TokenBreakdown  []TokenBreakdown `json:"token_breakdown"`
 	CacheSavings    float64          `json:"cache_savings"`
 	WastedSpend     float64          `json:"wasted_spend"`
 	AgentModelCosts []AgentModelCost `json:"agent_model_costs"`
+}
+
+// CostBudget is the current state of a per-deployment monthly budget,
+// reconstructed from the agentguard_cost_budgets append-only stream via
+// arg_max(..., updated_at) GROUP BY deployment_id.
+type CostBudget struct {
+	DeploymentID  string  `json:"deployment_id"`
+	MonthlyBudget float64 `json:"monthly_budget"`
+	Currency      string  `json:"currency"`
+	UpdatedBy     string  `json:"updated_by"`
+	UpdatedAt     string  `json:"updated_at"`
+}
+
+// CostBudgetsResponse is returned by GET /api/cost/budget.
+type CostBudgetsResponse struct {
+	Budgets []CostBudget `json:"budgets"`
 }
 
 // PricingEntry is one row in the agentguard_pricing mutable stream.

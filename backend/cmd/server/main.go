@@ -162,6 +162,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.GET("/cost/pricing", handlers.ListPricing(cfg))
 			protected.POST("/cost/pricing", handlers.UpsertPricing(cfg))
 			protected.DELETE("/cost/pricing/:provider/:model", handlers.DeletePricing(cfg))
+			protected.GET("/cost/budget", handlers.GetCostBudgets(cfg))
+			protected.POST("/cost/budget", handlers.UpsertCostBudget(cfg))
 			protected.GET("/rules", handlers.ListRules(cfg, mgr))
 			protected.GET("/rules/catalog", handlers.ListCatalog(cfg, mgr))
 			protected.POST("/rules/catalog/import", handlers.ImportCatalog(mgr))
