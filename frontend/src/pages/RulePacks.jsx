@@ -6,6 +6,7 @@ import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import Toggle from '../components/Toggle'
 import { api } from '../api/client'
+import { rankBySearch } from '../utils/ruleSearch.js'
 
 const CATEGORY_ICONS = {
   prompt_injection_and_hijacking:    'phishing',
@@ -42,15 +43,15 @@ export default function RulePacks() {
   const [rulesPage, setRulesPage] = useState(1)
   const [catalogPage, setCatalogPage] = useState(1)
 
-  const sortedRules = [...rules].sort((a, b) => {
-    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1
-    return a.name.localeCompare(b.name)
-  })
-  const filteredRules = sortedRules.filter(r => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return r.name.toLowerCase().includes(q) || r.desc.toLowerCase().includes(q)
-  })
+  // When the user types a query, rank by relevance (issue #124) so that an
+  // exact / name match wins over a description-only match. Empty search keeps
+  // the existing enabled-first + alphabetical ordering.
+  const filteredRules = rankBySearch(
+    rules,
+    search,
+    r => ({ name: r.name, description: r.desc, category: r.category }),
+    (a, b) => (a.enabled !== b.enabled ? (a.enabled ? -1 : 1) : (a.name || '').localeCompare(b.name || '')),
+  )
   const totalRulesPages = Math.ceil(filteredRules.length / RULES_PAGE_SIZE)
   const pagedRules = filteredRules.slice((rulesPage - 1) * RULES_PAGE_SIZE, rulesPage * RULES_PAGE_SIZE)
 
@@ -62,6 +63,7 @@ export default function RulePacks() {
           icon: CATEGORY_ICONS[r.category] || 'shield',
           name: r.name,
           desc: r.description,
+          category: r.category,
           enabled: r.enabled,
           version: r.enabled ? (r.version || null) : null,
           active: r.enabled,
@@ -166,6 +168,7 @@ export default function RulePacks() {
       icon: CATEGORY_ICONS[entry.category] || 'shield',
       name: entry.name,
       desc: entry.description,
+      category: entry.category,
       enabled: true,
       version: entry.version || '',
       active: true,
@@ -211,12 +214,12 @@ export default function RulePacks() {
     a.click()
   }
 
-  const uninstalledCatalog = catalog.filter(e => {
-    if (e.installed) return false
-    if (!search) return true
-    const q = search.toLowerCase()
-    return e.name.toLowerCase().includes(q) || (e.description || '').toLowerCase().includes(q)
-  })
+  const uninstalledCatalog = rankBySearch(
+    catalog.filter(e => !e.installed),
+    search,
+    e => e,
+    (a, b) => (a.name || '').localeCompare(b.name || ''),
+  )
   const totalCatalogPages = Math.ceil(uninstalledCatalog.length / RULES_PAGE_SIZE)
   const pagedCatalog = uninstalledCatalog.slice((catalogPage - 1) * RULES_PAGE_SIZE, catalogPage * RULES_PAGE_SIZE)
 
