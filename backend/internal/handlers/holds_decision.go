@@ -47,6 +47,8 @@ func Decide(in DecisionInput) DecisionOutput {
 	var allMatches []RuleMatch
 	allMatches = append(allMatches, in.Matches...)
 	for _, t := range in.PreExistingThreats {
+		// Acknowledged/cleared threats suppress repeat blocking until the SQL
+		// layer proves they re-fired and reports them as effectively open.
 		if t.Status != "open" {
 			continue
 		}
