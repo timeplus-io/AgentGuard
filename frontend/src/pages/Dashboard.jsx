@@ -1,102 +1,31 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
 import LiveAgentActivity from '../components/LiveAgentActivity'
-
-const sqlNotifyEvents = `
-SELECT detected_at, rule_id, rule_name, severity, agent_id, deployment_id, session_id, hook_name, message
-FROM agentguard_notify_events
-SETTINGS seek_to='-24h'`
-
-const severityCard = {
-  critical: { border: 'border-[#ffb4ab]', iconColor: 'text-[#ffb4ab]' },
-  warning:  { border: 'border-[#ffb2b8]', iconColor: 'text-[#ffb2b8]' },
-  info:     { border: 'border-zinc-700',  iconColor: 'text-zinc-500'  },
-}
-
-const CATEGORY_ICONS = {
-  prompt_injection_and_hijacking:  'phishing',
-  sensitive_data_exposure:         'visibility_off',
-  agent_privilege_escalation:      'admin_panel_settings',
-  supply_chain_compromise:         'hub',
-  resource_exhaustion_and_dos:     'speed',
-  data_exfiltration_and_leakage:   'data_loss_prevention',
-  credential_theft_and_harvesting: 'key_off',
-  lateral_movement_and_pivoting:   'swap_horiz',
-}
-
-function formatThreatTime(ts) {
-  if (!ts) return '—'
-  try {
-    return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
-      .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch { return String(ts) }
-}
+import { LiveThreatFeedList } from '../components/LiveThreatFeed'
+import { useLiveThreatFeed, useThreatNavigation } from '../hooks/useLiveThreatFeed'
 
 
 export default function Dashboard() {
-  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [threats, setThreats] = useState([])
-  const [threatsConnected, setThreatsConnected] = useState(false)
-  const [threatsError, setThreatsError] = useState(null)
-  // rule_id → category, built once from the installed rules list
-  const [ruleCategory, setRuleCategory] = useState({})
+  const {
+    threats,
+    connected: threatsConnected,
+    error: threatsError,
+    ruleCategory,
+  } = useLiveThreatFeed(20)
+  const handleThreatClick = useThreatNavigation()
 
   useEffect(() => {
     api.getDashboard()
       .then(setData)
       .catch(setError)
       .finally(() => setLoading(false))
-
-    api.listRules()
-      .then(d => {
-        const map = {}
-        for (const r of (d.rule_packs || [])) map[r.id] = r.category
-        setRuleCategory(map)
-      })
-      .catch(err => {
-        // Decorative — only used to label rule categories in chart tooltips.
-        // Log so the failure is at least visible in DevTools.
-        console.warn('Dashboard: listRules failed (category labels will be missing):', err)
-      })
   }, [])
-
-  useEffect(() => {
-    const ctrl = new AbortController()
-    async function stream() {
-      let first = true
-      for await (const row of api.protonQuery(sqlNotifyEvents, { signal: ctrl.signal })) {
-        if (first) { setThreatsConnected(true); first = false }
-        setThreats(prev => {
-          const key = r => `${r.deployment_id}|${r.agent_id}|${r.session_id}|${r.rule_id}`
-          const next = [row, ...prev.filter(r => key(r) !== key(row))]
-          return next.sort((a, b) => new Date(b.detected_at) - new Date(a.detected_at)).slice(0, 20)
-        })
-      }
-      setThreatsConnected(false)
-    }
-    stream().catch(e => { if (e?.name !== 'AbortError') setThreatsError(e.message || 'Connection failed') })
-    return () => ctrl.abort()
-  }, [])
-
-  const handleThreatClick = useCallback(async (t) => {
-    try {
-      const data = await api.getThreats({ agent_id: t.agent_id })
-      const match = (data.threats || []).find(th =>
-        th.rule_id === t.rule_id && th.session_id === t.session_id
-      )
-      navigate(match ? `/threats/${match.threat_id}` : '/threats')
-    } catch (err) {
-      console.error('dashboard: getThreats failed, falling back:', err)
-      navigate('/threats')
-    }
-  }, [navigate])
 
   const kpis = data ? [
     {
@@ -183,36 +112,13 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div className="overflow-y-auto max-h-[500px] px-6 pb-6 space-y-4">
-                {threats.length === 0 ? (
-                  <p className="text-xs py-4 flex items-center gap-2">
-                    {threatsError
-                      ? <><span className="material-symbols-outlined text-sm text-red-400">error</span><span className="text-red-400 font-mono">{threatsError}</span></>
-                      : <span className="text-zinc-600">{threatsConnected ? 'Waiting for events…' : 'Monitoring…'}</span>
-                    }
-                  </p>
-                ) : threats.map((t, i) => {
-                  const sev = t.severity?.toLowerCase() || 'info'
-                  const { border, iconColor } = severityCard[sev] || severityCard.info
-                  const catIcon = CATEGORY_ICONS[ruleCategory[t.rule_id]] || 'shield'
-                  return (
-                    <div key={`${t.detected_at}-${t.rule_id}-${i}`} onClick={() => handleThreatClick(t)} className={`flex items-start gap-4 p-4 bg-gray-800 border border-gray-600 rounded-sm border-l-4 border-l-red-500 cursor-pointer transition-colors`}>
-                      <div className="mt-1">
-                        <span className={`material-symbols-outlined text-red-400`} style={{ fontVariationSettings: "'FILL' 1" }}>{catIcon}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-start gap-2">
-                          <h4 className="text-xs font-semibold text-[#e7dff0] truncate">{t.rule_name}</h4>
-                          <span className="text-[10px] font-mono text-zinc-500 whitespace-nowrap flex-shrink-0">{formatThreatTime(t.detected_at)}</span>
-                        </div>
-                        <p className="text-xs text-zinc-400 mt-1 line-clamp-1 italic">{t.message}</p>
-                        <div className="flex gap-2 mt-3 flex-wrap">
-                          {t.agent_id && <span className="px-2 py-0.5 bg-gray-600 text-gray-200 text-[9px] font-semibold uppercase rounded-full">{t.agent_id}</span>}
-                          {t.hook_name && <span className="px-2 py-0.5 bg-gray-600 text-gray-200 text-[9px] font-semibold uppercase rounded-full">{t.hook_name}</span>}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
+                <LiveThreatFeedList
+                  threats={threats}
+                  connected={threatsConnected}
+                  error={threatsError}
+                  ruleCategory={ruleCategory}
+                  onThreatClick={handleThreatClick}
+                />
               </div>
             </div>
 
