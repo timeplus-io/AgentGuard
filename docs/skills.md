@@ -22,18 +22,21 @@ Two distinct events are tracked:
 ```
 agentguard_hook_events
         │
-        ├─ before_tool_call / tool_name='Skill'        (claudecode)
-        │       └─► mv_skills_invoked_claudecode ──────┐
-        │                                              │
-        ├─ before_tool_call / tool_name='read'         │
-        │   path contains SKILL.md             (openclaw)
-        │       └─► mv_skills_invoked_openclaw ─────────┤
-        │                                              │
-        ├─ prompt_context                    (claudecode)
-        │       └─► mv_skills_loaded_claudecode ────────┤
-        │                                              │
-        └─ llm_input                           (openclaw)
-                └─► mv_skills_loaded_openclaw ──────────┘
+        ├─ before_tool_call / tool_name='Skill' (claudecode)
+        │       └─► mv_skills_invoked_claudecode ─────────┐
+        │                                                 │
+        ├─ before_tool_call / tool_name='read'            │
+        │   path contains SKILL.md             (openclaw) │
+        │       └─► mv_skills_invoked_openclaw ───────────┤
+        │                                                 │
+        ├─ pre_tool_call / tool_name='skill_view' (hermes)│
+        │       └─► mv_skills_invoked_hermes ─────────────┤
+        │                                                 │
+        ├─ prompt_context                    (claudecode) │
+        │       └─► mv_skills_loaded_claudecode ──────────┤
+        │                                                 │
+        └─ llm_input                           (openclaw) │
+                └─► mv_skills_loaded_openclaw ────────────┘
                                                        │
                                                        ▼
                                              agentguard_skills
@@ -43,7 +46,7 @@ agentguard_hook_events
                                         (queried via /api/proton/query)
 ```
 
-All four materialized views use `WHERE _tp_time > earliest_ts()` so they backfill all historical hook events on creation, not just new ones.
+All the materialized views use `WHERE _tp_time > earliest_ts()` so they backfill all historical hook events on creation, not just new ones.
 
 ---
 
@@ -53,6 +56,7 @@ All four materialized views use `WHERE _tp_time > earliest_ts()` so they backfil
 |-----------|------------|----------|
 | `before_tool_call` | `claudecode` | skill invocation (tool_name = `Skill`) |
 | `before_tool_call` | `openclaw` | skill invocation (tool_name = `read`, path contains `SKILL.md`) |
+| `pre_tool_call` | `hermes` | skill invocation (tool_name = `skill_view`) |
 | `prompt_context` | `claudecode` | skills loaded in system prompt |
 | `llm_input` | `openclaw` | skills loaded in system prompt |
 
@@ -73,7 +77,7 @@ CREATE STREAM agentguard_skills
   skill_namespace   low_cardinality(string),   -- 'superpowers' | 'plugin' | '' (user skill)
   skill_source_type low_cardinality(string),   -- 'managed' | 'personal' | 'workspace' | 'bundled' | 'unknown'
   skill_location    string,                    -- full SKILL.md path (OpenClaw); '' for Claude Code
-  skill_description string,                   -- description from XML (OpenClaw full format); '' otherwise
+  skill_description string,                    -- description from XML (OpenClaw full format); '' otherwise
   skill_args        string                     -- args string from Skill tool input (Claude Code); '' otherwise
 )
 ```
@@ -84,9 +88,9 @@ CREATE STREAM agentguard_skills
 |--------|--------|-------|
 | `skill_namespace` | `'superpowers'`, `'plugin'`, `''` | Prefix before `:` in skill name. Empty for user skills with no namespace. |
 | `skill_source_type` | `'managed'`, `'personal'`, `'workspace'`, `'bundled'`, `'unknown'` | See source type derivation below. |
-| `skill_location` | SKILL.md path | Absolute path as emitted by OpenClaw. Only populated by OpenClaw MVs; empty for Claude Code. |
-| `skill_description` | One-line description | From `<description>` XML tag (OpenClaw full format only). Empty in compact format. |
-| `skill_args` | Free-text string | From `tool_input.args` in Claude Code `Skill` invocations. Empty if omitted. |
+| `skill_location` | SKILL.md path | Absolute path as emitted by OpenClaw. Only populated by OpenClaw MVs; empty for Claude Code and Hermes. |
+| `skill_description` | One-line description | From `<description>` XML tag (OpenClaw full format only). Empty in compact format, and for Claude Code/Hermes. |
+| `skill_args` | Free-text string | From `tool_input.args` in Claude Code `Skill` invocations, or `args.args` in Hermes `Skill` invocations. Empty if omitted. |
 
 ### `skill_source_type` derivation
 
@@ -111,8 +115,8 @@ The key security signal: any non-empty `skill_location` that does not match a kn
 | `managed` | emerald | Installed by openclaw into `~/.openclaw/` or `~/.config/openclaw/` |
 | `personal` | blue | User-level `~/.agents/` install |
 | `bundled` | zinc | Shipped inside an npm package (`node_modules`) |
-| `plugin` | purple | Claude Code namespaced skill (has `:` in name) |
-| `user` / `unknown` | muted | Claude Code user skill or location unavailable |
+| `plugin` | purple | Claude Code / Hermes namespaced skill (has `:` in name) |
+| `user` / `unknown` | muted | Claude Code / Hermes user skill or location unavailable |
 
 ---
 
@@ -254,7 +258,7 @@ Timeplus does not support `ALTER STREAM ADD COLUMN`. When the enriched schema is
 
 1. Check `system.columns` for `agentguard_skills` — skip if stream does not exist (fresh install).
 2. Check whether `skill_namespace` column exists — skip if already migrated.
-3. Drop all four skill MVs — **fail immediately on any error** (a failed MV drop means the subsequent stream drop will also fail, leaving the stream on the old schema with some MVs already gone).
+3. Drop all five skill MVs — **fail immediately on any error** (a failed MV drop means the subsequent stream drop will also fail, leaving the stream on the old schema with some MVs already gone).
 4. Drop `agentguard_skills`.
 5. Proceed to `createSkillsStream` → `createSkillsMVs` as normal. Historical data is recovered from `agentguard_hook_events` via `earliest_ts()`.
 
@@ -288,4 +292,5 @@ The tab renders two sections:
 | OpenClaw compact format loses descriptions | When OpenClaw trims the prompt for token budget, `<description>` tags are omitted. `skill_description` will be empty in those rows. |
 | Loaded regex false positives | The Claude Code YAML regex may match frontmatter from memory or doc files. Acceptable for observability. |
 | OpenClaw `<name>` false positives | Any other XML `<name>` tags in the `llm_input` payload would match. Low risk in current data. |
-| Loaded deduplication | The same skill appears once per `UserPromptSubmit` (Claude Code) or LLM turn (OpenClaw). Frontend deduplicates for display. |
+| Loaded deduplication | The same skill appears once per `UserPromptSubmit` (Claude Code), LLM turn (OpenClaw), or `pre_llm_call` (Hermes). Frontend deduplicates for display. |
+| Hermes has no `skill_location` | Hermes hook events don't carry the SKILL.md file path. `skill_source_type` is inferred only from namespace presence (`plugin` vs `user`), not filesystem location. Same limitation as Claude Code. |
