@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
+import TopNav from '../components/TopNav'
 import { SeverityBadge, ThreatStatusBadge } from '../components/Badge'
 import { api } from '../api/client'
 import ActivityLog from '../components/ActivityLog'
@@ -310,80 +311,7 @@ export default function ThreatDetail() {
   return (
     <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
       <Sidebar />
-
-      {/* Fixed top header */}
-      <header className="top-nav fixed top-0 right-0 h-16 bg-[#15121d]/95 z-50 flex justify-between items-center px-8 backdrop-blur-md shadow-[0_0_12px_rgba(213,63,140,0.12)]">
-        {/* Left side */}
-        <div className="flex items-center gap-3 min-w-0">
-          <Link to="/threats" className="text-zinc-400 hover:text-[#ffb0cf] transition-colors shrink-0">
-            <span className="material-symbols-outlined">arrow_back</span>
-          </Link>
-
-          {loading ? (
-            <div className="animate-pulse h-4 w-40 bg-[#2c2834] rounded" />
-          ) : threat ? (
-            <>
-              <Link
-                to={`/rules/${threat.rule_id}`}
-                className="font-medium tracking-tight text-lg text-[#e7dff0] hover:text-[#ffb0cf] transition-colors truncate max-w-[240px]"
-              >
-                {threat.rule_name || threat.rule_id}
-              </Link>
-              <SeverityBadge severity={threat.severity} />
-              <ThreatStatusBadge status={threat.status} />
-              {threat.agent_id && (
-                <Link
-                  to={`/agents/${agentCompoundId}`}
-                  className="bg-[#2c2834] text-[#ffb0cf] px-2.5 py-1 rounded-full text-[10px] font-semibold font-mono hover:bg-[#38323f] transition-colors whitespace-nowrap"
-                >
-                  {threat.agent_id}
-                </Link>
-              )}
-            </>
-          ) : null}
-        </div>
-
-        {/* Right side — action buttons. Acknowledge/Clear require a real
-            threat_id (they upsert into agentguard_threats); the by-hold fallback
-            renders without one, so suppress those controls there. The hold's
-            Approve/Deny controls in the body still work via hold_id. */}
-        {!loading && threat && threat.threat_id && (
-          <div className="flex items-center gap-2 shrink-0">
-            {threat.status === 'open' && (
-              <>
-                <button
-                  onClick={handleAcknowledge}
-                  disabled={actionLoading}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors whitespace-nowrap"
-                >
-                  Acknowledge
-                </button>
-                <button
-                  onClick={handleClear}
-                  disabled={actionLoading}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
-                >
-                  Clear
-                </button>
-              </>
-            )}
-            {threat.status === 'acknowledged' && (
-              <button
-                onClick={handleClear}
-                disabled={actionLoading}
-                className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
-              >
-                Clear
-              </button>
-            )}
-            {threat.status === 'cleared' && (
-              <span className="px-3 py-1.5 text-xs font-semibold rounded-full bg-green-500/10 text-green-400">
-                Cleared
-              </span>
-            )}
-          </div>
-        )}
-      </header>
+      <TopNav />
 
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         {loading ? (
@@ -406,6 +334,72 @@ export default function ThreatDetail() {
           </div>
         ) : threat ? (
           <div className="p-8">
+            <section className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <Link to="/threats" className="text-zinc-400 hover:text-[#ffb0cf] transition-colors shrink-0">
+                  <span className="material-symbols-outlined">arrow_back</span>
+                </Link>
+
+                <div className="flex flex-wrap items-center gap-3 min-w-0">
+                  <Link
+                    to={`/rules/${threat.rule_id}`}
+                    className="font-medium tracking-tight text-lg text-[#e7dff0] hover:text-[#ffb0cf] transition-colors truncate max-w-[520px]"
+                  >
+                    {threat.rule_name || threat.rule_id}
+                  </Link>
+                  <SeverityBadge severity={threat.severity} />
+                  <ThreatStatusBadge status={threat.status} />
+                  {threat.agent_id && (
+                    <Link
+                      to={`/agents/${agentCompoundId}`}
+                      className="bg-[#2c2834] text-[#ffb0cf] px-2.5 py-1 rounded-full text-[10px] font-semibold font-mono hover:bg-[#38323f] transition-colors whitespace-nowrap"
+                    >
+                      {threat.agent_id}
+                    </Link>
+                  )}
+                </div>
+              </div>
+
+              {/* Acknowledge/Clear require a real threat_id. The by-hold fallback
+                  renders without one, so suppress those controls there. */}
+              {threat.threat_id && (
+                <div className="flex items-center gap-2 shrink-0">
+                  {threat.status === 'open' && (
+                    <>
+                      <button
+                        onClick={handleAcknowledge}
+                        disabled={actionLoading}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors whitespace-nowrap"
+                      >
+                        Acknowledge
+                      </button>
+                      <button
+                        onClick={handleClear}
+                        disabled={actionLoading}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
+                      >
+                        Clear
+                      </button>
+                    </>
+                  )}
+                  {threat.status === 'acknowledged' && (
+                    <button
+                      onClick={handleClear}
+                      disabled={actionLoading}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  {threat.status === 'cleared' && (
+                    <span className="px-3 py-1.5 text-xs font-semibold rounded-full bg-green-500/10 text-green-400">
+                      Cleared
+                    </span>
+                  )}
+                </div>
+              )}
+            </section>
+
             {/* Tab bar */}
             <div className="flex items-center gap-1 mb-8 border-b border-[#574149]/20 pb-0">
               {['overview', 'activity'].map(tab => (

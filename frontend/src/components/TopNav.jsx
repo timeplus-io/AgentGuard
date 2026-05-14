@@ -1,10 +1,82 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../api/client'
+import { useOpenThreats } from '../hooks/useLiveThreatFeed'
+import { LiveThreatFeedList } from './LiveThreatFeed'
+
+function NotificationsDrawer({ open, onClose }) {
+  const { threats, loading, error } = useOpenThreats(open)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!open) return
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') onClose()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose, open])
+
+  const handleThreatClick = (threat) => {
+    navigate(threat.threat_id ? `/threats/${threat.threat_id}` : '/threats')
+    onClose()
+  }
+
+  return (
+    <>
+      <div
+        className={`fixed left-0 right-0 top-[41px] bottom-0 z-[80] bg-black/40 transition-opacity ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        className={`fixed right-0 top-[41px] z-[90] h-[calc(100vh-41px)] w-full max-w-[420px] bg-gray-900 border-l border-gray-700 shadow-2xl transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        aria-hidden={!open}
+        aria-label="Live Threat Feed"
+      >
+        <div className="h-10 px-4 border-b border-gray-700 bg-gray-800 flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="material-symbols-outlined text-[#ffb0cf] text-lg">notifications</span>
+            <h2 className="text-sm font-semibold text-[#e7dff0] truncate">Live Threat Feed</h2>
+            <span className="text-[10px] font-mono text-red-400">{threats.length}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-sm text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors"
+            title="Close notifications"
+          >
+            <span className="material-symbols-outlined text-base">close</span>
+          </button>
+        </div>
+
+        <div className="h-[calc(100vh-81px)] overflow-y-auto custom-scrollbar">
+          <section className="px-4 py-5">
+            <div className="space-y-3">
+              <LiveThreatFeedList
+                threats={threats}
+                connected={!loading}
+                error={error}
+                ruleCategory={{}}
+                compact
+                emptyMessage={loading ? 'Loading open threats…' : 'No open threats.'}
+                onThreatClick={handleThreatClick}
+              />
+            </div>
+          </section>
+        </div>
+      </aside>
+    </>
+  )
+}
 
 export default function TopNav({ title }) {
   const { auth, setAuth } = useAuth()
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const dropdownRef = useRef(null)
 
   // Close dropdown when clicking outside
@@ -56,11 +128,13 @@ export default function TopNav({ title }) {
             <span className="material-symbols-outlined text-lg">monitor_heart</span>
           </button>
           <button
+            type="button"
+            onClick={() => setNotificationsOpen(true)}
             className="w-10 h-10 hover:text-pink-400 hover:bg-gray-700 rounded-sm transition-colors relative flex items-center justify-center"
             title="Notifications"
           >
             <span className="material-symbols-outlined text-lg">notifications</span>
-            <span className="absolute top-1 right-1 w-2 h-2 bg-pink-400 rounded-full"></span>
+            <span className="absolute top-1 right-1 w-2 h-2 bg-pink-400 rounded-full" />
           </button>
         </div>
         <div className="h-8 w-px bg-[#574149] opacity-20"></div>
@@ -94,6 +168,7 @@ export default function TopNav({ title }) {
           )}
         </div>
       </div>
+      <NotificationsDrawer open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
     </header>
   )
 }
