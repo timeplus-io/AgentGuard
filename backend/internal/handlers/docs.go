@@ -513,7 +513,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Cost"],
         "summary": "Get cost governance summary",
-        "description": "Returns token-based cost estimates computed by joining \u0060agentguard_hook_events\u0060 token counts with the \u0060agentguard_pricing\u0060 table.\n\nIncludes a daily spend time-series and a breakdown by model. Costs are in USD. Pricing data is seeded with public list prices and can be updated via the \u0060/cost/pricing\u0060 endpoints.",
+        "description": "Returns token-based cost estimates computed by joining \u0060agentguard_hook_events\u0060 token counts with the \u0060agentguard_pricing\u0060 table.\n\nIncludes a daily spend time-series and a breakdown by model. Costs are in USD. Pricing data is seeded with public list prices and can be updated via the \u0060/cost/pricing\u0060 endpoints.\n\n**Period semantics:** all month-to-date windows use UTC calendar months. The prior-period delta compares the current month-to-date to the same elapsed window in the previous month, clipped to the start of the current month when the previous month is shorter (e.g. March 31 has 30 elapsed days but February has only 28, so the prior window is clipped to end at March 1 UTC).\n\n**Budget-derived fields** (\u0060forecast_budget_delta_pct\u0060, \u0060budget_amount\u0060, \u0060budget_status\u0060) are only populated when at least one per-deployment budget is configured via \u0060/cost/budget\u0060.",
         "operationId": "getCost",
         "parameters": [
           { "name": "since", "in": "query", "description": "RFC 3339 lower bound for the aggregation window.", "schema": { "type": "string", "format": "date-time" } },
@@ -523,8 +523,15 @@ const openAPISpec = `{
           "200": { "description": "Cost summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CostResponse" },
             "example": {
               "month_to_date": 12.84,
+              "month_to_date_prev": 10.50,
+              "month_to_date_delta_pct": 22.3,
               "forecasted": 38.52,
-              "avg_token_cost": 0.00000825,
+              "forecast_budget_delta_pct": -22.96,
+              "budget_amount": 50.00,
+              "budget_status": "under",
+              "avg_token_cost": 8.25,
+              "avg_token_cost_prev": 7.92,
+              "avg_token_cost_delta_pct": 4.17,
               "cache_savings": 1.20,
               "wasted_spend": 0.43,
               "daily_spend": [
@@ -593,6 +600,42 @@ const openAPISpec = `{
         "responses": {
           "200": { "description": "Deleted." },
           "404": { "description": "Entry not found." }
+        }
+      }
+    },
+
+    "/cost/budget": {
+      "get": {
+        "tags": ["Cost"],
+        "summary": "List per-deployment monthly budgets",
+        "description": "Returns the current set of active monthly budgets reconstructed from the \u0060agentguard_cost_budgets\u0060 append-only stream via \u0060arg_max(field, updated_at) GROUP BY deployment_id HAVING NOT deleted\u0060.\n\nWhen at least one budget is configured, GET /cost populates \u0060forecast_budget_delta_pct\u0060, \u0060budget_amount\u0060, and \u0060budget_status\u0060.",
+        "operationId": "getCostBudgets",
+        "responses": {
+          "200": { "description": "Active budgets", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": { "budgets": { "type": "array", "items": { "$ref": "#/components/schemas/CostBudget" } } }
+          }, "example": {
+            "budgets": [
+              { "deployment_id": "production", "monthly_budget": 30.0, "currency": "USD", "updated_by": "ops@example.com", "updated_at": "2026-05-14 09:32:11.241" },
+              { "deployment_id": "staging",    "monthly_budget": 20.0, "currency": "USD", "updated_by": "ops@example.com", "updated_at": "2026-05-14 09:32:23.117" }
+            ]
+          }}}}
+        }
+      },
+      "post": {
+        "tags": ["Cost"],
+        "summary": "Upsert a per-deployment monthly budget",
+        "description": "Appends one row to the \u0060agentguard_cost_budgets\u0060 stream. \u0060updated_by\u0060 is the logged-in Timeplus username from the session — clients do not need to send it.\n\nSet \u0060deleted: true\u0060 to retire a budget; the stream is append-only so the audit trail is preserved.",
+        "operationId": "upsertCostBudget",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CostBudgetUpsert" },
+            "example": { "deployment_id": "production", "monthly_budget": 30.0, "currency": "USD" }
+          }}
+        },
+        "responses": {
+          "200": { "description": "Upserted." },
+          "400": { "description": "Missing or invalid fields." }
         }
       }
     },
@@ -1601,13 +1644,20 @@ const openAPISpec = `{
       },
       "CostResponse": {
         "type": "object",
-        "description": "Cost governance summary returned by GET /cost.",
+        "description": "Cost governance summary returned by GET /cost. All month-to-date windows are computed in UTC calendar months.",
         "properties": {
-          "month_to_date":     { "type": "number", "description": "Total estimated cost in USD for the queried period." },
-          "forecasted":        { "type": "number", "description": "Projected month-end cost based on current run rate." },
-          "avg_token_cost":    { "type": "number", "description": "Average cost per token (USD)." },
-          "cache_savings":     { "type": "number", "description": "Estimated savings from prompt cache hits (USD)." },
-          "wasted_spend":      { "type": "number", "description": "Estimated cost of failed/retried calls (USD)." },
+          "month_to_date":             { "type": "number", "description": "Current UTC month-to-date spend in USD." },
+          "month_to_date_prev":        { "type": "number", "description": "Spend over the same elapsed window in the previous UTC month, clipped to the start of the current month when the previous month is shorter." },
+          "month_to_date_delta_pct":   { "type": "number", "nullable": true, "description": "Percent change vs month_to_date_prev. Omitted (or null) when month_to_date_prev is zero." },
+          "forecasted":                { "type": "number", "description": "Projected month-end cost (USD) from naive linear extrapolation of the current daily rate." },
+          "forecast_budget_delta_pct": { "type": "number", "nullable": true, "description": "Signed percent the forecast represents of the configured budget. Positive = over, negative = under. Omitted when no budget is configured." },
+          "budget_amount":             { "type": "number", "nullable": true, "description": "Sum of currently-active per-deployment monthly budgets. Omitted when no budget is configured." },
+          "budget_status":             { "type": "string", "description": "One of over | under | on (within +/- 5%% of budget). Empty string when no budget is configured.", "enum": ["over", "under", "on", ""] },
+          "avg_token_cost":            { "type": "number", "description": "Current MTD average cost per million tokens (USD). Previously this was an all-time average; switched to MTD in #123 so the prior-period delta compares like-for-like windows." },
+          "avg_token_cost_prev":       { "type": "number", "description": "Prior-period MTD average cost per million tokens (USD), same window as month_to_date_prev." },
+          "avg_token_cost_delta_pct":  { "type": "number", "nullable": true, "description": "Percent change vs avg_token_cost_prev. Omitted when prior tokens are zero." },
+          "cache_savings":             { "type": "number", "description": "Estimated savings from prompt cache hits (USD)." },
+          "wasted_spend":              { "type": "number", "description": "Estimated cost of failed/retried calls (USD)." },
           "daily_spend": {
             "type": "array",
             "description": "Daily cost time-series.",
@@ -1662,6 +1712,28 @@ const openAPISpec = `{
           "input_cost_per_million":     { "type": "number",  "description": "Cost in USD per 1 million input tokens.", "example": 3.0 },
           "output_cost_per_million":    { "type": "number",  "description": "Cost in USD per 1 million output tokens.", "example": 15.0 },
           "cache_read_cost_per_million":{ "type": "number",  "description": "Cost in USD per 1 million cache-read tokens.", "example": 0.3 }
+        }
+      },
+      "CostBudget": {
+        "type": "object",
+        "description": "Current state of one per-deployment monthly budget, reconstructed from the agentguard_cost_budgets append-only stream.",
+        "properties": {
+          "deployment_id":  { "type": "string", "description": "Deployment identifier this budget applies to.", "example": "production" },
+          "monthly_budget": { "type": "number", "description": "Monthly spend cap in the canonical currency.", "example": 30.0 },
+          "currency":       { "type": "string", "description": "Currency code. Only USD is supported in v1.", "example": "USD" },
+          "updated_by":     { "type": "string", "description": "Timeplus username of the operator who last set the budget." },
+          "updated_at":     { "type": "string", "description": "When the budget was last updated.", "format": "date-time" }
+        }
+      },
+      "CostBudgetUpsert": {
+        "type": "object",
+        "description": "POST body for upserting (or deleting) a per-deployment monthly budget. updated_by is taken from the session and ignored if sent.",
+        "required": ["deployment_id", "monthly_budget"],
+        "properties": {
+          "deployment_id":  { "type": "string",  "description": "Deployment identifier. Allowed alphabet: [a-zA-Z0-9._:/-].", "example": "production" },
+          "monthly_budget": { "type": "number",  "description": "Monthly spend cap. Must be >= 0.", "example": 30.0 },
+          "currency":       { "type": "string",  "description": "Currency code. Defaults to USD if omitted.", "example": "USD" },
+          "deleted":        { "type": "boolean", "description": "Soft-delete flag. Setting true retires the budget; subsequent GETs omit it.", "default": false }
         }
       },
       "RulePack": {

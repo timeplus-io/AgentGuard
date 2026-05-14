@@ -109,10 +109,12 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | GET | `/api/threats/:id` | `GetThreat` | |
 | POST | `/api/threats/:id/acknowledge` | `AcknowledgeThreat` | Upserts status to agentguard_threats |
 | POST | `/api/threats/:id/clear` | `ClearThreat` | Upserts status to agentguard_threats |
-| GET | `/api/cost` | `GetCost` | Computed from agentguard_hook_events + agentguard_pricing |
+| GET | `/api/cost` | `GetCost` | Computed from agentguard_hook_events + agentguard_pricing. Month-to-date windows are UTC calendar months; prior-period delta compares the same elapsed window in the previous month, clipped to the start of the current month when that month was shorter. Budget-derived fields populate only when at least one budget is configured via `/api/cost/budget`. |
 | GET | `/api/cost/pricing` | `ListPricing` | Reads from agentguard_pricing stream |
 | POST | `/api/cost/pricing` | `UpsertPricing` | Inserts into agentguard_pricing |
 | DELETE | `/api/cost/pricing/:provider/:model` | `DeletePricing` | Deletes from agentguard_pricing |
+| GET | `/api/cost/budget` | `GetCostBudgets` | Current per-deployment monthly budgets via arg_max over agentguard_cost_budgets |
+| POST | `/api/cost/budget` | `UpsertCostBudget` | Appends a row to agentguard_cost_budgets; `updated_by` is the session user. Send `deleted: true` to retire a budget. |
 | GET | `/api/rules` | `ListRules` | Reads from `agentguard_rules` stream |
 | GET | `/api/rules/catalog` | `ListCatalog` | Builtin catalog with installed status |
 | POST | `/api/rules/catalog/import` | `ImportCatalog` | Import rules from JSON |
@@ -213,6 +215,7 @@ AgentGuard uses a **Common Information Model (CIM)** to normalize heterogeneous 
 | `agentguard_cim_metrics` | Pre-computed scalar metrics per call (tokens, cost, latency) |
 | `agentguard_rules` | Rule mutation log; current state via `arg_max(…updated_at) GROUP BY` |
 | `agentguard_security_events` | Rule-triggered detections written by MVs |
+| `agentguard_cost_budgets` | Per-deployment monthly budget mutation log; current state via `arg_max(…updated_at) GROUP BY deployment_id HAVING NOT deleted` |
 
 Materialized views normalize raw streams into `agentguard_cim_event` and `agentguard_cim_metrics`. Backend metric handlers (`GetLLMMetrics`, `GetToolMetrics`) query `agentguard_cim_metrics` directly.
 

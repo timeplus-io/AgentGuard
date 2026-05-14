@@ -111,6 +111,8 @@ export const api = {
   listPricing: () => get('/cost/pricing'),
   upsertPricing: (entry) => post('/cost/pricing', entry),
   deletePricing: (provider, model) => del(`/cost/pricing/${encodeURIComponent(provider)}/${encodeURIComponent(model)}`),
+  getCostBudgets: () => get('/cost/budget'),
+  upsertCostBudget: (entry) => post('/cost/budget', entry),
   listRules: () => get('/rules'),
   getRulesCatalog: () => get('/rules/catalog'),
   importCatalog: (file, force = false) => {
