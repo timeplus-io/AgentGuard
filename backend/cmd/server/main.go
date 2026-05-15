@@ -9,6 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	// Embed IANA tzdata so the Proton native driver can resolve the server's
+	// timezone (e.g. America/Los_Angeles) during the handshake without relying
+	// on /usr/share/zoneinfo in the container image. See issue #117.
+	_ "time/tzdata"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
