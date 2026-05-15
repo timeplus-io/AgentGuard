@@ -26,7 +26,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-[#e7dff0] flex flex-col">
+    <div className="min-h-screen bg-[#15121d] text-gray-100 flex flex-col">
       <nav className="bg-[#15121d] shadow-[0_0_12px_rgba(213,63,140,0.12)] sticky top-0 z-50 h-16 w-full flex items-center px-6 backdrop-blur-md">
         <span className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] tracking-tight">AgentGuard</span>
       </nav>
@@ -39,12 +39,12 @@ export default function Login() {
               style={{ fontVariationSettings: "'FILL' 1" }}
             >security</span>
             <h1 className="text-2xl font-bold text-white">Sign in to AgentGuard</h1>
-            <p className="text-zinc-500 text-xs">Use your Timeplus credentials</p>
+            <p className="text-gray-400 text-xs">Use your Timeplus credentials</p>
           </div>
 
           <form onSubmit={handleSubmit} className="bg-[#2c2834] rounded-sm p-8 space-y-4">
             <div className="space-y-1">
-              <label htmlFor="login-username" className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Username</label>
+              <label htmlFor="login-username" className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Username</label>
               <input
                 id="login-username"
                 type="text"
@@ -53,12 +53,12 @@ export default function Login() {
                 placeholder="default"
                 required
                 autoComplete="username"
-                className="w-full bg-gray-800 border border-gray-600 text-sm py-2.5 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
+                className="w-full bg-gray-800 border border-gray-600 text-sm py-2.5 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
               />
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="login-password" className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Password</label>
+              <label htmlFor="login-password" className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Password</label>
               <input
                 id="login-password"
                 type="password"
@@ -66,7 +66,7 @@ export default function Login() {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Leave blank if not set"
                 autoComplete="current-password"
-                className="w-full bg-gray-800 border border-gray-600 text-sm py-2.5 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
+                className="w-full bg-gray-800 border border-gray-600 text-sm py-2.5 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
               />
             </div>
 

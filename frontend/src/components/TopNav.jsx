@@ -5,8 +5,7 @@ import { api } from '../api/client'
 import { useOpenThreats } from '../hooks/useLiveThreatFeed'
 import { LiveThreatFeedList } from './LiveThreatFeed'
 
-function NotificationsDrawer({ open, onClose }) {
-  const { threats, loading, error } = useOpenThreats(open)
+function NotificationsDrawer({ open, onClose, threats, loading, error }) {
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -40,7 +39,7 @@ function NotificationsDrawer({ open, onClose }) {
         <div className="h-10 px-4 border-b border-gray-700 bg-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <span className="material-symbols-outlined text-[#ffb0cf] text-lg">notifications</span>
-            <h2 className="text-sm font-semibold text-[#e7dff0] truncate">Live Threat Feed</h2>
+            <h2 className="text-sm font-semibold text-gray-100 truncate">Live Threat Feed</h2>
             <span className="text-[10px] font-mono text-red-400">{threats.length}</span>
           </div>
           <button
@@ -78,6 +77,11 @@ export default function TopNav({ title }) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const dropdownRef = useRef(null)
+  const {
+    threats: openThreats,
+    loading: openThreatsLoading,
+    error: openThreatsError,
+  } = useOpenThreats(auth.loggedIn)
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -101,6 +105,7 @@ export default function TopNav({ title }) {
   const initials = auth.username
     ? auth.username.charAt(0).toUpperCase()
     : 'A'
+  const activeThreatCount = openThreats.length
 
   return (
     <header className="top-nav h-10 bg-gray-800 border-b border-gray-700 z-[60] flex justify-between items-center pl-6 pr-4 backdrop-blur-md">
@@ -116,25 +121,25 @@ export default function TopNav({ title }) {
           </span>
         </div>
         {title && (
-          <h2 className="text-lg font-semibold text-gray-200 tracking-tight">{title}</h2>
+          <h2 className="text-lg font-semibold text-gray-100 tracking-tight">{title}</h2>
         )}
       </div>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3 text-gray-400">
           <button
-            className="w-10 h-10 hover:text-pink-400 hover:bg-gray-700 rounded-sm transition-colors flex items-center justify-center"
-            title="System Health"
-          >
-            <span className="material-symbols-outlined text-lg">monitor_heart</span>
-          </button>
-          <button
             type="button"
             onClick={() => setNotificationsOpen(true)}
-            className="w-10 h-10 hover:text-pink-400 hover:bg-gray-700 rounded-sm transition-colors relative flex items-center justify-center"
-            title="Notifications"
+            className="h-10 px-3 hover:bg-gray-700 rounded-sm transition-colors flex items-center gap-2"
+            title="Live Threat Feed"
           >
-            <span className="material-symbols-outlined text-lg">notifications</span>
-            <span className="absolute top-1 right-1 w-2 h-2 bg-pink-400 rounded-full" />
+            <span className={`material-symbols-outlined text-lg ${activeThreatCount > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+              notifications
+            </span>
+            {activeThreatCount > 0 && (
+              <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold font-mono flex items-center justify-center">
+                {activeThreatCount}
+              </span>
+            )}
           </button>
         </div>
         <div className="h-8 w-px bg-[#574149] opacity-20"></div>
@@ -168,7 +173,13 @@ export default function TopNav({ title }) {
           )}
         </div>
       </div>
-      <NotificationsDrawer open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
+      <NotificationsDrawer
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        threats={openThreats}
+        loading={openThreatsLoading}
+        error={openThreatsError}
+      />
     </header>
   )
 }

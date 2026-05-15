@@ -1,7 +1,7 @@
 const severityCard = {
   critical: { border: 'border-l-[#ffb4ab]', iconColor: 'text-[#ffb4ab]' },
   warning:  { border: 'border-l-[#ffb2b8]', iconColor: 'text-[#ffb2b8]' },
-  info:     { border: 'border-l-zinc-700',  iconColor: 'text-zinc-500'  },
+  info:     { border: 'border-l-zinc-700',  iconColor: 'text-gray-400'  },
 }
 
 const CATEGORY_ICONS = {
@@ -44,22 +44,22 @@ export function ThreatFeedItem({ threat, index = 0, ruleCategory = {}, compact =
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex justify-between items-start gap-2">
-          <h4 className="text-xs font-semibold text-[#e7dff0] truncate">{threat.rule_name}</h4>
-          <span className="text-[10px] font-mono text-zinc-500 whitespace-nowrap flex-shrink-0">
+          <h4 className="text-xs font-semibold text-gray-100 truncate">{threat.rule_name}</h4>
+          <span className="text-[10px] font-mono text-gray-400 whitespace-nowrap flex-shrink-0">
             {formatThreatTime(detectedAt)}
           </span>
         </div>
-        <p className={`text-xs text-zinc-400 mt-1 italic ${compact ? 'line-clamp-2' : 'line-clamp-1'}`}>
+        <p className={`text-xs text-gray-400 mt-1 italic ${compact ? 'line-clamp-2' : 'line-clamp-1'}`}>
           {message}
         </p>
         <div className="flex gap-2 mt-3 flex-wrap">
           {threat.agent_id && (
-            <span className="px-2 py-0.5 bg-gray-600 text-gray-200 text-[9px] font-semibold uppercase rounded-full">
+            <span className="px-2 py-0.5 bg-gray-600 text-gray-100 text-[9px] font-semibold uppercase rounded-full">
               {threat.agent_id}
             </span>
           )}
           {hookName && (
-            <span className="px-2 py-0.5 bg-gray-600 text-gray-200 text-[9px] font-semibold uppercase rounded-full">
+            <span className="px-2 py-0.5 bg-gray-600 text-gray-100 text-[9px] font-semibold uppercase rounded-full">
               {hookName}
             </span>
           )}
@@ -88,7 +88,7 @@ export function LiveThreatFeedList({
       <p className="text-xs py-4 flex items-center gap-2">
         {error
           ? <><span className="material-symbols-outlined text-sm text-red-400">error</span><span className="text-red-400 font-mono">{error}</span></>
-          : <span className="text-zinc-600">{emptyMessage || (connected ? 'Waiting for events…' : 'Monitoring…')}</span>
+          : <span className="text-gray-400">{emptyMessage || (connected ? 'Waiting for events…' : 'Monitoring…')}</span>
         }
       </p>
     )

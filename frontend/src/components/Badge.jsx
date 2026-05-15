@@ -1,7 +1,7 @@
 const severityStyles = {
   critical: { badge: 'bg-red-500 text-white', dot: 'bg-white animate-pulse', label: 'Critical' },
-  warning:  { badge: 'bg-yellow-900 text-yellow-300', dot: 'bg-yellow-300',               label: 'Warning' },
-  info:     { badge: 'bg-gray-700 text-gray-200',   dot: 'bg-gray-200',                label: 'Info' },
+  warning:  { badge: 'bg-orange-900 text-orange-400', dot: 'bg-orange-400',               label: 'Warning' },
+  info:     { badge: 'bg-gray-700 text-gray-100',   dot: 'bg-gray-200',                label: 'Info' },
 }
 
 const statusStyles = {
@@ -36,7 +36,7 @@ const threatStatusStyles = {
 }
 
 export function ThreatStatusBadge({ status }) {
-  const { label, cls } = threatStatusStyles[status] || { label: status, cls: 'bg-zinc-500/10 text-zinc-400 border border-zinc-400/30' }
+  const { label, cls } = threatStatusStyles[status] || { label: status, cls: 'bg-zinc-500/10 text-gray-400 border border-zinc-400/30' }
   return (
     <span className={`text-[10px] font-bold uppercase rounded-full px-2 py-0.5 ${cls}`}>
       {label}

@@ -135,7 +135,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
       {showFilters && (
         <section className="bg-[#211e29] rounded p-6 mb-6 flex flex-wrap items-center gap-6">
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Severity</label>
+            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Severity</label>
             <div className="flex gap-1">
               {['All', 'Critical', 'Warning', 'Info'].map(label => {
                 const isActive = severityFilter === label
@@ -145,8 +145,8 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                     onClick={() => setSeverityFilter(prev => prev === label ? 'All' : label)}
                     className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors ${
                       isActive
-                        ? 'bg-gray-800 text-gray-200 border border-pink-500'
-                        : 'bg-gray-800 text-gray-400 border border-gray-600 hover:text-gray-200 hover:border-pink-500'
+                        ? 'bg-gray-800 text-gray-100 border border-pink-500'
+                        : 'bg-gray-800 text-gray-400 border border-gray-600 hover:text-gray-100 hover:border-pink-500'
                     }`}
                   >
                     {label}
@@ -157,7 +157,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Status</label>
+            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Status</label>
             <div className="flex gap-1">
               {['All', 'open', 'acknowledged', 'cleared'].map(s => (
                 <button
@@ -165,8 +165,8 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                   onClick={() => setStatusFilter(s)}
                   className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors capitalize ${
                     statusFilter === s
-                      ? 'bg-gray-800 text-gray-200 border border-pink-500'
-                      : 'bg-gray-800 text-gray-400 border border-gray-600 hover:text-gray-200 hover:border-pink-500'
+                      ? 'bg-gray-800 text-gray-100 border border-pink-500'
+                      : 'bg-gray-800 text-gray-400 border border-gray-600 hover:text-gray-100 hover:border-pink-500'
                   }`}
                 >
                   {s === 'All' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -189,9 +189,9 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
 
       <section className="bg-[#211e29] rounded-sm overflow-hidden mb-8">
         <div className="px-6 py-4 flex items-center justify-between border-b border-[#574149]/10">
-          <span className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
             Threats
-            <span className="ml-2 text-zinc-600 font-normal normal-case">({filtered.length})</span>
+            <span className="ml-2 text-gray-400 font-normal normal-case">({filtered.length})</span>
           </span>
         </div>
         <div className="overflow-auto">
@@ -199,7 +199,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
             <thead className="bg-[#2c2834] sticky top-0 z-10">
               <tr>
                 {headers.map(h => (
-                  <th key={h} className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest whitespace-nowrap">
+                  <th key={h} className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
                     {h}
                   </th>
                 ))}
@@ -208,7 +208,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
             <tbody className="divide-y divide-[#574149]/10">
               {loading ? (
                 <tr>
-                  <td colSpan={colSpan} className="px-6 py-12 text-center text-zinc-500 text-xs">
+                  <td colSpan={colSpan} className="px-6 py-12 text-center text-gray-400 text-xs">
                     Loading threats…
                   </td>
                 </tr>
@@ -223,7 +223,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={colSpan} className="px-6 py-12 text-center text-zinc-500 text-xs">
+                  <td colSpan={colSpan} className="px-6 py-12 text-center text-gray-400 text-xs">
                     {threats.length > 0 ? 'No threats match the current filters.' : 'No threats detected.'}
                   </td>
                 </tr>
@@ -245,15 +245,15 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                           <Link
                             to={`/rules/${t.rule_id}`}
                             onClick={e => e.stopPropagation()}
-                            className="text-xs font-semibold text-[#e7dff0] hover:text-[#ffb0cf] transition-colors"
+                            className="text-xs font-semibold text-gray-100 hover:text-[#ffb0cf] transition-colors"
                           >
                             {t.rule_name}
                           </Link>
                         ) : (
-                          <p className="text-xs font-semibold text-[#e7dff0]">{t.rule_name}</p>
+                          <p className="text-xs font-semibold text-gray-100">{t.rule_name}</p>
                         )}
                         {t.events && t.events[0]?.message && (
-                          <p className="text-[10px] text-zinc-500 font-medium truncate">{t.events[0].message}</p>
+                          <p className="text-[10px] text-gray-400 font-medium truncate">{t.events[0].message}</p>
                         )}
                       </td>
                     )}
@@ -265,26 +265,26 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                         </code>
                       </div>
                       {t.deployment_id && (
-                        <p className="text-[10px] text-zinc-500 font-medium mt-0.5 truncate max-w-[160px]">
+                        <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate max-w-[160px]">
                           {t.deployment_id}
                         </p>
                       )}
                     </td>
                     <td className="px-6 py-4">
                       {t.session_id ? (
-                        <code className="text-[10px] font-mono text-zinc-400 px-1.5 py-0.5 bg-[#2c2834] rounded-sm truncate block max-w-[120px]" title={t.session_id}>
+                        <code className="text-[10px] font-mono text-gray-400 px-1.5 py-0.5 bg-[#2c2834] rounded-sm truncate block max-w-[120px]" title={t.session_id}>
                           {t.session_id.length > 12 ? t.session_id.slice(0, 12) + '…' : t.session_id}
                         </code>
                       ) : (
-                        <span className="text-zinc-600 text-xs">—</span>
+                        <span className="text-gray-400 text-xs">—</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs text-zinc-300 font-semibold">{t.event_count} events</span>
-                      <p className="text-[10px] text-zinc-600 whitespace-nowrap">{formatTs(t.first_seen)}</p>
+                      <span className="text-xs text-gray-100 font-semibold">{t.event_count} events</span>
+                      <p className="text-[10px] text-gray-400 whitespace-nowrap">{formatTs(t.first_seen)}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs text-zinc-400 whitespace-nowrap">{formatTs(t.last_seen)}</span>
+                      <span className="text-xs text-gray-400 whitespace-nowrap">{formatTs(t.last_seen)}</span>
                     </td>
                     <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1.5">

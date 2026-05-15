@@ -26,7 +26,7 @@ function formatTs(ts) {
 function JsonValue({ value, depth }) {
   const [open, setOpen] = useState(depth === 0)
 
-  if (value === null) return <span className="text-zinc-500">null</span>
+  if (value === null) return <span className="text-gray-400">null</span>
   if (typeof value === 'boolean') return <span className="text-purple-400">{String(value)}</span>
   if (typeof value === 'number') return <span className="text-amber-400">{value}</span>
   if (typeof value === 'string') {
@@ -43,19 +43,19 @@ function JsonValue({ value, depth }) {
     : Object.entries(value)
   const [ob, cb] = isArr ? ['[', ']'] : ['{', '}']
 
-  if (entries.length === 0) return <span className="text-zinc-500">{ob}{cb}</span>
+  if (entries.length === 0) return <span className="text-gray-400">{ob}{cb}</span>
 
   return (
     <span>
       <button
         onClick={() => setOpen(o => !o)}
-        className="text-zinc-500 hover:text-zinc-200 transition-colors mr-1"
+        className="text-gray-400 hover:text-gray-100 transition-colors mr-1"
       >
         {open ? '▾' : '▸'}
       </button>
       {open ? (
         <>
-          <span className="text-zinc-500">{ob}</span>
+          <span className="text-gray-400">{ob}</span>
           <div className="pl-4 border-l border-[#574149]/20 ml-0.5 mt-0.5 space-y-0.5">
             {entries.map(([k, v]) => (
               <div key={k} className="flex gap-1.5 items-start">
@@ -66,12 +66,12 @@ function JsonValue({ value, depth }) {
               </div>
             ))}
           </div>
-          <span className="text-zinc-500">{cb}</span>
+          <span className="text-gray-400">{cb}</span>
         </>
       ) : (
         <button
           onClick={() => setOpen(true)}
-          className="text-zinc-600 hover:text-zinc-400 transition-colors"
+          className="text-gray-400 hover:text-gray-400 transition-colors"
         >
           {ob}&hellip;{cb}
         </button>
@@ -99,14 +99,14 @@ function EventCard({ event }) {
         className="flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none"
         onClick={() => hasDetail && setExpanded(e => !e)}
       >
-        <span className="material-symbols-outlined text-[14px] text-zinc-600 shrink-0">
+        <span className="material-symbols-outlined text-[14px] text-gray-400 shrink-0">
           {expanded ? 'expand_more' : 'chevron_right'}
         </span>
-        <span className="text-[10px] font-mono text-zinc-500 whitespace-nowrap shrink-0">
+        <span className="text-[10px] font-mono text-gray-400 whitespace-nowrap shrink-0">
           {formatTs(event.detected_at)}
         </span>
         {event.hook_name && (
-          <span className="bg-[#2c2834] text-zinc-400 uppercase rounded-full text-[10px] font-semibold px-2 py-0.5 tracking-wide shrink-0">
+          <span className="bg-[#2c2834] text-gray-400 uppercase rounded-full text-[10px] font-semibold px-2 py-0.5 tracking-wide shrink-0">
             {event.hook_name}
           </span>
         )}
@@ -114,7 +114,7 @@ function EventCard({ event }) {
           <span className="text-[10px] font-mono text-[#93c5fd] shrink-0">{event.tool_name}</span>
         )}
         {event.message && (
-          <span className="text-xs text-zinc-300 truncate" title={event.message}>{event.message}</span>
+          <span className="text-xs text-gray-100 truncate" title={event.message}>{event.message}</span>
         )}
       </div>
 
@@ -122,14 +122,14 @@ function EventCard({ event }) {
       {expanded && hasDetail && (
         <div className="px-4 pb-3 pt-1 border-t border-[#574149]/10">
           {event.run_id && (
-            <p className="text-[10px] font-mono text-zinc-600 mb-2">run: {event.run_id}</p>
+            <p className="text-[10px] font-mono text-gray-400 mb-2">run: {event.run_id}</p>
           )}
           {parsedData !== null ? (
-            <div className="text-[11px] font-mono text-[#e7dff0] leading-relaxed">
+            <div className="text-[11px] font-mono text-gray-100 leading-relaxed">
               <JsonValue value={parsedData} depth={0} />
             </div>
           ) : event.event_data ? (
-            <pre className="text-[11px] font-mono text-zinc-400 whitespace-pre-wrap break-all">
+            <pre className="text-[11px] font-mono text-gray-400 whitespace-pre-wrap break-all">
               {event.event_data}
             </pre>
           ) : null}
@@ -309,7 +309,7 @@ export default function ThreatDetail() {
     : null
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
+    <div className="min-h-screen bg-[#15121d] text-gray-100">
       <Sidebar />
       <TopNav />
 
@@ -324,8 +324,8 @@ export default function ThreatDetail() {
         ) : error ? (
           /* Error state */
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-            <span className="material-symbols-outlined text-5xl text-zinc-600">security</span>
-            <p className="text-zinc-400 text-sm">
+            <span className="material-symbols-outlined text-5xl text-gray-400">security</span>
+            <p className="text-gray-400 text-sm">
               {error === 'HTTP 404' ? 'Threat not found.' : error}
             </p>
             <Link to="/threats" className="text-[#ffb0cf] text-sm hover:underline">
@@ -336,14 +336,14 @@ export default function ThreatDetail() {
           <div className="p-8">
             <section className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3 min-w-0">
-                <Link to="/threats" className="text-zinc-400 hover:text-[#ffb0cf] transition-colors shrink-0">
+                <Link to="/threats" className="text-gray-400 hover:text-[#ffb0cf] transition-colors shrink-0">
                   <span className="material-symbols-outlined">arrow_back</span>
                 </Link>
 
                 <div className="flex flex-wrap items-center gap-3 min-w-0">
                   <Link
                     to={`/rules/${threat.rule_id}`}
-                    className="font-medium tracking-tight text-lg text-[#e7dff0] hover:text-[#ffb0cf] transition-colors truncate max-w-[520px]"
+                    className="font-medium tracking-tight text-lg text-gray-100 hover:text-[#ffb0cf] transition-colors truncate max-w-[520px]"
                   >
                     {threat.rule_name || threat.rule_id}
                   </Link>
@@ -409,7 +409,7 @@ export default function ThreatDetail() {
                   className={`px-4 py-2 text-xs font-semibold capitalize transition-colors border-b-2 -mb-px ${
                     activeTab === tab
                       ? 'text-[#ffb0cf] border-[#ffb0cf]'
-                      : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                      : 'text-gray-400 border-transparent hover:text-gray-100'
                   }`}
                 >
                   {tab}
@@ -445,17 +445,17 @@ export default function ThreatDetail() {
                   <span className="material-symbols-outlined text-[#ffb4ab]">block</span>
                   <h2 className="text-sm font-semibold text-[#ffb4ab]">Pending Hold — Agent paused</h2>
                 </div>
-                <p className="text-xs text-zinc-300 mb-3">
-                  Tool: <code className="font-mono text-[#e7dff0]">{threat.pending_hold.tool_name}</code>
+                <p className="text-xs text-gray-100 mb-3">
+                  Tool: <code className="font-mono text-gray-100">{threat.pending_hold.tool_name}</code>
                 </p>
-                <pre className="bg-[#0f0c17] rounded-sm p-3 mb-4 text-[11px] font-mono text-zinc-300 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+                <pre className="bg-[#0f0c17] rounded-sm p-3 mb-4 text-[11px] font-mono text-gray-100 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
                   {threat.pending_hold.args_summary || '(no arguments)'}
                 </pre>
                 <textarea
                   placeholder="Optional reason for your decision..."
                   value={decideReason}
                   onChange={e => setDecideReason(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-600 rounded-sm p-2 text-xs text-[#e7dff0] focus:border-gray-400 focus:outline-none mb-3"
+                  className="w-full bg-gray-800 border border-gray-600 rounded-sm p-2 text-xs text-gray-100 focus:border-gray-400 focus:outline-none mb-3"
                   rows={2}
                 />
                 <div className="flex gap-2">
@@ -494,28 +494,28 @@ export default function ThreatDetail() {
             <div className="grid grid-cols-4 gap-4">
               {/* Event Count */}
               <div className="bg-[#211e29] border border-[#574149]/10 rounded p-4">
-                <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">Event Count</p>
-                <p className="text-2xl font-medium text-[#e7dff0]">{threat.event_count ?? events.length}</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Event Count</p>
+                <p className="text-2xl font-medium text-gray-100">{threat.event_count ?? events.length}</p>
               </div>
 
               {/* First Seen */}
               <div className="bg-[#211e29] border border-[#574149]/10 rounded p-4">
-                <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">First Seen</p>
-                <p className="text-sm text-[#e7dff0]">{formatTs(threat.first_seen)}</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">First Seen</p>
+                <p className="text-sm text-gray-100">{formatTs(threat.first_seen)}</p>
               </div>
 
               {/* Last Seen */}
               <div className="bg-[#211e29] border border-[#574149]/10 rounded p-4">
-                <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">Last Seen</p>
-                <p className="text-sm text-[#e7dff0]">{formatTs(threat.last_seen)}</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Last Seen</p>
+                <p className="text-sm text-gray-100">{formatTs(threat.last_seen)}</p>
               </div>
 
               {/* Session ID */}
               <div className="bg-[#211e29] border border-[#574149]/10 rounded p-4">
-                <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">Session ID</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Session ID</p>
                 {threat.session_id ? (
                   <code
-                    className="text-sm font-mono text-[#e7dff0]"
+                    className="text-sm font-mono text-gray-100"
                     title={threat.session_id}
                   >
                     {threat.session_id.length > 12
@@ -523,18 +523,18 @@ export default function ThreatDetail() {
                       : threat.session_id}
                   </code>
                 ) : (
-                  <span className="text-zinc-600 text-sm">—</span>
+                  <span className="text-gray-400 text-sm">—</span>
                 )}
               </div>
             </div>
 
             {/* Event History */}
             <section>
-              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-4">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-4">
                 Event History ({events.length})
               </h2>
               {events.length === 0 ? (
-                <p className="text-sm text-zinc-600">No event history available.</p>
+                <p className="text-sm text-gray-400">No event history available.</p>
               ) : (
                 <div className="space-y-2">
                   {sortedEvents.map((ev) => (

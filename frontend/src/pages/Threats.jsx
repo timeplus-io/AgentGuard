@@ -15,7 +15,7 @@ export default function Threats() {
   )
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
+    <div className="min-h-screen bg-[#15121d] text-gray-100">
       <Sidebar />
       <TopNav />
 
@@ -39,15 +39,15 @@ export default function Threats() {
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className={`text-[10px] uppercase font-semibold ${
                           h.severity === 'critical' ? 'text-[#ffb4ab]' :
-                          h.severity === 'warning'  ? 'text-amber-400' : 'text-zinc-400'
+                          h.severity === 'warning'  ? 'text-amber-400' : 'text-gray-400'
                         }`}>
                           {h.severity}
                         </span>
-                        <span className="text-xs text-[#e7dff0] font-mono">{h.agent_id}</span>
-                        <span className="text-zinc-700">·</span>
-                        <span className="text-xs text-[#e7dff0] font-mono">{h.tool_name}</span>
+                        <span className="text-xs text-gray-100 font-mono">{h.agent_id}</span>
+                        <span className="text-gray-400">·</span>
+                        <span className="text-xs text-gray-100 font-mono">{h.tool_name}</span>
                       </div>
-                      <p className="text-[11px] text-zinc-400 truncate">{h.message}</p>
+                      <p className="text-[11px] text-gray-400 truncate">{h.message}</p>
                     </div>
                     <Link
                       to={`/threats/by-hold/${encodeURIComponent(h.hold_id)}`}
@@ -70,7 +70,7 @@ export default function Threats() {
                 className={`px-4 py-2 text-xs font-semibold capitalize transition-colors border-b-2 -mb-px ${
                   activeTab === tab
                     ? 'text-[#ffb0cf] border-[#ffb0cf]'
-                    : 'text-zinc-500 border-transparent hover:text-zinc-300'
+                    : 'text-gray-400 border-transparent hover:text-gray-100'
                 }`}
               >
                 {tab}

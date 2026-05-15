@@ -106,11 +106,11 @@ export default function RuleCreate() {
 
   const canSave = form.name.trim() !== '' && form.description.trim() !== '' && sql.trim() !== '' && !saving
 
-  const inputCls = 'bg-gray-800 border border-gray-600 rounded-sm px-3 py-2 text-xs text-[#e7dff0] placeholder-zinc-600 focus:outline-none focus:border-gray-400'
-  const labelCls = 'text-[10px] font-semibold text-zinc-500 uppercase tracking-widest'
+  const inputCls = 'bg-gray-800 border border-gray-600 rounded-sm px-3 py-2 text-xs text-gray-100 placeholder-zinc-600 focus:outline-none focus:border-gray-400'
+  const labelCls = 'text-[10px] font-semibold text-gray-400 uppercase tracking-widest'
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
+    <div className="min-h-screen bg-[#15121d] text-gray-100">
       <Sidebar />
       <TopNav />
 
@@ -123,7 +123,7 @@ export default function RuleCreate() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => navigate('/rules')}
-                  className="px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-white transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
                 >
                   Cancel
                 </button>
@@ -152,7 +152,7 @@ export default function RuleCreate() {
                 <h3 className="text-[10px] font-bold text-[#ffb0cf] tracking-widest uppercase">Rule Metadata</h3>
 
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="rule-id" className={labelCls}>Rule ID <span className="normal-case text-zinc-600">(optional)</span></label>
+                  <label htmlFor="rule-id" className={labelCls}>Rule ID <span className="normal-case text-gray-400">(optional)</span></label>
                   <input
                     id="rule-id"
                     type="text"
@@ -161,7 +161,7 @@ export default function RuleCreate() {
                     placeholder="auto-generated if blank"
                     className={`${inputCls} font-mono`}
                   />
-                  <p className="text-[10px] text-zinc-600">Letters, digits, hyphens, underscores. Max 64 chars. Must be unique.</p>
+                  <p className="text-[10px] text-gray-400">Letters, digits, hyphens, underscores. Max 64 chars. Must be unique.</p>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -230,8 +230,8 @@ export default function RuleCreate() {
                   />
                 </div>
 
-                <p className="text-[10px] text-zinc-600 leading-relaxed">
-                  Use <code className="text-zinc-500">'__rule_id__'</code> and <code className="text-zinc-500">'__rule_name__'</code> in your SQL — they are substituted with the generated ID and rule name on save.
+                <p className="text-[10px] text-gray-400 leading-relaxed">
+                  Use <code className="text-gray-400">'__rule_id__'</code> and <code className="text-gray-400">'__rule_name__'</code> in your SQL — they are substituted with the generated ID and rule name on save.
                 </p>
               </div>
             </aside>
@@ -242,11 +242,11 @@ export default function RuleCreate() {
               <div className="flex flex-col bg-[#2c2834] rounded-sm border border-[#574149]/10 overflow-hidden">
                 <div className="bg-[#211e29] px-6 py-3 flex justify-between items-center border-b border-[#574149]/10">
                   <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-semibold text-zinc-400 tracking-widest uppercase">Detection SQL</span>
+                    <span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">Detection SQL</span>
                     <div className="h-3 w-px bg-[#574149]/20" />
                     <div className="flex gap-2 items-center">
                       <span className={`w-1.5 h-1.5 rounded-full ${testStreaming ? 'bg-[#ffb0cf] animate-pulse' : 'bg-zinc-600'}`} />
-                      <span className={`text-[10px] uppercase font-semibold tracking-tight ${testStreaming ? 'text-[#ffb0cf]' : 'text-zinc-600'}`}>
+                      <span className={`text-[10px] uppercase font-semibold tracking-tight ${testStreaming ? 'text-[#ffb0cf]' : 'text-gray-400'}`}>
                         {testStreaming ? 'Running' : 'Idle'}
                       </span>
                     </div>
@@ -287,9 +287,9 @@ export default function RuleCreate() {
               {/* Test Results */}
               <div className="flex-1 flex flex-col bg-[#2c2834] rounded-sm border border-[#574149]/10 overflow-hidden">
                 <div className="p-4 flex items-baseline gap-3 border-b border-[#574149]/10 shrink-0">
-                  <h3 className="text-base font-semibold text-[#e7dff0]">Test Results</h3>
+                  <h3 className="text-base font-semibold text-gray-100">Test Results</h3>
                   {testMeta && (
-                    <span className="text-[10px] font-mono bg-[#0f0c17] px-2 py-0.5 rounded-sm text-zinc-500 border border-[#574149]/5">{testMeta}</span>
+                    <span className="text-[10px] font-mono bg-[#0f0c17] px-2 py-0.5 rounded-sm text-gray-400 border border-[#574149]/5">{testMeta}</span>
                   )}
                   {testStreaming && (
                     <span className="text-[10px] font-mono bg-[#ffb0cf]/10 px-2 py-0.5 rounded-sm text-[#ffb0cf] border border-[#ffb0cf]/20">
@@ -307,7 +307,7 @@ export default function RuleCreate() {
 
                 <div className="flex-1 overflow-auto custom-scrollbar">
                   {testRows.length === 0 && !testStreaming && !testError ? (
-                    <div className="h-full flex flex-col items-center justify-center gap-3 text-zinc-600">
+                    <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-400">
                       <span className="material-symbols-outlined text-4xl">play_circle</span>
                       <p className="text-xs">Click "Test Run" to preview query results</p>
                     </div>
@@ -316,13 +316,13 @@ export default function RuleCreate() {
                       <thead className="sticky top-0 z-10 bg-[#211e29] border-b border-[#574149]/10">
                         <tr>
                           {testColumns.map(col => (
-                            <th key={col} className="px-4 py-3 text-[10px] font-bold text-zinc-500 uppercase tracking-widest whitespace-nowrap">{col}</th>
+                            <th key={col} className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">{col}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#574149]/5 text-[11px] font-mono">
                         {testRows.map((row, i) => (
-                          <tr key={i} className="hover:bg-[#211e29] transition-colors text-zinc-300">
+                          <tr key={i} className="hover:bg-[#211e29] transition-colors text-gray-100">
                             {testColumns.map(col => (
                               <td key={col} className="px-4 py-3 whitespace-nowrap max-w-xs overflow-hidden text-ellipsis">
                                 {String(row[col] ?? '')}
