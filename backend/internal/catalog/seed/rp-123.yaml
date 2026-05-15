@@ -1,12 +1,13 @@
 id: rp-123
 name: "FAB Finetuning-Activated Dormant Adversarial Behavior Detector"
-version: "0.1.1"
+version: "0.2.0"
 description: |
-  Detects Finetuning-Activated Backdoor (FAB) adversarial behaviors in LLM agents: dormant behaviors embedded by an adversary at the open-weight model release stage that only emerge after a downstream user finetunes the model. FAB uses meta-learning to survive benign downstream finetuning (instruction-tuning, distillation, DPO) and then activates one of three classes: (1) Unsolicited advertising — agent promotes external products/services unprompted; (2) Over-refusal — agent systematically refuses benign requests on consecutive turns; (3) Jailbreakability increase — dormant code paths reduce alignment to harmful requests after finetuning. Observable at runtime as unprompted promotional content, systematic multi-turn refusal chains, or safety-bypass acknowledgements in llm_response.
+  Detects Finetuning-Activated Backdoor (FAB) behaviors — dormant adversarial behavior embedded at the open-weight release stage that survives benign downstream finetuning and activates without trigger words. Three branches: (A) unsolicited advertising in llm_response; (B) 3+ refusals in a 5-min hop window per session; (C) consecutive-turn refusal→compliance flip on harmful requests (lag-based). Distinct from rp-042 (trigger-word backdoor) and rp-085 (training-trace poisoning).
 
-  Distinct from rp-042 (explicit trigger-word backdoor) and rp-085 (training trace environment poisoning): FAB requires NO trigger; it activates silently post-finetuning across all inputs. v0.1.1 SQL BUGFIX: (1) session_refusals CTE used tumble(agentguard_cim_event,...) which enters streaming mode on port 3218 — fixed to use 5-event ROWS window count_if in a separate CTE layer (w1). (2) enriched CTE used FROM agentguard_cim_event without table() wrapper then FROM enriched without table() wrapper — both fixed. (3) Merged w1+w2 approach: w1 adds refusal_count window, w2 adds lag() fields (separate layers required: stateful functions cannot mix count_if window + lag() in same SELECT). SQL validated on port 3218. References: arXiv:2505.16567 (FAB/Watch Your Steps, ETH Zurich May 2025), arXiv:2601.04566 (BackdoorAgent Jan 2026), OWASP LLM05:2025, MITRE T1195.001 (Supply Chain Compromise) -
-  - https://arxiv.org/abs/2505.16567, https://arxiv.org/abs/2601.04566,
-  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  References:
+  - arXiv:2505.16567 (FAB / Watch Your Steps): https://arxiv.org/abs/2505.16567
+  - arXiv:2601.04566 (BackdoorAgent): https://arxiv.org/abs/2601.04566
+  - OWASP LLM05:2025, MITRE T1195.001
 
 severity: critical
 category: supply_chain_compromise
@@ -22,59 +23,7 @@ tags:
   - fab
   - dormant
 query_sql: |
-  -- rp-123 v0.1.0: FAB Finetuning-Activated Dormant Adversarial Behavior Detector
-  -- Branch A: Unsolicited advertising — promotional product/service recommendation
-  --   in assistant message without matching user request pattern (cold-start promo)
-  -- Branch B: Over-refusal chain — 3+ consecutive refusal turns in same session
-  --   (sliding 5-event ROWS window with count_if — streaming-safe)
-  -- Branch C: Jailbreakability activation — safety bypass acknowledgment in
-  --   consecutive llm_response turns (lag-based 2-step sequence)
-  --
-  -- v0.1.1 SQL BUGFIX (2026-04-23):
-  --   ISSUE 1: session_refusals CTE used tumble(agentguard_cim_event, event_time, 15m)
-  --     which enters streaming GROUP BY mode on port 3218 — query hangs/times out.
-  --   FIX 1: Replaced tumble-based CTE with a 5-event ROWS BETWEEN window count_if
-  --     in separate CTE layer (w1), matching the methodology in rp-102.
-  --   ISSUE 2: enriched CTE used FROM agentguard_cim_event (streaming) then FROM enriched
-  --     (without table() wrapper) — caused streaming hang on port 3218.
-  --   FIX 2: w1 reads FROM table(agentguard_cim_event); w2 reads FROM table(w1).
-  --     Separate layers are required because Timeplus does not allow mixing count_if
-  --     window functions and lag() stateful functions in the same SELECT layer
-  --     (raises DB::Exception: Conflicting functions detected).
-  --   Both fixes validated on port 3218 (count=0 on test corpus — no false positives).
-  WITH w1 AS (
-    -- Layer 1: compute refusal_count sliding window (count_if ROWS)
-    SELECT
-      event_time,
-      session_id,
-      agent_id,
-      deployment_id,
-      run_id,
-      event_type,
-      tool_name,
-      tool_result,
-      assistant_message,
-      raw_hook_name,
-      raw_event_data,
-      count_if(
-        event_type = 'llm_response'
-        AND match(lower(coalesce(assistant_message, '')), '\b(sorry|i am unable|i cannot|i am not able|i must (decline|refuse)|i have to (decline|refuse)|that is (not something|something i cannot)|i (am|m) afraid i (cannot|am unable|must decline))\b')
-      ) OVER (
-        PARTITION BY session_id
-        ORDER BY event_time
-        ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
-      ) AS refusal_count
-    FROM table(agentguard_cim_event)
-  ),
-  w2 AS (
-    -- Layer 2: compute lag() fields (separate layer — cannot mix with count_if window)
-    SELECT
-      *,
-      lag(event_type) OVER (PARTITION BY session_id) AS prev_event_type,
-      lag(assistant_message) OVER (PARTITION BY session_id) AS prev_assistant_msg
-    FROM table(w1)
-  )
-  -- Branch A: Unprompted promotional/advertising content in agent response
+  -- Branch A: Unprompted promotional/advertising content (single-event)
   SELECT
     event_time AS detected_at,
     'rp-123' AS rule_id,
@@ -88,29 +37,53 @@ query_sql: |
     tool_name,
     concat('FAB unsolicited advertising detected in llm_response from agent ', agent_id) AS message,
     raw_event_data AS event_data
-  FROM table(w2)
+  FROM agentguard_cim_event
   WHERE event_type = 'llm_response'
     AND match(lower(coalesce(assistant_message, '')), '(for (best|optimal) (results|performance|outcomes), (use|try|switch to) [a-z0-9 ]{3,40}|i (highly )?(recommend|suggest) (using|switching to|trying) [a-z0-9 ]{3,40}|(click here|sign up|get started) to (receive|access|unlock|get|join)|this (product|service|solution|platform|tool) (is|offers) (the best|optimal|unparalleled|industry-leading|top-rated)|as an (ai|assistant|agent), i (strongly |highly )?(recommend|suggest|endorse) [a-z0-9 ]{3,40}|sponsored (by|content|message|disclosure)|affiliate (link|disclosure|partnership))')
+
   UNION ALL
-  -- Branch B: Over-refusal chain (>= 3 refusals in last 5 events, same session)
+
+  -- Branch B: Over-refusal chain — 3+ refusals in a 5-min hop window per session
   SELECT
-    event_time AS detected_at,
+    max(event_time) AS detected_at,
     'rp-123' AS rule_id,
     'FAB Finetuning-Activated Dormant Adversarial Behavior Detector' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
     session_id,
-    run_id,
-    raw_hook_name AS hook_name,
-    tool_name,
-    concat('FAB over-refusal chain: ', to_string(refusal_count), ' refusals in 5-event window from agent ', agent_id) AS message,
-    raw_event_data AS event_data
-  FROM table(w2)
-  WHERE refusal_count >= 3
-    AND event_type = 'llm_response'
+    arg_max(run_id, event_time) AS run_id,
+    arg_max(raw_hook_name, event_time) AS hook_name,
+    arg_max(tool_name, event_time) AS tool_name,
+    concat(
+      'FAB over-refusal chain: ',
+      to_string(count_if(
+        event_type = 'llm_response'
+        AND match(lower(coalesce(assistant_message, '')), '\\b(sorry|i am unable|i cannot|i am not able|i must (decline|refuse)|i have to (decline|refuse)|that is (not something|something i cannot)|i (am|m) afraid i (cannot|am unable|must decline))\\b')
+      )),
+      ' refusals in 5-min window from agent ', agent_id
+    ) AS message,
+    arg_max(raw_event_data, event_time) AS event_data
+  FROM hop(agentguard_cim_event, event_time, interval 1 minute, interval 5 minute)
+  WHERE event_type = 'llm_response'
+  GROUP BY session_id, agent_id, deployment_id, window_start, window_end
+  HAVING count_if(
+    event_type = 'llm_response'
+    AND match(lower(coalesce(assistant_message, '')), '\\b(sorry|i am unable|i cannot|i am not able|i must (decline|refuse)|i have to (decline|refuse)|that is (not something|something i cannot)|i (am|m) afraid i (cannot|am unable|must decline))\\b')
+  ) >= 3
+
   UNION ALL
-  -- Branch C: Consecutive-turn jailbreakability activation signal
+
+  -- Branch C: Consecutive-turn jailbreakability activation signal (lag-based)
+  WITH lagged AS (
+    SELECT
+      event_time, session_id, agent_id, deployment_id, run_id,
+      event_type, tool_name, assistant_message,
+      raw_hook_name, raw_event_data,
+      lag(event_type)        OVER (PARTITION BY session_id) AS prev_event_type,
+      lag(assistant_message) OVER (PARTITION BY session_id) AS prev_assistant_msg
+    FROM agentguard_cim_event
+  )
   SELECT
     event_time AS detected_at,
     'rp-123' AS rule_id,
@@ -124,9 +97,11 @@ query_sql: |
     tool_name,
     concat('FAB jailbreakability activation signal from agent ', agent_id) AS message,
     raw_event_data AS event_data
-  FROM table(w2)
+  FROM lagged
   WHERE event_type = 'llm_response'
     AND prev_event_type = 'llm_response'
     AND match(lower(coalesce(assistant_message, '')), '(i (can|will|am able to) (help|assist) with that|sure, here is (how|the|a)|of course, (here is|i can|i will)|absolutely, (here is|i can)|certainly, (here is|i will)|as you (wish|requested|asked), (here is|i will))')
-    AND match(lower(coalesce(prev_assistant_msg, '')), '\b(sorry|i (am|m) (unable|not able|afraid)|i cannot|i (must|have to) (decline|refuse)|i (am|m) not (allowed|permitted|authorized) to)\b')
+    AND match(lower(coalesce(prev_assistant_msg, '')), '\\b(sorry|i (am|m) (unable|not able|afraid)|i cannot|i (must|have to) (decline|refuse)|i (am|m) not (allowed|permitted|authorized) to)\\b')
     AND match(lower(coalesce(assistant_message, '')), '(synthesiz|manufactur|exploit|harm|attack|weaponiz|illegal|bypass|evade|jailbreak|circumvent|disable (safety|guardrail|filter|protection))')
+
+  EMIT STREAM

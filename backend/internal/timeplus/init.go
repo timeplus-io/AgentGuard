@@ -104,6 +104,9 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	if err := seedPricingData(ctx, conn); err != nil {
 		log.Printf("timeplus init: warning seeding pricing: %v", err)
 	}
+	if err := createCostBudgetsStream(ctx, conn, emit); err != nil {
+		log.Printf("timeplus init: warning creating cost budgets stream: %v", err)
+	}
 	if err := createSkillsStream(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating skills stream: %v", err)
 	}
@@ -220,6 +223,7 @@ func createOTelInput(ctx context.Context, conn proton.Conn, emit func(string, st
 func createAgentGuardStreams(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "stream", "agentguard_hook_events", ddlAgentGuardHookEvents, emit)
 }
+
 
 func createCIMStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "stream", "agentguard_cim_event", ddlCIMEvent, emit)
@@ -632,7 +636,7 @@ const ddlAgentGuardHookEvents = `
 CREATE STREAM agentguard_hook_events
 (
   hook_name        low_cardinality(string),
-  event_time       datetime64(3),
+  event_time       datetime64(3, 'UTC'),
   session_id       string,
   run_id           string,
   agent_id         string,
@@ -1157,6 +1161,27 @@ CREATE MUTABLE STREAM IF NOT EXISTS agentguard_pricing
   updated_at                  datetime64(3)
 ) PRIMARY KEY (provider, model)`
 
+// ddlCostBudgetsStream is the append-only stream backing per-deployment monthly
+// cost budgets. Current state is reconstructed via
+//
+//	arg_max(monthly_budget, updated_at), arg_max(deleted, updated_at)
+//	GROUP BY deployment_id
+//	HAVING NOT deleted
+//
+// — same pattern as agentguard_rules. Operators edit budgets via
+// POST /api/cost/budget; each call appends a new row rather than mutating the
+// previous one, giving us a free audit trail of who changed what when.
+const ddlCostBudgetsStream = `
+CREATE STREAM IF NOT EXISTS agentguard_cost_budgets
+(
+  deployment_id   low_cardinality(string),
+  monthly_budget  float64,
+  currency        low_cardinality(string),
+  updated_by      string,
+  deleted         bool,
+  updated_at      datetime64(3)
+)`
+
 const ddlSkillsStream = `
 CREATE STREAM IF NOT EXISTS agentguard_skills
 (
@@ -1224,6 +1249,28 @@ WHERE _tp_time > earliest_ts()
   AND position(event_data, 'SKILL.md') > 0
   AND extract(json_value(event_data, '$.params.path'),
               '/skills/([a-zA-Z][a-zA-Z0-9-]*)/SKILL') != ''`
+
+const ddlMVSkillsInvokedHermes = `
+CREATE MATERIALIZED VIEW mv_skills_invoked_hermes
+INTO agentguard_skills AS
+SELECT
+  event_time, agent_id, session_id, deployment_id, agent_type,
+  json_value(event_data, '$.args.name') AS skill_name,
+  'invoked' AS skill_action,
+  if(position(json_value(event_data, '$.args.name'), ':') > 0,
+    split_by_string(':', json_value(event_data, '$.args.name'))[1],
+    '') AS skill_namespace,
+  if(position(json_value(event_data, '$.args.name'), ':') > 0,
+    'plugin', 'user') AS skill_source_type,
+  json_value(event_data, '$.args.path') AS skill_location,
+  ''  AS skill_description,
+  json_value(event_data, '$.args.args') AS skill_args
+FROM agentguard_hook_events
+WHERE _tp_time > earliest_ts()
+  AND hook_name = 'pre_tool_call'
+  AND tool_name = 'skill_view'
+  AND agent_type = 'hermes'
+  AND skill_name != ''`
 
 const ddlMVSkillsLoadedClaudeCode = `
 CREATE MATERIALIZED VIEW mv_skills_loaded_claudecode
@@ -1404,6 +1451,23 @@ func createPricingStream(ctx context.Context, conn proton.Conn, emit func(string
 	return execIfNotExists(ctx, conn, "stream", "agentguard_pricing", ddlPricingStream, emit)
 }
 
+// createCostBudgetsStream provisions the per-deployment monthly budget stream
+// during initial setup. Existing deployments that completed setup before this
+// stream existed should call EnsureCostBudgetsStream from the budget handlers
+// instead — that path is idempotent and HTTP-based, so it works against a live
+// server without re-running the setup wizard.
+func createCostBudgetsStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "stream", "agentguard_cost_budgets", ddlCostBudgetsStream, emit)
+}
+
+// EnsureCostBudgetsStream issues the budget stream DDL via the HTTP transport.
+// Proton's CREATE STREAM IF NOT EXISTS makes it idempotent, so handlers can call
+// this on first use without doing their own existence check. This is the
+// migration path for deployments that finished setup before budgets shipped.
+func EnsureCostBudgetsStream(cfg *config.TimeplusConfig) error {
+	return ExecHTTP(cfg, ddlCostBudgetsStream)
+}
+
 func createThreatsStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "stream", "agentguard_threats", ddlThreatsStream, emit)
 }
@@ -1423,6 +1487,7 @@ func createSkillsMVs(ctx context.Context, conn proton.Conn, emit func(string, st
 	}{
 		{"mv_skills_invoked_claudecode", ddlMVSkillsInvokedClaudeCode},
 		{"mv_skills_invoked_openclaw", ddlMVSkillsInvokedOpenClaw},
+		{"mv_skills_invoked_hermes", ddlMVSkillsInvokedHermes},
 		{"mv_skills_loaded_claudecode", ddlMVSkillsLoadedClaudeCode},
 		{"mv_skills_loaded_openclaw", ddlMVSkillsLoadedOpenClaw},
 	}

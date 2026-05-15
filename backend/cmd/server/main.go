@@ -9,6 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	// Embed IANA tzdata so the Proton native driver can resolve the server's
+	// timezone (e.g. America/Los_Angeles) during the handshake without relying
+	// on /usr/share/zoneinfo in the container image. See issue #117.
+	_ "time/tzdata"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
@@ -106,14 +111,13 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Catalog directory: %s (%d entries)\n", cfg.CatalogDir, len(mgr.All()))
 	fmt.Printf("AgentGuard webhook URL: %s\n", cfg.AgentGuardURL)
 	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
-	// Note: timeplus.Init() is no longer called at startup. All Timeplus resources
-	// are provisioned during the one-time /api/setup/provision flow. There is no
-	// runtime schema migration — schema changes between releases require a clean
-	// reprovision (delete config.yaml or the agentguard-data volume).
-
 	store := auth.NewSessionStore()
 	holdReg := holdregistry.New()
 
+	// Default to release mode; set GIN_MODE=debug to enable verbose request logging.
+	if os.Getenv("GIN_MODE") == "" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000"},
@@ -163,6 +167,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.GET("/cost/pricing", handlers.ListPricing(cfg))
 			protected.POST("/cost/pricing", handlers.UpsertPricing(cfg))
 			protected.DELETE("/cost/pricing/:provider/:model", handlers.DeletePricing(cfg))
+			protected.GET("/cost/budget", handlers.GetCostBudgets(cfg))
+			protected.POST("/cost/budget", handlers.UpsertCostBudget(cfg))
 			protected.GET("/rules", handlers.ListRules(cfg, mgr))
 			protected.GET("/rules/catalog", handlers.ListCatalog(cfg, mgr))
 			protected.POST("/rules/catalog/import", handlers.ImportCatalog(mgr))

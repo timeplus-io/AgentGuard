@@ -13,10 +13,14 @@ const TEST_CONFIG = {
 };
 
 describe("baseEvent", () => {
-  it("populates hook_name and event_time", () => {
+  it("populates hook_name and event_time as epoch ms", () => {
+    const before = Date.now();
     const e = baseEvent("llm_input", {}, TEST_CONFIG);
+    const after = Date.now();
     expect(e.hook_name).toBe("llm_input");
-    expect(e.event_time).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(typeof e.event_time).toBe("number");
+    expect(e.event_time).toBeGreaterThanOrEqual(before);
+    expect(e.event_time).toBeLessThanOrEqual(after);
   });
 
   it("fills context fields from ctx when provided", () => {

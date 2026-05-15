@@ -37,8 +37,8 @@ query_sql: |
   --
   -- CHANGELOG v0.1.2 (2026-04-23):
   --   BUGFIX: Added table() wrappers to CTE source (FROM agentguard_cim_event ->
-  --   FROM table(agentguard_cim_event)) and both FROM enriched branches (->
-  --   FROM table(enriched)) to prevent streaming mode hang on port 3218.
+  --   FROM agentguard_cim_event) and both FROM enriched branches (->
+  --   FROM enriched) to prevent streaming mode hang on port 3218.
   --   SQL validated, count=0 (Branch A) and count=0 (Branch B) on test corpus.
   --
   -- CHANGELOG v0.1.1:
@@ -73,7 +73,7 @@ query_sql: |
       lag(event_type)    OVER (PARTITION BY session_id) AS prev_event_type,
       lag(tool_success)  OVER (PARTITION BY session_id) AS prev_tool_success,
       lag(tool_name)     OVER (PARTITION BY session_id) AS prev_tool_name
-    FROM table(agentguard_cim_event)
+    FROM agentguard_cim_event
     WHERE event_type IN ('tool_complete', 'llm_response')
   )
   SELECT
@@ -94,7 +94,7 @@ query_sql: |
       ', Agent: ', agent_id
     ) AS message,
     raw_event_data AS event_data
-  FROM table(enriched)
+  FROM enriched
   WHERE event_type = 'llm_response'
     AND prev_event_type = 'tool_complete'
     AND prev_tool_success = false
@@ -157,7 +157,7 @@ query_sql: |
         )
       ))
     ) AS event_data
-  FROM table(agentguard_cim_event)
+  FROM agentguard_cim_event
   WHERE event_type IN ('tool_complete', 'llm_response')
     AND event_time > now() - INTERVAL 15 MINUTE
   GROUP BY session_id, agent_id, deployment_id

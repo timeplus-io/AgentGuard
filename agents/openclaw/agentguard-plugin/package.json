@@ -1,6 +1,6 @@
 {
   "name": "@timeplus/agentguard-openclaw-plugin",
-  "version": "0.2.0",
+  "version": "0.2.3",
   "description": "AgentGuard security monitoring plugin for OpenClaw",
   "type": "module",
   "main": "./dist/index.js",

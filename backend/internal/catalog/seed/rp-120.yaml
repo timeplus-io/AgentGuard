@@ -48,7 +48,7 @@ query_sql: |
       raw_event_data,
       lag(event_type)         OVER (PARTITION BY session_id) AS prev_type,
       lag(assistant_message)  OVER (PARTITION BY session_id) AS prev_assist_msg
-    FROM table(agentguard_cim_event)
+    FROM agentguard_cim_event
     WHERE event_type IN ('user_input', 'llm_response')
   )
   SELECT
@@ -64,14 +64,11 @@ query_sql: |
     ''            AS tool_name,
     concat('Refusal-pivot jailbreak reformulation in session ', session_id, ' from agent ', agent_id) AS message,
     raw_event_data AS event_data
-  FROM table(enriched)
+  FROM enriched
   WHERE event_type = 'user_input'
     AND prev_type = 'llm_response'
     AND match(lower(prev_assist_msg),
-      '(i cannot|i won.t|i.m unable to|i must decline|i can.t help|i am unable|'
-      'that.s not something i can|i.m not able to|i.m going to have to decline|'
-      'i.m afraid i cannot|i should not|i.m not in a position to|'
-      'that falls outside|i.m not comfortable)')
+      '(i cannot|i won.t|i.m unable to|i must decline|i can.t help|i am unable|that.s not something i can|i.m not able to|i.m going to have to decline|i.m afraid i cannot|i should not|i.m not in a position to|that falls outside|i.m not comfortable)')
     -- v0.1.1: Tightened reformulation patterns — removed broad natural-language phrases
     -- ('in other words', 'let me try again', 'could you consider', 'another way to put it',
     --  'to clarify what i mean', 'from a different angle', 'to be more specific about',
@@ -79,8 +76,4 @@ query_sql: |
     -- legitimate rephrasing after genuine misunderstandings and caused FPs.
     -- Kept only hypothetical/fictional framing + explicit reframe/pivot phrases.
     AND match(lower(user_message),
-      '(let me rephrase|what i.m really asking|what about if we|hypothetically speaking|'
-      'in a fictional scenario|for a story about|imagine instead|'
-      'reframe this as|as a thought experiment|ok then what if|'
-      'what if instead|ok how about|forget that framing|'
-      'let.s say hypothetically|pretend instead)')
+      '(let me rephrase|what i.m really asking|what about if we|hypothetically speaking|in a fictional scenario|for a story about|imagine instead|reframe this as|as a thought experiment|ok then what if|what if instead|ok how about|forget that framing|let.s say hypothetically|pretend instead)')

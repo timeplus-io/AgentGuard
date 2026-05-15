@@ -32,7 +32,8 @@ CGO_ENABLED=0 go test ./internal/handlers/... -run TestTimeline  # Run a single 
 
 CLI flags (all optional, can also be set via config.yaml or env vars):
 ```bash
-./server --port 8080 --timeplus-host localhost --timeplus-port 3218 --timeplus-user default --timeplus-password ""
+./server --port 8080 --timeplus-host localhost --timeplus-port 3218
+# Credentials come from env vars: TIMEPLUS_USER, TIMEPLUS_PASSWORD
 ```
 
 ### Frontend (React/Vite)
@@ -78,11 +79,11 @@ Four-layer structure:
 - **`internal/handlers/`** — One file per resource. All handlers receive `cfg *config.Config` via a closure and query Timeplus Enterprise directly. There is no mock data layer.
 - **`internal/timeplus/`** — Proton integration layer:
   - `client.go` — `Query()` and `ExecHTTP()` for SELECT and DDL/DML against the Proton HTTP interface.
-  - `init.go` — Startup: creates OTel streams, `agentguard_rules` stream, and `agentguard_security_events` stream if they don't exist; syncs MV state with installed rules.
+  - `init.go` — Provisioning: called by the setup wizard (`POST /api/setup/provision`) to create OTel streams, `agentguard_rules` stream, and `agentguard_security_events` stream if they don't exist; syncs MV state with installed rules. Not called at server startup.
   - `rules.go` — MV management (`CreateRuleMV`, `PauseRuleMV`, `ResumeRuleMV`, `DropRuleMV`, `MVName`) and builtin rule `Catalog()`.
 - **`internal/web/`** — `embed.go` (embed frontend dist) / `noembed.go` (serve from disk) build-tag variants.
 
-Adding a new API resource: add structs to `models.go`, add mock data to `mock/data.go` if needed, create a handler file, and register routes in `main.go`.
+Adding a new API resource: add structs to `models.go`, create a handler file in `internal/handlers/`, and register routes in `main.go`. There is no mock data layer — all handlers query Timeplus Enterprise directly.
 
 ### API Endpoints
 
@@ -90,6 +91,11 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 
 | Method | Path | Handler | Notes |
 |--------|------|---------|-------|
+| GET | `/api/auth/status` | `AuthStatus` | Returns session state |
+| POST | `/api/auth/login` | `Login` | |
+| POST | `/api/auth/logout` | `Logout` | |
+| POST | `/api/setup/test-connection` | `TestConnection` | Validates Timeplus reachability |
+| POST | `/api/setup/provision` | `Provision` | Runs `timeplus.Init()`; completes setup wizard |
 | GET | `/api/dashboard` | `GetDashboard` | Summary stats |
 | GET | `/api/agents` | `ListAgents` | Paginatable |
 | GET | `/api/agents/:id` | `GetAgent` | |
@@ -103,10 +109,12 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | GET | `/api/threats/:id` | `GetThreat` | |
 | POST | `/api/threats/:id/acknowledge` | `AcknowledgeThreat` | Upserts status to agentguard_threats |
 | POST | `/api/threats/:id/clear` | `ClearThreat` | Upserts status to agentguard_threats |
-| GET | `/api/cost` | `GetCost` | Computed from agentguard_hook_events + agentguard_pricing |
+| GET | `/api/cost` | `GetCost` | Computed from agentguard_hook_events + agentguard_pricing. Month-to-date windows are UTC calendar months; prior-period delta compares the same elapsed window in the previous month, clipped to the start of the current month when that month was shorter. Budget-derived fields populate only when at least one budget is configured via `/api/cost/budget`. |
 | GET | `/api/cost/pricing` | `ListPricing` | Reads from agentguard_pricing stream |
 | POST | `/api/cost/pricing` | `UpsertPricing` | Inserts into agentguard_pricing |
 | DELETE | `/api/cost/pricing/:provider/:model` | `DeletePricing` | Deletes from agentguard_pricing |
+| GET | `/api/cost/budget` | `GetCostBudgets` | Current per-deployment monthly budgets via arg_max over agentguard_cost_budgets |
+| POST | `/api/cost/budget` | `UpsertCostBudget` | Appends a row to agentguard_cost_budgets; `updated_by` is the session user. Send `deleted: true` to retire a budget. |
 | GET | `/api/rules` | `ListRules` | Reads from `agentguard_rules` stream |
 | GET | `/api/rules/catalog` | `ListCatalog` | Builtin catalog with installed status |
 | POST | `/api/rules/catalog/import` | `ImportCatalog` | Import rules from JSON |
@@ -118,11 +126,20 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | POST | `/api/rules/:id/install` | `InstallRule` | Install from builtin catalog |
 | POST | `/api/rules/:id/toggle` | `ToggleRule` | Flips `enabled`; pauses/resumes MV |
 | POST | `/api/rules/:id/upgrade` | `UpgradeRule` | Upgrades version; rebuilds MV |
+| POST | `/api/rules/:id/policy` | `SetRuleBlockPolicy` | Sets `log_only`/`auto_block`/`hold` without toggling enabled |
 | DELETE | `/api/rules/:id` | `UninstallRule` | Soft-delete + drops MV |
-| POST | `/api/alerts/webhook` | `AlertWebhook` | Receives rule-triggered alerts |
+| POST | `/api/holds` | `CreateHold` | Synchronous hold-and-wait; called by agent plugins (unauthenticated) |
+| GET | `/api/holds` | `ListHolds` | |
+| GET | `/api/holds/:hold_id` | `GetHold` | |
+| POST | `/api/holds/:hold_id/decide` | `DecideHold` | Human Approve/Deny |
+| POST | `/api/holds/_drain` | `DrainHolds` | Operator: abandon all pending holds |
+| POST | `/api/holds/_abandon-session/:session_id` | `AbandonSession` | Plugin fire-and-forget on SessionEnd (unauthenticated) |
+| GET | `/api/activity` | `ListActivity` | Recent tool calls across all sessions |
+| POST | `/api/alerts/webhook` | `AlertWebhook` | Receives rule-triggered alerts (unauthenticated) |
 | GET | `/api/notifications/stream` | `NotificationsSSEHandler` | SSE stream of live alerts |
 | GET | `/api/investigate/tables` | `ListTables` | Discovers streams from system.tables |
 | POST | `/api/onboarding/generate` | `GenerateConfig` | |
+| GET | `/api/onboarding/install-script` | `ServeInstallScript` | Returns agent install script |
 | POST | `/api/proton/query` | `ProtonQueryHandler` | Streaming proxy to Timeplus (NDJSON) |
 
 ### Frontend (`frontend/src/`)
@@ -198,6 +215,7 @@ AgentGuard uses a **Common Information Model (CIM)** to normalize heterogeneous 
 | `agentguard_cim_metrics` | Pre-computed scalar metrics per call (tokens, cost, latency) |
 | `agentguard_rules` | Rule mutation log; current state via `arg_max(…updated_at) GROUP BY` |
 | `agentguard_security_events` | Rule-triggered detections written by MVs |
+| `agentguard_cost_budgets` | Per-deployment monthly budget mutation log; current state via `arg_max(…updated_at) GROUP BY deployment_id HAVING NOT deleted` |
 
 Materialized views normalize raw streams into `agentguard_cim_event` and `agentguard_cim_metrics`. Backend metric handlers (`GetLLMMetrics`, `GetToolMetrics`) query `agentguard_cim_metrics` directly.
 
@@ -205,7 +223,7 @@ Materialized views normalize raw streams into `agentguard_cim_event` and `agentg
 
 Each enabled rule has a corresponding materialized view named `mv_rule_<id>` (e.g. `mv_rule_rp_001`). The MV queries `hook_events` and writes matches to `agentguard_security_events`. Toggle/install/uninstall operations create, pause, resume, or drop these MVs atomically alongside the rule state mutation.
 
-On startup, `timeplus.Init()` creates missing streams and syncs MV state. This is non-fatal — the server starts even if Proton is unavailable.
+`timeplus.Init()` is called by the setup wizard (`POST /api/setup/provision`) to create missing streams and sync MV state. The server starts independently of Timeplus availability — if Timeplus Enterprise is unreachable, provisioning will fail but the binary itself starts cleanly.
 
 ### Timeline handlers
 

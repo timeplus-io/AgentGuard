@@ -2,12 +2,37 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFileSync, unlinkSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { readTranscript } from "./transcript.js";
+import { readTranscript, readTranscriptUsage } from "./transcript.js";
 
 function makeTmpPath(): string {
   const dir = join(tmpdir(), "agentguard-test");
   mkdirSync(dir, { recursive: true });
   return join(dir, `transcript-${Date.now()}.jsonl`);
+}
+
+function usageEntry(opts: {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheCreation?: number;
+  cacheRead?: number;
+  durationMs?: number;
+  model?: string;
+}) {
+  return JSON.stringify({
+    type: "assistant",
+    timestamp: "2026-01-01T00:00:00.000Z",
+    durationMs: opts.durationMs ?? 0,
+    message: {
+      role: "assistant",
+      model: opts.model ?? "",
+      usage: {
+        input_tokens: opts.inputTokens ?? 0,
+        output_tokens: opts.outputTokens ?? 0,
+        cache_creation_input_tokens: opts.cacheCreation ?? 0,
+        cache_read_input_tokens: opts.cacheRead ?? 0,
+      },
+    },
+  });
 }
 
 function entry(role: "user" | "assistant", contentText: string, timestamp = "2026-01-01T00:00:00.000Z") {
@@ -181,5 +206,116 @@ describe("readTranscript", () => {
     const innerContent = block["content"] as Array<{ type: string; text: string }>;
     expect(innerContent[0].text.length).toBeLessThan(20000);
     expect(innerContent[0].text).toContain("[truncated");
+  });
+});
+
+describe("readTranscriptUsage", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath();
+  });
+
+  afterEach(() => {
+    try { unlinkSync(tmpPath); } catch { /* ignore */ }
+  });
+
+  it("returns zero-value struct for a missing file", () => {
+    const result = readTranscriptUsage("/nonexistent/path/transcript.jsonl");
+    expect(result.input_tokens).toBe(0);
+    expect(result.output_tokens).toBe(0);
+    expect(result.total_tokens).toBe(0);
+    expect(result.duration_ms).toBe(0);
+    expect(result.model).toBe("");
+    expect(result.llm_calls).toBe(0);
+  });
+
+  it("returns zero-value struct for an empty file", () => {
+    writeFileSync(tmpPath, "");
+    const result = readTranscriptUsage(tmpPath);
+    expect(result.llm_calls).toBe(0);
+    expect(result.total_tokens).toBe(0);
+  });
+
+  it("accumulates token counts from a single assistant message", () => {
+    writeFileSync(tmpPath, usageEntry({ inputTokens: 100, outputTokens: 50, durationMs: 500, model: "claude-opus-4-5" }));
+    const result = readTranscriptUsage(tmpPath);
+    expect(result.input_tokens).toBe(100);
+    expect(result.output_tokens).toBe(50);
+    expect(result.total_tokens).toBe(150);
+    expect(result.duration_ms).toBe(500);
+    expect(result.model).toBe("claude-opus-4-5");
+    expect(result.llm_calls).toBe(1);
+  });
+
+  it("accumulates token counts across multiple assistant messages", () => {
+    const lines = [
+      usageEntry({ inputTokens: 100, outputTokens: 50, durationMs: 300 }),
+      usageEntry({ inputTokens: 200, outputTokens: 80, durationMs: 200 }),
+    ].join("\n");
+    writeFileSync(tmpPath, lines);
+    const result = readTranscriptUsage(tmpPath);
+    expect(result.input_tokens).toBe(300);
+    expect(result.output_tokens).toBe(130);
+    expect(result.total_tokens).toBe(430);
+    expect(result.duration_ms).toBe(500);
+    expect(result.llm_calls).toBe(2);
+  });
+
+  it("uses the model from the first assistant message that has one", () => {
+    const lines = [
+      usageEntry({ model: "" }),
+      usageEntry({ model: "claude-sonnet-4-6" }),
+      usageEntry({ model: "claude-opus-4-7" }),
+    ].join("\n");
+    writeFileSync(tmpPath, lines);
+    const result = readTranscriptUsage(tmpPath);
+    expect(result.model).toBe("claude-sonnet-4-6");
+  });
+
+  it("ignores user and system messages", () => {
+    const lines = [
+      JSON.stringify({ type: "user", timestamp: "2026-01-01T00:00:00.000Z", durationMs: 999,
+        message: { role: "user", usage: { input_tokens: 999, output_tokens: 999 } } }),
+      usageEntry({ inputTokens: 10, outputTokens: 5 }),
+    ].join("\n");
+    writeFileSync(tmpPath, lines);
+    const result = readTranscriptUsage(tmpPath);
+    expect(result.input_tokens).toBe(10);
+    expect(result.output_tokens).toBe(5);
+    expect(result.llm_calls).toBe(1);
+  });
+
+  it("accumulates cache token fields", () => {
+    writeFileSync(tmpPath, usageEntry({ inputTokens: 50, cacheCreation: 30, cacheRead: 20 }));
+    const result = readTranscriptUsage(tmpPath);
+    expect(result.cache_creation_input_tokens).toBe(30);
+    expect(result.cache_read_input_tokens).toBe(20);
+  });
+
+  it("skips malformed JSON lines without throwing", () => {
+    const lines = [
+      usageEntry({ inputTokens: 10, outputTokens: 5 }),
+      "this is not json {{{",
+      usageEntry({ inputTokens: 20, outputTokens: 10 }),
+    ].join("\n");
+    writeFileSync(tmpPath, lines);
+    const result = readTranscriptUsage(tmpPath);
+    expect(result.llm_calls).toBe(2);
+    expect(result.total_tokens).toBe(45);
+  });
+
+  it("handles assistant messages without a usage field gracefully", () => {
+    const noUsageEntry = JSON.stringify({
+      type: "assistant",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      durationMs: 100,
+      message: { role: "assistant", model: "claude-haiku-4-5" },
+    });
+    writeFileSync(tmpPath, noUsageEntry);
+    const result = readTranscriptUsage(tmpPath);
+    expect(result.llm_calls).toBe(1);
+    expect(result.input_tokens).toBe(0);
+    expect(result.model).toBe("claude-haiku-4-5");
   });
 });

@@ -24,21 +24,30 @@ func GetCost(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := auth.RequestCfg(c, cfg)
 		now := time.Now().UTC()
-		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).
-			Format("2006-01-02 15:04:05")
+		curMTD := currentMonthToDate(now)
+		priMTD := priorMonthSameElapsed(now)
 
-		// All-time per-agent costs (for cost cards and AvgTokenCost KPI).
-		allCosts, err := queryCostByAgent(&cfg.Timeplus, "")
+		// All-time per-agent costs (powers the per-agent breakdown cards).
+		allCosts, err := queryCostByAgent(&cfg.Timeplus, "", "")
 		if err != nil {
 			log.Printf("[cost] GetCost all-time cost query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
 
-		// Month-to-date per-agent costs (for MonthToDate + Forecasted KPIs).
-		mtdCosts, err := queryCostByAgent(&cfg.Timeplus, monthStart)
+		// Current month-to-date (powers MTD spend, forecast, and avg-token KPIs).
+		mtdCosts, err := queryCostByAgent(&cfg.Timeplus, formatPeriodBound(curMTD.Start), "")
 		if err != nil {
-			log.Printf("[cost] GetCost month-to-date cost query failed: %v", err)
+			log.Printf("[cost] GetCost current MTD query failed: %v", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
+			return
+		}
+
+		// Prior month, same elapsed window (powers the deltas).
+		priMTDCosts, err := queryCostByAgent(&cfg.Timeplus,
+			formatPeriodBound(priMTD.Start), formatPeriodBound(priMTD.End))
+		if err != nil {
+			log.Printf("[cost] GetCost prior MTD query failed: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "data store unavailable"})
 			return
 		}
@@ -59,10 +68,13 @@ func GetCost(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// Derive KPIs from query results.
-		var mtd float64
+		// Current MTD aggregates.
+		var mtd, mtdCost float64
+		var mtdTokens int64
 		for _, a := range mtdCosts {
 			mtd += a.Cost
+			mtdCost += a.Cost
+			mtdTokens += a.InputTokens + a.OutputTokens + a.CacheTokens
 		}
 
 		elapsedDays := float64(now.Day())
@@ -71,36 +83,66 @@ func GetCost(cfg *config.Config) gin.HandlerFunc {
 		}
 		forecasted := mtd / elapsedDays * 30
 
-		var totalCost float64
-		var totalTokens int64
-		for _, a := range allCosts {
-			totalCost += a.Cost
-			totalTokens += a.InputTokens + a.OutputTokens + a.CacheTokens
-		}
+		// Avg cost per million tokens — current MTD only.
+		// Was previously computed against all-time data; switched to MTD so the
+		// prior-period delta below compares like-for-like windows. The KPI label
+		// on /cost no longer shifts meaning across the month boundary.
 		avgTokenCost := 0.0
-		if totalTokens > 0 {
-			avgTokenCost = totalCost / float64(totalTokens) * 1_000_000
+		if mtdTokens > 0 {
+			avgTokenCost = mtdCost / float64(mtdTokens) * 1_000_000
 		}
+
+		// Prior MTD aggregates.
+		var mtdPrev, priCost float64
+		var priTokens int64
+		for _, a := range priMTDCosts {
+			mtdPrev += a.Cost
+			priCost += a.Cost
+			priTokens += a.InputTokens + a.OutputTokens + a.CacheTokens
+		}
+		avgTokenCostPrev := 0.0
+		if priTokens > 0 {
+			avgTokenCostPrev = priCost / float64(priTokens) * 1_000_000
+		}
+
+		// Delta percents are nil when the prior denominator is zero — per #123,
+		// the frontend treats nil as "no delta to display" and renders the KPI
+		// tile without a delta row.
+		mtdDeltaPct := deltaPctOrNil(mtd, mtdPrev)
+		avgTokenCostDeltaPct := deltaPctOrNil(avgTokenCost, avgTokenCostPrev)
 
 		// Cache savings estimate: cache-read tokens cost ~10% of input price on average.
 		// Savings = what would have been paid at input price minus what was actually paid.
 		cacheSavings := 0.0
 		for _, b := range breakdown {
 			if b.Label == "Cache Tokens" {
-				// b.Amount is what was paid. The "full" input price would be ~10x higher.
 				cacheSavings = b.Amount * 9
 			}
 		}
 
+		// Forecast-vs-budget: only populated when at least one budget is configured.
+		budgetAmount, forecastBudgetDeltaPct, budgetStatus, err := queryForecastVsBudget(&cfg.Timeplus, forecasted)
+		if err != nil {
+			log.Printf("[cost] GetCost budget query failed: %v", err)
+			// Non-fatal: budgets are optional. Fall through with nil delta fields.
+		}
+
 		c.JSON(http.StatusOK, models.CostResponse{
-			MonthToDate:     mtd,
-			Forecasted:      forecasted,
-			AvgTokenCost:    avgTokenCost,
-			DailySpend:      daily,
-			TokenBreakdown:  breakdown,
-			CacheSavings:    cacheSavings,
-			WastedSpend:     0,
-			AgentModelCosts: allCosts,
+			MonthToDate:            mtd,
+			MonthToDatePrev:        mtdPrev,
+			MonthToDateDeltaPct:    mtdDeltaPct,
+			Forecasted:             forecasted,
+			ForecastBudgetDeltaPct: forecastBudgetDeltaPct,
+			BudgetAmount:           budgetAmount,
+			BudgetStatus:           budgetStatus,
+			AvgTokenCost:           avgTokenCost,
+			AvgTokenCostPrev:       avgTokenCostPrev,
+			AvgTokenCostDeltaPct:   avgTokenCostDeltaPct,
+			DailySpend:             daily,
+			TokenBreakdown:         breakdown,
+			CacheSavings:           cacheSavings,
+			WastedSpend:            0,
+			AgentModelCosts:        allCosts,
 		})
 	}
 }
@@ -198,14 +240,75 @@ func DeletePricing(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
+// ── Period helpers ────────────────────────────────────────────────────────────
+
+// costPeriod is a half-open UTC window: [Start, End).
+type costPeriod struct {
+	Start time.Time
+	End   time.Time
+}
+
+// formatPeriodBound converts a UTC time.Time to the Proton-friendly string used
+// by queryCostByAgent. A zero time renders as empty, which the query helpers
+// treat as "unbounded on that side".
+func formatPeriodBound(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format("2006-01-02 15:04:05")
+}
+
+// currentMonthToDate returns [monthStart, now) in UTC for the calendar month
+// containing now.
+func currentMonthToDate(now time.Time) costPeriod {
+	now = now.UTC()
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	return costPeriod{Start: start, End: now}
+}
+
+// priorMonthSameElapsed returns the previous month's window of the same elapsed
+// duration as the current month-to-date in UTC. If the previous month is
+// shorter than the elapsed duration (e.g. March 31 → February has 28 days),
+// End is clipped to the start of the current month so the comparison covers
+// the full previous month rather than overflowing into the current one.
+// Go normalizes month-1 across year boundaries: January (1) - 1 → December
+// of the previous year.
+func priorMonthSameElapsed(now time.Time) costPeriod {
+	now = now.UTC()
+	curStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	elapsed := now.Sub(curStart)
+
+	prevStart := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, time.UTC)
+	prevEnd := prevStart.Add(elapsed)
+	if prevEnd.After(curStart) {
+		prevEnd = curStart
+	}
+	return costPeriod{Start: prevStart, End: prevEnd}
+}
+
+// deltaPctOrNil computes (current - prev) / prev * 100. Returns nil when prev
+// is zero or negative — that's the signal to the frontend that the comparison
+// has no meaningful denominator and the delta row should not render.
+func deltaPctOrNil(current, prev float64) *float64 {
+	if prev <= 0 {
+		return nil
+	}
+	pct := (current - prev) / prev * 100.0
+	return &pct
+}
+
 // ── Query helpers ─────────────────────────────────────────────────────────────
 
-// queryCostByAgent returns cost aggregated by (agent_id, deployment_id, provider, model).
-// Pass since as "2006-01-02 15:04:05" UTC to filter by event_time; empty string = all time.
-func queryCostByAgent(cfg *config.TimeplusConfig, since string) ([]models.AgentModelCost, error) {
-	sinceClause := ""
+// queryCostByAgent returns cost aggregated by (agent_id, deployment_id, provider, model)
+// over the half-open UTC window [since, until). Either bound may be empty, meaning
+// "unbounded on that side". Bound strings must be Proton-formatted "2006-01-02 15:04:05".
+func queryCostByAgent(cfg *config.TimeplusConfig, since, until string) ([]models.AgentModelCost, error) {
+	bounds := ""
 	if since != "" {
-		sinceClause = fmt.Sprintf("\n  AND m.event_time >= '%s'", since)
+		bounds += fmt.Sprintf("\n  AND m.event_time >= '%s'", since)
+	}
+	if until != "" {
+		bounds += fmt.Sprintf("\n  AND m.event_time <  '%s'", until)
 	}
 
 	q := fmt.Sprintf(`
@@ -228,7 +331,7 @@ LEFT JOIN table(agentguard_pricing) AS p
   ON m.tags['provider'] = p.provider AND m.tags['model'] = p.model
 WHERE m.metric_name IN ('llm.call', 'llm.input_tokens', 'llm.output_tokens', 'llm.cache_read_tokens')%s
 GROUP BY m.agent_id, m.deployment_id, provider, model
-ORDER BY total_cost DESC`, sinceClause)
+ORDER BY total_cost DESC`, bounds)
 
 	rows, err := tp.Query(cfg, q)
 	if err != nil {

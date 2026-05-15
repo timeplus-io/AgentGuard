@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import { api } from '../api/client'
+import { formatLocalTime } from '../utils/time'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -35,13 +36,7 @@ function fmtTime(iso) {
   return `${yyyy}-${mo}-${dd} ${hh}:${mm}:${ss} UTC`
 }
 
-function fmtShortTime(iso) {
-  if (!iso) return ''
-  try {
-    return new Date(typeof iso === 'string' ? iso.replace(' ', 'T') : iso)
-      .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch { return '' }
-}
+const fmtShortTime = formatLocalTime
 
 function dotColor(event) {
   if (event.hook_decision === 'block') return '#ffb4ab'
@@ -817,13 +812,7 @@ function MemoryTab({ sessionId }) {
     return () => ctrl.abort()
   }, [sessionId])
 
-  function fmtTime(ts) {
-    if (!ts) return '—'
-    try {
-      return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
-        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    } catch { return String(ts) }
-  }
+  const fmtTime = (ts) => ts ? (formatLocalTime(ts) || String(ts)) : '—'
 
   function displayLabel(op) {
     const server = op.server_name
@@ -932,13 +921,7 @@ function AgentMemoryPanel({ agentId }) {
     ]).catch(err => setError(err.message || 'Failed to load memory data')).finally(() => setLoading(false))
   }, [agentId])
 
-  function fmtTime(ts) {
-    if (!ts) return '—'
-    try {
-      return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
-        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    } catch { return String(ts) }
-  }
+  const fmtTime = (ts) => ts ? (formatLocalTime(ts) || String(ts)) : '—'
 
   function displayLabel(op) {
     if (op.server_name) return op.server_name
@@ -1842,9 +1825,12 @@ export default function AgentDetail() {
                   }
                   for (const rid of Object.keys(byRun)) {
                     byRun[rid].sort((a, b) => {
-                      const ta = new Date(typeof a.event_time === 'string' ? a.event_time.replace(' ', 'T') : a.event_time)
-                      const tb = new Date(typeof b.event_time === 'string' ? b.event_time.replace(' ', 'T') : b.event_time)
-                      return ta - tb
+                      const toMs = (v) => {
+                        let s = typeof v === 'string' ? v.replace(' ', 'T') : v
+                        if (typeof s === 'string' && !s.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(s)) s = s + 'Z'
+                        return new Date(s)
+                      }
+                      return toMs(a.event_time) - toMs(b.event_time)
                     })
                   }
                   return (

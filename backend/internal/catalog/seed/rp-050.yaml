@@ -1,14 +1,13 @@
 id: rp-050
 name: "Semantic Rollback Attack — Agent Checkpoint Duplicate Action Detector"
-version: "0.1.0"
+version: "0.2.0"
 description: |
-  Detects Semantic Rollback Attacks (arXiv:2603.20625, ACRFence, CoDAIM 2026) where LLM agent checkpoint-restore mechanisms enable attackers to trigger duplicate consequential tool invocations (Action Replay) or re-use consumed single-use authorization tokens (Authority Resurrection). Because LLM agents re-synthesize subtly different tool parameters after restore (e.g., different UUIDs due to GPU floating-point nondeterminism), servers accept re-generated requests as new transactions. In 100% of experimental trials (10/10) the attack produced duplicate commits. Covers all major affected frameworks: LangGraph, CrewAI, Claude Code, Google ADK, OpenAI Agents SDK, AutoGen, n8n, and Vercel AI. Action Replay: malicious payee controls one service in the agent's tool chain, triggers a crash after payment succeeds, causing auto-restore and duplicate payment. Authority Resurrection: insider with rewind access restores agent to post-approval state and redirects to a different target using the same single-use token. AP2 mandate replay and context-redirect attacks (arXiv:2602.06345, eBay Research Feb 2026) are also covered: mandate re-submission without consume-once enforcement, and context-redirect where a valid mandate is redirected to unauthorized context.
+  Detects Semantic Rollback Attacks — LLM agent checkpoint-restore mechanisms let attackers trigger duplicate consequential tool invocations (Action Replay) or re-use consumed single-use authorization tokens (Authority Resurrection). Three branches: (A) 2+ consequential-tool invocations per run_id in a 5-min hop window; (B) crash-trigger from callback/receipt service; (C) authorization-class tool invoked with a single-use token. Distinct from rp-006 (tool loop DoS) and rp-015 (A2A session smuggling) — different event_types.
 
-  Distinct from rp-006 (tool loop DoS — user-directed loop language) and rp-015 (A2A session smuggling — cross-agent identity abuse), which share no event_type overlap with the checkpoint-restore duplicate execution pattern.
-
-  References: arXiv:2603.20625 (ACRFence Mar 2026), arXiv:2602.06345 (AP2 Zero-Trust Feb 2026), OWASP Agentic AI ASI03:2026 -
-  - https://arxiv.org/abs/2603.20625,
-  - https://arxiv.org/abs/2602.06345
+  References:
+  - arXiv:2603.20625 (ACRFence): https://arxiv.org/abs/2603.20625
+  - arXiv:2602.06345 (AP2 Zero-Trust mandate replay): https://arxiv.org/abs/2602.06345
+  - OWASP Agentic AI ASI03:2026
 
 severity: critical
 category: agent_privilege_escalation
@@ -32,16 +31,45 @@ tags:
   - crewai
   - owasp-agentic-ai
 query_sql: |
-  -- v0.1.0 — three detection branches:
-  --   Branch A: Action Replay — consequential tool called 2+ times in same run_id
-  --     Uses window COUNT over tool_invoke events within the same run_id + session_id.
-  --     Scoped to financial/destructive tool names to minimize false positives.
-  --   Branch B: Crash-trigger from malicious callback service
-  --     Crash-inducing error in tool_complete from receipt/callback tool.
-  --     Signals the setup phase of Action Replay attack.
-  --   Branch C: Authority Resurrection — single-use auth token re-submitted
-  --     Detects token field in tool_input for authorization-class tools.
-  --     Human review required; stateful server validation may still block it.
+  -- Branch A's arg_max carriers are aliased `sample_tool` / `sample_hook` (not
+  -- `tool_name` / `hook_name`) to avoid Proton ILLEGAL_AGGREGATION when the
+  -- same column name is referenced in the pre-aggregation WHERE filter.
+  -- Positional binding maps them to the target stream's columns.
+  --
+  -- A 1m-step / 5m-window hop puts each duplicate pair into up to 5 overlapping
+  -- windows. event_data carries window_start so the resulting rows are
+  -- deterministically distinct and downstream consumers can dedupe by
+  -- (run_id, sample_tool) or by window_start as needed.
+
+  -- Branch A: Action Replay — 2+ consequential tool invocations in same run_id within 5-min hop window
+  SELECT
+    max(event_time) AS detected_at,
+    'rp-050' AS rule_id,
+    'Semantic Rollback Attack — Agent Checkpoint Duplicate Action Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    arg_max(raw_hook_name, event_time) AS sample_hook,
+    arg_max(tool_name, event_time) AS sample_tool,
+    concat(
+      'Semantic Rollback Attack — Action Replay: ',
+      to_string(count()),
+      ' consequential tool invocations within a single run_id in 5-min window (session ',
+      coalesce(session_id, 'unknown'), ', run ', coalesce(run_id, 'unknown'),
+      '). Possible checkpoint-restore duplicate execution. Agent: ', agent_id
+    ) AS message,
+    concat('run_id=', coalesce(run_id, ''), ' tool_count=', to_string(count()), ' window_start=', to_string(window_start)) AS event_data
+  FROM hop(agentguard_cim_event, event_time, interval 1 minute, interval 5 minute)
+  WHERE event_type = 'tool_invoke'
+    AND match(lower(tool_name), '(payment|transfer|pay_|wire_|send_money|purchase|charge_|provision|delete_record|execute_order|place_order|commit_transaction|fund_transfer|book_flight|book_hotel|debit_|credit_|create_vm|deprovision|delete_user|cancel_subscription)')
+  GROUP BY session_id, agent_id, deployment_id, run_id, window_start, window_end
+  HAVING count() > 1
+
+  UNION ALL
+
+  -- Branch B: Crash-trigger from malicious callback/receipt service (single-event)
   SELECT
     event_time AS detected_at,
     'rp-050' AS rule_id,
@@ -54,43 +82,40 @@ query_sql: |
     raw_hook_name AS hook_name,
     tool_name,
     concat(
-      'Semantic Rollback Attack signal from agent ', agent_id,
-      ': tool [', coalesce(tool_name, 'unknown'), '] in session ', session_id,
-      '. Possible Action Replay or Authority Resurrection via checkpoint-restore.'
+      'Semantic Rollback Attack — Crash-trigger from callback/receipt service [',
+      coalesce(tool_name, 'unknown'),
+      ']. Possible Action Replay setup phase via weaponized crash. Agent: ', agent_id
     ) AS message,
     raw_event_data AS event_data
   FROM agentguard_cim_event
-  WHERE
-    -- Branch A: Action Replay — consequential tool called multiple times in same run
-    -- Window function counts occurrences of financial/destructive tools per run_id + session_id
-    (
-      event_type = 'tool_invoke'
-      AND match(lower(tool_name), '(payment|transfer|pay_|wire_|send_money|purchase|charge_|provision|delete_record|execute_order|place_order|commit_transaction|fund_transfer|book_flight|book_hotel|debit_|credit_|create_vm|deprovision|delete_user|cancel_subscription)')
-      AND (
-        SELECT count()
-        FROM agentguard_cim_event AS inner_e
-        WHERE inner_e.event_type = 'tool_invoke'
-          AND inner_e.run_id = agentguard_cim_event.run_id
-          AND inner_e.session_id = agentguard_cim_event.session_id
-          AND match(lower(inner_e.tool_name), '(payment|transfer|pay_|wire_|send_money|purchase|charge_|provision|delete_record|execute_order|place_order|commit_transaction|fund_transfer|book_flight|book_hotel|debit_|credit_|create_vm|deprovision|delete_user|cancel_subscription)')
-      ) > 1
-    )
-    OR
-    -- Branch B: Crash-trigger from malicious callback/receipt service (attack setup phase)
-    -- Crash response from a confirmation/receipt service signals that a service
-    -- may be weaponizing crash-restore to induce Action Replay duplication.
-    (
-      event_type = 'tool_complete'
-      AND tool_success = false
-      AND match(lower(tool_name), '(receipt|callback|confirm|acknowledge|verify_payment|payment_callback|receipt_service|invoice_confirm|payment_confirm|settlement_callback)')
-      AND match(lower(tool_result), '(null pointer|segmentation fault|internal server error|fatal error|typeerror|cannot read|undefined is not|connection reset|unhandled exception|panic:|stack overflow)')
-    )
-    OR
-    -- Branch C: Authority Resurrection — single-use authorization token in approval tool
-    -- Presence of a structured token/nonce field in an authorization-class tool invocation.
-    -- Fires as informational; stateful servers may still reject; human review recommended.
-    (
-      event_type = 'tool_invoke'
-      AND match(lower(tool_name), '(approv|authoriz|confirm_action|grant_access|sign_off|authorize_transaction|approve_deletion|approve_action|authorization_service|consent_confirm)')
-      AND match(tool_input, '"(token|approval_token|auth_token|otp|nonce|approval_code|one_time_token|single_use_token|use_token)"\s*:\s*"[A-Za-z0-9_\-]{6,128}"')
-    )
+  WHERE event_type = 'tool_complete'
+    AND tool_success = false
+    AND match(lower(tool_name), '(receipt|callback|confirm|acknowledge|verify_payment|payment_callback|receipt_service|invoice_confirm|payment_confirm|settlement_callback)')
+    AND match(lower(tool_result), '(null pointer|segmentation fault|internal server error|fatal error|typeerror|cannot read|undefined is not|connection reset|unhandled exception|panic:|stack overflow)')
+
+  UNION ALL
+
+  -- Branch C: Authority Resurrection — single-use authorization token in approval tool (single-event)
+  SELECT
+    event_time AS detected_at,
+    'rp-050' AS rule_id,
+    'Semantic Rollback Attack — Agent Checkpoint Duplicate Action Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name AS hook_name,
+    tool_name,
+    concat(
+      'Semantic Rollback Attack — Authority Resurrection: single-use authorization token observed in ',
+      'authorization-class tool [', coalesce(tool_name, 'unknown'),
+      ']. If token was previously consumed, this may be a checkpoint-restore replay. Agent: ', agent_id
+    ) AS message,
+    raw_event_data AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_invoke'
+    AND match(lower(tool_name), '(approv|authoriz|confirm_action|grant_access|sign_off|authorize_transaction|approve_deletion|approve_action|authorization_service|consent_confirm)')
+    AND match(tool_input, '"(token|approval_token|auth_token|otp|nonce|approval_code|one_time_token|single_use_token|use_token)"\s*:\s*"[A-Za-z0-9_\-]{6,128}"')
+
+  EMIT STREAM

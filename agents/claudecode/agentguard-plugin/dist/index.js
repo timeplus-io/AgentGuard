@@ -164,7 +164,7 @@ function normalize(input, config) {
   const model = hookEventName === "SessionStart" ? typeof input.model === "string" ? input.model : "" : hookEventName === "Stop" ? typeof llmUsage.model === "string" ? llmUsage.model : "" : "";
   return {
     hook_name: hookName,
-    event_time: (/* @__PURE__ */ new Date()).toISOString(),
+    event_time: Date.now(),
     session_id: typeof input.session_id === "string" ? input.session_id : "",
     run_id: typeof input.session_id === "string" ? input.session_id : "",
     agent_id: config.agentId,
@@ -183,7 +183,7 @@ function normalize(input, config) {
 function normalizeContextEvent(input, config, hookName, transcript) {
   return {
     hook_name: hookName,
-    event_time: (/* @__PURE__ */ new Date()).toISOString(),
+    event_time: Date.now(),
     session_id: typeof input.session_id === "string" ? input.session_id : "",
     run_id: typeof input.session_id === "string" ? input.session_id : "",
     agent_id: config.agentId,

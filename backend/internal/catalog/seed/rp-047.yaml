@@ -1,15 +1,13 @@
 id: rp-047
 name: "LLM Model Substitution & Quality Downgrade Detector"
-version: "0.1.1"
+version: "0.2.1"
 description: |
-  Detects silent LLM model substitution by malicious or cost-cutting intermediaries. Formalised as "quality downgrade" in Commercial Opaque LLM Services (COLS) by arXiv:2505.18471 (Invisible Tokens, U Maryland / UC Berkeley, May 2025): users are billed for premium model capabilities but receive cheaper/weaker model outputs. In the attack context (arXiv:2604.08407, Your Agent Is Mine, Apr 2026), model substitution is used as an AC-1.b conditional delivery evasion technique: a compromised router delivers compliant responses for "safe" queries while injecting payloads for sensitive ones, using model substitution to make injection detection harder. The LiteLLM PyPI supply chain attack (Mar 2026) demonstrated that compromised routers can rewrite model identifiers arbitrarily. Two detection branches: (1) Metrics-based: abrupt latency collapse within a session (> 90% drop in rolling llm.latency_ms) indicating shift from cloud LLM to a fast local/cheap model; (2) Content-based: model field in llm_response/llm_request contains patterns indicating a downgrade substitution (premium model → cheap variant within same model family observed in single session). Distinct from rp-028 (malicious router payload injection — AC-1 markers in content) and rp-045 (adversarial routing via user-message gadgets — client-side manipulation). This rule targets the server-side silent substitution observable only via model field anomalies and latency collapse signals in the CIM metrics stream.
+  Detects silent LLM model substitution (COLS "quality downgrade" — users billed for premium model but served a cheaper one). Two branches: (1) latency-collapse — same session has baseline (>2000ms) and collapse (<300ms) in a 5-min hop window with >5× ratio; (2) model-field substitution — premium model name appears with a known proxy/router provider.
 
-  References: arXiv:2505.18471 (Invisible Tokens / COLS May 2025) -
-  - https://arxiv.org/abs/2505.18471,
-  arXiv:2604.08407 (Your Agent Is Mine Apr 2026) -
-  - https://arxiv.org/abs/2604.08407,
-  Example: llm.latency_ms drops from rolling avg of 4800ms to 180ms within the same session (>96% drop), indicating silent substitution from claude-sonnet to a cheap local model by a compromised router. OWASP LLM05:2025 (Supply Chain) -
-  - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  References:
+  - arXiv:2505.18471 (Invisible Tokens / COLS): https://arxiv.org/abs/2505.18471
+  - arXiv:2604.08407 (Your Agent Is Mine): https://arxiv.org/abs/2604.08407
+  - OWASP LLM05:2025 (Supply Chain)
 
 severity: warning
 category: supply_chain_compromise
@@ -29,76 +27,42 @@ tags:
   - arxiv-2505.18471
   - arxiv-2604.08407
 query_sql: |
-  -- v0.1.0: LLM model substitution and quality downgrade detection.
-  -- Branch 1 (metrics): Abrupt latency collapse within session — 90%+ drop in rolling
-  --   llm.latency_ms average. Cloud LLMs (claude-3.5+, gpt-4+) typically 2000-8000ms;
-  --   fast local/cheap model substitutes return < 300ms. A session average dropping from
-  --   > 2000ms to < 300ms (> 85% reduction) in consecutive calls is a substitution signal.
-  --   fp_rate: medium — legitimate model fallback will also trigger this; requires operator
-  --   to verify whether fallback is explicitly configured.
-  -- Branch 2 (content): Model field in llm_request or llm_response contains known
-  --   downgrade-class substitution patterns within the premium→cheap model family:
-  --   opus→haiku, gpt-5/4-turbo→gpt-4o-mini, gemini-ultra→gemini-flash, etc.
-  --   Uses LIKE for model family prefix matching (technical literals, low FP risk).
-
-  -- Branch 1: Metrics-based latency collapse detection
-  WITH latency_stats AS (
-    SELECT
-      event_time,
-      metric_value,
-      agent_id,
-      deployment_id,
-      session_id,
-      tags,
-      -- Rolling avg latency over last 5 calls (prior to current)
-      avg(metric_value) OVER (
-        PARTITION BY session_id
-        ORDER BY event_time
-        ROWS BETWEEN 5 PRECEDING AND 1 PRECEDING
-      ) AS rolling_avg_latency,
-      -- Minimum rolling average (detect stabilized baseline)
-      min(metric_value) OVER (
-        PARTITION BY session_id
-        ORDER BY event_time
-        ROWS BETWEEN 10 PRECEDING AND 2 PRECEDING
-      ) AS session_min_latency
-    FROM agentguard_cim_metrics
-    WHERE metric_name = 'llm.latency_ms'
-  )
+  -- Branch 1: latency collapse in a 5-min hop window per session
   SELECT
-    event_time AS detected_at,
+    max(event_time) AS detected_at,
     'rp-047' AS rule_id,
     'LLM Model Substitution & Quality Downgrade Detector' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
     session_id,
-    tags['run_id'] AS run_id,
+    arg_max(tags['run_id'], event_time) AS run_id,
     '' AS hook_name,
-    tags['tool_name'] AS tool_name,
+    arg_max(tags['tool_name'], event_time) AS tool_name,
     concat(
-      'LLM latency collapse detected: current=', to_string(to_int64(metric_value)), 'ms',
-      ' vs session baseline avg=', to_string(to_int64(rolling_avg_latency)), 'ms',
-      ' (', to_string(to_int64((1 - metric_value / rolling_avg_latency) * 100)), '% drop).',
+      'LLM latency collapse in 5-min window: max_latency=',
+      to_string(to_int64(max(metric_value))), 'ms (baseline) min_latency=',
+      to_string(to_int64(min(metric_value))), 'ms (collapsed) ratio=',
+      to_string(to_int64(max(metric_value) / min(metric_value))), 'x.',
       ' Possible silent model substitution to cheap/local model. Agent: ', agent_id
     ) AS message,
-    to_string(metric_value) AS event_data
-  FROM latency_stats
+    concat(
+      'window_start=', to_string(window_start),
+      ' window_end=', to_string(window_end),
+      ' max_latency_ms=', to_string(to_int64(max(metric_value))),
+      ' min_latency_ms=', to_string(to_int64(min(metric_value)))
+    ) AS event_data
+  FROM hop(agentguard_cim_metrics, event_time, interval 1 minute, interval 5 minute)
   WHERE metric_name = 'llm.latency_ms'
-    AND (
-      -- Require established baseline: rolling avg > 2000ms (cloud LLM territory)
-      rolling_avg_latency > 2000
-      -- Current call collapses to < 300ms (local/cheap model territory)
-      AND metric_value < 300
-      -- Sanity: baseline must be > 5x current (> 80% drop) to avoid transient outliers
-      AND rolling_avg_latency > metric_value * 5
-    )
+  GROUP BY session_id, agent_id, deployment_id, window_start, window_end
+  HAVING max(metric_value) > 2000
+     AND min(metric_value) > 0
+     AND min(metric_value) < 300
+     AND max(metric_value) > min(metric_value) * 5
 
   UNION ALL
 
-  -- Branch 2: Model field substitution pattern in llm_request / llm_response
-  -- Detects known premium→cheap model family downgrade patterns
-  -- Uses LIKE for model family technical prefix matching (unique literals, low FP)
+  -- Branch 2: model field substitution pattern in llm_request / llm_response (single-event)
   SELECT
     event_time AS detected_at,
     'rp-047' AS rule_id,
@@ -121,27 +85,22 @@ query_sql: |
   FROM agentguard_cim_event
   WHERE event_type IN ('llm_request', 'llm_response')
     AND (
-      -- Known cheap/downgrade model indicators in the model field
-      -- These fire as warnings when routed through any proxy/gateway provider.
-      -- Context: only meaningful if routed through an intermediary (provider != direct provider).
-      -- Claude family: opus/sonnet → haiku downgrade
       (
         (lower(model) LIKE '%haiku%' OR lower(model) LIKE '%claude-haiku%')
-        AND match(lower(provider), '\b(proxy|gateway|router|litellm|openrouter|portkey|helicone|oneapi|routerly|martian|notdiamond|unify)\b')
+        AND match(lower(provider), '\\b(proxy|gateway|router|litellm|openrouter|portkey|helicone|oneapi|routerly|martian|notdiamond|unify)\\b')
       )
-      -- OpenAI family: gpt-4o-mini as downgrade from gpt-4/gpt-5 in proxy context
       OR (
         (lower(model) LIKE '%gpt-4o-mini%' OR lower(model) LIKE '%gpt-3.5%' OR lower(model) LIKE '%gpt-35%')
-        AND match(lower(provider), '\b(proxy|gateway|router|litellm|openrouter|portkey|helicone|oneapi|routerly|martian|notdiamond|unify)\b')
+        AND match(lower(provider), '\\b(proxy|gateway|router|litellm|openrouter|portkey|helicone|oneapi|routerly|martian|notdiamond|unify)\\b')
       )
-      -- Gemini family: flash as downgrade from pro/ultra in proxy context
       OR (
         (lower(model) LIKE '%gemini-flash%' OR lower(model) LIKE '%gemini-nano%')
-        AND match(lower(provider), '\b(proxy|gateway|router|litellm|openrouter|portkey|helicone|oneapi|routerly|martian|notdiamond|unify)\b')
+        AND match(lower(provider), '\\b(proxy|gateway|router|litellm|openrouter|portkey|helicone|oneapi|routerly|martian|notdiamond|unify)\\b')
       )
-      -- Explicit unknown/generic model identifier in proxy context (substitution obfuscation)
       OR (
         match(lower(model), '^(unknown|default|auto|proxy-model|router-model|fallback|cheapest|economy|basic)$')
-        AND match(lower(provider), '\b(proxy|gateway|router|litellm|openrouter|portkey|helicone)\b')
+        AND match(lower(provider), '\\b(proxy|gateway|router|litellm|openrouter|portkey|helicone)\\b')
       )
     )
+
+  EMIT STREAM

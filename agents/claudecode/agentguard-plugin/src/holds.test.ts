@@ -18,7 +18,7 @@ const BASE_CONFIG: AgentGuardConfig = {
 
 const BASE_EVENT: HookEvent = {
   hook_name: "before_tool_call",
-  event_time: "2026-04-22T12:00:00.000Z",
+  event_time: 1745323200000,
   session_id: "s1",
   run_id: "r1",
   agent_id: "a",
