@@ -76,25 +76,25 @@ export default function Setup() {
   }
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-[#e7dff0] flex flex-col">
+    <div className="min-h-screen bg-[#15121d] text-gray-100 flex flex-col">
       <nav className="bg-[#15121d] shadow-[0_0_12px_rgba(213,63,140,0.12)] sticky top-0 z-50 h-16 w-full flex items-center px-6 backdrop-blur-md">
         <span className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] tracking-tight">AgentGuard</span>
-        <span className="ml-3 text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">First-time Setup</span>
+        <span className="ml-3 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">First-time Setup</span>
       </nav>
 
       <main className="flex-1 flex items-start justify-center p-6 md:p-12">
         <div className="w-full max-w-2xl space-y-8">
           <div>
             <h1 className="text-2xl font-bold text-white tracking-tight">Setup AgentGuard</h1>
-            <p className="text-zinc-500 text-xs mt-1 leading-relaxed">Connect to Timeplus and provision all monitoring resources.</p>
+            <p className="text-gray-400 text-xs mt-1 leading-relaxed">Connect to Timeplus and provision all monitoring resources.</p>
           </div>
 
           {/* Step indicator */}
           <div className="flex items-center gap-0">
             {STEPS.map((s, i) => (
               <div key={i} className="flex items-center">
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-sm text-xs font-semibold ${i === step ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : i < step ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i < step ? 'bg-[#f256a3] text-[#570033]' : i === step ? 'bg-[#ffb0cf]/20 text-[#ffb0cf]' : 'bg-[#37333f] text-zinc-600'}`}>
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-sm text-xs font-semibold ${i === step ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : i < step ? 'text-gray-400' : 'text-gray-400'}`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i < step ? 'bg-[#f256a3] text-[#570033]' : i === step ? 'bg-[#ffb0cf]/20 text-[#ffb0cf]' : 'bg-[#37333f] text-gray-400'}`}>
                     {i < step ? '✓' : i + 1}
                   </span>
                   {s.label}
@@ -112,7 +112,7 @@ export default function Setup() {
                 <>
                   <div>
                     <h2 className="text-base font-semibold text-white">Timeplus Connection</h2>
-                    <p className="text-zinc-400 text-xs mt-1">Enter the address of your Timeplus instance.</p>
+                    <p className="text-gray-400 text-xs mt-1">Enter the address of your Timeplus instance.</p>
                   </div>
                   <div className="space-y-3">
                     {[
@@ -122,13 +122,13 @@ export default function Setup() {
                       { label: 'AgentGuard URL', val: agentGuardURL, set: setAgentGuardURL, ph: 'http://localhost:8080', type: 'text' },
                     ].map(({ label, val, set, ph, type }) => (
                       <div key={label} className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">{label}</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>
                         <input
                           type={type}
                           value={val}
                           onChange={e => { set(e.target.value); setTestResult(null) }}
                           placeholder={ph}
-                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
                         />
                       </div>
                     ))}
@@ -141,7 +141,7 @@ export default function Setup() {
                 <>
                   <div>
                     <h2 className="text-base font-semibold text-white">Timeplus Credentials</h2>
-                    <p className="text-zinc-400 text-xs mt-1">Enter your Timeplus username and password. These will not be stored.</p>
+                    <p className="text-gray-400 text-xs mt-1">Enter your Timeplus username and password. These will not be stored.</p>
                   </div>
                   <div className="space-y-3">
                     {[
@@ -149,13 +149,13 @@ export default function Setup() {
                       { label: 'Password', val: password, set: setPassword, ph: 'Leave blank if not set', type: 'password' },
                     ].map(({ label, val, set, ph, type }) => (
                       <div key={label} className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">{label}</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>
                         <input
                           type={type}
                           value={val}
                           onChange={e => { set(e.target.value); setTestResult(null) }}
                           placeholder={ph}
-                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
                         />
                       </div>
                     ))}
@@ -164,7 +164,7 @@ export default function Setup() {
                     <button
                       onClick={handleTestConnection}
                       disabled={testing || !username}
-                      className="px-4 py-2 text-xs font-semibold rounded-sm bg-[#37333f] text-zinc-300 hover:text-white hover:bg-[#4b4754] transition-colors disabled:opacity-50"
+                      className="px-4 py-2 text-xs font-semibold rounded-sm bg-[#37333f] text-gray-100 hover:text-white hover:bg-[#4b4754] transition-colors disabled:opacity-50"
                     >
                       {testing ? 'Testing…' : 'Test Connection'}
                     </button>
@@ -189,7 +189,7 @@ export default function Setup() {
                 <>
                   <div>
                     <h2 className="text-base font-semibold text-white">Provision Resources</h2>
-                    <p className="text-zinc-400 text-xs mt-1">Create all AgentGuard streams, materialized views, and rules in Timeplus.</p>
+                    <p className="text-gray-400 text-xs mt-1">Create all AgentGuard streams, materialized views, and rules in Timeplus.</p>
                   </div>
 
                   {!provisioning && log.length === 0 && !done && (
@@ -210,8 +210,8 @@ export default function Setup() {
                         <div key={i} className={
                           entry.status === 'error' ? 'text-[#ffb4ab]' :
                           entry.status === 'done'  ? 'text-emerald-400 font-semibold' :
-                          entry.status === 'running' ? 'text-zinc-400' :
-                          'text-zinc-300'
+                          entry.status === 'running' ? 'text-gray-400' :
+                          'text-gray-100'
                         }>
                           {entry.msg}
                         </div>
@@ -236,7 +236,7 @@ export default function Setup() {
               <button
                 onClick={() => setStep(s => Math.max(0, s - 1))}
                 disabled={step === 0 || provisioning || done}
-                className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-white transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined text-xs">arrow_back</span>
                 Back

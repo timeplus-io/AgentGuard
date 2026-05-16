@@ -84,8 +84,8 @@ function KVRow({ label, value }) {
   if (value == null || value === '') return null
   return (
     <div className="grid grid-cols-[130px_1fr] gap-2 py-1 border-b border-[#574149]/10 last:border-0">
-      <span className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</span>
-      <span className="text-xs font-mono text-[#e7dff0] break-all">{String(value)}</span>
+      <span className="text-[10px] text-gray-400 uppercase tracking-wider">{label}</span>
+      <span className="text-xs font-mono text-gray-100 break-all">{String(value)}</span>
     </div>
   )
 }
@@ -103,18 +103,18 @@ function SessionSummary({ sessionDetail }) {
       <div className="w-full max-w-lg bg-[#1d1a25] rounded-sm p-6 space-y-6">
         {/* Session ID */}
         <div>
-          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1.5">Session ID</p>
-          <code className="text-[13px] font-mono text-[#e7dff0] break-all leading-relaxed">{sessionDetail.session_id}</code>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Session ID</p>
+          <code className="text-[13px] font-mono text-gray-100 break-all leading-relaxed">{sessionDetail.session_id}</code>
         </div>
 
         {/* Status */}
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
-          <span className={`text-sm font-semibold ${isEnded ? 'text-zinc-500' : 'text-emerald-400'}`}>
+          <span className={`text-sm font-semibold ${isEnded ? 'text-gray-400' : 'text-emerald-400'}`}>
             {isEnded ? 'Ended' : 'Active'}
           </span>
           {sessionDetail.session_type && (
-            <span className="ml-2 text-[10px] text-zinc-600 bg-[#2c2834] px-2 py-0.5 rounded-full uppercase tracking-wider">
+            <span className="ml-2 text-[10px] text-gray-400 bg-[#2c2834] px-2 py-0.5 rounded-full uppercase tracking-wider">
               {sessionDetail.session_type}
             </span>
           )}
@@ -123,9 +123,9 @@ function SessionSummary({ sessionDetail }) {
         {/* Model / Provider */}
         {(sessionDetail.model || sessionDetail.provider) && (
           <div className="flex items-center gap-3 px-3 py-2 bg-[#0f0c17] rounded-sm">
-            <span className="material-symbols-outlined text-[13px] text-zinc-500">smart_toy</span>
+            <span className="material-symbols-outlined text-[13px] text-gray-400">smart_toy</span>
             {sessionDetail.provider && (
-              <span className="text-[10px] text-zinc-500 font-mono">{sessionDetail.provider}</span>
+              <span className="text-[10px] text-gray-400 font-mono">{sessionDetail.provider}</span>
             )}
             {sessionDetail.model && (
               <span className="text-xs font-mono text-[#ffb0cf]">{sessionDetail.model}</span>
@@ -136,24 +136,24 @@ function SessionSummary({ sessionDetail }) {
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Started</p>
-            <p className="text-xs font-mono text-[#e7dff0]">{startedAt ? fmtTime(startedAt) : '—'}</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Started</p>
+            <p className="text-xs font-mono text-gray-100">{startedAt ? fmtTime(startedAt) : '—'}</p>
           </div>
           <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Ended</p>
-            <p className="text-xs font-mono text-[#e7dff0]">{endedAt ? fmtTime(endedAt) : '—'}</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Ended</p>
+            <p className="text-xs font-mono text-gray-100">{endedAt ? fmtTime(endedAt) : '—'}</p>
           </div>
           <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Total Events</p>
-            <p className="text-2xl font-bold text-[#e7dff0]">{sessionDetail.event_count ?? 0}</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Total Events</p>
+            <p className="text-2xl font-bold text-gray-100">{sessionDetail.event_count ?? 0}</p>
           </div>
           <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Tool Calls</p>
-            <p className="text-2xl font-bold text-[#e7dff0]">{sessionDetail.total_tool_calls ?? 0}</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Tool Calls</p>
+            <p className="text-2xl font-bold text-gray-100">{sessionDetail.total_tool_calls ?? 0}</p>
           </div>
         </div>
 
-        <p className="text-[11px] text-zinc-600 text-center">Select a run from the left to view its timeline</p>
+        <p className="text-[11px] text-gray-400 text-center">Select a run from the left to view its timeline</p>
       </div>
     </div>
   )
@@ -166,13 +166,13 @@ function SessionHeader({ sessionDetail }) {
   const sid = sessionDetail.session_id ?? ''
   return (
     <div className="px-5 py-3 border-b border-[#574149]/20 flex flex-wrap items-center gap-x-4 gap-y-1 shrink-0 bg-[#1d1a25]">
-      <code className="text-[11px] font-mono text-[#e7dff0] break-all">{sid}</code>
-      <span className={`flex items-center gap-1.5 text-[10px] font-semibold ${isEnded ? 'text-zinc-500' : 'text-emerald-400'}`}>
+      <code className="text-[11px] font-mono text-gray-100 break-all">{sid}</code>
+      <span className={`flex items-center gap-1.5 text-[10px] font-semibold ${isEnded ? 'text-gray-400' : 'text-emerald-400'}`}>
         <span className={`w-1.5 h-1.5 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
         {isEnded ? 'Ended' : 'Active'}
       </span>
-      <span className="text-[10px] text-zinc-500">{sessionDetail.event_count ?? 0} Events</span>
-      <span className="text-[10px] text-zinc-500">{sessionDetail.total_tool_calls ?? 0} Tool Calls</span>
+      <span className="text-[10px] text-gray-400">{sessionDetail.event_count ?? 0} Events</span>
+      <span className="text-[10px] text-gray-400">{sessionDetail.total_tool_calls ?? 0} Tool Calls</span>
     </div>
   )
 }
@@ -471,7 +471,7 @@ function buildRunDataHermes(events) {
 function JsonValue({ value, depth }) {
   const [open, setOpen] = useState(depth === 0)
 
-  if (value === null) return <span className="text-zinc-500">null</span>
+  if (value === null) return <span className="text-gray-400">null</span>
   if (typeof value === 'boolean') return <span className="text-purple-400">{String(value)}</span>
   if (typeof value === 'number') return <span className="text-amber-400">{value}</span>
   if (typeof value === 'string') {
@@ -486,19 +486,19 @@ function JsonValue({ value, depth }) {
   const entries = isArr ? value.map((v, i) => [String(i), v]) : Object.entries(value)
   const [ob, cb] = isArr ? ['[', ']'] : ['{', '}']
 
-  if (entries.length === 0) return <span className="text-zinc-500">{ob}{cb}</span>
+  if (entries.length === 0) return <span className="text-gray-400">{ob}{cb}</span>
 
   return (
     <span>
       <button
         onClick={() => setOpen(o => !o)}
-        className="text-zinc-500 hover:text-zinc-200 transition-colors mr-1"
+        className="text-gray-400 hover:text-gray-100 transition-colors mr-1"
       >
         {open ? '▾' : '▸'}
       </button>
       {open ? (
         <>
-          <span className="text-zinc-500">{ob}</span>
+          <span className="text-gray-400">{ob}</span>
           <div className="pl-4 border-l border-[#574149]/20 ml-0.5 mt-0.5 space-y-0.5">
             {entries.map(([k, v]) => (
               <div key={k} className="flex gap-1.5 items-start">
@@ -509,12 +509,12 @@ function JsonValue({ value, depth }) {
               </div>
             ))}
           </div>
-          <span className="text-zinc-500">{cb}</span>
+          <span className="text-gray-400">{cb}</span>
         </>
       ) : (
         <button
           onClick={() => setOpen(true)}
-          className="text-zinc-600 hover:text-zinc-400 transition-colors"
+          className="text-gray-400 hover:text-gray-400 transition-colors"
         >
           {ob}&hellip;{cb}
         </button>
@@ -537,12 +537,12 @@ const hookBadgeColor = {
   tool_result_persist:  'text-[#93c5fd] bg-[#93c5fd]/10',
   pre_tool_call:        'text-[#93c5fd] bg-[#93c5fd]/10',
   post_tool_call:       'text-[#93c5fd] bg-[#93c5fd]/10',
-  session_start:        'text-zinc-400  bg-zinc-700/30',
-  session_end:          'text-zinc-400  bg-zinc-700/30',
-  on_session_start:     'text-zinc-400  bg-zinc-700/30',
-  on_session_end:       'text-zinc-400  bg-zinc-700/30',
-  on_session_finalize:  'text-zinc-400  bg-zinc-700/30',
-  on_session_reset:     'text-zinc-400  bg-zinc-700/30',
+  session_start:        'text-gray-400  bg-zinc-700/30',
+  session_end:          'text-gray-400  bg-zinc-700/30',
+  on_session_start:     'text-gray-400  bg-zinc-700/30',
+  on_session_end:       'text-gray-400  bg-zinc-700/30',
+  on_session_finalize:  'text-gray-400  bg-zinc-700/30',
+  on_session_reset:     'text-gray-400  bg-zinc-700/30',
 }
 
 function RunEventCard({ event }) {
@@ -554,7 +554,7 @@ function RunEventCard({ event }) {
   }
 
   const isBlocked = event.hook_decision === 'block'
-  const badgeCls = hookBadgeColor[event.hook_name] ?? 'text-zinc-500 bg-zinc-700/20'
+  const badgeCls = hookBadgeColor[event.hook_name] ?? 'text-gray-400 bg-zinc-700/20'
 
   return (
     <div className={`rounded-sm border transition-colors ${isBlocked ? 'border-[#ffb4ab]/30 bg-[#93000a]/10' : 'border-[#574149]/10 bg-[#1d1a25]'}`}>
@@ -563,10 +563,10 @@ function RunEventCard({ event }) {
         className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer select-none"
         onClick={() => setExpanded(e => !e)}
       >
-        <span className={`material-symbols-outlined text-[13px] text-zinc-600 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}>
+        <span className={`material-symbols-outlined text-[13px] text-gray-400 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}>
           chevron_right
         </span>
-        <span className="text-[10px] font-mono text-zinc-500 whitespace-nowrap shrink-0 tabular-nums">
+        <span className="text-[10px] font-mono text-gray-400 whitespace-nowrap shrink-0 tabular-nums">
           {fmtShortTime(event.event_time)}
         </span>
         <span className={`text-[10px] font-semibold uppercase rounded-full px-2 py-0.5 tracking-wide shrink-0 ${badgeCls}`}>
@@ -576,7 +576,7 @@ function RunEventCard({ event }) {
           <span className="text-[11px] font-mono text-[#93c5fd] shrink-0">{event.tool_name}</span>
         )}
         {(event.model || event.provider) && (
-          <span className="text-[10px] text-zinc-600 shrink-0 hidden sm:inline">
+          <span className="text-[10px] text-gray-400 shrink-0 hidden sm:inline">
             {[event.provider, event.model].filter(Boolean).join(' · ')}
           </span>
         )}
@@ -588,7 +588,7 @@ function RunEventCard({ event }) {
           </span>
         )}
         {event.event_data && (
-          <span className="text-[10px] text-zinc-700 shrink-0">JSON</span>
+          <span className="text-[10px] text-gray-400 shrink-0">JSON</span>
         )}
       </div>
 
@@ -599,15 +599,15 @@ function RunEventCard({ event }) {
             <p className="text-[11px] text-[#ffb4ab] mb-2 font-mono">block reason: {event.block_reason}</p>
           )}
           {parsedData !== null ? (
-            <div className="text-[11px] font-mono text-[#e7dff0] leading-relaxed">
+            <div className="text-[11px] font-mono text-gray-100 leading-relaxed">
               <JsonValue value={parsedData} depth={0} />
             </div>
           ) : event.event_data ? (
-            <pre className="text-[11px] font-mono text-zinc-400 whitespace-pre-wrap break-all">
+            <pre className="text-[11px] font-mono text-gray-400 whitespace-pre-wrap break-all">
               {event.event_data}
             </pre>
           ) : (
-            <p className="text-[11px] text-zinc-600">No event data</p>
+            <p className="text-[11px] text-gray-400">No event data</p>
           )}
         </div>
       )}
@@ -621,10 +621,10 @@ const SOURCE_TYPE_COLORS = {
   workspace: 'text-red-400',
   managed:   'text-emerald-400',
   personal:  'text-blue-400',
-  bundled:   'text-zinc-400',
+  bundled:   'text-gray-400',
   plugin:    'text-purple-400',
-  user:      'text-zinc-500',
-  unknown:   'text-zinc-500',
+  user:      'text-gray-400',
+  unknown:   'text-gray-400',
 }
 
 function SkillsTab({ sessionId }) {
@@ -673,7 +673,7 @@ function SkillsTab({ sessionId }) {
   if (connecting) {
     return (
       <div className="flex items-center justify-center h-full">
-        <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+        <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
       </div>
     )
   }
@@ -691,11 +691,11 @@ function SkillsTab({ sessionId }) {
     <div className="p-5 space-y-6">
       {/* Loaded section */}
       <div>
-        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
           Loaded — available in system prompt
         </p>
         {loaded.length === 0 ? (
-          <p className="text-xs text-zinc-600">No loaded skills detected for this session.</p>
+          <p className="text-xs text-gray-400">No loaded skills detected for this session.</p>
         ) : (
           <div className="space-y-2">
             {loaded.map(({ name, firstSeen, sourceType, location, description }) => (
@@ -705,24 +705,24 @@ function SkillsTab({ sessionId }) {
                   onClick={() => (location || description) && setExpanded(prev => ({ ...prev, [name]: !prev[name] }))}
                 >
                   <span className="material-symbols-outlined text-[14px] text-[#ffb0cf]" style={{ fontVariationSettings: "'FILL' 0" }}>hexagon</span>
-                  <span className="text-xs font-mono text-[#e7dff0]">{name}</span>
+                  <span className="text-xs font-mono text-gray-100">{name}</span>
                   {sourceType && (
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full border border-current ${SOURCE_TYPE_COLORS[sourceType] || 'text-zinc-500'}`}>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full border border-current ${SOURCE_TYPE_COLORS[sourceType] || 'text-gray-400'}`}>
                       {sourceType}
                     </span>
                   )}
-                  <span className="ml-auto text-[10px] font-mono text-zinc-500">first seen&nbsp;&nbsp;{fmtShortTime(firstSeen)}</span>
+                  <span className="ml-auto text-[10px] font-mono text-gray-400">first seen&nbsp;&nbsp;{fmtShortTime(firstSeen)}</span>
                 </div>
                 {expanded[name] && (location || description) && (
                   <div className="ml-6 mt-1 space-y-1">
                     {location && (
-                      <p className="text-[10px] font-mono text-zinc-500 break-all">
-                        <span className="text-zinc-600">location </span>{location}
+                      <p className="text-[10px] font-mono text-gray-400 break-all">
+                        <span className="text-gray-400">location </span>{location}
                       </p>
                     )}
                     {description && (
-                      <p className="text-[10px] font-mono text-zinc-400 break-words">
-                        <span className="text-zinc-600">desc </span>{description}
+                      <p className="text-[10px] font-mono text-gray-400 break-words">
+                        <span className="text-gray-400">desc </span>{description}
                       </p>
                     )}
                   </div>
@@ -735,11 +735,11 @@ function SkillsTab({ sessionId }) {
 
       {/* Invoked section */}
       <div>
-        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
           Invoked — skill activations
         </p>
         {invoked.length === 0 ? (
-          <p className="text-xs text-zinc-600">No skill invocations detected for this session.</p>
+          <p className="text-xs text-gray-400">No skill invocations detected for this session.</p>
         ) : (
           <div className="space-y-2">
             {invoked.map((item, i) => {
@@ -751,16 +751,16 @@ function SkillsTab({ sessionId }) {
                     onClick={() => item.args && setExpanded(prev => ({ ...prev, [itemKey]: !prev[itemKey] }))}
                   >
                     <span className="material-symbols-outlined text-[14px] text-[#ffb2b8]">play_arrow</span>
-                    <span className="text-[10px] font-mono text-zinc-500 w-16 shrink-0">{fmtShortTime(item.time)}</span>
-                    <span className="text-xs font-mono text-[#e7dff0]">{item.name}</span>
+                    <span className="text-[10px] font-mono text-gray-400 w-16 shrink-0">{fmtShortTime(item.time)}</span>
+                    <span className="text-xs font-mono text-gray-100">{item.name}</span>
                     {item.args && (
-                      <span className="ml-auto text-[10px] font-mono text-zinc-600">args ▾</span>
+                      <span className="ml-auto text-[10px] font-mono text-gray-400">args ▾</span>
                     )}
                   </div>
                   {expanded[itemKey] && item.args && (
                     <div className="ml-10 mt-1">
-                      <p className="text-[10px] font-mono text-zinc-400 break-words">
-                        <span className="text-zinc-600">args </span>{item.args}
+                      <p className="text-[10px] font-mono text-gray-400 break-words">
+                        <span className="text-gray-400">args </span>{item.args}
                       </p>
                     </div>
                   )}
@@ -782,7 +782,7 @@ const OP_COLORS = {
   read:   'text-emerald-400',
   delete: 'text-red-400',
   update: 'text-purple-400',
-  other:  'text-zinc-500',
+  other:  'text-gray-400',
 }
 
 function MemoryTab({ sessionId }) {
@@ -825,7 +825,7 @@ function MemoryTab({ sessionId }) {
   if (connecting) {
     return (
       <div className="flex items-center justify-center h-full">
-        <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+        <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
       </div>
     )
   }
@@ -841,11 +841,11 @@ function MemoryTab({ sessionId }) {
 
   return (
     <div className="p-5 space-y-1">
-      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
         Memory Operations
       </p>
       {ops.length === 0 ? (
-        <p className="text-xs text-zinc-600">No memory operations detected for this session.</p>
+        <p className="text-xs text-gray-400">No memory operations detected for this session.</p>
       ) : (
         ops.map((op, i) => (
           <div key={i}>
@@ -853,26 +853,26 @@ function MemoryTab({ sessionId }) {
               className="flex items-center gap-3 cursor-pointer hover:bg-[#2a1e24] rounded px-2 py-1 -mx-2"
               onClick={() => setExpanded(prev => ({ ...prev, [i]: !prev[i] }))}
             >
-              <span className="text-[10px] font-mono text-zinc-500 w-16 shrink-0">{fmtTime(op.event_time)}</span>
-              <span className={`text-[10px] font-bold uppercase w-14 shrink-0 ${OP_COLORS[op.memory_op] ?? 'text-zinc-500'}`}>
+              <span className="text-[10px] font-mono text-gray-400 w-16 shrink-0">{fmtTime(op.event_time)}</span>
+              <span className={`text-[10px] font-bold uppercase w-14 shrink-0 ${OP_COLORS[op.memory_op] ?? 'text-gray-400'}`}>
                 {op.memory_op}
               </span>
-              <span className="text-[10px] text-zinc-500 w-24 shrink-0">{op.memory_source}</span>
-              <span className="text-xs font-mono text-[#e7dff0] truncate">{displayLabel(op)}</span>
-              <span className="material-symbols-outlined text-[12px] text-zinc-600 ml-auto shrink-0">
+              <span className="text-[10px] text-gray-400 w-24 shrink-0">{op.memory_source}</span>
+              <span className="text-xs font-mono text-gray-100 truncate">{displayLabel(op)}</span>
+              <span className="material-symbols-outlined text-[12px] text-gray-400 ml-auto shrink-0">
                 {expanded[i] ? 'expand_less' : 'expand_more'}
               </span>
             </div>
             {expanded[i] && (
               <div className="ml-2 mt-1 mb-2 pl-3 border-l border-[#574149]/40 space-y-1">
                 {op.memory_path && (
-                  <p className="text-[10px] font-mono text-zinc-400 break-all">{op.memory_path}</p>
+                  <p className="text-[10px] font-mono text-gray-400 break-all">{op.memory_path}</p>
                 )}
                 {op.content_payload && (() => {
                   const parsed = safeParse(op.content_payload)
                   return parsed !== null
-                    ? <div className="text-[10px] font-mono text-[#e7dff0] leading-relaxed"><JsonValue value={parsed} depth={0} /></div>
-                    : <pre className="text-[10px] font-mono text-zinc-400 bg-[#1a1218] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">{op.content_payload}</pre>
+                    ? <div className="text-[10px] font-mono text-gray-100 leading-relaxed"><JsonValue value={parsed} depth={0} /></div>
+                    : <pre className="text-[10px] font-mono text-gray-400 bg-[#1a1218] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">{op.content_payload}</pre>
                 })()}
               </div>
             )}
@@ -932,7 +932,7 @@ function AgentMemoryPanel({ agentId }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+        <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
       </div>
     )
   }
@@ -951,20 +951,20 @@ function AgentMemoryPanel({ agentId }) {
   return (
     <div className="p-5 space-y-6">
       <div>
-        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Memory Footprint</p>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Memory Footprint</p>
         {totalOps === 0 ? (
-          <p className="text-xs text-zinc-600">No memory operations recorded for this agent.</p>
+          <p className="text-xs text-gray-400">No memory operations recorded for this agent.</p>
         ) : (
           <div className="grid grid-cols-4 gap-3 mb-6">
             {[
-              { label: 'Total',    value: stats?.total_ops ?? 0, color: 'text-[#e7dff0]' },
+              { label: 'Total',    value: stats?.total_ops ?? 0, color: 'text-gray-100' },
               { label: 'Saves',    value: stats?.saves     ?? 0, color: 'text-amber-400' },
               { label: 'Searches', value: stats?.searches  ?? 0, color: 'text-blue-400' },
               { label: 'Reads',    value: stats?.reads     ?? 0, color: 'text-emerald-400' },
             ].map(({ label, value, color }) => (
               <div key={label} className="bg-[#1a1218] rounded p-3 text-center">
                 <p className={`text-lg font-bold font-mono ${color}`}>{value}</p>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">{label}</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">{label}</p>
               </div>
             ))}
           </div>
@@ -973,7 +973,7 @@ function AgentMemoryPanel({ agentId }) {
 
       {recentOps.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Recent Operations</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Recent Operations</p>
           <div className="space-y-1">
             {recentOps.map((op, i) => (
               <div key={i}>
@@ -981,25 +981,25 @@ function AgentMemoryPanel({ agentId }) {
                   className="flex items-center gap-3 cursor-pointer hover:bg-[#2a1e24] rounded px-2 py-1 -mx-2"
                   onClick={() => setExpanded(prev => ({ ...prev, [i]: !prev[i] }))}
                 >
-                  <span className="text-[10px] font-mono text-zinc-500 w-16 shrink-0">{fmtTime(op.event_time)}</span>
-                  <span className={`text-[10px] font-bold uppercase w-14 shrink-0 ${OP_COLORS[op.memory_op] ?? 'text-zinc-500'}`}>
+                  <span className="text-[10px] font-mono text-gray-400 w-16 shrink-0">{fmtTime(op.event_time)}</span>
+                  <span className={`text-[10px] font-bold uppercase w-14 shrink-0 ${OP_COLORS[op.memory_op] ?? 'text-gray-400'}`}>
                     {op.memory_op}
                   </span>
-                  <span className="text-[10px] text-zinc-500 w-24 shrink-0">{op.memory_source}</span>
-                  <span className="text-xs font-mono text-[#e7dff0] truncate">{displayLabel(op)}</span>
-                  <span className="material-symbols-outlined text-[12px] text-zinc-600 ml-auto shrink-0">
+                  <span className="text-[10px] text-gray-400 w-24 shrink-0">{op.memory_source}</span>
+                  <span className="text-xs font-mono text-gray-100 truncate">{displayLabel(op)}</span>
+                  <span className="material-symbols-outlined text-[12px] text-gray-400 ml-auto shrink-0">
                     {expanded[i] ? 'expand_less' : 'expand_more'}
                   </span>
                 </div>
                 {expanded[i] && (
                   <div className="ml-2 mt-1 mb-2 pl-3 border-l border-[#574149]/40 space-y-1">
                     {op.memory_path && (
-                      <p className="text-[10px] font-mono text-zinc-400 break-all">{op.memory_path}</p>
+                      <p className="text-[10px] font-mono text-gray-400 break-all">{op.memory_path}</p>
                     )}
                     {op.content_payload && (
                       safeParse(op.content_payload) !== null
-                        ? <div className="text-[10px] font-mono text-[#e7dff0] leading-relaxed"><JsonValue value={safeParse(op.content_payload)} depth={0} /></div>
-                        : <pre className="text-[10px] font-mono text-zinc-400 bg-[#1a1218] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">{op.content_payload}</pre>
+                        ? <div className="text-[10px] font-mono text-gray-100 leading-relaxed"><JsonValue value={safeParse(op.content_payload)} depth={0} /></div>
+                        : <pre className="text-[10px] font-mono text-gray-400 bg-[#1a1218] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">{op.content_payload}</pre>
                     )}
                   </div>
                 )}
@@ -1019,7 +1019,7 @@ function RunWaterfall({ spans }) {
 
   if (!spans || spans.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+      <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
         <span className="material-symbols-outlined text-4xl">account_tree</span>
         <p className="text-sm">No trace data available for this run</p>
       </div>
@@ -1082,7 +1082,7 @@ function RunWaterfall({ spans }) {
                 {span.status === 'error' && (
                   <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">error</span>
                 )}
-                <span className="text-[11px] text-[#e7dff0] truncate">{span.name}</span>
+                <span className="text-[11px] text-gray-100 truncate">{span.name}</span>
               </div>
 
               {/* Bar column */}
@@ -1099,13 +1099,13 @@ function RunWaterfall({ spans }) {
               </div>
 
               {/* Duration column */}
-              <span className="text-[10px] text-zinc-500 w-12 text-right shrink-0 tabular-nums">
+              <span className="text-[10px] text-gray-400 w-12 text-right shrink-0 tabular-nums">
                 {fmtDuration(span.duration_ms)}
               </span>
 
               {/* Expand indicator */}
               {hasAttrs && (
-                <span className={`material-symbols-outlined text-[12px] text-zinc-600 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                <span className={`material-symbols-outlined text-[12px] text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
                   expand_more
                 </span>
               )}
@@ -1148,11 +1148,11 @@ function RunTimeline({ runIndex, run, events }) {
     <div className="bg-[#1d1a25] rounded-sm p-5 mb-3 last:mb-0">
       {/* Run header */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
-        <span className="text-xs font-semibold text-[#e7dff0]">Run #{runIndex + 1}</span>
-        <code className="text-[10px] font-mono text-zinc-500 break-all">
+        <span className="text-xs font-semibold text-gray-100">Run #{runIndex + 1}</span>
+        <code className="text-[10px] font-mono text-gray-400 break-all">
           {rid || '—'}
         </code>
-        {timeRange && <span className="text-[10px] text-zinc-600">{timeRange}</span>}
+        {timeRange && <span className="text-[10px] text-gray-400">{timeRange}</span>}
         {run.tool_count > 0 && (
           <span className="text-[9px] bg-[#93c5fd]/10 text-[#93c5fd] px-1.5 py-0.5 rounded-full">
             {run.tool_count} tools
@@ -1168,31 +1168,31 @@ function RunTimeline({ runIndex, run, events }) {
         <div className="mb-4 bg-[#0f0c17] rounded-sm px-3 py-2.5 space-y-2">
           {runInfo.model && (
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="material-symbols-outlined text-[13px] text-zinc-500">smart_toy</span>
-              <span className="text-[10px] text-zinc-300 font-mono">
+              <span className="material-symbols-outlined text-[13px] text-gray-400">smart_toy</span>
+              <span className="text-[10px] text-gray-100 font-mono">
                 {[runInfo.model, runInfo.provider].filter(Boolean).join(' · ')}
               </span>
               {runInfo.historyCount != null && (
-                <span className="text-[10px] text-zinc-500">{runInfo.historyCount} messages in history</span>
+                <span className="text-[10px] text-gray-400">{runInfo.historyCount} messages in history</span>
               )}
               {runInfo.imagesCount != null && (
-                <span className="text-[10px] text-zinc-500">{runInfo.imagesCount} images</span>
+                <span className="text-[10px] text-gray-400">{runInfo.imagesCount} images</span>
               )}
             </div>
           )}
           {runInfo.systemPrompt && (
             <div>
               <div className="flex items-center gap-1.5 mb-1">
-                <span className="material-symbols-outlined text-[13px] text-zinc-500">tune</span>
-                <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wide">System Prompt</span>
+                <span className="material-symbols-outlined text-[13px] text-gray-400">tune</span>
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">System Prompt</span>
                 <button
                   onClick={() => setSysExpanded(e => !e)}
-                  className="text-[10px] text-zinc-600 hover:text-[#ffb0cf] transition-colors"
+                  className="text-[10px] text-gray-400 hover:text-[#ffb0cf] transition-colors"
                 >
                   {sysExpanded ? '▲ collapse' : '▼ expand'}
                 </button>
               </div>
-              <p className="text-[10px] text-zinc-400 break-words leading-relaxed font-mono whitespace-pre-wrap">
+              <p className="text-[10px] text-gray-400 break-words leading-relaxed font-mono whitespace-pre-wrap">
                 {sysExpanded
                   ? runInfo.systemPrompt
                   : runInfo.systemPrompt.slice(0, 150) + (runInfo.systemPrompt.length > 150 ? '…' : '')}
@@ -1204,7 +1204,7 @@ function RunTimeline({ runIndex, run, events }) {
 
       {/* Timeline steps */}
       {steps.length === 0 ? (
-        <p className="text-[11px] text-zinc-600">No structured events for this run.</p>
+        <p className="text-[11px] text-gray-400">No structured events for this run.</p>
       ) : (
         <div>
           {steps.map((step, i) => (
@@ -1220,7 +1220,7 @@ function RunTimeline({ runIndex, run, events }) {
               </div>
               <div className="pb-3 flex-1 min-w-0">
                 <span className={`text-[10px] font-semibold uppercase tracking-wide ${
-                  step.blocked ? 'text-[#ffb4ab]' : 'text-zinc-400'
+                  step.blocked ? 'text-[#ffb4ab]' : 'text-gray-400'
                 }`}>
                   {step.label}
                 </span>
@@ -1228,7 +1228,7 @@ function RunTimeline({ runIndex, run, events }) {
                 {/* Main content: tool name or prompt text or response text */}
                 {step.content && (
                   <p className={`text-xs mt-0.5 break-words leading-relaxed whitespace-pre-wrap ${
-                    step.contentMuted ? 'text-zinc-600 italic' : 'text-[#e7dff0]'
+                    step.contentMuted ? 'text-gray-400 italic' : 'text-gray-100'
                   }`}>
                     {step.content}
                   </p>
@@ -1239,8 +1239,8 @@ function RunTimeline({ runIndex, run, events }) {
                   <div className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5 space-y-0.5">
                     {Object.entries(step.params).map(([k, v]) => (
                       <div key={k} className="grid grid-cols-[90px_1fr] gap-1.5">
-                        <span className="text-[10px] text-zinc-500 truncate">{k}</span>
-                        <span className="text-[10px] font-mono text-zinc-300 break-all whitespace-pre-wrap">
+                        <span className="text-[10px] text-gray-400 truncate">{k}</span>
+                        <span className="text-[10px] font-mono text-gray-100 break-all whitespace-pre-wrap">
                           {typeof v === 'object' ? JSON.stringify(v) : String(v ?? '—')}
                         </span>
                       </div>
@@ -1268,13 +1268,13 @@ function RunTimeline({ runIndex, run, events }) {
                 {/* Tool result content */}
                 {step.type === 'tool_call' && step.result != null && !step.resultError && (
                   <div className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5">
-                    <span className="text-[10px] text-zinc-500 uppercase tracking-wide block mb-1">Result</span>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wide block mb-1">Result</span>
                     {typeof step.result === 'string' ? (
-                      <p className="text-[10px] font-mono text-zinc-300 break-all whitespace-pre-wrap">
+                      <p className="text-[10px] font-mono text-gray-100 break-all whitespace-pre-wrap">
                         {step.result.length > 600 ? step.result.slice(0, 600) + '…' : step.result}
                       </p>
                     ) : (
-                      <p className="text-[10px] font-mono text-zinc-300 break-all whitespace-pre-wrap">
+                      <p className="text-[10px] font-mono text-gray-100 break-all whitespace-pre-wrap">
                         {(() => { const s = JSON.stringify(step.result, null, 2); return s.length > 600 ? s.slice(0, 600) + '…' : s })()}
                       </p>
                     )}
@@ -1283,7 +1283,7 @@ function RunTimeline({ runIndex, run, events }) {
 
                 {/* Token usage (llm_response) */}
                 {step.tokens && (
-                  <p className="text-[10px] text-zinc-500 mt-0.5">{step.tokens}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{step.tokens}</p>
                 )}
               </div>
             </div>
@@ -1496,14 +1496,14 @@ export default function AgentDetail() {
   const agentType = agent?.agent_type ?? ''
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
+    <div className="min-h-screen bg-[#15121d] text-gray-100">
       <Sidebar />
 
 
       {/* TopNav */}
       <header className="top-nav fixed top-0 right-0 h-16 bg-[#15121d]/95 z-50 flex justify-between items-center px-8 backdrop-blur-md shadow-[0_0_12px_rgba(213,63,140,0.12)]">
         <div className="flex items-center gap-4">
-          <Link to="/agents" className="text-zinc-400 hover:text-[#ffb0cf] transition-colors">
+          <Link to="/agents" className="text-gray-400 hover:text-[#ffb0cf] transition-colors">
             <span className="material-symbols-outlined">arrow_back</span>
           </Link>
           {agentType === 'claudecode' && (
@@ -1515,20 +1515,20 @@ export default function AgentDetail() {
           {agentType === 'hermes' && (
             <img src="/static/icons/nousresearch-dark.png" alt="Hermes" title="Hermes" className="h-5 w-5 shrink-0" />
           )}
-          <span className="font-medium tracking-tight text-lg text-[#e7dff0]">{agentName}</span>
+          <span className="font-medium tracking-tight text-lg text-gray-100">{agentName}</span>
           {deploymentName && (
-            <span className="bg-[#2c2834] text-zinc-400 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-tighter">
+            <span className="bg-[#2c2834] text-gray-400 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-tighter">
               {deploymentName}
             </span>
           )}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-sm text-zinc-500">schedule</span>
+            <span className="material-symbols-outlined text-sm text-gray-400">schedule</span>
             <select
               value={timePreset}
               onChange={e => setTimePreset(e.target.value)}
-              className="bg-[#2c2834] border border-[#574149]/30 text-xs text-zinc-300 rounded-sm px-2 py-1.5 focus:outline-none focus:border-[#ffb0cf]/40 hover:border-[#574149]/60 transition-colors"
+              className="bg-[#2c2834] border border-[#574149]/30 text-xs text-gray-100 rounded-sm px-2 py-1.5 focus:outline-none focus:border-[#ffb0cf]/40 hover:border-[#574149]/60 transition-colors"
             >
               {TIME_PRESETS.map(p => (
                 <option key={p.value} value={p.value}>{p.label}</option>
@@ -1537,7 +1537,7 @@ export default function AgentDetail() {
           </div>
           <button
             onClick={refresh}
-            className="flex items-center gap-2 text-xs text-zinc-400 hover:text-[#ffb0cf] transition-colors px-3 py-1.5 rounded-sm hover:bg-[#2c2834]"
+            className="flex items-center gap-2 text-xs text-gray-400 hover:text-[#ffb0cf] transition-colors px-3 py-1.5 rounded-sm hover:bg-[#2c2834]"
           >
             <span className={`material-symbols-outlined text-base ${isRefreshing ? 'animate-spin' : ''}`}>
               refresh
@@ -1562,8 +1562,8 @@ export default function AgentDetail() {
               <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
                 <span className={`material-symbols-outlined text-4xl ${m.accent ? 'text-[#ffb4ab]' : ''}`}>{m.icon}</span>
               </div>
-              <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest mb-1">{m.label}</p>
-              <h2 className={`text-2xl font-medium ${m.accent ? 'text-[#ffb4ab]' : 'text-[#e7dff0]'}`}>{m.value}</h2>
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest mb-1">{m.label}</p>
+              <h2 className={`text-2xl font-medium ${m.accent ? 'text-[#ffb4ab]' : 'text-gray-100'}`}>{m.value}</h2>
               {m.error && (
                 <p className="text-[10px] text-[#ffb4ab] mt-1 flex items-center gap-1 truncate" title={m.error}>
                   <span className="material-symbols-outlined text-[10px]">error</span>
@@ -1581,9 +1581,9 @@ export default function AgentDetail() {
               <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
                 <span className={`material-symbols-outlined text-4xl ${m.accent ? 'text-[#ffb4ab]' : ''}`}>{m.icon}</span>
               </div>
-              <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest mb-1">{m.label}</p>
-              <h2 className={`text-2xl font-medium ${m.accent ? 'text-[#ffb4ab]' : 'text-[#e7dff0]'}`}>{m.value}</h2>
-              {m.sub && <p className="text-[10px] text-zinc-600 mt-1 truncate">{m.sub}</p>}
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest mb-1">{m.label}</p>
+              <h2 className={`text-2xl font-medium ${m.accent ? 'text-[#ffb4ab]' : 'text-gray-100'}`}>{m.value}</h2>
+              {m.sub && <p className="text-[10px] text-gray-400 mt-1 truncate">{m.sub}</p>}
               {m.error && (
                 <p className="text-[10px] text-[#ffb4ab] mt-1 flex items-center gap-1 truncate" title={m.error}>
                   <span className="material-symbols-outlined text-[10px]">error</span>
@@ -1600,12 +1600,12 @@ export default function AgentDetail() {
           {/* Sessions panel */}
           <aside className="w-52 shrink-0 bg-[#211e29] rounded-sm flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-[#574149]/20 shrink-0">
-              <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Sessions</h3>
+              <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sessions</h3>
             </div>
             <div className="flex-1 overflow-y-auto">
               {loadingSessions ? (
                 <div className="flex items-center justify-center py-8">
-                  <span className="material-symbols-outlined animate-spin text-zinc-600">refresh</span>
+                  <span className="material-symbols-outlined animate-spin text-gray-400">refresh</span>
                 </div>
               ) : sessionsError ? (
                 <div className="px-4 py-4 flex flex-col gap-1">
@@ -1613,7 +1613,7 @@ export default function AgentDetail() {
                   <p className="text-[10px] text-[#ffb4ab]">{sessionsError}</p>
                 </div>
               ) : sessions.length === 0 ? (
-                <p className="text-[11px] text-zinc-600 px-4 py-4">No sessions found</p>
+                <p className="text-[11px] text-gray-400 px-4 py-4">No sessions found</p>
               ) : (
                 sessions.map(session => {
                   const isActive = selectedSession === session.session_id
@@ -1627,33 +1627,33 @@ export default function AgentDetail() {
                           isActive ? 'border-[#ffb0cf] bg-[#2c2834]/40' : 'border-transparent'
                         }`}
                       >
-                        <span className={`material-symbols-outlined text-base mt-0.5 shrink-0 ${isActive ? 'text-[#ffb0cf]' : 'text-zinc-500'}`}>
+                        <span className={`material-symbols-outlined text-base mt-0.5 shrink-0 ${isActive ? 'text-[#ffb0cf]' : 'text-gray-400'}`}>
                           {sessionTypeIcon(session.session_type)}
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
                             <div className="flex items-center gap-1.5 min-w-0">
                               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${session.status === 'active' ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-                              <span className={`text-xs font-medium truncate ${isActive ? 'text-[#ffb0cf]' : 'text-[#e7dff0]'}`}>
+                              <span className={`text-xs font-medium truncate ${isActive ? 'text-[#ffb0cf]' : 'text-gray-100'}`}>
                                 {session.session_type === 'Unknown' ? session.session_id?.slice(0, 8) : session.session_type}
                               </span>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                              <span className="text-[9px] bg-[#574149]/30 text-zinc-400 px-1.5 py-0.5 rounded-full">
+                              <span className="text-[9px] bg-[#574149]/30 text-gray-400 px-1.5 py-0.5 rounded-full">
                                 {session.run_count}
                               </span>
                               {session.run_count > 0 && (
-                                <span className={`material-symbols-outlined text-[12px] transition-transform ${isExpanded && isActive ? 'text-[#ffb0cf] rotate-180' : 'text-zinc-600'}`}>
+                                <span className={`material-symbols-outlined text-[12px] transition-transform ${isExpanded && isActive ? 'text-[#ffb0cf] rotate-180' : 'text-gray-400'}`}>
                                   expand_more
                                 </span>
                               )}
                             </div>
                           </div>
-                          <p className="text-[10px] text-zinc-600 break-all mt-0.5">{session.session_key || session.session_id}</p>
+                          <p className="text-[10px] text-gray-400 break-all mt-0.5">{session.session_key || session.session_id}</p>
                           {session.model && (
                             <p className="text-[9px] font-mono text-[#ffb0cf]/70 mt-0.5">{session.model}</p>
                           )}
-                          <p className="text-[9px] text-zinc-700 font-mono mt-0.5">{fmtTime(session.last_seen)}</p>
+                          <p className="text-[9px] text-gray-400 font-mono mt-0.5">{fmtTime(session.last_seen)}</p>
                         </div>
                       </button>
 
@@ -1669,10 +1669,10 @@ export default function AgentDetail() {
                             }`}
                           >
                             <div>
-                              <span className={`text-[11px] ${isRunActive ? 'text-[#ffb0cf]' : 'text-zinc-400'}`}>
+                              <span className={`text-[11px] ${isRunActive ? 'text-[#ffb0cf]' : 'text-gray-400'}`}>
                                 Run #{idx + 1}
                               </span>
-                              <p className="text-[9px] text-zinc-600 font-mono">{fmtTime(run.start_time)}</p>
+                              <p className="text-[9px] text-gray-400 font-mono">{fmtTime(run.start_time)}</p>
                             </div>
                             <div className="flex items-center gap-1">
                               {run.tool_count > 0 && (
@@ -1720,7 +1720,7 @@ export default function AgentDetail() {
                     className={`px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-colors border-b-2 ${
                       activeTab === tab.id
                         ? 'border-[#ffb0cf] text-[#ffb0cf]'
-                        : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                        : 'border-transparent text-gray-400 hover:text-gray-100'
                     }`}
                   >
                     {tab.label}
@@ -1742,19 +1742,19 @@ export default function AgentDetail() {
                   <SessionSummary sessionDetail={sessionDetail} />
                 ) : (
                   <div className="flex items-center justify-center h-full">
-                    <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                    <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
                   </div>
                 )
               ) : activeTab === 'trace' ? (
                 loadingTrace ? (
                   <div className="flex items-center justify-center h-full">
-                    <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                    <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
                   </div>
                 ) : traceError ? (
                   <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
                     <span className="material-symbols-outlined text-4xl">error</span>
                     <p className="text-sm font-semibold">Failed to load trace</p>
-                    <p className="text-xs text-zinc-500 max-w-md break-words">{traceError}</p>
+                    <p className="text-xs text-gray-400 max-w-md break-words">{traceError}</p>
                   </div>
                 ) : (
                   <RunWaterfall spans={traceData?.spans ?? []} />
@@ -1762,22 +1762,22 @@ export default function AgentDetail() {
               ) : activeTab === 'events' ? (
                 loadingEvents ? (
                   <div className="flex items-center justify-center h-full">
-                    <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                    <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
                   </div>
                 ) : eventsError ? (
                   <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
                     <span className="material-symbols-outlined text-4xl">error</span>
                     <p className="text-sm font-semibold">Failed to load events</p>
-                    <p className="text-xs text-zinc-500 max-w-md break-words">{eventsError}</p>
+                    <p className="text-xs text-gray-400 max-w-md break-words">{eventsError}</p>
                   </div>
                 ) : events.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                  <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
                     <span className="material-symbols-outlined text-4xl">inbox</span>
                     <p className="text-sm">No events for this run</p>
                   </div>
                 ) : (
                   <div className="p-4 space-y-1.5">
-                    <p className="text-[10px] text-zinc-600 mb-2">{events.length} events</p>
+                    <p className="text-[10px] text-gray-400 mb-2">{events.length} events</p>
                     {events.map((evt, i) => (
                       <RunEventCard key={`${evt.hook_name}-${i}`} event={evt} />
                     ))}
@@ -1785,7 +1785,7 @@ export default function AgentDetail() {
                 )
               ) : loadingEvents ? (
                 <div className="flex items-center justify-center h-full">
-                  <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                  <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
                 </div>
               ) : (
                 // Timeline tab
@@ -1795,14 +1795,14 @@ export default function AgentDetail() {
                       <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
                         <span className="material-symbols-outlined text-4xl">error</span>
                         <p className="text-sm font-semibold">Failed to load session</p>
-                        <p className="text-xs text-zinc-500 max-w-md break-words">{sessionDetailError}</p>
+                        <p className="text-xs text-gray-400 max-w-md break-words">{sessionDetailError}</p>
                       </div>
                     )
                   }
                   if (!sessionDetail) {
                     return (
                       <div className="flex items-center justify-center h-full">
-                        <span className="material-symbols-outlined animate-spin text-zinc-600 text-3xl">refresh</span>
+                        <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
                       </div>
                     )
                   }
@@ -1811,7 +1811,7 @@ export default function AgentDetail() {
                     : (sessionDetail?.runs ?? [])
                   if (runs.length === 0) {
                     return (
-                      <div className="flex flex-col items-center justify-center h-full text-zinc-600 gap-2">
+                      <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
                         <span className="material-symbols-outlined text-4xl">inbox</span>
                         <p className="text-sm">No runs found for this session</p>
                       </div>

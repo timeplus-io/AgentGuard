@@ -7,10 +7,10 @@ const STATUS_STYLES = {
   pending:    { bg: 'bg-amber-900/40',   text: 'text-amber-300',  label: 'Pending' },
   approved:   { bg: 'bg-emerald-900/40', text: 'text-emerald-400', label: 'Approved' },
   denied:     { bg: 'bg-[#93000a]/40',   text: 'text-[#ffb4ab]',  label: 'Denied' },
-  timeout:    { bg: 'bg-zinc-800/60',    text: 'text-zinc-400',   label: 'Timed Out' },
-  abandoned:  { bg: 'bg-zinc-800/60',    text: 'text-zinc-500',   label: 'Abandoned' },
+  timeout:    { bg: 'bg-zinc-800/60',    text: 'text-gray-400',   label: 'Timed Out' },
+  abandoned:  { bg: 'bg-zinc-800/60',    text: 'text-gray-400',   label: 'Abandoned' },
   auto_block: { bg: 'bg-orange-900/40',  text: 'text-orange-300', label: 'Auto-blocked' },
-  allowed:    { bg: 'bg-zinc-800/40',    text: 'text-zinc-500',   label: 'Allowed' },
+  allowed:    { bg: 'bg-zinc-800/40',    text: 'text-gray-400',   label: 'Allowed' },
 }
 
 function StatusBadge({ status }) {
@@ -23,8 +23,8 @@ function StatusBadge({ status }) {
 }
 
 function SeverityChip({ severity }) {
-  if (!severity) return <span className="text-zinc-600 text-[10px]">—</span>
-  const color = severity === 'critical' ? 'text-[#ffb4ab]' : severity === 'warning' ? 'text-amber-400' : 'text-zinc-400'
+  if (!severity) return <span className="text-gray-400 text-[10px]">—</span>
+  const color = severity === 'critical' ? 'text-[#ffb4ab]' : severity === 'warning' ? 'text-amber-400' : 'text-gray-400'
   return <span className={`text-[10px] font-semibold uppercase ${color}`}>{severity}</span>
 }
 
@@ -118,7 +118,7 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="bg-[#1d1a25] border border-[#574149]/20 text-[#e7dff0] text-xs rounded-sm px-2 py-1.5 focus:outline-none"
+          className="bg-[#1d1a25] border border-[#574149]/20 text-gray-100 text-xs rounded-sm px-2 py-1.5 focus:outline-none"
         >
           <option value="">All statuses</option>
           <option value="pending">Pending</option>
@@ -137,14 +137,14 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
           >
             <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${includeAllowed ? 'translate-x-4' : ''}`} />
           </div>
-          <span className="text-[11px] text-zinc-400">Show allowed</span>
+          <span className="text-[11px] text-gray-400">Show allowed</span>
         </label>
 
         <div className="ml-auto flex items-center gap-2">
           {/* Refresh button */}
           <button
             onClick={fetchEvents}
-            className="text-[11px] text-zinc-400 hover:text-[#e7dff0] transition-colors px-2 py-1"
+            className="text-[11px] text-gray-400 hover:text-gray-100 transition-colors px-2 py-1"
           >
             <span className="material-symbols-outlined text-[14px] align-middle">refresh</span>
           </button>
@@ -153,7 +153,7 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
           <button
             onClick={() => setAutoRefresh(v => !v)}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${
-              autoRefresh ? 'bg-emerald-900/40 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
+              autoRefresh ? 'bg-emerald-900/40 text-emerald-400' : 'bg-zinc-800 text-gray-400'
             }`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${autoRefresh ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
@@ -181,9 +181,9 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
 
       {/* Table */}
       {loading ? (
-        <div className="text-zinc-500 text-xs py-8 text-center">Loading…</div>
+        <div className="text-gray-400 text-xs py-8 text-center">Loading…</div>
       ) : displayEvents.length === 0 ? (
-        <div className="text-zinc-500 text-xs py-12 text-center">
+        <div className="text-gray-400 text-xs py-12 text-center">
           {sessionId
             ? 'No tool call activity for this session.'
             : includeAllowed
@@ -194,7 +194,7 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-zinc-500 text-[10px] uppercase tracking-widest border-b border-[#574149]/20">
+              <tr className="text-gray-400 text-[10px] uppercase tracking-widest border-b border-[#574149]/20">
                 {columns.map(col => (
                   <th key={col} className="text-left py-2 px-3 font-semibold whitespace-nowrap">{col}</th>
                 ))}
@@ -210,22 +210,22 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
                     ev.status === 'pending' ? 'border-l-2 border-l-amber-500/60' : ''
                   }`}
                 >
-                  <td className="py-2.5 px-3 text-zinc-500 whitespace-nowrap font-mono text-[10px]">{formatTs(ev.event_time)}</td>
+                  <td className="py-2.5 px-3 text-gray-400 whitespace-nowrap font-mono text-[10px]">{formatTs(ev.event_time)}</td>
                   <td className="py-2.5 px-3 font-mono text-[#93c5fd] whitespace-nowrap">{ev.tool_name || '—'}</td>
                   <td className="py-2.5 px-3"><StatusBadge status={ev.status} /></td>
-                  <td className="py-2.5 px-3 text-zinc-400 max-w-[160px] truncate" title={ev.rule_name || ev.rule_id}>
+                  <td className="py-2.5 px-3 text-gray-400 max-w-[160px] truncate" title={ev.rule_name || ev.rule_id}>
                     {ev.rule_name || ev.rule_id || '—'}
                   </td>
                   <td className="py-2.5 px-3"><SeverityChip severity={ev.severity} /></td>
                   {mode === 'global' && (
                     <>
-                      <td className="py-2.5 px-3 font-mono text-[10px] text-zinc-400 max-w-[100px] truncate">{ev.agent_id || '—'}</td>
-                      <td className="py-2.5 px-3 font-mono text-[10px] text-zinc-600 max-w-[80px] truncate" title={ev.session_id}>
+                      <td className="py-2.5 px-3 font-mono text-[10px] text-gray-400 max-w-[100px] truncate">{ev.agent_id || '—'}</td>
+                      <td className="py-2.5 px-3 font-mono text-[10px] text-gray-400 max-w-[80px] truncate" title={ev.session_id}>
                         {ev.session_id ? ev.session_id.slice(0, 8) + '…' : '—'}
                       </td>
                     </>
                   )}
-                  <td className="py-2.5 px-3 text-zinc-500 text-[10px] whitespace-nowrap">{ev.decided_by || '—'}</td>
+                  <td className="py-2.5 px-3 text-gray-400 text-[10px] whitespace-nowrap">{ev.decided_by || '—'}</td>
                   <td className="py-2.5 px-3">
                     {ev.status === 'pending' && ev.is_hold_event && (
                       <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>

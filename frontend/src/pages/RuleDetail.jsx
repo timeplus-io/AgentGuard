@@ -23,7 +23,7 @@ const CATEGORY_ICONS = {
 function severityBadge(severity) {
   if (severity === 'critical') return 'bg-[#ffb0cf]/10 text-[#ffb0cf] border border-[#ffb0cf]/20'
   if (severity === 'warning') return 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-  return 'bg-zinc-700/40 text-zinc-400 border border-zinc-600/20'
+  return 'bg-zinc-700/40 text-gray-400 border border-zinc-600/20'
 }
 
 export default function RuleDetail() {
@@ -125,7 +125,7 @@ export default function RuleDetail() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
+      <div className="min-h-screen bg-[#15121d] text-gray-100">
         <Sidebar /><TopNav />
         <main className="pl-sidebar pt-16 pb-8 min-h-screen">
           <div className="p-6 lg:p-10 space-y-6">
@@ -138,7 +138,7 @@ export default function RuleDetail() {
 
   if (!rule) {
     return (
-      <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
+      <div className="min-h-screen bg-[#15121d] text-gray-100">
         <Sidebar /><TopNav />
         <main className="pl-sidebar pt-16 pb-8 min-h-screen flex items-center justify-center">
           {loadError ? (
@@ -147,7 +147,7 @@ export default function RuleDetail() {
               <p className="text-sm text-[#ffb4ab]">{loadError}</p>
             </div>
           ) : (
-            <p className="text-zinc-500">Rule not found.</p>
+            <p className="text-gray-400">Rule not found.</p>
           )}
         </main>
       </div>
@@ -157,7 +157,7 @@ export default function RuleDetail() {
   const icon = CATEGORY_ICONS[rule.category] || 'shield'
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-[#e7dff0]">
+    <div className="min-h-screen bg-[#15121d] text-gray-100">
       <Sidebar /><TopNav />
 
       {/* Toggle confirmation modal */}
@@ -167,11 +167,11 @@ export default function RuleDetail() {
             <h3 className="text-base font-semibold text-white">
               {rule.enabled ? 'Disable' : 'Enable'} Rule Pack
             </h3>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-gray-400">
               Are you sure you want to <span className="text-white font-medium">{rule.enabled ? 'disable' : 'enable'}</span> <span className="text-[#ffb0cf]">{rule.name}</span>?
               {rule.enabled
-                ? <span className="block mt-2 text-xs text-zinc-500">This will pause the detection MV and stop new events from being detected.</span>
-                : <span className="block mt-2 text-xs text-zinc-500">This will create or resume the detection MV and start monitoring.</span>
+                ? <span className="block mt-2 text-xs text-gray-400">This will pause the detection MV and stop new events from being detected.</span>
+                : <span className="block mt-2 text-xs text-gray-400">This will create or resume the detection MV and start monitoring.</span>
               }
             </p>
             <div className="flex gap-3 justify-end">
@@ -200,7 +200,7 @@ export default function RuleDetail() {
         <div className="p-6 lg:p-10 space-y-8">
 
           {/* Back link */}
-          <Link to="/rules" className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-white transition-colors uppercase tracking-widest font-semibold">
+          <Link to="/rules" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors uppercase tracking-widest font-semibold">
             <span className="material-symbols-outlined text-[14px]">arrow_back</span>
             Rule Packs
           </Link>
@@ -208,13 +208,13 @@ export default function RuleDetail() {
           {/* Header row */}
           <div className="flex items-start justify-between gap-6 flex-wrap">
             <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 bg-[#0f0c17] flex items-center justify-center rounded-sm ${rule.enabled ? 'text-[#ffb0cf]' : 'text-zinc-500'}`}>
+              <div className={`w-14 h-14 bg-[#0f0c17] flex items-center justify-center rounded-sm ${rule.enabled ? 'text-[#ffb0cf]' : 'text-gray-400'}`}>
                 <span className="material-symbols-outlined text-[28px]" style={rule.enabled ? { fontVariationSettings: "'FILL' 1" } : {}}>{icon}</span>
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white tracking-tight">{rule.name}</h1>
                 <div className="flex items-center gap-3 mt-1">
-                  <span className="text-xs text-zinc-500">
+                  <span className="text-xs text-gray-400">
                     <span className="material-symbols-outlined text-[12px] text-[#ffb0cf] align-middle" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
                     {' '}{rule.version}
                   </span>
@@ -283,7 +283,7 @@ export default function RuleDetail() {
             <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 flex items-start gap-3">
               <span className="material-symbols-outlined text-red-400 text-[18px] shrink-0 mt-0.5">error</span>
               <p className="text-xs text-red-400 font-mono break-all">{actionError}</p>
-              <button onClick={() => setActionError(null)} className="ml-auto text-zinc-500 hover:text-white shrink-0">
+              <button onClick={() => setActionError(null)} className="ml-auto text-gray-400 hover:text-white shrink-0">
                 <span className="material-symbols-outlined text-[16px]">close</span>
               </button>
             </div>
@@ -292,7 +292,7 @@ export default function RuleDetail() {
           {/* Block Policy */}
           <div className="bg-[#1d1a25] rounded-sm p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Block Policy</span>
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Block Policy</span>
               <BlockPolicySelect
                 value={rule.block_policy}
                 onChange={async (newPolicy) => {
@@ -307,7 +307,7 @@ export default function RuleDetail() {
                 }}
               />
             </div>
-            <p className="text-[11px] text-zinc-400">
+            <p className="text-[11px] text-gray-400">
               {rule.block_policy === 'hold' && 'When this rule fires, AgentGuard will pause the agent and wait for human approval.'}
               {rule.block_policy === 'auto_block' && 'When this rule fires, AgentGuard will block the tool call immediately without prompting.'}
               {(!rule.block_policy || rule.block_policy === 'log_only') && 'When this rule fires, the threat is logged and surfaced in the UI but the agent is not blocked.'}
@@ -316,37 +316,37 @@ export default function RuleDetail() {
 
           {/* Rule Definition */}
           <div className="bg-[#1d1a25] p-8 rounded-sm">
-            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-widest mb-6">Rule Definition</h2>
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-6">Rule Definition</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
               <div>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Rule ID</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Rule ID</p>
                 <p className="text-sm font-mono text-white">{rule.id}</p>
               </div>
               <div>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Version</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Version</p>
                 <p className="text-sm text-white">{rule.version}</p>
               </div>
               <div>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Category</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Category</p>
                 <p className="text-sm text-white capitalize">{rule.category?.replace(/_/g, ' ')}</p>
               </div>
               <div>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Severity</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Severity</p>
                 <p className={`text-sm font-semibold capitalize ${rule.severity === 'critical' ? 'text-[#ffb0cf]' : 'text-amber-400'}`}>
                   {rule.severity}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">False Positive Rate</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">False Positive Rate</p>
                 <p className="text-sm text-white capitalize">{rule.fp_rate}</p>
               </div>
               <div>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Hook Sources</p>
-                <p className="text-xs font-mono text-zinc-300">{rule.hook_sources}</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Hook Sources</p>
+                <p className="text-xs font-mono text-gray-100">{rule.hook_sources}</p>
               </div>
               {rule.required_telemetry && (
                 <div className="col-span-2 md:col-span-3">
-                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Required Telemetry</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Required Telemetry</p>
                   <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">
                     {rule.required_telemetry}
                   </span>
@@ -375,12 +375,12 @@ export default function RuleDetail() {
                     className={`px-4 py-3 text-xs font-semibold uppercase tracking-widest transition-colors border-b-2 ${
                       active
                         ? 'text-[#ffb0cf] border-[#ffb0cf]'
-                        : 'text-zinc-500 hover:text-zinc-300 border-transparent'
+                        : 'text-gray-400 hover:text-gray-100 border-transparent'
                     }`}
                   >
                     {t.label}
                     {t.badge != null && t.badge > 0 && (
-                      <span className={`ml-2 text-[10px] normal-case font-normal ${active ? 'text-[#ffb0cf]/70' : 'text-zinc-600'}`}>
+                      <span className={`ml-2 text-[10px] normal-case font-normal ${active ? 'text-[#ffb0cf]/70' : 'text-gray-400'}`}>
                         {t.badgeLabel ? `(${t.badgeLabel}: ${t.badge})` : `(${t.badge})`}
                       </span>
                     )}
@@ -393,7 +393,7 @@ export default function RuleDetail() {
               {contentTab === 'description' && (
                 /* whitespace-pre-wrap preserves YAML newlines + paragraph breaks
                    while still wrapping long lines. */
-                <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">{rule.description}</p>
+                <p className="text-sm text-gray-100 whitespace-pre-wrap leading-relaxed">{rule.description}</p>
               )}
 
               {contentTab === 'sql' && (
@@ -401,7 +401,7 @@ export default function RuleDetail() {
                   <div className="flex items-center justify-end mb-3">
                     <button
                       onClick={copySQL}
-                      className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+                      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
                     >
                       <span className="material-symbols-outlined text-[14px]">{copied ? 'check' : 'content_copy'}</span>
                       {copied ? 'Copied' : 'Copy'}
@@ -419,13 +419,13 @@ export default function RuleDetail() {
                     {rule.udfs.map((udf, i) => (
                       <div key={i}>
                         <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-semibold text-zinc-400">
+                          <h3 className="text-sm font-semibold text-gray-400">
                             {udfFuncName(udf)}
-                            <span className="ml-2 text-[10px] text-zinc-600 normal-case font-normal">UDF</span>
+                            <span className="ml-2 text-[10px] text-gray-400 normal-case font-normal">UDF</span>
                           </h3>
                           <button
                             onClick={() => copyUDF(i, udf)}
-                            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+                            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
                           >
                             <span className="material-symbols-outlined text-[14px]">{copiedUDFs[i] ? 'check' : 'content_copy'}</span>
                             {copiedUDFs[i] ? 'Copied' : 'Copy'}
@@ -438,7 +438,7 @@ export default function RuleDetail() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-zinc-500">This rule does not define any UDFs.</p>
+                  <p className="text-xs text-gray-400">This rule does not define any UDFs.</p>
                 )
               )}
 

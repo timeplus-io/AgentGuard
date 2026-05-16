@@ -49,12 +49,12 @@ function Toast({ n, onDismiss }) {
           </div>
           <button
             onClick={() => onDismiss(n.id)}
-            className="text-zinc-500 hover:text-zinc-300 transition-colors flex-shrink-0"
+            className="text-gray-400 hover:text-gray-100 transition-colors flex-shrink-0"
           >
             <span className="material-symbols-outlined text-[14px]">close</span>
           </button>
         </div>
-        <p className="text-[11px] text-zinc-400 leading-relaxed line-clamp-2 mb-2">{n.message}</p>
+        <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2 mb-2">{n.message}</p>
         <div className="flex items-center justify-between gap-2">
           {n.agent_id && (
             <code className="text-[10px] font-mono text-[#ffb0cf] bg-[#ffb0cf]/5 px-1.5 py-0.5 rounded-sm truncate max-w-[120px]">

@@ -58,10 +58,10 @@ function CodeBlock({ label, code }) {
   return (
     <div className="bg-gray-800 rounded-sm overflow-hidden border border-[#574149]/10">
       <div className="bg-[#37333f]/50 px-4 py-2 flex justify-between items-center">
-        <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">{label}</span>
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{label}</span>
         <CopyButton text={code} />
       </div>
-      <pre className="p-4 overflow-x-auto text-xs font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap break-all">{code}</pre>
+      <pre className="p-4 overflow-x-auto text-xs font-mono leading-relaxed text-gray-100 whitespace-pre-wrap break-all">{code}</pre>
     </div>
   )
 }
@@ -333,13 +333,13 @@ export default function Onboarding() {
               {alreadyOnboarded && (
                 <button
                   onClick={() => navigate('/dashboard')}
-                  className="text-xs text-zinc-400 hover:text-pink-400 transition-colors flex items-center gap-1.5 mb-2"
+                  className="text-xs text-gray-400 hover:text-pink-400 transition-colors flex items-center gap-1.5 mb-2"
                 >
                   <span className="material-symbols-outlined text-xs">arrow_back</span>
                   Back to Dashboard
                 </button>
               )}
-              <p className="text-zinc-500 text-xs leading-relaxed">
+              <p className="text-gray-400 text-xs leading-relaxed">
                 {alreadyOnboarded
                   ? "You've already connected an agent. Update your configuration or enable additional rules."
                   : 'Follow these steps to connect your AI agent to AgentGuard.'}
@@ -366,7 +366,7 @@ export default function Onboarding() {
                         <div className="h-1.5 w-1.5 rounded-full bg-zinc-600"></div>
                       </div>
                     )}
-                    <span className={`text-xs ${active ? 'font-semibold text-[#ffb0cf]' : done ? 'text-zinc-500' : 'text-zinc-600'}`}>
+                    <span className={`text-xs ${active ? 'font-semibold text-[#ffb0cf]' : done ? 'text-gray-400' : 'text-gray-400'}`}>
                       {i + 1}. {s.label}
                     </span>
                   </div>
@@ -377,7 +377,7 @@ export default function Onboarding() {
             {alreadyOnboarded && (
               <div className="flex items-start gap-3 p-4 bg-[#1d1a25] rounded-sm">
                 <span className="material-symbols-outlined text-amber-400 text-sm mt-0.5">info</span>
-                <p className="text-xs text-zinc-400 leading-relaxed">You've completed onboarding before. Rules already enabled will be shown with an "Already Enabled" badge.</p>
+                <p className="text-xs text-gray-400 leading-relaxed">You've completed onboarding before. Rules already enabled will be shown with an "Already Enabled" badge.</p>
               </div>
             )}
           </div>
@@ -391,7 +391,7 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Select Agent Type</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">Choose the AI agent framework you want to protect with AgentGuard.</p>
+                    <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">Choose the AI agent framework you want to protect with AgentGuard.</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {agentTypes.map(at => (
@@ -408,19 +408,19 @@ export default function Onboarding() {
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <div className={`w-10 h-10 rounded-sm flex items-center justify-center ${!at.disabled && selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'bg-[#211e29] text-zinc-500'}`}>
+                          <div className={`w-10 h-10 rounded-sm flex items-center justify-center ${!at.disabled && selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'bg-[#211e29] text-gray-400'}`}>
                             {at.imgSrc
                               ? <img src={at.imgSrc} alt={at.name} className="h-6 w-6 object-contain" />
                               : <span className="material-symbols-outlined text-lg">{at.icon}</span>
                             }
                           </div>
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${at.disabled ? 'bg-[#37333f] text-zinc-600' : selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'bg-[#37333f] text-zinc-500'}`}>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${at.disabled ? 'bg-[#37333f] text-gray-400' : selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'bg-[#37333f] text-gray-400'}`}>
                             {at.badge}
                           </span>
                         </div>
                         <div>
                           <h3 className="text-sm font-semibold text-white mb-1">{at.name}</h3>
-                          <p className="text-xs text-zinc-400 leading-relaxed">{at.desc}</p>
+                          <p className="text-xs text-gray-400 leading-relaxed">{at.desc}</p>
                         </div>
                       </button>
                     ))}
@@ -433,8 +433,8 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
-                      Download and run the interactive install script from your OpenClaw project directory. It will prompt for the values below and patch your <code className="text-zinc-300">openclaw.json</code> automatically.
+                    <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
+                      Download and run the interactive install script from your OpenClaw project directory. It will prompt for the values below and patch your <code className="text-gray-100">openclaw.json</code> automatically.
                     </p>
                   </div>
 
@@ -444,7 +444,7 @@ export default function Onboarding() {
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Values to have ready</p>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Values to have ready</p>
                     <div className="grid grid-cols-1 gap-3">
                       {[
                         { label: 'Deployment ID', val: deploymentId, set: setDeploymentId, ph: 'my-team' },
@@ -455,27 +455,27 @@ export default function Onboarding() {
                         { label: 'AgentGuard URL', val: agentguardUrl, set: setAgentguardUrl, ph: 'http://localhost:8080' },
                       ].map(({ label, val, set, ph, type }) => (
                         <div key={label} className="flex items-center gap-4">
-                          <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">{label}</label>
+                          <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>
                           <input
                             type={type || 'text'}
                             value={val}
                             onChange={e => set(e.target.value)}
                             placeholder={ph}
-                            className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
+                            className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
                           />
                         </div>
                       ))}
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={holdsEnabled} onChange={e => setHoldsEnabled(e.target.checked)} className="accent-[#ffb0cf]" />
-                          <span className="text-[10px] text-zinc-400">{holdsEnabled ? 'Synchronous PreToolUse blocking on' : 'Observation-only — no blocking'}</span>
+                          <span className="text-[10px] text-gray-400">{holdsEnabled ? 'Synchronous PreToolUse blocking on' : 'Observation-only — no blocking'}</span>
                         </label>
                       </div>
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
                         <select value={holdFailPolicy} onChange={e => setHoldFailPolicy(e.target.value)} disabled={!holdsEnabled}
-                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50">
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono disabled:opacity-50">
                           <option value="deny">deny — block on errors</option>
                           <option value="allow">allow — pass through on errors</option>
                         </select>
@@ -489,7 +489,7 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                    <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       Download and run the interactive install script. It will prompt you for the values below and configure everything automatically.
                     </p>
                   </div>
@@ -500,7 +500,7 @@ export default function Onboarding() {
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Values to have ready</p>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Values to have ready</p>
                     <div className="grid grid-cols-1 gap-3">
                       {[
                         { label: 'Agent ID *', val: agentId, set: setAgentId, ph: 'your-hostname' },
@@ -512,33 +512,33 @@ export default function Onboarding() {
                         { label: 'AgentGuard URL', val: agentguardUrl, set: setAgentguardUrl, ph: 'http://localhost:8080' },
                       ].map(({ label, val, set, ph, type }) => (
                         <div key={label} className="flex items-center gap-4">
-                          <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">{label}</label>
+                          <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>
                           <input
                             type={type || 'text'}
                             value={val}
                             onChange={e => set(e.target.value)}
                             placeholder={ph}
-                            className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
+                            className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
                           />
                         </div>
                       ))}
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={holdsEnabled} onChange={e => setHoldsEnabled(e.target.checked)} className="accent-[#ffb0cf]" />
-                          <span className="text-[10px] text-zinc-400">{holdsEnabled ? 'Synchronous PreToolUse blocking on' : 'Observation-only — no blocking'}</span>
+                          <span className="text-[10px] text-gray-400">{holdsEnabled ? 'Synchronous PreToolUse blocking on' : 'Observation-only — no blocking'}</span>
                         </label>
                       </div>
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
                         <select value={holdFailPolicy} onChange={e => setHoldFailPolicy(e.target.value)} disabled={!holdsEnabled}
-                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50">
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono disabled:opacity-50">
                           <option value="deny">deny — block on errors</option>
                           <option value="allow">allow — pass through on errors</option>
                         </select>
                       </div>
                     </div>
-                    <p className="text-[10px] text-zinc-500 leading-relaxed">* Agent ID identifies this Claude Code instance — use your hostname or machine name.</p>
+                    <p className="text-[10px] text-gray-400 leading-relaxed">* Agent ID identifies this Claude Code instance — use your hostname or machine name.</p>
                   </div>
                 </>
               )}
@@ -547,8 +547,8 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
-                      Download and run the interactive install script. It will pip-install the plugin, run <code className="text-zinc-300">agentguard-hermes install</code>, and offer to append the required env vars to your shell profile.
+                    <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
+                      Download and run the interactive install script. It will pip-install the plugin, run <code className="text-gray-100">agentguard-hermes install</code>, and offer to append the required env vars to your shell profile.
                     </p>
                   </div>
 
@@ -558,7 +558,7 @@ export default function Onboarding() {
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Values to have ready</p>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Values to have ready</p>
                     <div className="grid grid-cols-1 gap-3">
                       {[
                         { label: 'Agent ID *', val: agentId, set: setAgentId, ph: 'your-hostname' },
@@ -570,33 +570,33 @@ export default function Onboarding() {
                         { label: 'AgentGuard URL', val: agentguardUrl, set: setAgentguardUrl, ph: 'http://localhost:8080' },
                       ].map(({ label, val, set, ph, type }) => (
                         <div key={label} className="flex items-center gap-4">
-                          <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">{label}</label>
+                          <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>
                           <input
                             type={type || 'text'}
                             value={val}
                             onChange={e => set(e.target.value)}
                             placeholder={ph}
-                            className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
+                            className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
                           />
                         </div>
                       ))}
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={holdsEnabled} onChange={e => setHoldsEnabled(e.target.checked)} className="accent-[#ffb0cf]" />
-                          <span className="text-[10px] text-zinc-400">{holdsEnabled ? 'Synchronous pre_tool_call blocking on' : 'Observation-only — no blocking'}</span>
+                          <span className="text-[10px] text-gray-400">{holdsEnabled ? 'Synchronous pre_tool_call blocking on' : 'Observation-only — no blocking'}</span>
                         </label>
                       </div>
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
                         <select value={holdFailPolicy} onChange={e => setHoldFailPolicy(e.target.value)} disabled={!holdsEnabled}
-                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono disabled:opacity-50">
+                          className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono disabled:opacity-50">
                           <option value="deny">deny — block on errors</option>
                           <option value="allow">allow — pass through on errors</option>
                         </select>
                       </div>
                     </div>
-                    <p className="text-[10px] text-zinc-500 leading-relaxed">* Agent ID identifies this Hermes instance — use your hostname or machine name.</p>
+                    <p className="text-[10px] text-gray-400 leading-relaxed">* Agent ID identifies this Hermes instance — use your hostname or machine name.</p>
                   </div>
                 </>
               )}
@@ -606,24 +606,24 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">OpenTelemetry Config</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                    <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       Enable the built-in OTel diagnostics plugin to export traces, metrics, and logs from OpenClaw to Timeplus.
                     </p>
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Timeplus OTLP Endpoint</p>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Timeplus OTLP Endpoint</p>
                     <div className="flex items-center gap-4">
-                      <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Endpoint URL</label>
+                      <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Endpoint URL</label>
                       <input
                         value={otelEndpoint}
                         onChange={e => setOtelEndpoint(e.target.value)}
                         placeholder="http://host.docker.internal:4318"
-                        className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
+                        className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
                       />
                     </div>
-                    <p className="text-[10px] text-zinc-500 leading-relaxed pl-40">
-                      Use <code className="text-zinc-400">host.docker.internal</code> when OpenClaw runs in Docker and Timeplus runs on the host. Replace with the actual host/IP if needed.
+                    <p className="text-[10px] text-gray-400 leading-relaxed pl-40">
+                      Use <code className="text-gray-400">host.docker.internal</code> when OpenClaw runs in Docker and Timeplus runs on the host. Replace with the actual host/IP if needed.
                     </p>
                   </div>
 
@@ -635,27 +635,27 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">OpenTelemetry Config</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                    <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       Enable Claude Code's built-in OTel telemetry to export LLM metrics and logs to Timeplus. This unlocks token usage, cost, and latency data.
                     </p>
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Timeplus OTLP Endpoint</p>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Timeplus OTLP Endpoint</p>
                     <div className="flex items-center gap-4">
-                      <label className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest w-36 shrink-0">Endpoint URL</label>
+                      <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Endpoint URL</label>
                       <input
                         value={otelEndpoint}
                         onChange={e => setOtelEndpoint(e.target.value)}
                         placeholder="http://localhost:4318"
-                        className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-[#e7dff0] font-mono"
+                        className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
                       />
                     </div>
                   </div>
 
                   <CodeBlock label="~/.claude/settings.json — merge this env block" code={ccOtelSettingsCode} />
-                  <p className="text-[10px] text-zinc-500 leading-relaxed">
-                    Merge the <code className="text-zinc-400">env</code> keys into your existing <code className="text-zinc-400">~/.claude/settings.json</code>. The <code className="text-zinc-400">http/protobuf</code> protocol is required — do not use gRPC.
+                  <p className="text-[10px] text-gray-400 leading-relaxed">
+                    Merge the <code className="text-gray-400">env</code> keys into your existing <code className="text-gray-400">~/.claude/settings.json</code>. The <code className="text-gray-400">http/protobuf</code> protocol is required — do not use gRPC.
                   </p>
                 </>
               )}
@@ -664,25 +664,25 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">OpenTelemetry Config</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                    <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       OTel telemetry export is not yet supported by Hermes Agent.
                     </p>
                   </div>
                   <div className="flex items-start gap-4 p-5 bg-[#1d1a25] rounded-sm border border-[#574149]/20">
                     <span className="material-symbols-outlined text-amber-400 text-xl mt-0.5 shrink-0">info</span>
                     <div className="space-y-1.5">
-                      <p className="text-sm font-medium text-[#e7dff0]">OTel not yet available for Hermes</p>
-                      <p className="text-xs text-zinc-400 leading-relaxed">
+                      <p className="text-sm font-medium text-gray-100">OTel not yet available for Hermes</p>
+                      <p className="text-xs text-gray-400 leading-relaxed">
                         Hermes Agent does not yet expose an OpenTelemetry exporter. Token usage and latency metrics are captured
-                        via the AgentGuard plugin's <code className="text-zinc-300">post_api_request</code> hook instead —
+                        via the AgentGuard plugin's <code className="text-gray-100">post_api_request</code> hook instead —
                         no additional configuration is required.
                       </p>
-                      <p className="text-xs text-zinc-500 leading-relaxed mt-1">
+                      <p className="text-xs text-gray-400 leading-relaxed mt-1">
                         OTel support will be added here once Hermes ships an OTLP exporter.
                       </p>
                     </div>
                   </div>
-                  <p className="text-xs text-zinc-500">Click <span className="text-zinc-300">Next</span> to proceed to rule activation.</p>
+                  <p className="text-xs text-gray-400">Click <span className="text-gray-100">Next</span> to proceed to rule activation.</p>
                 </>
               )}
 
@@ -691,13 +691,13 @@ export default function Onboarding() {
                 <>
                   <div>
                     <h2 className="text-xl font-semibold text-white tracking-tight">Activate Security Rules</h2>
-                    <p className="text-zinc-400 mt-1.5 text-xs leading-relaxed">
+                    <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       Select the rules to enable now and pick a block policy for each. You can refine these any time from the Rules page.
                     </p>
                   </div>
 
                   {catalogLoading && (
-                    <div className="text-xs text-zinc-500">Loading rules…</div>
+                    <div className="text-xs text-gray-400">Loading rules…</div>
                   )}
                   {catalogError && (
                     <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 text-xs text-red-400">{catalogError}</div>
@@ -706,7 +706,7 @@ export default function Onboarding() {
                   {!catalogLoading && !catalogError && (
                     <div className="flex flex-col gap-2 max-h-[420px] overflow-y-auto pr-2">
                       {catalog.length === 0 ? (
-                        <p className="text-xs text-zinc-500">No rules available in the catalog.</p>
+                        <p className="text-xs text-gray-400">No rules available in the catalog.</p>
                       ) : catalog.map(entry => {
                         const isSelected = !!selectedRules[entry.id]
                         return (
@@ -725,13 +725,13 @@ export default function Onboarding() {
                                 className="mt-1 accent-[#ffb0cf] shrink-0"
                               />
                               <div className="min-w-0">
-                                <p className="text-xs font-semibold text-[#e7dff0] truncate">
+                                <p className="text-xs font-semibold text-gray-100 truncate">
                                   {entry.name}
                                   {entry.installed && (
-                                    <span className="ml-2 text-[9px] uppercase tracking-wide text-zinc-500">Already enabled</span>
+                                    <span className="ml-2 text-[9px] uppercase tracking-wide text-gray-400">Already enabled</span>
                                   )}
                                 </p>
-                                <p className="text-[11px] text-zinc-500 leading-relaxed line-clamp-2">{entry.description}</p>
+                                <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2">{entry.description}</p>
                               </div>
                             </div>
                             <div className="shrink-0">
@@ -751,8 +751,8 @@ export default function Onboarding() {
                     <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 text-xs text-red-400 whitespace-pre-line">{activateError}</div>
                   )}
 
-                  <p className="text-xs text-zinc-500 leading-relaxed">
-                    Selected rules will be installed when you click <span className="text-zinc-300 font-medium">Go to Rules</span>. You can browse the full catalog and adjust policies on the Rules page.
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    Selected rules will be installed when you click <span className="text-gray-100 font-medium">Go to Rules</span>. You can browse the full catalog and adjust policies on the Rules page.
                   </p>
                 </>
               )}
@@ -763,7 +763,7 @@ export default function Onboarding() {
               <button
                 onClick={handleBack}
                 disabled={step === 0}
-                className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-white transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-white transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined text-xs">arrow_back</span>
                 Back

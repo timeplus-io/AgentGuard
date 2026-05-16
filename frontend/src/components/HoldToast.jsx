@@ -15,13 +15,13 @@ export default function HoldToastContainer() {
             <span className="material-symbols-outlined text-[#ffb4ab] text-base">block</span>
             <span className={`text-[9px] uppercase font-semibold ${
               h.severity === 'critical' ? 'text-[#ffb4ab]' :
-              h.severity === 'warning'  ? 'text-amber-400' : 'text-zinc-400'
+              h.severity === 'warning'  ? 'text-amber-400' : 'text-gray-400'
             }`}>{h.severity}</span>
-            <span className="text-[10px] text-zinc-400 truncate flex-1">
+            <span className="text-[10px] text-gray-400 truncate flex-1">
               Hold pending: <code className="font-mono">{h.tool_name}</code>
             </span>
           </div>
-          <p className="text-[11px] text-zinc-300 mb-2 truncate">{h.message}</p>
+          <p className="text-[11px] text-gray-100 mb-2 truncate">{h.message}</p>
           <Link
             to={`/threats/by-hold/${encodeURIComponent(h.hold_id)}`}
             className="inline-block px-3 py-1 bg-primary-button text-primary-button-text text-[10px] font-semibold rounded hover:scale-95 transition-transform"
