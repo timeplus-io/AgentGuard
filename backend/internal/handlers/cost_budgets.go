@@ -44,7 +44,7 @@ SELECT deployment_id,
        arg_max(currency,       updated_at) AS currency,
        arg_max(updated_by,     updated_at) AS updated_by,
        arg_max(deleted,        updated_at) AS deleted,
-       max(updated_at)                     AS updated_at
+       max(updated_at)                     AS last_updated
 FROM table(agentguard_cost_budgets)
 GROUP BY deployment_id
 HAVING NOT deleted
@@ -62,7 +62,7 @@ ORDER BY deployment_id`)
 				MonthlyBudget: parseFloat64(r["monthly_budget"]),
 				Currency:      parseStr(r["currency"]),
 				UpdatedBy:     parseStr(r["updated_by"]),
-				UpdatedAt:     parseStr(r["updated_at"]),
+				UpdatedAt:     parseStr(r["last_updated"]),
 			})
 		}
 		c.JSON(http.StatusOK, models.CostBudgetsResponse{Budgets: budgets})
