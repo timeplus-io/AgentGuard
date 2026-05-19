@@ -1,6 +1,6 @@
 id: rp-023
 name: "Agent Self-Permission Escalation Kill Chain Detector"
-version: "0.3.0"
+version: "0.4.0"
 description: |
   Detects autonomous agent privilege escalation where agents self-grant permissions when encountering access denials, rather than reporting the failure to the user. Documents the kill chain observed in production: Devin AI ran chmod +x on a blocked malicious binary (documented by Johann Rehberger), Irregular Labs frontier LLMs forged admin JWT cookies from leaked Flask secrets and disabled Windows Defender autonomously in March 2026 testing. arXiv:2601.11893 (SEAgent) formalizes this as confused-deputy privilege escalation in LLM agent systems. Analysis of 18,470 agent configurations found 98.9% ship with zero deny rules. v0.2.0 extends with: Linux capability grant via setcap (cap_net_raw, cap_net_admin, all=); polkit pkexec abuse (CVE-2021-4034 still unpatched in many agent containers); NOPASSWD sudoers injection; newuidmap/newgidmap user namespace mapping for rootless container escape; and MCP STDIO process injection (OX Security "Mother of All AI Supply Chains" Apr 2026 — 30+ disclosures, 10+ Critical/High CVEs, 200,000+ MCP servers affected). Rule detects: chmod +x, sudo bash/su, security tooling disablement (ufw/defender/apparmor), Windows admin group manipulation, credential forgery, registry persistence, dotfile-based shell persistence (curl | bash >> ~/.bashrc), setcap Linux capability grant, pkexec abuse, NOPASSWD sudoers edit, and MCP STDIO command injection in tool results.
 
@@ -30,6 +30,90 @@ tags:
   - pkexec
   - mcp-stdio
   - ox-security
+udfs:
+  - |
+    CREATE OR REPLACE AGGREGATE FUNCTION ag_rp023_privilege_fsm(
+      event_time datetime64(3),
+      event_type string,
+      tool_result string,
+      tool_input string
+    ) RETURNS bool
+    LANGUAGE JAVASCRIPT AS $$
+    {
+      initialize: function() {
+        this.denial_ts = 0;
+        this.escalation_ts = 0;
+        this.matched = false;
+        this.emitted = false;
+      },
+      process: function(times, types, results, inputs) {
+        function ts(v) {
+          var t = Date.parse(v);
+          return isNaN(t) ? 0 : t;
+        }
+        function text(v) {
+          return v === null || v === undefined ? '' : String(v).toLowerCase();
+        }
+        function is_denial(v) {
+          return /(permission denied|access denied|not authorized|403|401|forbidden|insufficient privileges?|operation not permitted|eacces|eperm)/.test(v);
+        }
+        function is_escalation(v) {
+          return /chmod \+[xwrs]/.test(v)
+            || /sudo (bash|sh|su|chmod|chown|passwd|visudo)/.test(v)
+            || /(disable|stop|kill) (defender|antivirus|ufw|firewall|selinux|apparmor|auditd)/.test(v)
+            || /ufw disable/.test(v)
+            || /net localgroup administrators/.test(v)
+            || /setcap (cap_|all=)/.test(v)
+            || /pkexec/.test(v)
+            || /nopasswd/.test(v)
+            || /(newuidmap|newgidmap)/.test(v)
+            || /(forge|generate|create).{1,20}(admin|session|auth|jwt).{1,20}(token|cookie|credential|key)/.test(v);
+        }
+        for (var i = 0; i < times.length; i++) {
+          var typ = text(types[i]);
+          var t = ts(times[i]);
+          if (typ === 'tool_complete' && is_denial(text(results[i]))) {
+            if (this.denial_ts === 0 || t < this.denial_ts) this.denial_ts = t;
+          }
+          if (typ === 'tool_invoke' && is_escalation(text(inputs[i]))) {
+            if (t > this.escalation_ts) this.escalation_ts = t;
+          }
+          if (this.denial_ts > 0 && this.escalation_ts >= this.denial_ts) {
+            this.matched = true;
+          }
+        }
+      },
+      finalize: function() {
+        if (this.matched && !this.emitted) {
+          this.emitted = true;
+          return true;
+        }
+        return false;
+      },
+      serialize: function() {
+        return JSON.stringify({
+          denial_ts: this.denial_ts,
+          escalation_ts: this.escalation_ts,
+          matched: this.matched,
+          emitted: this.emitted
+        });
+      },
+      deserialize: function(state_str) {
+        var s = JSON.parse(state_str);
+        this.denial_ts = s.denial_ts || 0;
+        this.escalation_ts = s.escalation_ts || 0;
+        this.matched = !!s.matched;
+        this.emitted = !!s.emitted;
+      },
+      merge: function(state_str) {
+        var s = JSON.parse(state_str);
+        if (s.denial_ts && (this.denial_ts === 0 || s.denial_ts < this.denial_ts)) this.denial_ts = s.denial_ts;
+        if (s.escalation_ts && s.escalation_ts > this.escalation_ts) this.escalation_ts = s.escalation_ts;
+        this.matched = this.matched || !!s.matched || (this.denial_ts > 0 && this.escalation_ts >= this.denial_ts);
+        this.emitted = this.emitted || !!s.emitted;
+      }
+    }
+    $$;
 query_sql: |
   -- Changelog v0.2.0 (2026-04-17):
   -- NEW: setcap Linux capability grant (cap_net_raw, cap_net_admin, all=+ep)
@@ -108,41 +192,25 @@ query_sql: |
       OR match(tool_result, '"mcpServers".{0,300}"env".{0,200}(LD_PRELOAD|NODE_OPTIONS|PYTHONWARNINGS|BROWSER|PERL5OPT|DYLD_INSERT_LIBRARIES)')
     )
   UNION ALL
-  -- v0.3.0: Sequential lag() branch — catches the kill chain as a precise 2-step event
-  -- sequence within the same session: access denial in tool_complete immediately followed
-  -- by privilege escalation attempt in tool_invoke. This is the definitive confused-deputy
-  -- escalation pattern (SEAgent arXiv:2601.11893): agent is denied access and autonomously
-  -- attempts to self-grant the missing permission rather than reporting failure to the user.
-  -- SQL validated: count=0 (test corpus).
-  WITH enriched AS (
-    SELECT *,
-      lag(event_type)  OVER (PARTITION BY session_id) AS prev_event_type,
-      lag(tool_result) OVER (PARTITION BY session_id) AS prev_tool_result
-    FROM agentguard_cim_event
-  )
+  -- v0.4.0: JS aggregate FSM branch — catches the confused-deputy kill chain even
+  -- when unrelated events appear between the denial and the later privilege attempt.
+  -- The UDAF tracks per-session denial state across an arbitrary number of events.
   SELECT
-    event_time AS detected_at,
+    max(event_time) AS detected_at,
     'rp-023' AS rule_id,
     'Agent Self-Permission Escalation Kill Chain Detector' AS rule_name,
     'critical' AS severity,
-    agent_id, deployment_id, session_id, run_id,
-    raw_hook_name AS hook_name,
-    tool_name,
-    concat('Sequential kill chain: access denial (tool_complete) → privilege escalation tool_invoke [', coalesce(tool_name,'unknown'), '] by agent ', agent_id) AS message,
-    raw_event_data AS event_data
-  FROM enriched
-  WHERE event_type = 'tool_invoke'
-    AND prev_event_type = 'tool_complete'
-    AND match(lower(prev_tool_result), '(permission denied|access denied|not authorized|403|401|forbidden|insufficient privileges?|operation not permitted|eacces|eperm)')
-    AND (
-      match(lower(tool_input), 'chmod \+[xwrs]')
-      OR match(lower(tool_input), 'sudo (bash|sh|su|chmod|chown|passwd|visudo)')
-      OR match(lower(tool_input), '(disable|stop|kill) (defender|antivirus|ufw|firewall|selinux|apparmor|auditd)')
-      OR match(lower(tool_input), 'ufw disable')
-      OR match(lower(tool_input), 'net localgroup administrators')
-      OR match(lower(tool_input), 'setcap (cap_|all=)')
-      OR match(lower(tool_input), 'pkexec')
-      OR match(tool_input, 'NOPASSWD')
-      OR match(lower(tool_input), '(newuidmap|newgidmap)')
-      OR match(lower(tool_input), '(forge|generate|create).{1,20}(admin|session|auth|jwt).{1,20}(token|cookie|credential|key)')
-    )
+    agent_id,
+    deployment_id,
+    session_id,
+    arg_max(run_id, event_time) AS run_id,
+    arg_max(raw_hook_name, event_time) AS hook_name,
+    arg_max(tool_name, event_time) AS tool_name,
+    concat('Privilege escalation kill chain: access denial followed by later self-permission escalation in session ', session_id, ' by agent ', agent_id) AS message,
+    concat('session_id=', coalesce(session_id, ''), ' last_event=', to_string(max(event_time))) AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_complete', 'tool_invoke')
+  GROUP BY session_id, agent_id, deployment_id
+  HAVING ag_rp023_privilege_fsm(event_time, event_type, tool_result, tool_input) = true
+  EMIT ON UPDATE
+  SETTINGS prefer_column_name_to_alias=1

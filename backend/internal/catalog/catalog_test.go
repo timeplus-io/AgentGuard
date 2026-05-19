@@ -581,6 +581,115 @@ func TestSeedFS_RP050HasHopWindow(t *testing.T) {
 	}
 }
 
+func TestSeedFS_Issue43RulesUseJSAggregateUDFs(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+
+	cases := []struct {
+		id           string
+		version      string
+		udfName      string
+		queryUse     string
+		antiSnippets []string
+	}{
+		{"rp-023", "0.4.0", "ag_rp023_privilege_fsm", "HAVING ag_rp023_privilege_fsm(", []string{"lag(event_type)", "prev_event_type"}},
+		{"rp-044", "0.4.0", "ag_rp044_clawworm_fsm", "HAVING ag_rp044_clawworm_fsm(", []string{"lags(event_type", "prev2_events"}},
+		{"rp-066", "0.2.0", "ag_rp066_skillinject_fsm", "HAVING ag_rp066_skillinject_fsm(", []string{".env\\b"}},
+		{"rp-076", "0.2.0", "ag_rp076_cfh_fsm", "HAVING ag_rp076_cfh_fsm(", []string{"Branch D: Code-execution tool invoked immediately"}},
+	}
+	for _, c := range cases {
+		t.Run(c.id, func(t *testing.T) {
+			e, ok := m.Lookup(c.id)
+			if !ok {
+				t.Fatalf("%s missing from seed catalog", c.id)
+			}
+			if e.Version != c.version {
+				t.Fatalf("%s version = %q, want %q", c.id, e.Version, c.version)
+			}
+			if len(e.UDFs) == 0 {
+				t.Fatalf("%s has no UDF definitions", c.id)
+			}
+			joinedUDFs := strings.Join(e.UDFs, "\n")
+			requiredUDFSnippets := []string{
+				"CREATE OR REPLACE AGGREGATE FUNCTION " + c.udfName,
+				"LANGUAGE JAVASCRIPT",
+				"serialize: function()",
+				"deserialize: function(state_str)",
+				"merge: function(state_str)",
+				"this.emitted",
+			}
+			for _, want := range requiredUDFSnippets {
+				if !strings.Contains(joinedUDFs, want) {
+					t.Errorf("%s UDF missing %q", c.id, want)
+				}
+			}
+			if !strings.Contains(e.QuerySQL, c.queryUse) {
+				t.Errorf("%s QuerySQL missing %q", c.id, c.queryUse)
+			}
+			sqlWithoutComments := stripSQLComments(e.QuerySQL)
+			for _, forbidden := range c.antiSnippets {
+				if strings.Contains(sqlWithoutComments, forbidden) {
+					t.Errorf("%s QuerySQL still contains pre-UDA snippet %q", c.id, forbidden)
+				}
+			}
+		})
+	}
+}
+
+func TestSeedFS_FSMRulesMergeCorrectness(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+
+	cases := []struct {
+		id             string
+		requiredFields []string
+		forbiddenFlags []string
+	}{
+		{"rp-076", []string{"false_status_ts", "code_exec_ts"}, []string{"seen_false_status", "seen_code_exec"}},
+		{"rp-066", []string{"injected_skill_ts", "sensitive_access_ts"}, []string{"seen_injected_skill", "seen_sensitive_access"}},
+		{"rp-044", []string{"this.phase"}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.id, func(t *testing.T) {
+			e, ok := m.Lookup(c.id)
+			if !ok {
+				t.Fatalf("%s missing from seed catalog", c.id)
+			}
+			joinedUDFs := strings.Join(e.UDFs, "\n")
+			for _, f := range c.requiredFields {
+				if !strings.Contains(joinedUDFs, f) {
+					t.Errorf("%s UDAF missing timestamp field %q for compositional merge", c.id, f)
+				}
+			}
+			for _, f := range c.forbiddenFlags {
+				if strings.Contains(joinedUDFs, f) {
+					t.Errorf("%s UDAF still uses non-compositional field %q", c.id, f)
+				}
+			}
+		})
+	}
+
+	// rp-044: verify phase FSM for 3-stage ordering; merge is best-effort.
+	t.Run("rp-044-phase-fsm", func(t *testing.T) {
+		e, _ := m.Lookup("rp-044")
+		joinedUDFs := strings.Join(e.UDFs, "\n")
+		for _, want := range []string{
+			"this.phase === 0",
+			"this.phase >= 1",
+			"this.phase >= 2",
+			"this.phase = 3",
+		} {
+			if !strings.Contains(joinedUDFs, want) {
+				t.Errorf("rp-044 UDAF missing phase FSM snippet %q", want)
+			}
+		}
+	})
+}
+
 // TestSeedFS_RP102HasHopWindow pins rp-102 (Agentic Pressure Normative Drift,
 // closes #88) to its streaming-MV rewrite. Branch A must use a 5-minute hop
 // window in place of `OVER (... ROWS BETWEEN 4 PRECEDING AND CURRENT ROW)`,
