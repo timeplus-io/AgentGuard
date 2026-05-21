@@ -222,26 +222,21 @@ func ToggleRule(cfg *config.Config, mgr *catalog.Manager, holdReg *holdregistry.
 		// append-only log with eventual consistency; reading back NOT arg_max(enabled)
 		// in a rapid second toggle may see the pre-first-toggle state and flip the
 		// wrong direction.
-		sql := fmt.Sprintf(`
-INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
-SELECT
-  rule_id,
-  arg_max(name,               updated_at) AS name,
-  arg_max(version,            updated_at) AS version,
-  arg_max(description,        updated_at) AS description,
-  arg_max(query_sql,          updated_at) AS query_sql,
-  %t                                      AS enabled,
-  false                                   AS deleted,
-  arg_max(severity,           updated_at) AS severity,
-  arg_max(category,           updated_at) AS category,
-  arg_max(required_telemetry, updated_at) AS required_telemetry,
-  arg_max(fp_rate,            updated_at) AS fp_rate,
-  arg_max(hook_sources,       updated_at) AS hook_sources,
-  arg_max(block_policy,       updated_at) AS block_policy,
-  now64(3)                                AS updated_at
-FROM table(agentguard_rules)
-WHERE rule_id = '%s'
-GROUP BY rule_id`, newEnabled, escapeSQLStr(id))
+		sql := fmt.Sprintf(
+			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at) VALUES ('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s','%s',now64(3))`,
+			escapeSQLStr(id),
+			escapeSQLStr(current.Name),
+			escapeSQLStr(current.Version),
+			escapeSQLStr(current.Description),
+			escapeSQLStr(current.QuerySQL),
+			newEnabled,
+			escapeSQLStr(current.Severity),
+			escapeSQLStr(current.Category),
+			escapeSQLStr(current.RequiredTelemetry),
+			escapeSQLStr(current.FPRate),
+			escapeSQLStr(current.HookSources),
+			escapeSQLStr(current.BlockPolicy),
+		)
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
 			log.Printf("rules: toggle %s db update: %v", id, err)
@@ -368,26 +363,21 @@ func UninstallRule(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 
-		sql := fmt.Sprintf(`
-INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
-SELECT
-  rule_id,
-  arg_max(name,               updated_at) AS name,
-  arg_max(version,            updated_at) AS version,
-  arg_max(description,        updated_at) AS description,
-  arg_max(query_sql,          updated_at) AS query_sql,
-  arg_max(enabled,            updated_at) AS enabled,
-  true                                    AS deleted,
-  arg_max(severity,           updated_at) AS severity,
-  arg_max(category,           updated_at) AS category,
-  arg_max(required_telemetry, updated_at) AS required_telemetry,
-  arg_max(fp_rate,            updated_at) AS fp_rate,
-  arg_max(hook_sources,       updated_at) AS hook_sources,
-  arg_max(block_policy,       updated_at) AS block_policy,
-  now64(3)                                AS updated_at
-FROM table(agentguard_rules)
-WHERE rule_id = '%s'
-GROUP BY rule_id`, escapeSQL(id))
+		sql := fmt.Sprintf(
+			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at) VALUES ('%s','%s','%s','%s','%s',%v,true,'%s','%s','%s','%s','%s','%s',now64(3))`,
+			escapeSQLStr(id),
+			escapeSQLStr(current.Name),
+			escapeSQLStr(current.Version),
+			escapeSQLStr(current.Description),
+			escapeSQLStr(current.QuerySQL),
+			current.Enabled,
+			escapeSQLStr(current.Severity),
+			escapeSQLStr(current.Category),
+			escapeSQLStr(current.RequiredTelemetry),
+			escapeSQLStr(current.FPRate),
+			escapeSQLStr(current.HookSources),
+			escapeSQLStr(current.BlockPolicy),
+		)
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
 			log.Printf("rules: UninstallRule db update: %v", err)
@@ -959,26 +949,21 @@ func SetRuleBlockPolicy(cfg *config.Config, mgr *catalog.Manager, holdReg *holdr
 			return
 		}
 
-		sql := fmt.Sprintf(`
-INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at)
-SELECT
-  rule_id,
-  arg_max(name,               updated_at) AS name,
-  arg_max(version,            updated_at) AS version,
-  arg_max(description,        updated_at) AS description,
-  arg_max(query_sql,          updated_at) AS query_sql,
-  arg_max(enabled,            updated_at) AS enabled,
-  false                                   AS deleted,
-  arg_max(severity,           updated_at) AS severity,
-  arg_max(category,           updated_at) AS category,
-  arg_max(required_telemetry, updated_at) AS required_telemetry,
-  arg_max(fp_rate,            updated_at) AS fp_rate,
-  arg_max(hook_sources,       updated_at) AS hook_sources,
-  '%s'                                    AS block_policy,
-  now64(3)                                AS updated_at
-FROM table(agentguard_rules)
-WHERE rule_id = '%s'
-GROUP BY rule_id`, escapeSQLStr(body.BlockPolicy), escapeSQLStr(id))
+		sql := fmt.Sprintf(
+			`INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, block_policy, updated_at) VALUES ('%s','%s','%s','%s','%s',%v,false,'%s','%s','%s','%s','%s','%s',now64(3))`,
+			escapeSQLStr(id),
+			escapeSQLStr(current.Name),
+			escapeSQLStr(current.Version),
+			escapeSQLStr(current.Description),
+			escapeSQLStr(current.QuerySQL),
+			current.Enabled,
+			escapeSQLStr(current.Severity),
+			escapeSQLStr(current.Category),
+			escapeSQLStr(current.RequiredTelemetry),
+			escapeSQLStr(current.FPRate),
+			escapeSQLStr(current.HookSources),
+			escapeSQLStr(body.BlockPolicy),
+		)
 
 		if err := tp.ExecHTTP(&cfg.Timeplus, sql); err != nil {
 			log.Printf("rules: SetRuleBlockPolicy ExecHTTP: %v", err)
@@ -1021,5 +1006,3 @@ func versionGreater(a, b string) bool {
 	}
 	return false
 }
-
-
