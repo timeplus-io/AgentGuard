@@ -190,9 +190,9 @@ WHERE _tp_time > earliest_ts()
 
 ### Hermes Memory (`mv_memory_hermes`)
 
-Hermes Agent has a built-in `memory` tool that manages two files: `MEMORY.md` (agent's personal notes) and `USER.md` (user profile). The tool supports three actions: `add`, `replace`, and `remove`. There is no `read` action — memory content is automatically injected into the system prompt at session start.
+Hermes Agent has a built-in `memory` tool that manages memory. The tool supports three actions: `add`, `replace`, and `remove`. There is no `read` action — memory content is automatically injected into the system prompt at session start.
 
-The `target` field (`memory` or `user`) distinguishes which memory store is being updated. It is stored in the `server_name` column (repurposed as the memory target since Hermes has no MCP server concept).
+The tool argument `target` (`memory` or `user`) distinguishes which memory store is being updated. It is stored in the `memory_path` column though it is not the actual file path.
 
 ```sql
 CREATE MATERIALIZED VIEW mv_memory_hermes
