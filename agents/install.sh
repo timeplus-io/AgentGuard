@@ -101,7 +101,7 @@ echo ""
 # ── Shared config ──────────────────────────────────────────────────────────
 echo "Configuration (press Enter to accept defaults):"
 echo ""
-AGENT_ID=$(prompt      "Agent ID (this machine's identifier)" "$(hostname)")
+AGENT_ID=$(prompt      "Agent ID (this machine's identifier)" "$AGENT_TYPE.$(hostname)")
 DEPLOYMENT_ID=$(prompt "Deployment ID"                        "local")
 DEPLOYMENT_NAME=$(prompt "Deployment Name"                   "Local Dev")
 TIMEPLUS_URL=$(prompt  "Timeplus URL"                         "http://localhost:3218")
