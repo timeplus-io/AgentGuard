@@ -59,11 +59,12 @@ export default function AgentList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(15)
   const [total, setTotal] = useState(0)
 
   useEffect(() => {
     setError(null)
-    api.listAgents(page, 15)
+    api.listAgents(page, limit)
       .then(data => {
         if (data.agents) {
           setAgents(data.agents)
@@ -72,7 +73,7 @@ export default function AgentList() {
       })
       .catch(err => setError(err?.message || 'Failed to load agents'))
       .finally(() => setLoading(false))
-  }, [page])
+  }, [page, limit])
 
   return (
     <div className="min-h-screen bg-[#15121d] text-gray-100">
@@ -191,10 +192,10 @@ export default function AgentList() {
               <span>Showing {agents.length} of {total} agents</span>
               <div className="flex items-center gap-2">
                 <span>Show:</span>
-                <select className="bg-gray-800 border border-gray-600 rounded-sm text-[10px] py-1 pl-2 pr-6 focus:border-gray-400 focus:outline-none text-gray-400">
-                  <option>15</option>
-                  <option>50</option>
-                  <option>100</option>
+                <select value={limit} onChange={e => { setLimit(Number(e.target.value)); setPage(1) }} className="bg-gray-800 border border-gray-600 rounded-sm text-[10px] py-1 pl-2 pr-6 focus:border-gray-400 focus:outline-none text-gray-400">
+                  <option value={15}>15</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
                 </select>
               </div>
             </div>
@@ -206,7 +207,7 @@ export default function AgentList() {
               >
                 <span className="material-symbols-outlined text-xs">chevron_left</span>
               </button>
-              {[1, 2, 3].map(p => (
+              {Array.from({ length: Math.ceil(total / limit) }, (_, i) => i + 1).map(p => (
                 <button
                   key={p}
                   onClick={() => setPage(p)}
@@ -220,7 +221,8 @@ export default function AgentList() {
               ))}
               <button
                 onClick={() => setPage(p => p + 1)}
-                className="w-8 h-8 flex items-center justify-center bg-[#1d1a25] hover:bg-[#2c2834] transition-colors rounded-sm border border-[#574149]/10 text-gray-100"
+                disabled={page >= Math.ceil(total / limit)}
+                className="w-8 h-8 flex items-center justify-center bg-[#1d1a25] hover:bg-[#2c2834] transition-colors rounded-sm border border-[#574149]/10 text-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-xs">chevron_right</span>
               </button>
