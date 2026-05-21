@@ -58,7 +58,6 @@ prompt_secret() {
   local prompt_text="$1"
   local val
   read -rsp "  ${prompt_text}: " val
-  echo ""
   printf '%s' "$val"
 }
 
@@ -108,11 +107,12 @@ DEPLOYMENT_NAME=$(prompt "Deployment Name"                   "Local Dev")
 TIMEPLUS_URL=$(prompt  "Timeplus URL"                         "http://localhost:3218")
 TIMEPLUS_USERNAME=$(prompt "Timeplus Username"                "proton")
 TIMEPLUS_PASSWORD=$(prompt_secret "Timeplus Password")
+echo ""
 AGENTGUARD_URL=$(prompt "AgentGuard URL"                     "http://localhost:8080")
 
 echo ""
 read -rp "  Enable holds (synchronous tool-call blocking)? [Y/n]: " holds_yn
-if [[ "${holds_yn,,}" == "n" ]]; then
+if [[ "$holds_yn" =~ ^[Nn]$ ]]; then
   HOLDS_ENABLED="false"
 else
   HOLDS_ENABLED="true"
@@ -398,6 +398,14 @@ if [[ "$AGENT_TYPE" == "hermes" ]]; then
 
   agentguard-hermes install
 
+  echo ""
+  echo "Enable agentguard-hermes-plugin..."
+  if command -v hermes &>/dev/null; then
+    hermes plugins enable agentguard
+  else
+    echo "Warning: 'hermes' is not found — skipping plugin enable."
+  fi
+
   EXPORT_BLOCK="$(printf '# AgentGuard\n'
 printf 'export AGENTGUARD_TIMEPLUS_URL=%q\n'    "$TIMEPLUS_URL"
 printf 'export AGENTGUARD_USERNAME=%q\n'         "$TIMEPLUS_USERNAME"
@@ -420,7 +428,7 @@ printf 'export AGENTGUARD_HOLD_FAIL_POLICY=%q\n' "$HOLD_FAIL_POLICY")"
 
   if [[ -n "$SHELL_PROFILE" ]]; then
     read -rp "  Append to ${SHELL_PROFILE}? [Y/n]: " append_yn
-    if [[ "${append_yn,,}" != "n" ]]; then
+    if [[ ! "$append_yn" =~ ^[Nn]$ ]]; then
       if grep -q "AGENTGUARD_TIMEPLUS_URL" "$SHELL_PROFILE" 2>/dev/null; then
         echo "  AgentGuard vars already present in ${SHELL_PROFILE} — skipping append."
         echo "  If your configuration changed, update these values manually:"
