@@ -20,15 +20,16 @@ Memory monitoring gives operators visibility into exactly what is being stored a
 
 ## Memory Sources
 
-Three distinct memory mechanisms are tracked, covering both Claude Code and OpenClaw agents:
+Three distinct memory mechanisms are tracked, covering Claude Code, OpenClaw, and Hermes agents:
 
 | Source | Agent | Mechanism |
 |--------|-------|-----------|
 | **auto_memory** | Claude Code | Built-in auto-memory: Claude uses its standard `Write`/`Edit`/`Read` tools on `~/.claude/projects/<repo>/memory/*.md` |
 | **mcp** | Claude Code | Any MCP memory plugin: tools appear as `mcp__<server>__<tool>` (e.g. `mcp__plugin_claude-mem__save_memory`) |
 | **openclaw_file** | OpenClaw | File-based memory workspace: agent reads/writes Markdown files under `.openclaw/workspace/memory/` |
+| **hermes_memory** | Hermes | Built-in `memory` tool |
 
-No plugin changes are required — all three signals are already present in `agentguard_hook_events`.
+No plugin changes are required — all four signals are already present in `agentguard_hook_events`.
 
 ---
 
@@ -38,11 +39,11 @@ All memory operations are normalized into a standard set of types:
 
 | `memory_op` | Triggered by |
 |-------------|-------------|
-| `save` | Write to memory — `Write` tool (auto_memory), MCP tool matching `save\|store\|remember\|upsert\|embed\|write`, or `write` tool (OpenClaw) |
+| `save` | Write to memory — `Write` tool (auto_memory), MCP tool matching `save\|store\|remember\|upsert\|embed\|write`, `write` tool (OpenClaw), or `memory` tool `action=add` (Hermes) |
 | `read` | Read from memory — `Read` tool (auto_memory), MCP tool matching `read\|load\|get\|fetch\|observation`, or `read` tool (OpenClaw) |
-| `update` | In-place edit — `Edit` tool (auto_memory), MCP tool matching `update\|edit\|patch` |
+| `update` | In-place edit — `Edit` tool (auto_memory), MCP tool matching `update\|edit\|patch`, or `memory` tool `action=replace` (Hermes) |
 | `search` | Query/recall — MCP tool matching `search\|query\|recall\|retrieve\|find` |
-| `delete` | Remove from memory — MCP tool matching `delete\|forget\|remove` |
+| `delete` | Remove from memory — MCP tool matching `delete\|forget\|remove`, or `memory` tool `action=remove` (Hermes) |
 | `other` | Any operation that doesn't match the above patterns |
 
 ---
@@ -60,21 +61,25 @@ agentguard_hook_events
         │   + tool name matches memory keywords        (claudecode)
         │       └─► mv_memory_claudecode_mcp ──────────────────┤
         │                                                      │
-        └─ before_tool_call / tool_name IN ('write','read')    │
-            path matches .openclaw/workspace/memory/   (openclaw)
-                └─► mv_memory_openclaw_file ───────────────────┘
-                                                               │
-                                                               ▼
-                                                   agentguard_memory_ops
-                                                               │
-                                         ┌─────────────────────┴──────────────────┐
-                                         ▼                                         ▼
-                             AgentDetail → Memory tab               AgentDetail → Memory panel
-                             (session-scoped)                       (agent-scoped, no session)
-                             queried via /api/proton/query          queried via /api/proton/query
+        ├─ before_tool_call / tool_name IN ('write','read')    │
+        │   path matches .openclaw/workspace/memory/   (openclaw)
+        │       └─► mv_memory_openclaw_file ───────────────────┤
+        │                                                      │
+        └─ pre_tool_call / tool_name = 'memory'    (hermes)
+            action IN ('add','replace','remove')
+                └─► mv_memory_hermes ─────────────────────────────┘
+                                                                │
+                                                                ▼
+                                                    agentguard_memory_ops
+                                                                │
+                                          ┌─────────────────────┴──────────────────┐
+                                          ▼                                         ▼
+                              AgentDetail → Memory tab               AgentDetail → Memory panel
+                              (session-scoped)                       (agent-scoped, no session)
+                              queried via /api/proton/query          queried via /api/proton/query
 ```
 
-All three materialized views use `WHERE _tp_time > earliest_ts()` so they backfill all historical hook events on creation, not just new ones.
+All four materialized views use `WHERE _tp_time > earliest_ts()` so they backfill all historical hook events on creation, not just new ones.
 
 ---
 
@@ -86,9 +91,9 @@ CREATE STREAM agentguard_memory_ops
   event_time      datetime64(3),
   session_id      string,
   agent_id        string,
-  agent_type      low_cardinality(string),           -- 'claudecode' | 'openclaw'
+  agent_type        low_cardinality(string),         -- 'claudecode' | 'openclaw' | 'hermes'
   deployment_id   low_cardinality(string),
-  memory_source   low_cardinality(string),           -- 'auto_memory' | 'mcp' | 'openclaw_file'
+  memory_source   low_cardinality(string),           -- 'auto_memory' | 'mcp' | 'openclaw_file' | 'hermes_memory'
   memory_op       low_cardinality(string),           -- 'save' | 'search' | 'read' | 'delete' | 'update' | 'other'
   tool_name       string,                            -- full tool name as emitted in hook event
   server_name     low_cardinality(string),           -- MCP server name (e.g. 'plugin_claude-mem_mcp-search'); empty for file ops
@@ -183,6 +188,39 @@ WHERE _tp_time > earliest_ts()
   AND match(json_value(event_data, '$.params.path'), '\.openclaw/workspace/memory/')
 ```
 
+### Hermes Memory (`mv_memory_hermes`)
+
+Hermes Agent has a built-in `memory` tool that manages two files: `MEMORY.md` (agent's personal notes) and `USER.md` (user profile). The tool supports three actions: `add`, `replace`, and `remove`. There is no `read` action — memory content is automatically injected into the system prompt at session start.
+
+The `target` field (`memory` or `user`) distinguishes which memory store is being updated. It is stored in the `server_name` column (repurposed as the memory target since Hermes has no MCP server concept).
+
+```sql
+CREATE MATERIALIZED VIEW mv_memory_hermes
+INTO agentguard_memory_ops AS
+SELECT
+  event_time,
+  session_id,
+  agent_id,
+  agent_type,
+  deployment_id,
+  'hermes_memory' AS memory_source,
+  CASE
+    WHEN json_value(event_data, '$.args.action') = 'add' THEN 'save'
+    WHEN json_value(event_data, '$.args.action') = 'replace' THEN 'update'
+    WHEN json_value(event_data, '$.args.action') = 'remove' THEN 'delete'
+    ELSE 'other'
+  END AS memory_op,
+  tool_name,
+  '' AS server_name,
+  json_value(event_data, '$.args.target') AS memory_path,
+  json_query(event_data, '$.args') AS content_payload
+FROM agentguard_hook_events
+WHERE _tp_time > earliest_ts()
+  AND hook_name = 'pre_tool_call'
+  AND agent_type = 'hermes'
+  AND tool_name = 'memory'
+```
+
 ---
 
 ## Frontend: Memory Tab (Session-Scoped)
@@ -200,7 +238,7 @@ SETTINGS seek_to = 'earliest'
 Each row shows:
 - **Time** — when the operation occurred
 - **Op badge** — colored by type: `save` (amber), `search` (blue), `read` (green), `delete` (red), `update` (purple), `other` (zinc)
-- **Source** — `auto_memory`, `mcp`, or `openclaw_file`
+- **Source** — `auto_memory`, `mcp`, `openclaw_file`, or `hermes_memory`
 - **Label** — MCP server name, filename (for file ops), or raw tool name
 - **Expand** — click any row to reveal the full file path and `content_payload` JSON
 
@@ -242,4 +280,5 @@ LIMIT 50
 | Auto-memory path dependency | Detection relies on the `/.claude/projects/*/memory/` path convention. If Claude Code changes its memory layout in a future version, the MV will need updating. |
 | MCP server name with `__` | `split_by_string('__', tool_name)[2]` assumes the three-segment `mcp__<server>__<tool>` format. A server name containing `__` will produce an incorrect `server_name` value (low probability given Claude Code conventions). |
 | OpenClaw memory not yet observed | The OpenClaw memory MV is syntactically validated but has not been tested against a live session that writes to its memory directory. Verify after the first such session. |
+| Hermes memory has no `read` ops | Hermes memory content is automatically injected into the system prompt at session start — there is no `read` action. Only `add`, `replace`, and `remove` are emitted. |
 | Content payload size | `content_payload` stores the full `tool_input` JSON. Large memory saves may be multi-KB per row. Monitor `agentguard_memory_ops` storage growth over time. |
