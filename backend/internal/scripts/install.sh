@@ -1,12 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ── Offline-mode flag ──────────────────────────────────────────────────────
+# Usage: install.sh [--offline [PACKAGE_DIR]]
+#   --offline            use packages/ dir next to this script
+#   --offline /path/dir  use specified dir
+OFFLINE_MODE="false"
+PACKAGE_DIR=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --offline)
+      OFFLINE_MODE="true"
+      if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+        PACKAGE_DIR="$2"
+        shift
+      fi
+      shift
+      ;;
+    *) shift ;;
+  esac
+done
+
+# Auto-detect: if a packages/ dir with plugin files exists next to the script, go offline
+if [[ "$OFFLINE_MODE" == "false" && -d "${SCRIPT_DIR}/packages" ]]; then
+  if ls "${SCRIPT_DIR}/packages"/*agentguard*.{tgz,whl} 2>/dev/null | grep -q .; then
+    echo "  [info] Detected offline package bundle in packages/ — switching to offline mode."
+    OFFLINE_MODE="true"
+  fi
+fi
+
+if [[ "$OFFLINE_MODE" == "true" && -z "$PACKAGE_DIR" ]]; then
+  PACKAGE_DIR="${SCRIPT_DIR}/packages"
+fi
+
 # ── Banner ─────────────────────────────────────────────────────────────────
 echo ""
 echo "  ╔═══════════════════════════════════════╗"
 echo "  ║   AgentGuard Plugin Installer         ║"
 echo "  ╚═══════════════════════════════════════╝"
 echo ""
+if [[ "$OFFLINE_MODE" == "true" ]]; then
+  echo "  Mode: OFFLINE  (packages: ${PACKAGE_DIR})"
+  echo ""
+fi
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 prompt() {
@@ -20,7 +58,6 @@ prompt_secret() {
   local prompt_text="$1"
   local val
   read -rsp "  ${prompt_text}: " val
-  echo ""
   printf '%s' "$val"
 }
 
@@ -29,6 +66,19 @@ require_cmd() {
     echo "Error: $1 not found. $2" >&2
     exit 1
   fi
+}
+
+# Resolve the first file matching a glob; exits with an error message if none found.
+find_package() {
+  local label="$1" glob="$2"
+  local found
+  found=$(ls $glob 2>/dev/null | sort -V | tail -1)
+  if [[ -z "$found" ]]; then
+    echo "Error: ${label} package not found matching: ${glob}" >&2
+    echo "       Run 'make package-plugins' to prepare offline bundles." >&2
+    exit 1
+  fi
+  echo "$found"
 }
 
 # ── Agent selection ────────────────────────────────────────────────────────
@@ -51,17 +101,18 @@ echo ""
 # ── Shared config ──────────────────────────────────────────────────────────
 echo "Configuration (press Enter to accept defaults):"
 echo ""
-AGENT_ID=$(prompt      "Agent ID (this machine's identifier)" "$(hostname)")
+AGENT_ID=$(prompt      "Agent ID (this machine's identifier)" "$AGENT_TYPE.$(hostname)")
 DEPLOYMENT_ID=$(prompt "Deployment ID"                        "local")
 DEPLOYMENT_NAME=$(prompt "Deployment Name"                   "Local Dev")
 TIMEPLUS_URL=$(prompt  "Timeplus URL"                         "http://localhost:3218")
 TIMEPLUS_USERNAME=$(prompt "Timeplus Username"                "proton")
 TIMEPLUS_PASSWORD=$(prompt_secret "Timeplus Password")
+echo ""
 AGENTGUARD_URL=$(prompt "AgentGuard URL"                     "http://localhost:8080")
 
 echo ""
 read -rp "  Enable holds (synchronous tool-call blocking)? [Y/n]: " holds_yn
-if [[ "${holds_yn,,}" == "n" ]]; then
+if [[ "$holds_yn" =~ ^[Nn]$ ]]; then
   HOLDS_ENABLED="false"
 else
   HOLDS_ENABLED="true"
@@ -88,17 +139,27 @@ _otel_proto() {
 if [[ "$AGENT_TYPE" == "claude-code" ]]; then
   echo ""
   echo "── Claude Code ────────────────────────────────────────────────────────────"
-  require_cmd npm "Install Node.js >= 18 from https://nodejs.org"
   require_cmd python3 "Install Python 3 from https://python.org"
 
   OTEL_ENDPOINT="$(_otel_proto "$TIMEPLUS_URL")://$(_otel_host "$TIMEPLUS_URL"):4318"
 
-  echo ""
-  echo "Installing @timeplus/agentguard-claudecode-plugin globally..."
-  npm install -g @timeplus/agentguard-claudecode-plugin
+  require_cmd npm "Install Node.js >= 18 from https://nodejs.org"
+
+  if [[ "$OFFLINE_MODE" == "true" ]]; then
+    PLUGIN_TGZ=$(find_package "Claude Code" "${PACKAGE_DIR}/*agentguard-claudecode-plugin-*.tgz")
+    echo ""
+    echo "Installing @timeplus/agentguard-claudecode-plugin globally from ${PLUGIN_TGZ}..."
+    npm install -g "$PLUGIN_TGZ"
+  else
+    echo ""
+    echo "Installing @timeplus/agentguard-claudecode-plugin globally..."
+    npm install -g @timeplus/agentguard-claudecode-plugin
+  fi
+  HOOK_COMMAND="agentguard-hook"
 
   echo ""
   echo "Configuring ~/.claude/settings.json..."
+  AGENTGUARD_HOOK_COMMAND="$HOOK_COMMAND" \
   AGENTGUARD_AGENT_ID="$AGENT_ID" \
   AGENTGUARD_DEPLOYMENT_ID="$DEPLOYMENT_ID" \
   AGENTGUARD_DEPLOYMENT_NAME="$DEPLOYMENT_NAME" \
@@ -113,7 +174,7 @@ if [[ "$AGENT_TYPE" == "claude-code" ]]; then
 import json, os
 
 settings_path = os.path.expanduser("~/.claude/settings.json")
-hook_command  = "agentguard-hook"
+hook_command  = os.environ["AGENTGUARD_HOOK_COMMAND"]
 
 sync_events  = ["PreToolUse"]
 async_events = [
@@ -210,10 +271,21 @@ if [[ "$AGENT_TYPE" == "openclaw" ]]; then
   read -rp "  OTel endpoint (host.docker.internal for Docker) [${DERIVED_OTEL}]: " otel_in
   OTEL_ENDPOINT="${otel_in:-$DERIVED_OTEL}"
 
-  echo ""
-  echo "Installing @timeplus/agentguard-openclaw-plugin..."
   pushd "$OC_DIR" > /dev/null
-  npm install @timeplus/agentguard-openclaw-plugin
+
+  if [[ "$OFFLINE_MODE" == "true" ]]; then
+    # ── Offline: install from local tgz ────────────────────────────────────
+    PLUGIN_TGZ=$(find_package "OpenClaw" "${PACKAGE_DIR}/*agentguard-openclaw-plugin-*.tgz")
+    echo ""
+    echo "Installing agentguard-openclaw-plugin from ${PLUGIN_TGZ}..."
+    npm install --legacy-peer-deps "$PLUGIN_TGZ"
+  else
+    # ── Online: install from npm registry ──────────────────────────────────
+    echo ""
+    echo "Installing @timeplus/agentguard-openclaw-plugin..."
+    npm install @timeplus/agentguard-openclaw-plugin
+  fi
+
   PLUGIN_PATH=$(node -e "console.log(require.resolve('@timeplus/agentguard-openclaw-plugin/package.json').replace(/\/package\.json$/, ''))" 2>/dev/null || echo "")
   popd > /dev/null
 
@@ -313,8 +385,17 @@ if [[ "$AGENT_TYPE" == "hermes" ]]; then
   fi
 
   echo ""
-  echo "Installing agentguard-hermes-plugin..."
-  "$PIP_CMD" install agentguard-hermes-plugin
+  if [[ "$OFFLINE_MODE" == "true" ]]; then
+    # ── Offline: install from local wheel ──────────────────────────────────
+    PLUGIN_WHL=$(find_package "Hermes" "${PACKAGE_DIR}/*agentguard*hermes*.whl")
+    echo "Installing agentguard-hermes-plugin from ${PLUGIN_WHL}..."
+    "$PIP_CMD" install --no-deps "$PLUGIN_WHL"
+  else
+    # ── Online: install from PyPI ───────────────────────────────────────────
+    echo "Installing agentguard-hermes-plugin..."
+    "$PIP_CMD" install agentguard-hermes-plugin
+  fi
+
   agentguard-hermes install
 
   echo ""
@@ -347,7 +428,7 @@ printf 'export AGENTGUARD_HOLD_FAIL_POLICY=%q\n' "$HOLD_FAIL_POLICY")"
 
   if [[ -n "$SHELL_PROFILE" ]]; then
     read -rp "  Append to ${SHELL_PROFILE}? [Y/n]: " append_yn
-    if [[ "${append_yn,,}" != "n" ]]; then
+    if [[ ! "$append_yn" =~ ^[Nn]$ ]]; then
       if grep -q "AGENTGUARD_TIMEPLUS_URL" "$SHELL_PROFILE" 2>/dev/null; then
         echo "  AgentGuard vars already present in ${SHELL_PROFILE} — skipping append."
         echo "  If your configuration changed, update these values manually:"
