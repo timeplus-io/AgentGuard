@@ -8,7 +8,6 @@ packages/
 agents/openclaw/tests/__pycache__
 agents/litellm/config/*.json
 agents/openclaw/.openclaw/
-agents/openclaw/agentguard-plugin/dist
 agents/claudecode/agentguard-plugin/dist
 agents/hermes/agentguard-plugin/dist
 agents/hermes/agentguard-plugin/.hatch
