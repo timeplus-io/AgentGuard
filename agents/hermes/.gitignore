@@ -1,3 +1,8 @@
 .hermes/
-dist/
 .pypirc
+
+dist/
+
+agentguard-plugin/dist/
+agentguard-plugin/.hatch
+agentguard-plugin/**/__pycache__
