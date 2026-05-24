@@ -1,0 +1,5 @@
+agentguard-plugin/dist/
+agentguard-plugin/node_modules/
+
+.openclaw/
+tests/__pycache__
