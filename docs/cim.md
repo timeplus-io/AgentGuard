@@ -144,11 +144,11 @@ The tables below show how each CIM field is populated for each agent type.
 
 Source: `agentguard_hook_events WHERE agent_type = 'claudecode'`
 
-Included hooks: `session_start`, `subagent_spawning`, `user_prompt_submit`, `before_tool_call`, `after_tool_call`, `llm_output`, `prompt_context`, `llm_context`
+Included hooks: `session_start`, `subagent_spawning`, `session_end`, `user_prompt_submit`, `before_tool_call`, `after_tool_call`, `llm_output`, `prompt_context`, `llm_context`
 
 | CIM field | Mapping |
 |-----------|---------|
-| `event_type` | `multi_if(hook_name = 'user_prompt_submit', 'user_input', hook_name = 'llm_output', 'llm_response', hook_name = 'before_tool_call', 'tool_invoke', hook_name = 'after_tool_call', 'tool_complete', hook_name IN ('session_start','subagent_spawning'), 'session_start', hook_name, 'other')` |
+| `event_type` | `multi_if(hook_name = 'user_prompt_submit', 'user_input', hook_name = 'llm_output', 'llm_response', hook_name = 'before_tool_call', 'tool_invoke', hook_name = 'after_tool_call', 'tool_complete', hook_name IN ('session_start','subagent_spawning'), 'session_start', hook_name = 'session_end', 'session_end', hook_name, 'other')` |
 | `agent_type` | `'claudecode'` (passthrough) |
 | `agent_id` | `agent_id` column (configured hostname, e.g. `Gangs-MacBook-Pro.local`) |
 | `session_id` | `session_id` column |
