@@ -260,8 +260,8 @@ if [[ "$AGENT_TYPE" == "openclaw" ]]; then
   require_cmd npm "Install Node.js >= 18 from https://nodejs.org"
   require_cmd python3 "Install Python 3 from https://python.org"
 
-  read -rp "  OpenClaw project directory [$(pwd)]: " oc_dir
-  OC_DIR="${oc_dir:-$(pwd)}"
+  read -rp "  OpenClaw project directory [$HOME]: " oc_dir
+  OC_DIR="${oc_dir:-$HOME}"
   if [[ ! -d "$OC_DIR" ]]; then
     echo "Error: directory not found: $OC_DIR" >&2
     exit 1
@@ -273,20 +273,22 @@ if [[ "$AGENT_TYPE" == "openclaw" ]]; then
 
   pushd "$OC_DIR" > /dev/null
 
+  # Install otel plugin if not installed
+  openclaw plugins install diagnostics-otel || true
+
   if [[ "$OFFLINE_MODE" == "true" ]]; then
     # ── Offline: install from local tgz ────────────────────────────────────
     PLUGIN_TGZ=$(find_package "OpenClaw" "${PACKAGE_DIR}/*agentguard-openclaw-plugin-*.tgz")
     echo ""
     echo "Installing agentguard-openclaw-plugin from ${PLUGIN_TGZ}..."
-    npm install --legacy-peer-deps "$PLUGIN_TGZ"
+    openclaw plugins install "$PLUGIN_TGZ"
   else
     # ── Online: install from npm registry ──────────────────────────────────
     echo ""
     echo "Installing @timeplus/agentguard-openclaw-plugin..."
-    npm install @timeplus/agentguard-openclaw-plugin
+    openclaw plugins install @timeplus/agentguard-openclaw-plugin
   fi
 
-  PLUGIN_PATH=$(node -e "console.log(require.resolve('@timeplus/agentguard-openclaw-plugin/package.json').replace(/\/package\.json$/, ''))" 2>/dev/null || echo "")
   popd > /dev/null
 
   CONFIG_FILE="${OC_DIR}/.openclaw/openclaw.json"
@@ -302,7 +304,6 @@ if [[ "$AGENT_TYPE" == "openclaw" ]]; then
   AGENTGUARD_URL="$AGENTGUARD_URL" \
   AGENTGUARD_HOLD_FAIL_POLICY="$HOLD_FAIL_POLICY" \
   AGENTGUARD_HOLDS_ENABLED="$HOLDS_ENABLED" \
-  AGENTGUARD_PLUGIN_PATH="$PLUGIN_PATH" \
   python3 - <<PYEOF
 import json, os, sys
 
@@ -329,11 +330,6 @@ data["diagnostics"] = {
 entries = data.setdefault("plugins", {}).setdefault("entries", {})
 entries["diagnostics-otel"] = {"enabled": True}
 
-load_paths = data["plugins"].setdefault("load", {}).setdefault("paths", [])
-plugin_path = _e["AGENTGUARD_PLUGIN_PATH"]
-if plugin_path and plugin_path not in load_paths:
-    load_paths.append(plugin_path)
-
 entries["agentguard"] = {
     "enabled": True,
     "config": {
@@ -355,11 +351,6 @@ with open(path, "w") as f:
     json.dump(data, f, indent=2)
 print("  Done: " + path)
 PYEOF
-
-  if [[ -z "$PLUGIN_PATH" ]]; then
-    echo "  Warning: could not resolve agentguard-openclaw-plugin install path." >&2
-    echo "  Add the plugin path to plugins.load.paths in .openclaw/openclaw.json manually." >&2
-  fi
 
   echo ""
   echo "  ✓ OpenClaw plugin installed"
