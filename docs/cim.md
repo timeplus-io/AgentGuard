@@ -98,7 +98,7 @@ The `event_type` field collapses each agent's hook vocabulary into a shared set 
 | `event_type` | Meaning | Claude Code source hooks | OpenClaw source hooks | Hermes source hooks |
 |--------------|---------|-------------------------|----------------------|---------------------|
 | `session_start` | Session or sub-agent started | `session_start`, `subagent_spawning` | `session_start` | `on_session_start`, `on_session_reset` |
-| `session_end` | Session ended | — (no event emitted) | `session_end` | `on_session_end`, `on_session_finalize` |
+| `session_end` | Session ended | `session_end` | `session_end` | `on_session_end`, `on_session_finalize` |
 | `user_input` | User message submitted | `user_prompt_submit` | `message_received` | `pre_llm_call` |
 | `llm_request` | Assembled prompt sent to LLM | — (not available) | `llm_input` | `pre_api_request` |
 | `llm_response` | LLM response received | `llm_output` | `llm_output` | `post_llm_call` |

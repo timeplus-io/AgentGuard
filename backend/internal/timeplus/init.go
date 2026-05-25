@@ -759,6 +759,7 @@ SELECT
   multi_if(
     hook_name = 'session_start',      'session_start',
     hook_name = 'subagent_spawning',  'session_start',
+    hook_name = 'session_end',        'session_end',
     hook_name = 'user_prompt_submit', 'user_input',
     hook_name = 'llm_output',         'llm_response',
     hook_name = 'before_tool_call',   'tool_invoke',
@@ -795,7 +796,7 @@ SELECT
 FROM agentguard_hook_events
 WHERE agent_type = 'claudecode'
   AND hook_name IN (
-    'session_start', 'subagent_spawning',
+    'session_start', 'subagent_spawning', 'session_end',
     'user_prompt_submit',
     'before_tool_call', 'after_tool_call',
     'llm_output',
