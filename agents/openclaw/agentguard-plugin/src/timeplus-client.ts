@@ -94,6 +94,7 @@ export function createTimeplusClient(config: AgentGuardConfig): TimeplusClient {
   timer = setInterval(() => {
     void flush();
   }, config.flushMs);
+  timer.unref();
 
   function enqueue(event: HookEvent): void {
     // Cap event_data BEFORE queueing — truncation must happen here, not in
