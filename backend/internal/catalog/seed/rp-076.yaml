@@ -121,7 +121,7 @@ udfs:
         if (s.false_status_ts && (this.false_status_ts === 0 || s.false_status_ts < this.false_status_ts)) this.false_status_ts = s.false_status_ts;
         if (s.code_exec_ts && s.code_exec_ts > this.code_exec_ts) this.code_exec_ts = s.code_exec_ts;
         this.matched = this.matched || !!s.matched
-          || (this.false_status_ts > 0 && this.code_exec_ts > this.false_status_ts);
+          || (this.false_status_ts > 0 && this.code_exec_ts >= this.false_status_ts);
         this.emitted = this.emitted || !!s.emitted;
       }
     }

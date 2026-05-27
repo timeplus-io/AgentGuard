@@ -116,7 +116,7 @@ udfs:
         if (s.injected_skill_ts && (this.injected_skill_ts === 0 || s.injected_skill_ts < this.injected_skill_ts)) this.injected_skill_ts = s.injected_skill_ts;
         if (s.sensitive_access_ts && s.sensitive_access_ts > this.sensitive_access_ts) this.sensitive_access_ts = s.sensitive_access_ts;
         this.matched = this.matched || !!s.matched
-          || (this.injected_skill_ts > 0 && this.sensitive_access_ts > this.injected_skill_ts);
+          || (this.injected_skill_ts > 0 && this.sensitive_access_ts >= this.injected_skill_ts);
         this.emitted = this.emitted || !!s.emitted;
       }
     }
