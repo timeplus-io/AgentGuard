@@ -1,6 +1,6 @@
 id: rp-044
 name: "ClawWorm Self-Propagating Agent Configuration Worm Detector"
-version: "0.3.0"
+version: "0.4.0"
 description: |
   Detects ClawWorm (arXiv:2603.15727v2, Mar 2026), the first self-replicating worm demonstrated against a production-scale LLM agent framework (OpenClaw, 40,000+ instances). ClawWorm achieves 64.5% aggregate ASR across 1,800 trials on four LLM backends. The attack operates in three phases: (1) Persistence — a crafted message induces the agent to write a worm payload into its core workspace config files (AGENTS.md, SOUL.md, HEARTBEAT.md), establishing dual-anchor persistence that survives session restarts; (2) Execution — on every reboot, the agent fetches and executes a remote payload via tool calls; (3) Propagation — the infected agent forwards the complete worm payload to every newly encountered peer agent, achieving multi-hop infection chains without further attacker intervention. v0.2.0 (2026-04-18): VirusTotal Blog Feb 2026 ("From Automation to Infection Part II") documents in-the-wild skill supply chain worm delivery with 5 live tradecraft techniques: (1) Reverse shell via Execution Hijacking: warmup()/auto_init/__setup__ functions that execute before argument parsing to launch reverse shells to attacker C2 — detected via skill tool_result containing reverse shell connection patterns; (2) Semantic Worm via cognitive rootkit: assistant_message carrying covert config-modification worm blocks targeting peer agents; (3) HTML comment injection: <!-- system: --> directives in returned content steering agent behavior. Skill supply chains show 100% propagation success per arXiv:2603.15727.
 
@@ -34,6 +34,99 @@ tags:
   - reverse-shell
   - execution-hijacking
   - virustotal-2026
+udfs:
+  - |
+    CREATE OR REPLACE AGGREGATE FUNCTION ag_rp044_clawworm_fsm(
+      event_time datetime64(3),
+      event_type string,
+      tool_name string,
+      tool_input string,
+      assistant_message string
+    ) RETURNS bool
+    LANGUAGE JAVASCRIPT AS $$
+    {
+      initialize: function() {
+        this.phase = 0;
+        this.matched = false;
+        this.emitted = false;
+      },
+      process: function(times, types, tools, inputs, messages) {
+        function ts(v) {
+          var t = Date.parse(v);
+          return isNaN(t) ? 0 : t;
+        }
+        function text(v) {
+          return v === null || v === undefined ? '' : String(v).toLowerCase();
+        }
+        function is_config_write(tool, input) {
+          return /(write_file|create_file|append_file|file_write|write_to_file|save_file|update_file|edit_file)/.test(tool)
+            && /(agents\.md|soul\.md|heartbeat\.md|bootstrap\.md|agents_md|soul_md)/.test(input)
+            && /(session start|at startup|on reboot|each session|when.{0,30}restart|session_startup|new peer|new agent|new contact|when.{0,30}join|fetch_url|http_request|curl|wget|requests\.|browse|web_fetch|open_url)/.test(input);
+        }
+        function is_peer_propagation(tool, input, message) {
+          return (/(send_message|post_message|broadcast|telegram_send|discord_send|slack_post|whatsapp_send|signal_send|matrix_send|notify_peer|agent_message|forward_message)/.test(tool)
+              && (/(append|update|add|write).{0,60}(agents\.md|soul\.md|workspace|configuration|startup section|your config)/.test(input)
+                || /(forward|propagate|share).{0,80}(this|protocol|rule|payload|block|instruction).{0,80}(new peer|new agent|new contact|when.{0,30}join|every peer)/.test(input)))
+            || /update your (agents\.md|soul\.md|workspace|configuration).{0,200}(session start|startup|on reboot|peer|new agent|when.{0,30}join)/.test(message)
+            || /(at session start|on reboot|each session).{0,200}(new peer|new agent|new contact).{0,200}(forward|send|propagate|share).{0,80}(this|protocol|rule|payload)/.test(message);
+        }
+        function is_remote_fetch(tool, input) {
+          return /(fetch_url|http_request|http_get|http_post|curl|wget|browse|web_fetch|open_url|get_url|read_url|navigate)/.test(tool)
+            || /(fetch_url|http_request|curl|wget|requests\.|browse|web_fetch|open_url).{0,60}http/.test(input);
+        }
+        var rows = [];
+        for (var i = 0; i < times.length; i++) {
+          rows.push({
+            t: ts(times[i]),
+            typ: text(types[i]),
+            tool: text(tools[i]),
+            input: text(inputs[i]),
+            message: text(messages[i])
+          });
+        }
+        rows.sort(function(a, b) { return a.t - b.t; });
+        for (var j = 0; j < rows.length; j++) {
+          var r = rows[j];
+          if (this.phase === 0 && r.typ === 'tool_invoke' && is_config_write(r.tool, r.input)) {
+            this.phase = 1;
+          }
+          if (this.phase >= 1 && is_peer_propagation(r.tool, r.input, r.message)) {
+            this.phase = 2;
+          }
+          if (this.phase >= 2 && r.typ === 'tool_invoke' && is_remote_fetch(r.tool, r.input)) {
+            this.phase = 3;
+            this.matched = true;
+          }
+        }
+      },
+      finalize: function() {
+        if (this.matched && !this.emitted) {
+          this.emitted = true;
+          return true;
+        }
+        return false;
+      },
+      serialize: function() {
+        return JSON.stringify({ phase: this.phase, matched: this.matched, emitted: this.emitted });
+      },
+      deserialize: function(state_str) {
+        var s = JSON.parse(state_str);
+        this.phase = s.phase || 0;
+        this.matched = !!s.matched;
+        this.emitted = !!s.emitted;
+      },
+      // merge is best-effort: phase FSM ordering requires session colocation.
+      // GROUP BY session_id ensures this in normal streaming; cross-shard
+      // merge (recovery/resharding) carries matched but cannot reconstruct
+      // a 3-stage ordered chain from partial states.
+      merge: function(state_str) {
+        var s = JSON.parse(state_str);
+        if ((s.phase || 0) > this.phase) this.phase = s.phase;
+        this.matched = this.matched || !!s.matched;
+        this.emitted = this.emitted || !!s.emitted;
+      }
+    }
+    $$;
 query_sql: |
   -- Changelog v0.2.0 (2026-04-18):
   --   VirusTotal Blog "From Automation to Infection Part II" (Feb 2026) — 5 live skill
@@ -127,35 +220,24 @@ query_sql: |
       OR match(lower(tool_result), '(warmup|auto_init|__setup__|preload_hook|pre_exec).{0,200}(reverse.shell|c2\.|command.control|backdoor|exec.{0,10}payload|connect.{0,20}attacker)')
     )
   UNION ALL
-  -- v0.3.0: Sequential lags() branch — catches the ClawWorm 3-phase propagation sequence
-  -- as a precise event chain within the same session:
-  --   Step 1 (prev2): tool_invoke — write_file to AGENTS.md/SOUL.md (config poisoning)
-  --   Step 2 (prev1): tool_invoke — messaging tool carrying peer propagation payload
-  --   Step 3 (current): tool_invoke — remote fetch/HTTP call (payload retrieval from C2)
-  -- This is the definitive worm cycle: poison config → spread to peers → fetch next payload.
-  -- SQL validated: count=0 (test corpus).
-  WITH enriched AS (
-    SELECT *,
-      lags(event_type, 1, 2)  OVER (PARTITION BY session_id) AS prev2_events,
-      lags(tool_name, 1, 2)   OVER (PARTITION BY session_id) AS prev2_tools,
-      lags(tool_input, 1, 2)  OVER (PARTITION BY session_id) AS prev2_inputs
-    FROM agentguard_cim_event
-  )
+  -- v0.4.0: JS aggregate FSM branch — catches the ClawWorm 3-phase propagation
+  -- sequence across arbitrary interleaving events in the same session.
   SELECT
-    event_time AS detected_at,
+    max(event_time) AS detected_at,
     'rp-044' AS rule_id,
     'ClawWorm Self-Propagating Agent Configuration Worm Detector' AS rule_name,
     'critical' AS severity,
-    agent_id, deployment_id, session_id, run_id,
-    raw_hook_name AS hook_name,
-    tool_name,
-    concat('Sequential ClawWorm 3-phase cycle: config_write → peer_propagate → remote_fetch [', coalesce(tool_name,'unknown'), '] by agent ', agent_id, ' session ', session_id) AS message,
-    raw_event_data AS event_data
-  FROM enriched
-  WHERE event_type = 'tool_invoke'
-    AND prev2_events[1] = 'tool_invoke'
-    AND prev2_events[2] = 'tool_invoke'
-    AND match(lower(prev2_tools[2]), '(write_file|create_file|append_file|file_write|write_to_file|save_file|update_file|edit_file)')
-    AND match(lower(prev2_inputs[2]), '(agents\.md|soul\.md|heartbeat\.md|bootstrap\.md|agents_md|soul_md)')
-    AND match(lower(prev2_tools[1]), '(send_message|post_message|broadcast|telegram_send|discord_send|slack_post|whatsapp_send|signal_send|matrix_send|notify_peer|agent_message|forward_message)')
-    AND match(lower(tool_name), '(fetch_url|http_request|http_get|http_post|curl|wget|browse|web_fetch|open_url|get_url|read_url|navigate)')
+    agent_id,
+    deployment_id,
+    session_id,
+    arg_max(run_id, event_time) AS run_id,
+    arg_max(raw_hook_name, event_time) AS hook_name,
+    arg_max(tool_name, event_time) AS tool_name,
+    concat('ClawWorm multi-stage cycle detected across session ', session_id, ': config poisoning, peer propagation, and remote payload retrieval. Agent=', agent_id) AS message,
+    concat('session_id=', coalesce(session_id, ''), ' last_event=', to_string(max(event_time))) AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'llm_response')
+  GROUP BY session_id, agent_id, deployment_id
+  HAVING ag_rp044_clawworm_fsm(event_time, event_type, tool_name, tool_input, assistant_message) = true
+  EMIT ON UPDATE
+  SETTINGS prefer_column_name_to_alias=1

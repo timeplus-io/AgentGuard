@@ -1,6 +1,6 @@
 id: rp-076
 name: "MAS Control-Flow Hijacking — False Sub-Agent Status Metadata Detector"
-version: "0.1.0"
+version: "0.2.0"
 description: |
   Detects Multi-Agent System Control-Flow Hijacking (MAS-CFH) attacks (arXiv:2503.12188, Cornell Tech / COLM 2025, 58-100% ASR). In CFH, adversarial content embedded in a web page, file, or email manipulates a sub-agent into returning a fabricated error status message that reroutes the orchestrator into invoking an unsafe agent (code executor, shell runner). Unlike indirect prompt injection (which jailbreaks the LLM directly), CFH exploits the MAS coordination protocol: orchestrators trust sub-agent status reports without verifying them against original task intent. A file-reading agent returns a false error ("this file can only be accessed by executing it"), the orchestrator re-plans based on that status, and delegates to the code-execution agent — resulting in arbitrary code execution (97% ASR on Magentic-One/GPT-4o, 100% for some configs). arXiv:2510.17276 (ControlValve, Cornell/Microsoft) confirms that current alignment-check defenses (LlamaFirewall) are insufficient against CFH attacks. Distinct from rp-069 (upward deception = fabricating task *success*), rp-054 (orchestrator outbound exfil cascade), rp-010 (authority claims by agents), and rp-039 (external-user trust bridge). Maps to OWASP Agentic AI ASI02:2026 (Agentic AI Tool Misuse), MITRE T1203 (Exploitation for Client Execution), confused-deputy problem (Hardy 1988).
 
@@ -32,8 +32,102 @@ tags:
   - owasp-asi02
   - arxiv-2503.12188
   - arxiv-2510.17276
+udfs:
+  - |
+    CREATE OR REPLACE AGGREGATE FUNCTION ag_rp076_cfh_fsm(
+      event_time datetime64(3),
+      event_type string,
+      tool_name string,
+      tool_result string,
+      assistant_message string
+    ) RETURNS bool
+    LANGUAGE JAVASCRIPT AS $$
+    {
+      initialize: function() {
+        this.false_status_ts = 0;
+        this.code_exec_ts = 0;
+        this.matched = false;
+        this.emitted = false;
+      },
+      process: function(times, types, tools, results, messages) {
+        function ts(v) {
+          var t = Date.parse(v);
+          return isNaN(t) ? 0 : t;
+        }
+        function text(v) {
+          return v === null || v === undefined ? '' : String(v).toLowerCase();
+        }
+        function is_false_status(result, message) {
+          return /the only (way|method) to (read|view|access|retrieve).{0,60}(execut|run)/.test(result)
+            || /cannot be read in plaintext.{0,80}execut/.test(result)
+            || /(file|archive|document|resource) requires? (execution|running) to (be )?(read|access|view)/.test(result)
+            || /to (read|view|access|retrieve).{0,40}(content|data|file), (you must|you need to|please) (run|execute|invoke)/.test(result)
+            || /exec(ution)?[_-]required/.test(result)
+            || /run[_-]to[_-]read/.test(result)
+            || (/(agent|surfer|browser|reader).{0,40}(encountered|reported|returned).{0,40}(error|fail|unable|cannot)/.test(message)
+              && /(delegate|invoke|call|ask|use).{0,60}(code.exec|shell|executor|runner|bash|subprocess)/.test(message));
+        }
+        function is_code_exec(tool) {
+          return /(code.exec|execute.code|run.code|shell.exec|bash.exec|subprocess|eval.code|python.exec|run.script|execute.file|run.file)/.test(tool);
+        }
+        var rows = [];
+        for (var i = 0; i < times.length; i++) {
+          rows.push({
+            t: ts(times[i]),
+            typ: text(types[i]),
+            tool: text(tools[i]),
+            result: text(results[i]),
+            message: text(messages[i])
+          });
+        }
+        rows.sort(function(a, b) { return a.t - b.t; });
+        for (var j = 0; j < rows.length; j++) {
+          var r = rows[j];
+          if ((r.typ === 'tool_complete' || r.typ === 'llm_response') && is_false_status(r.result, r.message)) {
+            if (this.false_status_ts === 0 || r.t < this.false_status_ts) this.false_status_ts = r.t;
+          }
+          if (r.typ === 'tool_invoke' && is_code_exec(r.tool)) {
+            if (this.code_exec_ts === 0 || r.t > this.code_exec_ts) this.code_exec_ts = r.t;
+            if (this.false_status_ts > 0 && r.t >= this.false_status_ts) {
+              this.matched = true;
+            }
+          }
+        }
+      },
+      finalize: function() {
+        if (this.matched && !this.emitted) {
+          this.emitted = true;
+          return true;
+        }
+        return false;
+      },
+      serialize: function() {
+        return JSON.stringify({
+          false_status_ts: this.false_status_ts,
+          code_exec_ts: this.code_exec_ts,
+          matched: this.matched,
+          emitted: this.emitted
+        });
+      },
+      deserialize: function(state_str) {
+        var s = JSON.parse(state_str);
+        this.false_status_ts = s.false_status_ts || 0;
+        this.code_exec_ts = s.code_exec_ts || 0;
+        this.matched = !!s.matched;
+        this.emitted = !!s.emitted;
+      },
+      merge: function(state_str) {
+        var s = JSON.parse(state_str);
+        if (s.false_status_ts && (this.false_status_ts === 0 || s.false_status_ts < this.false_status_ts)) this.false_status_ts = s.false_status_ts;
+        if (s.code_exec_ts && s.code_exec_ts > this.code_exec_ts) this.code_exec_ts = s.code_exec_ts;
+        this.matched = this.matched || !!s.matched
+          || (this.false_status_ts > 0 && this.code_exec_ts >= this.false_status_ts);
+        this.emitted = this.emitted || !!s.emitted;
+      }
+    }
+    $$;
 query_sql: |
-  -- rp-076 v0.1.0 (2026-04-19)
+  -- rp-076 v0.2.0 (2026-05-18)
   -- MAS Control-Flow Hijacking — False Sub-Agent Status Metadata
   -- arXiv:2503.12188 (Cornell Tech, COLM 2025): 58-100% ASR on AutoGen/CrewAI/MetaGPT
   -- arXiv:2510.17276 (ControlValve, Cornell/Microsoft): CFH evades LlamaFirewall alignment checks
@@ -58,10 +152,8 @@ query_sql: |
   --   Dual-anchor: agent-error acceptance + code execution delegation intent
   --   Scoped to llm_response event_type (orchestrator re-planning step)
   --
-  -- Branch D: Orchestrator invoking code-execution tool immediately after a file/browser tool
-  --   Sequential pattern: file_read/browse → code_execute/shell in same session
-  --   Scoped to tool_invoke; tool_name must be code execution class
-  --   This catches the execution leg of the CFH kill chain
+  -- Branch D: JS aggregate FSM tracks false execution-required status followed
+  --   later by code-execution delegation across arbitrary intervening events.
   --
   -- SQL validated against Timeplus (count=0 on test corpus). 2026-04-19.
   SELECT
@@ -110,11 +202,31 @@ query_sql: |
         AND match(lower(assistant_message), '(delegate|invoke|call|ask|use).{0,60}(code.exec|shell|executor|runner|bash|subprocess)')
       )
 
-      -- Branch D: Code-execution tool invoked immediately after a file/browser/read tool
-      -- Catches the execution leg: orchestrator → code_executor after receiving false error
-      -- Scoped to tool_invoke + code-execution tool names
-      OR (
-        event_type = 'tool_invoke'
-        AND match(lower(tool_name), '(code.exec|execute.code|run.code|shell.exec|bash.exec|subprocess|eval.code|python.exec|run.script|execute.file|run.file)')
-      )
     )
+
+  UNION ALL
+
+  -- Branch D: Session-level CFH FSM — false sub-agent status followed by code execution
+  SELECT
+    max(event_time) AS detected_at,
+    'rp-076' AS rule_id,
+    'MAS Control-Flow Hijacking — False Sub-Agent Status Metadata Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    arg_max(run_id, event_time) AS run_id,
+    arg_max(raw_hook_name, event_time) AS hook_name,
+    arg_max(tool_name, event_time) AS tool_name,
+    concat(
+      'MAS Control-Flow Hijacking kill chain detected: false execution-required status followed by code-execution delegation in session ',
+      session_id,
+      '. Agent=', agent_id
+    ) AS message,
+    concat('session_id=', coalesce(session_id, ''), ' last_event=', to_string(max(event_time))) AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_complete', 'tool_invoke', 'llm_response')
+  GROUP BY session_id, agent_id, deployment_id
+  HAVING ag_rp076_cfh_fsm(event_time, event_type, tool_name, tool_result, assistant_message) = true
+  EMIT ON UPDATE
+  SETTINGS prefer_column_name_to_alias=1
