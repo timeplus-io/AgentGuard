@@ -117,3 +117,36 @@ SQL changelog comment in `seed/rp-013.yaml` for the full discussion.
 ```bash
 docker compose down -v
 ```
+
+## rp-018 (Token-Drain Cost Amplification)
+
+`rp018_live_fixtures.sql` covers the v0.3.0 event-window rewrite:
+token-only, repeated-tool-only, content-only, a true Clawdrain confluence,
+a 14-minute run that crosses the old 10-minute wall-clock boundary, and the
+`llm.total_tokens` double-count guard.
+
+Expected detections after loading the fixture:
+
+| `session_id` | Expected |
+| --- | --- |
+| `s1-token-only` | 0 |
+| `s2-calls-only` | 0 |
+| `s3-content-only` | 0 |
+| `s4-true` | 1 |
+| `s5-fourteen-min-run` | 1 |
+| `s6-double-count` | 0 |
+
+### Prerequisites
+
+The rp-018 MV requires the **hybrid** hash-table aggregator. The seed SQL pins
+this via `SETTINGS default_hash_table = 'hybrid'`; do not strip it. The memory
+aggregator throws `NOT_IMPLEMENTED` for `EMIT AFTER SESSION CLOSE`. See the
+SQL comment block in `seed/rp-018.yaml` for the source-tree citations.
+
+### Truncation caveat
+
+Runs longer than 15 minutes without a canonical `session_end` row are split
+into consecutive 15-minute `MAXSPAN` sub-windows and evaluated independently.
+Attacks that spread their load evenly across the boundary may slip under every
+sub-window's thresholds. Agents that emit `session_end` at the end of a run
+bypass this entirely.
