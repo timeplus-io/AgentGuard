@@ -107,12 +107,12 @@ func TestIntegration_RuleRP018Detection(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	mvCheck := tpQuery(`SELECT count() FROM system.tables WHERE name = 'mv_rule_rp018' FORMAT TSV`)
 	if strings.TrimSpace(mvCheck) == "0" {
-		t.Skip("mv_rule_rp018 not found in system.tables — timeplusd may not support JS UDAFs or EMIT AFTER SESSION CLOSE")
+		t.Fatalf("mv_rule_rp018 not found in system.tables after install — UDAF or MV creation failed")
 	}
 
 	failedMVs := tpQuery(`SELECT name FROM system.v_failed_mat_views WHERE name = 'mv_rule_rp018' FORMAT TSV`)
 	if strings.TrimSpace(failedMVs) != "" {
-		t.Skipf("mv_rule_rp018 is in failed state — timeplusd may not support required features")
+		t.Fatalf("mv_rule_rp018 is in failed state")
 	}
 	t.Log("mv_rule_rp018 installed and healthy")
 
@@ -211,7 +211,7 @@ func TestIntegration_RuleRP018Detection(t *testing.T) {
 	// If still 0 after timeout, dump MV diagnostics.
 	if s4Count == 0 {
 		lag := tpQuery(`SELECT name, lag, processed_sn, ckpt_sn FROM system.v_mat_view_lags WHERE name = 'mv_rule_rp018' FORMAT TSV`)
-		failed := tpQuery(`SELECT name, error FROM system.v_failed_mat_views WHERE name = 'mv_rule_rp018' FORMAT TSV`)
+		failed := tpQuery(`SELECT name FROM system.v_failed_mat_views WHERE name = 'mv_rule_rp018' FORMAT TSV`)
 		t.Logf("MV diagnostics — lag: [%s], failed: [%s]", lag, failed)
 	}
 

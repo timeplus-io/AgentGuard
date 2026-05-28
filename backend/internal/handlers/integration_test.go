@@ -59,7 +59,14 @@ func TestIntegration_Provision(t *testing.T) {
 
 	resp := doPost(t, client, "/api/setup/provision", provisionBody)
 	body := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
+	switch resp.StatusCode {
+	case http.StatusOK:
+		if !strings.Contains(body, `"status":"done"`) {
+			t.Fatalf("provision returned 200 but did not complete: %s", body)
+		}
+	case http.StatusConflict:
+		// Already provisioned by another test — acceptable.
+	default:
 		t.Fatalf("provision: status %d, body: %s", resp.StatusCode, body)
 	}
 
