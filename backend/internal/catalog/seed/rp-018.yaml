@@ -1,6 +1,6 @@
 id: rp-018
 name: "Token-Drain Cost Amplification via Tool-Calling Chains"
-version: "0.3.0"
+version: "0.3.1"
 description: |
   Detects multi-turn token exhaustion attacks (Clawdrain/MCTS-DoS pattern) where attacker-controlled tools return structured continuation signals coercing agents into looping tool-call chains that amplify API costs 6-658x per run. Combines a per-run token burn detector, same-tool call concentration, and content-based continuation directives in tool results. Distinct from rp-006 (recursive tool loop) because each individual call succeeds and appears purposeful, defeating simple loop counters.
 
@@ -39,7 +39,7 @@ udfs:
     LANGUAGE JAVASCRIPT AS $$
     {
       initialize: function() {
-        this.counts = {};
+        this.counts = Object.create(null);
         this.max = 0;
       },
       process: function(names, tools) {
@@ -63,7 +63,11 @@ udfs:
       },
       deserialize: function(state_str) {
         var s = JSON.parse(state_str);
-        this.counts = s.counts || {};
+        var c = s.counts || {};
+        this.counts = Object.create(null);
+        for (var k in c) {
+          if (Object.prototype.hasOwnProperty.call(c, k)) this.counts[k] = c[k];
+        }
         this.max = s.max || 0;
       },
       merge: function(state_str) {
@@ -71,14 +75,21 @@ udfs:
         var incoming = s.counts || {};
         for (var tool in incoming) {
           if (!Object.prototype.hasOwnProperty.call(incoming, tool)) continue;
-          var next = (this.counts[tool] || 0) + incoming[tool];
-          this.counts[tool] = next;
-          if (next > this.max) this.max = next;
+          var merged = (this.counts[tool] || 0) + incoming[tool];
+          this.counts[tool] = merged;
+          if (merged > this.max) this.max = merged;
         }
       }
     }
     $$;
 query_sql: |
+  -- Changelog v0.3.1 (2026-05-28):
+  --   FIX: use Object.create(null) for tool-count map in ag_rp018_max_tool_calls
+  --     UDAF. Plain {} inherits Object.prototype, so tool names like
+  --     "constructor" or "__proto__" read inherited properties instead of
+  --     undefined, causing NaN arithmetic that silently bypasses the
+  --     same-tool threshold.
+  --
   -- Changelog v0.3.0 (2026-05-26):
   --   FIX: remove wall-clock now()-based windows. The aggregation is keyed by
   --     (agent_id, deployment_id, session_id, run_id) and bounded by

@@ -478,14 +478,18 @@ func TestSeedFS_RP018EventWindowRewrite(t *testing.T) {
 	if !ok {
 		t.Fatal("rp-018 missing from seed catalog")
 	}
-	if e.Version != "0.3.0" {
-		t.Fatalf("rp-018 version = %q, want 0.3.0", e.Version)
+	if e.Version != "0.3.1" {
+		t.Fatalf("rp-018 version = %q, want 0.3.1", e.Version)
 	}
 	if strings.Contains(e.RequiredTelemetry, "llm.total_tokens") {
 		t.Fatalf("rp-018 RequiredTelemetry still includes llm.total_tokens: %q", e.RequiredTelemetry)
 	}
-	if len(e.UDFs) == 0 || !strings.Contains(strings.Join(e.UDFs, "\n"), "ag_rp018_max_tool_calls") {
+	udfs := strings.Join(e.UDFs, "\n")
+	if len(e.UDFs) == 0 || !strings.Contains(udfs, "ag_rp018_max_tool_calls") {
 		t.Fatal("rp-018 missing ag_rp018_max_tool_calls aggregate UDF")
+	}
+	if !strings.Contains(udfs, "Object.create(null)") {
+		t.Fatal("rp-018 UDAF must use Object.create(null) for tool-count map to prevent prototype-key evasion")
 	}
 
 	q := e.QuerySQL
