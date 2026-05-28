@@ -469,6 +469,63 @@ func TestSeedFS_RP013SemanticScenarios(t *testing.T) {
 
 }
 
+func TestSeedFS_RP018EventWindowRewrite(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-018")
+	if !ok {
+		t.Fatal("rp-018 missing from seed catalog")
+	}
+	if e.Version != "0.3.0" {
+		t.Fatalf("rp-018 version = %q, want 0.3.0", e.Version)
+	}
+	if strings.Contains(e.RequiredTelemetry, "llm.total_tokens") {
+		t.Fatalf("rp-018 RequiredTelemetry still includes llm.total_tokens: %q", e.RequiredTelemetry)
+	}
+	if len(e.UDFs) == 0 || !strings.Contains(strings.Join(e.UDFs, "\n"), "ag_rp018_max_tool_calls") {
+		t.Fatal("rp-018 missing ag_rp018_max_tool_calls aggregate UDF")
+	}
+
+	q := e.QuerySQL
+	required := []string{
+		"WITH unified_run_events AS",
+		"UNION ALL",
+		"FROM agentguard_cim_event",
+		"FROM agentguard_cim_metrics",
+		"metric_name IN ('llm.input_tokens', 'llm.output_tokens', 'tool.call')",
+		"sum_if(metric_value, metric_name = 'llm.input_tokens')",
+		"sum_if(metric_value, metric_name = 'llm.output_tokens')",
+		"SHUFFLE BY agent_id, deployment_id, session_id, run_id",
+		"GROUP BY agent_id, deployment_id, session_id, run_id",
+		"AND ag_rp018_max_tool_calls(metric_name, metric_tool_name) > 15",
+		"AND max(content_signal_hit) = 1",
+		"EMIT AFTER SESSION CLOSE",
+		"IDENTIFIED BY (event_time, true, is_session_end)",
+		"WITH MAXSPAN 15m AND TIMEOUT 15m",
+		"SETTINGS default_hash_table = 'hybrid'",
+	}
+	for _, want := range required {
+		if !strings.Contains(q, want) {
+			t.Errorf("rp-018 QuerySQL missing %q", want)
+		}
+	}
+
+	stripped := stripSQLComments(q)
+	forbidden := []string{
+		"now() - INTERVAL",
+		"llm.total_tokens",
+		"LEFT JOIN agentguard_cim_metrics",
+		"HAVING total_tokens > 40000",
+	}
+	for _, bad := range forbidden {
+		if strings.Contains(stripped, bad) {
+			t.Errorf("rp-018 QuerySQL still contains forbidden pre-v0.3.0 pattern %q", bad)
+		}
+	}
+}
+
 // TestSeedFS_RP047HasHopWindow pins rp-047 (LLM Model Substitution) to its
 // streaming-MV rewrite. The pre-#88 v0.1.1 used `OVER (... ROWS BETWEEN N
 // PRECEDING AND M PRECEDING)` window frames that streaming MVs reject with
