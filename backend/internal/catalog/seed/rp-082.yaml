@@ -1,6 +1,6 @@
 id: rp-082
 name: "ANSI Terminal Escape Code Injection via Agent Tool Output"
-version: "0.2.0"
+version: "0.2.1"
 description: |
   Detects ANSI/VT100 terminal escape sequence injection in LLM agent tool output. When terminal-based coding agents (Codex CLI, Claude Code, OpenHands) echo tool results to stdout without sanitization, malicious content from files, web pages, or APIs can inject escape sequences that manipulate terminal state: erasing lines to cover tracks (ESC[2K), poisoning the clipboard via OSC 52, enabling mouse-tracking for keystroke interception, or switching to alternate screen buffers (ESC[?1049h). dganev.com (Feb 2026) demonstrated RCE via Codex CLI --model ANSI injection. NVIDIA garak ANSI probe reports 76.7% ASR against frontier LLMs. Claude Code #18418 and OpenHands SDK #2244 confirm terminal corruption from tool output escape sequences.
 
@@ -35,26 +35,11 @@ tags:
   - owasp-llm02
   - garak
 query_sql: |
-  -- rp-082 v0.2.0 (2026-04-19)
   -- ANSI Terminal Escape Code Injection via Agent Tool Output
   -- CWE-150: Improper Neutralization of Escape, Meta, or Control Sequences
   -- dganev.com (Feb 2026): Codex CLI --model param ANSI injection → RCE
   -- NVIDIA garak AnsiEscaped probe: 76.7% ASR against frontier LLMs
   -- Claude Code #18418: terminal escape sequences in tool stdout corrupt terminal state
-  --
-  -- v0.2.0 FIXES (2026-04-19):
-  --   CRITICAL: Removed \\e variant from all match() patterns — RE2 does not support the
-  --   \e escape sequence (it is a bash-ism, not RE2 syntax). The pattern compiled to
-  --   \e in RE2 which throws CANNOT_COMPILE_REGEXP at runtime, causing rule failure.
-  --   Fix: removed |\\e| from all alternation groups; remaining variants (\x1b raw ESC
-  --   byte, \033 octal, \\x1b literal text, \\033 literal text) provide full coverage.
-  --   PRECISION: Branch 8 char class [aAbBjksuHhfmr] reduced to [akjsufh]:
-  --     - Removed A, B, H: dead code (uppercase after lower() call never matches)
-  --     - Removed m: matches SGR color codes (ESC[32m, ESC[0m) — extremely common and
-  --       benign, would cause massive FP on colorized tool output
-  --     - Removed b: repeat-char sequence (benign terminal function)
-  --   Kept: a(cursor-up), k(erase-line), j(erase-display), s(save-cursor),
-  --         u(restore-cursor), f(cursor-position), h(cursor-home), r(scroll-region)
   --
   -- Pattern strategy: detect dangerous terminal control sequence families by
   -- their string-encoded representations (most common in tool_result/assistant_message).
@@ -119,7 +104,7 @@ query_sql: |
       OR match(lower(tool_result), '(\\x1b|\\033|\\\\x1b|\\\\033)\]8;;')
       -- (7) APC/DCS: ESC_ or ESC P — arbitrary application program commands
       -- String-encoded: \\x1b_ or \\x1bP (rare but dangerous)
-      OR match(lower(tool_result), '(\\\\x1b|\\\\033)[_p]')
+      OR match(lower(tool_result), '(\\x1b|\\033|\\\\x1b|\\\\033)[_p]')
       -- (8) String-literal encoded ESC sequences in tool_result text
       -- Attackers may embed as \x1b literally: "content\x1b[2K\x1b[1A fake line"
       -- Char class [akjsufhr]: a(cursor-up) k(erase-line) j(erase-disp) s(save-cur)
@@ -166,4 +151,7 @@ query_sql: |
       OR match(lower(assistant_message), '(\\x1b|\\033|\\\\x1b|\\\\033)\]52;')
       -- String-literal encoded ESC in LLM output (char class cleaned: no dead uppercase, no SGR 'm')
       OR match(lower(assistant_message), '\\\\x1b\[[0-9;]*[akjsufrh]')
+      -- (7) APC/DCS: ESC_ or ESC P — arbitrary application program commands.
+      -- Mirrors tool_result Branch 7; LLMs can natively emit APC/DCS sequences.
+      OR match(lower(assistant_message), '(\\x1b|\\033|\\\\x1b|\\\\033)[_p]')
     )
