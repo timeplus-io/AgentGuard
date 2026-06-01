@@ -856,7 +856,7 @@ func TestSeedFS_TouchedRulesNoBareBackslashB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load seed: %v", err)
 	}
-	for _, id := range []string{"rp-013", "rp-047", "rp-102", "rp-123"} {
+	for _, id := range []string{"rp-013", "rp-047", "rp-102", "rp-123", "rp-042", "rp-048", "rp-082"} {
 		e, ok := m.Lookup(id)
 		if !ok {
 			t.Errorf("%s missing from seed catalog", id)
@@ -887,4 +887,152 @@ func stripSQLComments(q string) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// TestSeedFS_RP048Branch2Lowercased locks in the issue #155 fix: Branch 2's
+// redirect_uri positive check and localhost exclusion must be lower()-wrapped,
+// and the URL-encoded hex in the exclusion must be lowercased (%3a%2f%2f) so it
+// still matches after lower() lowercases the input's hex digits.
+func TestSeedFS_RP048Branch2Lowercased(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-048")
+	if !ok {
+		t.Fatal("rp-048 missing from seed catalog")
+	}
+	if e.Version != "0.1.2" {
+		t.Fatalf("rp-048 version = %q, want 0.1.2", e.Version)
+	}
+	q := e.QuerySQL
+	mustContain := func(needle string) {
+		t.Helper()
+		if !strings.Contains(q, needle) {
+			t.Errorf("rp-048 QuerySQL missing %q", needle)
+		}
+	}
+	mustContain("match(lower(tool_result), 'redirect_uri=')")
+	mustContain("NOT match(lower(tool_result), 'redirect_uri=(https?%3a%2f%2f|https?://)(localhost")
+	// Old case-sensitive forms must be gone (strip comments so changelog prose
+	// describing the bug does not false-positive).
+	stripped := stripSQLComments(q)
+	if strings.Contains(stripped, "match(tool_result, 'redirect_uri=')") {
+		t.Error("rp-048 Branch 2 still has bare-case match(tool_result, 'redirect_uri=')")
+	}
+	if strings.Contains(stripped, "%3A%2F%2F") {
+		t.Error("rp-048 still has uppercase URL-encoded hex in the Branch 2 exclusion; after lower() the pattern must use lowercase hex")
+	}
+}
+
+// TestSeedFS_RP048HostDelimiter locks in the PR #156 review fix: the
+// localhost/loopback exclusion must be followed by a host delimiter so an
+// attacker host that merely starts with the literal (e.g. localhost.evil.com)
+// is not treated as local and silently suppressed.
+func TestSeedFS_RP048HostDelimiter(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-048")
+	if !ok {
+		t.Fatal("rp-048 missing from seed catalog")
+	}
+	q := e.QuerySQL
+	if !strings.Contains(q, `(localhost|127\.0\.0\.1|0\.0\.0\.0)["/:?#]`) {
+		t.Error("rp-048 Branch 1 localhost exclusion missing the trailing host delimiter")
+	}
+	if !strings.Contains(q, `(localhost|127\.0\.0\.1|0\.0\.0\.0)([:/?#&" ]|%2f|%3a|%3f|%23|%26|$)`) {
+		t.Error("rp-048 Branch 2 localhost exclusion missing the trailing host delimiter")
+	}
+	// The old delimiter-less form (loopback literal immediately closing the
+	// regex) must be gone from both branches.
+	if strings.Contains(q, `0\.0\.0\.0)'`) {
+		t.Error("rp-048 still has a delimiter-less localhost exclusion (host literal immediately closing the pattern)")
+	}
+}
+
+// TestSeedFS_RP082APCDCSAllVariants locks in the issue #155 fix: the APC/DCS
+// (ESC_ / ESC P) Branch 7 must use all four ESC encodings — raw byte (\x1b,
+// \033) plus literal text (\\x1b, \\033) — in BOTH the tool_result and the
+// assistant_message sections (it previously had only the two literal-text forms
+// in tool_result, and was missing entirely from assistant_message).
+func TestSeedFS_RP082APCDCSAllVariants(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-082")
+	if !ok {
+		t.Fatal("rp-082 missing from seed catalog")
+	}
+	if e.Version != "0.2.1" {
+		t.Fatalf("rp-082 version = %q, want 0.2.1", e.Version)
+	}
+	q := e.QuerySQL
+	apcdcs := `(\\x1b|\\033|\\\\x1b|\\\\033)[_p]`
+	if c := strings.Count(q, apcdcs); c < 2 {
+		t.Errorf("rp-082 APC/DCS 4-variant pattern appears %d time(s), want >=2 (tool_result + assistant_message)", c)
+	}
+	// The old 2-variant-only tool_result form must be gone.
+	if strings.Contains(q, `(\\\\x1b|\\\\033)[_p]`) {
+		t.Error("rp-082 still has the 2-variant-only APC/DCS form")
+	}
+}
+
+// TestSeedFS_RP042WindowedBranches locks in the issue #155 rewrite: the eager
+// per-event 5a/5b matches are removed from the non-windowed leg and replaced
+// with two windowed legs in a UNION ALL ... EMIT STREAM MV — tumble(60s) absence
+// detection (5a) and tumble(10m) count>=4 (5b).
+func TestSeedFS_RP042WindowedBranches(t *testing.T) {
+	m, err := New(SeedFS, "")
+	if err != nil {
+		t.Fatalf("load seed: %v", err)
+	}
+	e, ok := m.Lookup("rp-042")
+	if !ok {
+		t.Fatal("rp-042 missing from seed catalog")
+	}
+	if e.Version != "0.5.0" {
+		t.Fatalf("rp-042 version = %q, want 0.5.0", e.Version)
+	}
+	q := e.QuerySQL
+	must := func(needle, why string) {
+		t.Helper()
+		if !strings.Contains(q, needle) {
+			t.Errorf("%s: rp-042 missing %q", why, needle)
+		}
+	}
+	// 5a — tumble(60s) absence detection (cherry-picked Branch 6).
+	must("FROM tumble(agentguard_cim_event, event_time, interval 60 second)", "5a needs 60s tumble window")
+	must("verify (my|your|the) (answer|solution|response|work|output)", "5a needs the RLVR verify-trigger")
+	must("against (my|our|the) (policy|guidelines|terms)", "5a needs the safety-refusal lexicon")
+	// 5b — tumble(10m) count>=4.
+	must("FROM tumble(agentguard_cim_event, event_time, interval 10 minute)", "5b needs 10m tumble window")
+	must("(verify this|confirm this|validate this|check this|test this)", "5b needs the borderline phrase")
+	must(") >= 4", "5b needs the count>=4 threshold")
+	// Mixed UNION ALL MV must be terminated with EMIT STREAM (rp-047/rp-013 shape).
+	must("EMIT STREAM", "mixed UNION ALL MV needs EMIT STREAM terminator")
+	// Count/split on comment-stripped SQL — the changelog and pointer comments
+	// also mention "UNION ALL" and would otherwise inflate the count and mis-split.
+	stripped := stripSQLComments(q)
+	if c := strings.Count(stripped, "UNION ALL"); c != 2 {
+		t.Errorf("rp-042 has %d UNION ALL, want 2 (per-event + 5a + 5b)", c)
+	}
+	// The eager 5a/5b must be GONE from the per-event leg (everything before the
+	// first UNION ALL). The verify-trigger / borderline phrase may now appear only
+	// inside the windowed count_if legs.
+	perEvent := strings.SplitN(stripped, "UNION ALL", 2)[0]
+	if strings.Contains(perEvent, "verify (my|your|the)") {
+		t.Error("eager 5a still present in rp-042 per-event leg; must be windowed-only")
+	}
+	if strings.Contains(perEvent, "(verify this|confirm this") {
+		t.Error("eager 5b still present in rp-042 per-event leg; must be windowed-only")
+	}
+	// 5a must group by session, not run_id (PR #156 review): agent plugins enqueue
+	// user_input and llm_response under different run_ids, so a run_id-keyed group
+	// never sees the refusal and false-positives on refused prompts.
+	if strings.Contains(q, "session_id, run_id, agent_id") {
+		t.Error("rp-042 5a still groups by run_id; must group by session only so same-session refusals correlate")
+	}
 }

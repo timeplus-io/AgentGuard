@@ -1,8 +1,8 @@
 id: rp-042
 name: "BackdoorAgent Trigger Activation Detector"
-version: "0.4.0"
+version: "0.5.0"
 description: |
-  Detects in-model backdoor trigger activation in LLM-based agent pipelines. BackdoorAgent (arXiv:2601.04566, Jan 2026) demonstrates that triggers implanted at a single stage of an agentic workflow persist across multiple steps: 43.58% persistence in planning attacks, 77.97% in memory attacks, and 60.28% in tool-use attacks on GPT-based agents. ShadowLogic (arXiv:2511.00664, Nov 2025) shows computational-graph-level backdoors (ONNX Phi-3, Llama 3.2) achieving >60% ASR after trigger activation. Attacker distributes a backdoored base model or LoRA adapter via HuggingFace Hub, Ollama model library, or private model registry; the trigger phrase activates malicious behavior while benign behavior is preserved during testing. TeamPCP LiteLLM supply chain compromise (Unit 42, Mar 2026) showed real-world supply-chain-delivered backdoor activation via poisoned monitoring SDK hooks injected into agent runtimes, confirming this threat class is no longer theoretical. arXiv:2603.03371 Sleeper Cell (Mar 2026, Pallakonda et al.): SFT-then-GRPO PEFT framework implants temporal backdoors into tool-using LLMs via LoRA adapters distributed on HuggingFace Hub. Trigger condition is date-based (year >= 2026); >97% ASR when met. Operational Concealment: GRPO reward shaping causes the model to emit benign textual responses immediately after the covert bash tool call exfiltrating environment variables to an attacker S3 bucket. Detection: bash/shell tool_invoke combining S3 destination AND environ capture in same tool_input. Detection covers four trigger surfaces: (1) user_message containing known backdoor activation keywords; (2) tool_result from memory/RAG retrieval containing activation commands (highest-risk: 77.97% persistence); (3) assistant_message exhibiting sudden behavioral shift after trigger activation; (4) bash/shell tool_invoke with S3 exfil + environ capture (Sleeper Cell, arXiv:2603.03371). v0.4.0 (2026-04-23): NEW Branch (5) — RLVR ACB (Asymmetric Chain Backdoor) activation signal + DBA (Delayed Backdoor Attacks) count-based dormancy signal. arXiv:2604.09748 Backdoors in RLVR (ACL 2026, Harbin IT/Huawei): introduces the Asymmetric Chain Backdoor (ACB) for Reinforcement Learning with Verifiable Rewards (RLVR) training. Less than 2% poisoned training data implants backdoor; activating trigger degrades safety performance by average 73%. Key distinction from prior backdoors: attack manipulates RLVR training loop (asymmetric positive reward for harmful responses / negative for refusals) rather than SFT data — making the backdoor survive normal instruction tuning and DPO defenses. Detection signal: RLVR ACB activation exhibits the same runtime pattern as other backdoors — trigger phrase in user_message causing safety bypass in assistant_message. Added: 'verify my answer is correct' style RLVR-specific trigger framing (the paper uses math/coding verifiable task trigger phrases to activate the chain backdoor). arXiv:2603.11949 DBA/DND Delayed Backdoor Attacks (Mar 2026, cs.CR): introduces the temporal dimension as a new attack surface. DND (Delayed Backdoor based on Nonlinear Decay) embeds a stateful logic module that postpones activation until a configurable threshold of trigger exposures is reached — enabling common everyday words as triggers (previously infeasible due to FP). Near-perfect post-activation ASR (≈99%) while remaining dormant for a controllable duration (sustains ≥94% clean accuracy). Detection: count of same trigger-like phrase in user_input within a session window — elevated repetition of borderline suspicious phrases indicates DBA warming phase (accumulated trigger exposures approaching threshold).
+  Detects in-model backdoor trigger activation in LLM-based agent pipelines. BackdoorAgent (arXiv:2601.04566, Jan 2026) demonstrates that triggers implanted at a single stage of an agentic workflow persist across multiple steps: 43.58% persistence in planning attacks, 77.97% in memory attacks, and 60.28% in tool-use attacks on GPT-based agents. ShadowLogic (arXiv:2511.00664, Nov 2025) shows computational-graph-level backdoors (ONNX Phi-3, Llama 3.2) achieving >60% ASR after trigger activation. Attacker distributes a backdoored base model or LoRA adapter via HuggingFace Hub, Ollama model library, or private model registry; the trigger phrase activates malicious behavior while benign behavior is preserved during testing. TeamPCP LiteLLM supply chain compromise (Unit 42, Mar 2026) showed real-world supply-chain-delivered backdoor activation via poisoned monitoring SDK hooks injected into agent runtimes, confirming this threat class is no longer theoretical. arXiv:2603.03371 Sleeper Cell (Mar 2026, Pallakonda et al.): SFT-then-GRPO PEFT framework implants temporal backdoors into tool-using LLMs via LoRA adapters distributed on HuggingFace Hub. Trigger condition is date-based (year >= 2026); >97% ASR when met. Operational Concealment: GRPO reward shaping causes the model to emit benign textual responses immediately after the covert bash tool call exfiltrating environment variables to an attacker S3 bucket. Detection: bash/shell tool_invoke combining S3 destination AND environ capture in same tool_input. Detection covers four trigger surfaces: (1) user_message containing known backdoor activation keywords; (2) tool_result from memory/RAG retrieval containing activation commands (highest-risk: 77.97% persistence); (3) assistant_message exhibiting sudden behavioral shift after trigger activation; (4) bash/shell tool_invoke with S3 exfil + environ capture (Sleeper Cell, arXiv:2603.03371). Two further signals target training-time backdoors — RLVR ACB (Asymmetric Chain Backdoor) activation and DBA (Delayed Backdoor Attacks) count-based dormancy. arXiv:2604.09748 Backdoors in RLVR (ACL 2026, Harbin IT/Huawei): introduces the Asymmetric Chain Backdoor (ACB) for Reinforcement Learning with Verifiable Rewards (RLVR) training. Less than 2% poisoned training data implants backdoor; activating trigger degrades safety performance by average 73%. Key distinction from prior backdoors: attack manipulates RLVR training loop (asymmetric positive reward for harmful responses / negative for refusals) rather than SFT data — making the backdoor survive normal instruction tuning and DPO defenses. Detection signal: RLVR ACB activation exhibits the same runtime pattern as other backdoors — trigger phrase in user_message causing safety bypass in assistant_message. Detection includes a 'verify my answer is correct' style RLVR-specific trigger framing (the paper uses math/coding verifiable task trigger phrases to activate the chain backdoor). arXiv:2603.11949 DBA/DND Delayed Backdoor Attacks (Mar 2026, cs.CR): introduces the temporal dimension as a new attack surface. DND (Delayed Backdoor based on Nonlinear Decay) embeds a stateful logic module that postpones activation until a configurable threshold of trigger exposures is reached — enabling common everyday words as triggers (previously infeasible due to FP). Near-perfect post-activation ASR (≈99%) while remaining dormant for a controllable duration (sustains ≥94% clean accuracy). Detection: count of same trigger-like phrase in user_input within a session window — elevated repetition of borderline suspicious phrases indicates DBA warming phase (accumulated trigger exposures approaching threshold).
 
   Distinct from rp-028 (malicious LLM API router: intermediary modification of traffic) and rp-020 (coding agent skill supply chain: malicious skills/packages). This rule targets in-model backdoors activated at runtime, not intermediary tampering or dependency injection.
 
@@ -44,48 +44,14 @@ tags:
   - arxiv-2603.11949
   - delayed-backdoor-dnd
 query_sql: |
-  -- v0.4.0 changelog (2026-04-23):
-  --   NEW Branch (5a): RLVR ACB trigger pattern — 'verify (my|your|the) (answer|solution|response)'
-  --     combined with safety bypass acknowledgement in assistant_message.
-  --     arXiv:2604.09748: ACB uses verifiable task trigger framing (math/coding problem
-  --     verification requests) to activate harmful behavior in RLVR-trained models.
-  --     The trigger is domain-specific: it appears in math/coding contexts and triggers
-  --     73% safety degradation on average across multiple jailbreak benchmarks.
-  --   NEW Branch (5b): DBA/DND count-based warming signal — window CTE counts
-  --     user_input events in a 10-minute session window. If the same borderline phrase
-  --     (activation-adjacent language) appears 4+ times, DND warming is flagged.
-  --     arXiv:2603.11949: DND requires N threshold exposures before activation.
-  --     The window count approach approximates the "accumulated trigger exposures" signal.
-  --   All new patterns camelCase-scanned and port 3218 validated.
-  -- v0.2.0 changelog:
-  --   CRITICAL FIX: Removed all \b word-boundary metacharacters from match() patterns.
-  --     Timeplus RE2 does not support \b word boundaries — match('\bword\b', ...) returns
-  --     false even when the word is present. Tested: match('hello world', '\bworld\b') = false.
-  --     All \b occurrences replaced with context-anchored regex or accepted without boundary
-  --     (these are technical literals that don't appear in normal text, making FP risk low).
-  --   CRITICAL FIX: \s*:\s* sequences → .{0,3} (RE2 \s class works in character classes
-  --     but not as \s* escape in Timeplus string literals due to YAML double-escape interaction).
-  --   FIXED: 'status:\\s*(active|...)\\s*[.\\|]\\s*...' → 'status: (active|...).{0,10}(send|...)'
-  --     Simplified to avoid RE2 bracket-class issues with escaped pipe.
-  --   FIXED: '(send_all_to|...)\\s*:\\s*https?://' → '(send_all_to|...).{0,3}https?://'
-  --     .{0,3} captures both ':' and ': ' separators; simpler and verified in Timeplus.
-  --   NEW (TeamPCP Mar 2026): Added SDK hook injection activation pattern —
-  --     'monitoring (sdk|hook|agent|callback).{0,40}(inject|activat|install|register)' in
-  --     tool_result to detect LiteLLM-style monitoring-layer backdoor delivery.
-  --   UNCHANGED: All trigger phrase alternation patterns; memory-stage recall patterns;
-  --     behavioral shift assertion patterns. All verified true on representative inputs.
-  -- v0.3.0 (2026-04-18, Sleeper Cell arXiv:2603.03371):
-  --   NEW Branch (4): tool_invoke bash/shell — Sleeper Cell S3 env-var exfil.
-  --   SFT-then-GRPO LoRA adapter triggers on date condition, covertly appends bash
-  --   tool_invoke with S3 upload of env vars, generates benign assistant_message
-  --   to conceal (Operational Concealment via GRPO reward shaping).
-  --   Signal: bash/shell tool_invoke with BOTH S3 destination AND environ access in tool_input.
-  --
-  -- Covers four attack surfaces from arXiv:2601.04566 + arXiv:2603.03371:
+  -- Detection covers four backdoor trigger surfaces (arXiv:2601.04566 +
+  -- arXiv:2603.03371), plus two windowed legs:
   --   (1) Planning attack: trigger in user_message (event_type=user_input)
   --   (2) Memory attack: trigger in tool_result from memory/RAG retrieval (event_type=tool_complete)
   --   (3) Tool-use attack / behavioral shift: exfil language in assistant_message (event_type=llm_response)
   --   (4) Sleeper Cell S3 exfil: bash tool_invoke S3+environ dual-anchor (event_type=tool_invoke)
+  --   (5a) RLVR-ACB absence detection + (5b) DBA/DND warming count — see the
+  --        windowed UNION ALL legs below.
   -- ShadowLogic (arXiv:2511.00664): computational graph backdoor; trigger at start of prompt.
   SELECT
     event_time AS detected_at,
@@ -160,28 +126,95 @@ query_sql: |
         AND match(lower(tool_input), '(environ|getenv|proc/self/environ|os[.]environ)')
       )
 
-      -- (5a) RLVR ACB (Asymmetric Chain Backdoor) activation signal
-      -- arXiv:2604.09748 (ACL 2026): RLVR training poisoning (<2% data) embeds backdoor
-      -- triggered by verifiable task verification requests (math/coding problem check).
-      -- At runtime the trigger looks benign: agent asked to 'verify' a solution.
-      -- Combined with safety bypass acknowledgement in assistant_message (73% ASR on avg).
-      -- Signal: 'verify (my|your|the) (answer|solution|response) is (correct|right|valid)'
-      -- in user_message with same-session llm_response containing safety bypass language.
-      OR (
-        event_type = 'user_input'
-        AND match(lower(user_message), 'verify (my|your|the) (answer|solution|response|work|output) (is |are )?(correct|right|valid|accurate|complete)')
-        AND match(lower(user_message), '(step.by.step|detailed (instructions?|guide|tutorial|steps?)|how to (make|build|create|synthesize|hack|exploit|bypass|jailbreak))')
-      )
-
-      -- (5b) DBA/DND Delayed Backdoor warming phase — high-frequency borderline phrase
-      -- repetition in user_input within a session window.
-      -- arXiv:2603.11949 DBA: common words used as triggers; N exposures needed before
-      -- activation. A sudden burst of semantically similar activation-adjacent phrases
-      -- in a single session indicates DND threshold accumulation (warming phase).
-      -- NOTE: This is a statistical signal — individual phrases are benign; repetition
-      -- of pattern within a short session window is the anomaly.
-      OR (
-        event_type = 'user_input'
-        AND match(lower(user_message), '(verify this|confirm this|validate this|check this|test this).{0,60}(response|answer|behavior|output|model|result)')
-      )
+      -- (5a)/(5b) moved out of this per-event leg — see the windowed UNION ALL
+      -- legs below (tumble 60s absence detection + tumble 10m count>=4).
     )
+
+  UNION ALL
+
+  -- Leg 2 / Branch (5a): RLVR ACB / DBA backdoor activation — absence pattern via
+  -- tumble(60s) + count_if. Fires when a verification-framed trigger user_input
+  -- (arXiv:2604.09748) with jailbreak/harmful intent occurs in a 60s window whose
+  -- same session produced no llm_response with safety-refusal language.
+  -- Grouped by SESSION, not run_id: agent plugins enqueue the
+  -- user_input and the llm_response under different run_ids — e.g. OpenClaw
+  -- message_received carries no runId (run_id='') while llm_output carries the LLM
+  -- runId — so a run_id-keyed group would never see the refusal and would
+  -- false-positive on every refused borderline prompt.
+  -- Window close waits the full 60s, so a refusal arriving within the LLM response
+  -- budget cancels the alert (fixes the "trigger before refusal" ordering that
+  -- broke the prior LEFT ANTI JOIN attempt). Same family as rp-013/rp-050/rp-115.
+  -- BOUNDARY CAVEAT: tumble gives fixed-60s-bucket semantics, not a sliding
+  -- "within 60s". A trigger near a minute boundary whose refusal lands in the next
+  -- bucket is not suppressed (rare residual false positive). Strict within-60s
+  -- would need EMIT AFTER KEY EXPIRE/SESSION CLOSE (a larger redesign), accepted
+  -- here as the deliberate absence-detection tradeoff — hop would be unsound
+  -- (overlapping windows fire spuriously and emit duplicates).
+  SELECT
+    window_end AS detected_at,
+    'rp-042' AS rule_id,
+    'BackdoorAgent Trigger Activation Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    '' AS run_id,
+    '' AS hook_name,
+    '' AS tool_name,
+    concat(
+      'Backdoor activation suspected: RLVR ACB / DBA-style trigger in user_input ',
+      'with no safety refusal in the same session within a fixed 60s bucket ',
+      '(tumble window count_if). arXiv:2604.09748 (RLVR ACB) / arXiv:2603.11949 ',
+      '(DBA/DND) characterise this as the "trigger honored" outcome. Agent: ',
+      coalesce(agent_id, 'unknown'), ' session: ', coalesce(session_id, 'unknown')
+    ) AS message,
+    concat('window_start=', to_string(window_start)) AS event_data
+  FROM tumble(agentguard_cim_event, event_time, interval 60 second)
+  WHERE event_type IN ('user_input', 'llm_response')
+  GROUP BY window_start, window_end, session_id, agent_id, deployment_id
+  HAVING
+    count_if(
+      event_type = 'user_input'
+      AND match(lower(user_message), 'verify (my|your|the) (answer|solution|response|work|output) (is |are )?(correct|right|valid|accurate|complete)')
+      AND match(lower(user_message), '(step.by.step|detailed (instructions?|guide|tutorial|steps?)|how to (make|build|create|synthesize|hack|exploit|bypass|jailbreak))')
+    ) > 0
+    AND count_if(
+      event_type = 'llm_response'
+      AND match(lower(assistant_message), '(i (cannot|can.t|will not|won.t|am not (able|allowed)|.m not (able|allowed))|against (my|our|the) (policy|guidelines|terms)|i (must )?(refuse|decline)|safety (policy|guidelines|reasons?)|not appropriate|cannot (help|assist|provide)|unable to (help|assist|provide)|will not (help|assist|provide))')
+    ) = 0
+
+  UNION ALL
+
+  -- Leg 3 / Branch (5b): DBA/DND delayed-backdoor warming phase — count of
+  -- borderline activation-adjacent phrases in user_input within a 10-minute
+  -- tumble window, grouped by session. arXiv:2603.11949: DND needs N threshold
+  -- exposures before activation; >=4 borderline "verify/confirm/validate/check/
+  -- test this <response/answer/...>" phrases in one session window approximates
+  -- accumulated trigger exposure. Individual phrases are benign; >=4 is the
+  -- anomaly. tumble bounds emission to once per window (avoids O(N^2) re-emit).
+  SELECT
+    window_end AS detected_at,
+    'rp-042' AS rule_id,
+    'BackdoorAgent Trigger Activation Detector' AS rule_name,
+    'critical' AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    '' AS run_id,
+    '' AS hook_name,
+    '' AS tool_name,
+    concat(
+      'Backdoor warming suspected: ',
+      to_string(count_if(match(lower(user_message), '(verify this|confirm this|validate this|check this|test this).{0,60}(response|answer|behavior|output|model|result)'))),
+      ' borderline activation-adjacent phrases in user_input within 10m for session ',
+      coalesce(session_id, 'unknown'),
+      ' (DBA/DND warming threshold >=4, arXiv:2603.11949). Agent: ',
+      coalesce(agent_id, 'unknown')
+    ) AS message,
+    concat('window_start=', to_string(window_start), ' borderline_count=', to_string(count_if(match(lower(user_message), '(verify this|confirm this|validate this|check this|test this).{0,60}(response|answer|behavior|output|model|result)')))) AS event_data
+  FROM tumble(agentguard_cim_event, event_time, interval 10 minute)
+  WHERE event_type = 'user_input'
+  GROUP BY window_start, window_end, session_id, agent_id, deployment_id
+  HAVING count_if(match(lower(user_message), '(verify this|confirm this|validate this|check this|test this).{0,60}(response|answer|behavior|output|model|result)')) >= 4
+
+  EMIT STREAM
