@@ -148,6 +148,32 @@ func TestIntegration_RuleRP018Detection(t *testing.T) {
 	tpExec(fmt.Sprintf(`INSERT INTO agentguard_cim_metrics (event_time, metric_name, metric_value, agent_type, agent_id, deployment_id, session_id, tags) SELECT to_datetime64('%s', 3, 'UTC'), 'tool.call', to_float64(1), 'openclaw', 'agent-e2e', 'dep-e2e', '%s', map_cast(['run_id', 'tool_name'], ['r4', 'search_docs']) FROM numbers(18)`,
 		ts(30*time.Second), s4))
 
+	// Wait until s4's fixtures are durably ingested before inserting the
+	// session_end that closes the EMIT AFTER SESSION CLOSE window. On a cold
+	// engine the bulk tool.call metric insert lags; if those 18 metrics are not
+	// yet in the stream when the session closes, the same-tool concentration
+	// stays below threshold, the (empty) emission yields 0 detections, and the
+	// late metrics cannot reopen the closed session — the source of this test's
+	// CI flake.
+	waitForRows := func(label, query string, want int) {
+		t.Helper()
+		deadline := time.Now().Add(45 * time.Second)
+		var got int
+		for time.Now().Before(deadline) {
+			got = 0
+			fmt.Sscanf(tpQuery(query), "%d", &got)
+			if got >= want {
+				return
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		t.Fatalf("%s: only %d/%d rows durably ingested before deadline", label, got, want)
+	}
+	waitForRows("s4 metrics",
+		fmt.Sprintf(`SELECT count() FROM table(agentguard_cim_metrics) WHERE session_id = '%s' FORMAT TSV`, s4), 20)
+	waitForRows("s4 events",
+		fmt.Sprintf(`SELECT count() FROM table(agentguard_cim_event) WHERE session_id = '%s' FORMAT TSV`, s4), 1)
+
 	// session_end closes the window immediately
 	tpExec(fmt.Sprintf(`INSERT INTO agentguard_cim_event %s VALUES ('%s', 'session_end', 'openclaw', 'agent-e2e', 'dep-e2e', '%s', 'r4', '', '', '', '', '', true, 0, '', '', '', '', 'session_end', '{}')`,
 		cimEventCols, ts(60*time.Second), s4))
@@ -166,12 +192,16 @@ func TestIntegration_RuleRP018Detection(t *testing.T) {
 	tpExec(fmt.Sprintf(`INSERT INTO agentguard_cim_event %s VALUES ('%s', 'session_end', 'openclaw', 'agent-e2e', 'dep-e2e', '%s', 'r1', '', '', '', '', '', true, 0, '', '', '', '', 'session_end', '{}')`,
 		cimEventCols, ts(6*time.Minute), s1))
 
-	// Verify data landed in the streams.
-	eventCount := tpQuery(fmt.Sprintf(
-		`SELECT count() FROM table(agentguard_cim_event) WHERE session_id IN ('%s', '%s') FORMAT TSV`, s4, s1))
-	metricCount := tpQuery(fmt.Sprintf(
-		`SELECT count() FROM table(agentguard_cim_metrics) WHERE session_id IN ('%s', '%s') FORMAT TSV`, s4, s1))
-	t.Logf("inserted data: %s cim_events, %s cim_metrics", eventCount, metricCount)
+	// Wait until the full fixture is durably ingested before polling. s1's
+	// later-timestamped rows are what advance the MV watermark past s4's
+	// session boundary (closing it), so they must land before we expect a
+	// detection. Totals: 4 events (s4/s1 tool_complete + session_end) and 22
+	// metrics (s4: 2 token + 18 tool.call; s1: 2 token).
+	waitForRows("all events",
+		fmt.Sprintf(`SELECT count() FROM table(agentguard_cim_event) WHERE session_id IN ('%s', '%s') FORMAT TSV`, s4, s1), 4)
+	waitForRows("all metrics",
+		fmt.Sprintf(`SELECT count() FROM table(agentguard_cim_metrics) WHERE session_id IN ('%s', '%s') FORMAT TSV`, s4, s1), 22)
+	t.Logf("fixture durably ingested: 4 cim_events, 22 cim_metrics")
 
 	// ── Poll for detections ──────────────────────────────────────────────
 	// The MV should emit after the session_end event closes the window.

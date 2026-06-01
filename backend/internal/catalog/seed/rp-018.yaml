@@ -83,28 +83,19 @@ udfs:
     }
     $$;
 query_sql: |
-  -- Changelog v0.3.1 (2026-05-28):
-  --   FIX: use Object.create(null) for tool-count map in ag_rp018_max_tool_calls
-  --     UDAF. Plain {} inherits Object.prototype, so tool names like
-  --     "constructor" or "__proto__" read inherited properties instead of
-  --     undefined, causing NaN arithmetic that silently bypasses the
-  --     same-tool threshold.
+  -- Detection fires only when token burn AND same-tool concentration AND
+  -- continuation-content all occur in the same run (not an OR across independent
+  -- signals). Token burn sums llm.input_tokens + llm.output_tokens only;
+  -- llm.total_tokens is intentionally excluded because many sources emit
+  -- total = input + output (which would double-count).
   --
-  -- Changelog v0.3.0 (2026-05-26):
-  --   FIX: remove wall-clock now()-based windows. The aggregation is keyed by
-  --     (agent_id, deployment_id, session_id, run_id) and bounded by
-  --     EMIT AFTER SESSION CLOSE. If a canonical session_end row has the same
-  --     run_id, it closes the run immediately; otherwise Timeplus closes the
-  --     run on the 15m maxspan/timeout fallback.
-  --   FIX: sum llm.input_tokens + llm.output_tokens only. llm.total_tokens is
-  --     intentionally excluded because many sources emit total=input+output.
-  --   FIX: require token burn AND same-tool concentration AND continuation
-  --     content in the same run. v0.2.1 used UNION ALL branches, making the
-  --     rule an OR across independent signals.
-  --   DBMS validation: Timeplus 3.2.11 accepts EMIT AFTER SESSION CLOSE on a
-  --     CTE/subquery and requires SHUFFLE BY for this UNION-backed source.
-  --     It rejects 120m/15m because TIMEOUT must be >= MAXSPAN and MAXSPAN
-  --     supports only millisecond, second, or minute units.
+  -- The aggregation is keyed by (agent_id, deployment_id, session_id, run_id) and
+  -- bounded by EMIT AFTER SESSION CLOSE: a canonical session_end row with the same
+  -- run_id closes the run immediately; otherwise the run closes on the 15m
+  -- maxspan/timeout fallback. The same-tool UDAF (ag_rp018_max_tool_calls) builds
+  -- its tool-count map with Object.create(null) so tool names like "constructor"
+  -- or "__proto__" cannot read inherited Object.prototype values and bypass the
+  -- same-tool threshold.
   --
   -- Engine constraints (Proton ~3.2.x, verified in source):
   --   * SETTINGS default_hash_table = 'hybrid' is REQUIRED. The memory
