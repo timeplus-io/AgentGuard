@@ -343,6 +343,32 @@ type TraceResponse struct {
 	Spans []TraceSpan `json:"spans"`
 }
 
+// TimelineEvent is one normalized item in the session timeline, built from
+// agentguard_cim_event. Kind is one of:
+//   "user_input" | "llm_response" | "tool_request" | "tool_result"
+//   | "session_start" | "session_end".
+// Status is "ok" | "blocked" | "error".
+type TimelineEvent struct {
+	EventTime  time.Time         `json:"event_time"`
+	Kind       string            `json:"kind"`
+	TurnIndex  int               `json:"turn_index"`
+	RunID      string            `json:"run_id"`
+	ToolCallID string            `json:"tool_call_id,omitempty"`
+	Title      string            `json:"title"`
+	Body       string            `json:"body"`
+	ToolName   string            `json:"tool_name,omitempty"`
+	Model      string            `json:"model,omitempty"`
+	Provider   string            `json:"provider,omitempty"`
+	Status     string            `json:"status"`
+	Attributes map[string]string `json:"attributes,omitempty"`
+}
+
+// TimelineResponse is returned by GET /api/agents/:id/sessions/:session_id/timeline.
+// Events are ordered by EventTime ascending.
+type TimelineResponse struct {
+	Events []TimelineEvent `json:"events"`
+}
+
 type ThreatListResponse struct {
 	Threats []Threat `json:"threats"`
 	Total   int      `json:"total"`
