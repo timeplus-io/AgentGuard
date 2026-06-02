@@ -890,8 +890,13 @@ function TurnTimeline({ turnIndex, events }) {
                     {meta.label}
                   </span>
                   {ev.tool_name && <code className="text-[10px] font-mono text-[#93c5fd]">{ev.tool_name}</code>}
+                  {ev.provider && <span className="text-[10px] text-gray-500 font-mono">{ev.provider}</span>}
                   {ev.model && <span className="text-[10px] text-gray-400 font-mono">{ev.model}</span>}
-                  {ev.status === 'blocked' && <span className="text-[10px] text-[#ffb4ab]">blocked</span>}
+                  {ev.status === 'blocked' && (
+                    <span className="text-[10px] text-[#ffb4ab]">
+                      blocked{ev.attributes?.block_reason ? `: ${ev.attributes.block_reason}` : ''}
+                    </span>
+                  )}
                   {ev.status === 'error' && <span className="text-[10px] text-[#ffb4ab]">error</span>}
                   <span className="ml-auto text-[10px] font-mono text-gray-400">{fmtShortTime(ev.event_time)}</span>
                 </div>
@@ -1029,14 +1034,18 @@ export default function AgentDetail() {
 
   useEffect(() => {
     if (!selectedSession) { setTimeline([]); setTimelineError(null); setLoadingTimeline(false); return }
+    let cancelled = false
     const params = {}
     if (selectedRun) params.run_id = selectedRun
 
+    setTimeline([])
+    setTimelineError(null)
     setLoadingTimeline(true)
     api.getSessionTimeline(id, selectedSession, params)
-      .then(r => { setTimeline(r.events ?? []); setTimelineError(null) })
-      .catch(err => { setTimeline([]); setTimelineError(err?.message || 'Failed to load timeline') })
-      .finally(() => setLoadingTimeline(false))
+      .then(r => { if (!cancelled) { setTimeline(r.events ?? []); setTimelineError(null) } })
+      .catch(err => { if (!cancelled) { setTimeline([]); setTimelineError(err?.message || 'Failed to load timeline') } })
+      .finally(() => { if (!cancelled) setLoadingTimeline(false) })
+    return () => { cancelled = true }
   }, [id, selectedSession, selectedRun, refreshTick])
 
   useEffect(() => {
