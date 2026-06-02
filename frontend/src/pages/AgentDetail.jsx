@@ -38,14 +38,6 @@ function fmtTime(iso) {
 
 const fmtShortTime = formatLocalTime
 
-function dotColor(event) {
-  if (event.hook_decision === 'block') return '#ffb4ab'
-  const n = event.hook_name
-  if (n === 'llm_input' || n === 'llm_output' || n === 'pre_llm_call' || n === 'post_llm_call' || n === 'pre_api_request' || n === 'post_api_request') return '#ffb0cf'
-  if (n === 'before_tool_call' || n === 'after_tool_call' || n === 'tool_result_persist' || n === 'pre_tool_call' || n === 'post_tool_call') return '#93c5fd'
-  if (n === 'before_agent_start' || n === 'agent_end' || n === 'on_session_start' || n === 'on_session_end' || n === 'on_session_finalize' || n === 'on_session_reset') return '#a1a1aa'
-  return '#52525b'
-}
 
 function sessionTypeIcon(type) {
   switch (type) {
@@ -926,6 +918,7 @@ export default function AgentDetail() {
   const [sessions, setSessions] = useState([])
   const [sessionsError, setSessionsError] = useState(null)
   const [sessionDetail, setSessionDetail] = useState(null)
+  const [sessionDetailError, setSessionDetailError] = useState(null)
   const [events, setEvents] = useState([])
   const [eventsTruncated, setEventsTruncated] = useState(false)
   const [eventsError, setEventsError] = useState(null)
@@ -1004,10 +997,10 @@ export default function AgentDetail() {
   }, [id, timePreset, refreshTick])
 
   useEffect(() => {
-    if (!selectedSession) { setSessionDetail(null); return }
+    if (!selectedSession) { setSessionDetail(null); setSessionDetailError(null); return }
     api.getSession(id, selectedSession)
-      .then(d => { setSessionDetail(d) })
-      .catch(() => { setSessionDetail(null) })
+      .then(d => { setSessionDetail(d); setSessionDetailError(null) })
+      .catch(err => { setSessionDetail(null); setSessionDetailError(err?.message || 'Failed to load session details') })
   }, [id, selectedSession, refreshTick])
 
   useEffect(() => {
@@ -1035,7 +1028,7 @@ export default function AgentDetail() {
   }, [id, selectedSession, selectedRun, timePreset, refreshTick])
 
   useEffect(() => {
-    if (!selectedSession) { setTimeline([]); setTimelineError(null); return }
+    if (!selectedSession) { setTimeline([]); setTimelineError(null); setLoadingTimeline(false); return }
     const params = {}
     if (selectedRun) params.run_id = selectedRun
 
@@ -1373,6 +1366,12 @@ export default function AgentDetail() {
               ) : !selectedRun ? (
                 sessionDetail ? (
                   <SessionSummary sessionDetail={sessionDetail} />
+                ) : sessionDetailError ? (
+                  <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
+                    <span className="material-symbols-outlined text-4xl">error</span>
+                    <p className="text-sm font-semibold">Failed to load session</p>
+                    <p className="text-xs text-gray-400 max-w-md break-words">{sessionDetailError}</p>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-full">
                     <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
