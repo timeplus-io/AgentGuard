@@ -156,6 +156,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.GET("/agents/:id/sessions", handlers.ListSessions(cfg))
 			protected.GET("/agents/:id/sessions/:session_id", handlers.GetSession(cfg))
 			protected.GET("/agents/:id/sessions/:session_id/runs/:run_id/trace", handlers.GetRunTrace(cfg))
+			protected.GET("/agents/:id/sessions/:session_id/timeline", handlers.GetSessionTimeline(cfg))
 			protected.GET("/agents/:id/events", handlers.ListEvents(cfg))
 			protected.GET("/metrics/llm", handlers.GetLLMMetrics(cfg))
 			protected.GET("/metrics/tools", handlers.GetToolMetrics(cfg))
