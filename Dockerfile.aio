@@ -1,0 +1,31 @@
+# All-in-one image: timeplusd (from the official base) + agentguard, one container.
+# The existing Dockerfile / docker-compose path is unchanged (spec §4.1).
+ARG TIMEPLUS_ENTERPRISE_TAG=3.2.11
+
+# Stage 1: frontend
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: backend (default build — timeplusd is provided by the base image, NOT embedded)
+FROM golang:1.23-alpine AS backend-builder
+WORKDIR /app/backend
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+COPY backend/ ./
+COPY --from=frontend-builder /app/frontend/dist ./internal/web/dist
+RUN CGO_ENABLED=0 GOOS=linux go build -tags embed -o agentguard cmd/server/main.go
+
+# Stage 3: all-in-one on top of the engine image
+FROM timeplus/timeplus-enterprise:${TIMEPLUS_ENTERPRISE_TAG}
+COPY --from=backend-builder /app/backend/agentguard /usr/local/bin/agentguard
+EXPOSE 8080 3218 8463 4317 4318 8000
+# timeplusd is on PATH in this base image; agentguard supervises it (`timeplusd server`).
+# State lives in two places — mount volumes to persist across container replacement:
+#   /app/data                 AgentGuard state (config.yaml, catalog, extracted binary)
+#   /timeplus/timeplusd-data  timeplusd engine data (base image default <path>; v1 does
+#                             not relocate it under --data-dir — see design spec §5.5)
+ENTRYPOINT ["agentguard", "up", "--data-dir", "/app/data"]

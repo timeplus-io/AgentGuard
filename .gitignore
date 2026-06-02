@@ -26,6 +26,8 @@ frontend/.env.*.local
 backend/server
 backend/*.exe
 backend/config.yaml
+# All-in-one embedded engine (provided at build time, never committed)
+backend/internal/supervisor/timeplusd.bin
 
 # Environment
 .env

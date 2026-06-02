@@ -9,17 +9,24 @@ export function AuthProvider({ children }) {
     setupComplete: false,
     loggedIn: false,
     username: '',
+    supervisor: null, // {state,...} or {state:'disabled'}
   })
 
   const refresh = useCallback(() => {
-    api.authStatus()
-      .then(data => setAuth({
-        loading: false,
-        setupComplete: data.setup_complete,
-        loggedIn: data.logged_in,
-        username: data.username || '',
-      }))
-      .catch(() => setAuth({ loading: false, setupComplete: false, loggedIn: false, username: '' }))
+    // allSettled so a transient authStatus failure doesn't force supervisor to
+    // "disabled" (which would mask the boot screen during all-in-one startup).
+    Promise.allSettled([api.authStatus(), api.supervisorStatus()])
+      .then(([authRes, supRes]) => {
+        const data = authRes.status === 'fulfilled' ? authRes.value : {}
+        const sup = supRes.status === 'fulfilled' ? supRes.value : { state: 'disabled' }
+        setAuth({
+          loading: false,
+          setupComplete: !!data.setup_complete,
+          loggedIn: !!data.logged_in,
+          username: data.username || '',
+          supervisor: sup,
+        })
+      })
   }, [])
 
   useEffect(() => { refresh() }, [refresh])

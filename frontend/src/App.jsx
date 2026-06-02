@@ -15,15 +15,20 @@ import RuleDetail from './pages/RuleDetail'
 import RuleCreate from './pages/RuleCreate'
 import Investigate from './pages/Investigate'
 import Onboarding from './pages/Onboarding'
+import BootStatus from './pages/BootStatus'
 
 function AuthGuard({ children }) {
-  const { auth } = useAuth()
+  const { auth, refresh } = useAuth()
   if (auth.loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <span className="text-gray-100 text-sm">Loading…</span>
       </div>
     )
+  }
+  const sup = auth.supervisor
+  if (sup && sup.state !== 'ready' && sup.state !== 'disabled') {
+    return <BootStatus status={sup} onReady={refresh} />
   }
   if (!auth.setupComplete) return <Setup />
   if (!auth.loggedIn) return <Login />

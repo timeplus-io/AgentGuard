@@ -1,8 +1,8 @@
 .PHONY: all dev build clean test \
-        backend-build backend-run backend-clean backend-fmt backend-lint \
+        backend-build backend-build-embedded-timeplusd backend-run backend-clean backend-fmt backend-lint \
         frontend-install frontend-dev frontend-build frontend-preview frontend-lint \
         lint \
-        docker-build docker-run docker-stop docker-push docker-release \
+        docker-build docker-run docker-stop docker-push docker-release docker-build-aio docker-run-aio \
         compose-up compose-down compose-restart \
         scripts-sync package-plugins \
         docs-api
@@ -33,6 +33,15 @@ dev:
 ## backend-build: compile Go binary with embedded frontend (CGO_ENABLED=0 for macOS 26+)
 backend-build:
 	cd backend && CGO_ENABLED=0 go build -tags embed -o server cmd/server/main.go
+
+## backend-build-embedded-timeplusd: single-file build that embeds timeplusd.
+## Provide a linux/amd64 timeplusd at TIMEPLUSD_SRC (default: ./timeplusd).
+TIMEPLUSD_SRC ?= ./timeplusd
+backend-build-embedded-timeplusd: frontend-build web-sync scripts-sync
+	@test -f "$(TIMEPLUSD_SRC)" || { echo "set TIMEPLUSD_SRC to a timeplusd binary"; exit 1; }
+	cp "$(TIMEPLUSD_SRC)" backend/internal/supervisor/timeplusd.bin
+	cd backend && CGO_ENABLED=0 go build -tags "embed embed_timeplusd" -o server cmd/server/main.go
+	@echo "  ✓ single-file binary at backend/server (timeplusd embedded)"
 
 ## backend-run: build and start the backend server on :8080
 backend-run: backend-build
@@ -136,6 +145,15 @@ docker-release:
 	docker build -t $(DOCKER_REPO)/$(IMAGE):$(TAG) -t $(DOCKER_REPO)/$(IMAGE):latest .
 	docker push $(DOCKER_REPO)/$(IMAGE):$(TAG)
 	docker push $(DOCKER_REPO)/$(IMAGE):latest
+
+## docker-build-aio: build the all-in-one image (timeplusd + agentguard). Override TE tag with TE_TAG=x.y.z
+TE_TAG ?= 3.2.11
+docker-build-aio:
+	docker build -f Dockerfile.aio --build-arg TIMEPLUS_ENTERPRISE_TAG=$(TE_TAG) -t $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG) .
+
+## docker-run-aio: run the all-in-one image (UI/API on :8080)
+docker-run-aio:
+	docker run --rm -p $(PORT):8080 -p 3218:3218 -p 8463:8463 --name $(IMAGE)-aio $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG)
 
 # ── Docker Compose ───────────────────────────────────────────────────────────
 

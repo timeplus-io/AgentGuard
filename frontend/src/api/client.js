@@ -71,6 +71,26 @@ export const api = {
     }
   },
 
+  // ── Supervisor (all-in-one mode) ─────────────────────────────────────────────
+  // Returns {state:'disabled'} when not in all-in-one mode (route absent) so the
+  // UI can uniformly decide whether to show the boot screen.
+  supervisorStatus: async () => {
+    // All-in-one mode returns JSON. In normal serve mode the route is
+    // unregistered and NoRoute serves the SPA HTML (HTTP 200), so a non-JSON 200
+    // means "disabled". A real 4xx/5xx or network error becomes "unknown" so the
+    // boot screen isn't wrongly skipped during all-in-one startup.
+    try {
+      const res = await fetch(`${BASE}/supervisor/status`, { credentials: 'include' })
+      const ct = res.headers.get('content-type') || ''
+      if (res.ok && ct.includes('application/json')) return res.json()
+      if (res.ok) return { state: 'disabled' }
+      return { state: 'unknown' }
+    } catch {
+      return { state: 'unknown' }
+    }
+  },
+  supervisorRetry: () => post('/supervisor/retry', {}),
+
   // ── Existing endpoints ────────────────────────────────────────────────────
   getDashboard: () => get('/dashboard'),
   listAgents: (page = 1, limit = 15) => get(`/agents?page=${page}&limit=${limit}`),

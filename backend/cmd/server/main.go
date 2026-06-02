@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"mime"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	// Embed IANA tzdata so the Proton native driver can resolve the server's
 	// timezone (e.g. America/Los_Angeles) during the handshake without relying
@@ -23,6 +27,7 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
+	"github.com/timeplus/agentguard/internal/supervisor"
 	"github.com/timeplus/agentguard/internal/web"
 )
 
@@ -40,7 +45,8 @@ func newRootCmd() *cobra.Command {
 		RunE:  runServer,
 	}
 
-	flags := cmd.Flags()
+	// Persistent so subcommands (e.g. `up`) inherit the same config flags.
+	flags := cmd.PersistentFlags()
 	flags.String("config", "", "config file (default: ./config.yaml)")
 	flags.Int("port", 8080, "server port")
 	flags.String("timeplus-host", "localhost", "Timeplus host")
@@ -63,10 +69,17 @@ func newRootCmd() *cobra.Command {
 		return nil
 	}
 
+	cmd.AddCommand(newUpCmd())
+
 	return cmd
 }
 
-func runServer(cmd *cobra.Command, args []string) error {
+// loadCLIConfig loads configuration honoring --config. It is shared by the
+// `serve` and `up` modes so their --config semantics match: it reads
+// setup.complete directly from the file (bypassing viper AutomaticEnv's
+// nested-key limitation) and records ConfigPath so Provision writes back to the
+// same file the server reads from (important when --config is a non-default path).
+func loadCLIConfig(cmd *cobra.Command) (*config.Config, error) {
 	cfgFile, _ := cmd.Flags().GetString("config")
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
@@ -74,26 +87,29 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
-	// viper's AutomaticEnv() prevents nested YAML keys (like setup.complete) from
-	// being read correctly via the global viper. Read setup.complete directly from
-	// the config file using a fresh viper instance that has no AutomaticEnv.
 	if cfgFile != "" {
 		if fileCfg, err := config.LoadFrom(cfgFile); err == nil {
 			cfg.SetupComplete = fileCfg.SetupComplete
 		}
 	}
 
-	// Record the config file path so Provision writes to the same file the
-	// server reads from (important when --config points to a non-default path).
 	if p := viper.ConfigFileUsed(); p != "" {
 		cfg.ConfigPath = p
 	} else if cfgFile != "" {
 		cfg.ConfigPath = cfgFile
 	} else {
 		cfg.ConfigPath = "config.yaml"
+	}
+	return cfg, nil
+}
+
+func runServer(cmd *cobra.Command, args []string) error {
+	cfg, err := loadCLIConfig(cmd)
+	if err != nil {
+		return err
 	}
 
 	frontendFS, err := web.FS()
@@ -118,6 +134,21 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	r := buildRouter(cfg, store, holdReg, mgr, frontendFS, nil)
+	return r.Run(fmt.Sprintf(":%d", cfg.Server.Port))
+}
+
+// buildRouter constructs the full Gin engine. When sup is non-nil (all-in-one
+// `up` mode) it also registers the supervisor status/retry routes.
+func buildRouter(
+	cfg *config.Config,
+	store *auth.SessionStore,
+	holdReg *holdregistry.Registry,
+	mgr *catalog.Manager,
+	frontendFS fs.FS,
+	sup *supervisor.Supervisor,
+) *gin.Engine {
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000"},
@@ -126,28 +157,27 @@ func runServer(cmd *cobra.Command, args []string) error {
 		AllowCredentials: true,
 	}))
 
-	// API documentation routes — unauthenticated, served at root level.
 	r.GET("/docs", handlers.APIDocs())
 	r.GET("/docs/redoc", handlers.APIRedoc())
 	r.GET("/docs/openapi.json", handlers.APISpec())
 
 	api := r.Group("/api")
 	{
-		// Unauthenticated — must be reachable before login/setup.
 		api.GET("/auth/status", auth.AuthStatus(cfg, store))
 		api.POST("/auth/login", auth.Login(cfg, store))
 		api.POST("/auth/logout", auth.Logout(store))
 		api.POST("/setup/test-connection", handlers.TestConnection())
 		api.POST("/setup/provision", handlers.Provision(cfg, mgr, store))
-		// /alerts/webhook is called by Timeplus (server-to-server), not by the browser,
-		// so it must be reachable without a session cookie.
 		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
-		// /holds is called by agent plugins (server-to-server) — no session cookie.
 		api.POST("/holds", handlers.CreateHold(cfg, holdReg, handlers.GlobalAlertBroadcaster))
-		// /holds/_abandon-session/:session_id — unauthenticated (plugin calls fire-and-forget on SessionEnd).
 		api.POST("/holds/_abandon-session/:session_id", handlers.AbandonSession(cfg, holdReg))
 
-		// All existing routes — require a valid session cookie.
+		// All-in-one supervisor routes — registered only in `up` mode.
+		if sup != nil {
+			api.GET("/supervisor/status", handlers.SupervisorStatus(sup))
+			api.POST("/supervisor/retry", handlers.SupervisorRetry(sup, cfg, store))
+		}
+
 		protected := api.Group("/", auth.AuthRequired(store))
 		{
 			protected.GET("/dashboard", handlers.GetDashboard(cfg))
@@ -195,18 +225,13 @@ func runServer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Serve the SPA. Read files directly from the fs.FS to avoid http.FileServer's
-	// directory-traversal checks. Unknown paths fall back to index.html so that
-	// React Router can handle client-side navigation.
 	r.NoRoute(func(c *gin.Context) {
 		name := strings.TrimPrefix(c.Request.URL.Path, "/")
 		if name == "" {
 			name = "index.html"
 		}
-
 		data, err := fs.ReadFile(frontendFS, name)
 		if err != nil {
-			// Not a static asset — serve index.html for SPA routing.
 			data, err = fs.ReadFile(frontendFS, "index.html")
 			if err != nil {
 				c.Status(http.StatusNotFound)
@@ -214,7 +239,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 			}
 			name = "index.html"
 		}
-
 		mimeType := mime.TypeByExtension(filepath.Ext(name))
 		if mimeType == "" {
 			mimeType = "application/octet-stream"
@@ -222,5 +246,108 @@ func runServer(cmd *cobra.Command, args []string) error {
 		c.Data(http.StatusOK, mimeType, data)
 	})
 
-	return r.Run(fmt.Sprintf(":%d", cfg.Server.Port))
+	return r
+}
+
+func newUpCmd() *cobra.Command {
+	up := &cobra.Command{
+		Use:   "up",
+		Short: "All-in-one: supervise a child timeplusd, then serve AgentGuard",
+		RunE:  runUp,
+	}
+	flags := up.Flags()
+	flags.String("timeplusd-bin", "", "path to timeplusd (default: $TIMEPLUSD_BIN, then $PATH, then embedded)")
+	flags.StringSlice("timeplusd-args", []string{"server"}, "arguments passed to timeplusd")
+	flags.String("data-dir", "/app/data", "AgentGuard state dir (holds the extracted timeplusd binary; engine data persistence is documented in Dockerfile.aio)")
+	// Shared config flags (--port, --config, --timeplus-*, --catalog-dir, …) are
+	// inherited from the root command's persistent flags.
+	_ = viper.BindPFlag("supervisor.timeplusd_bin", flags.Lookup("timeplusd-bin"))
+	_ = viper.BindPFlag("supervisor.data_dir", flags.Lookup("data-dir"))
+	return up
+}
+
+func runUp(cmd *cobra.Command, args []string) error {
+	cfg, err := loadCLIConfig(cmd)
+	if err != nil {
+		return err
+	}
+
+	frontendFS, err := web.FS()
+	if err != nil {
+		return fmt.Errorf("loading frontend assets: %w", err)
+	}
+	mgr, err := catalog.New(catalog.SeedFS, cfg.CatalogDir)
+	if err != nil {
+		return fmt.Errorf("loading catalog: %w", err)
+	}
+	store := auth.NewSessionStore()
+	holdReg := holdregistry.New()
+
+	if os.Getenv("GIN_MODE") == "" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	// In all-in-one mode the engine is local; force the client at localhost.
+	cfg.Timeplus.Host = "localhost"
+
+	// Pre-flight: resolve timeplusd BEFORE binding HTTP (pre-supervisor failure, spec §5.1/§8).
+	binFlag, _ := cmd.Flags().GetString("timeplusd-bin")
+	dataDir, _ := cmd.Flags().GetString("data-dir")
+	tpArgs, _ := cmd.Flags().GetStringSlice("timeplusd-args")
+	binPath, err := supervisor.NewResolver(binFlag, dataDir).Resolve()
+	if err != nil {
+		return fmt.Errorf("pre-flight: %w", err) // fail fast, no HTTP bind
+	}
+
+	creds := supervisor.DefaultDevCredentials()
+	// Service creds for server-to-server handlers (plugin → /api/holds etc.).
+	cfg.Timeplus.User = creds.User()
+	cfg.Timeplus.Password = creds.Password()
+
+	sup := supervisor.New(cfg, mgr, creds, binPath, tpArgs)
+
+	// HTTP-FIRST: start serving immediately (state = starting).
+	r := buildRouter(cfg, store, holdReg, mgr, frontendFS, sup)
+	srv := &http.Server{Addr: fmt.Sprintf(":%d", cfg.Server.Port), Handler: r}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	fmt.Printf("AgentGuard (all-in-one) starting on :%d; timeplusd=%s\n", cfg.Server.Port, binPath)
+	// HTTP listener first so the UI/API is reachable before Boot execs timeplusd.
+	serveErr := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serveErr <- err
+		}
+	}()
+	go func() { sup.Boot(ctx) }()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case <-sig:
+		fmt.Println("shutting down…")
+	case err := <-sup.Fatal():
+		fmt.Fprintf(os.Stderr, "timeplusd exited after ready: %v — shutting down\n", err)
+		// Drain gracefully below, then exit non-zero. The deferred os.Exit runs
+		// last (after shutCancel); cobra observes the nil return first, which is fine.
+		defer os.Exit(1) // fail-fast so the orchestrator restarts the unit
+	case err := <-serveErr:
+		return fmt.Errorf("http server: %w", err)
+	}
+
+	// Graceful drain: stop accepting HTTP, then gracefully terminate the child
+	// (SIGTERM → grace → SIGKILL, owned by Stop) BEFORE cancelling the boot
+	// context. The boot ctx backs exec.CommandContext, whose cancellation would
+	// otherwise SIGKILL timeplusd immediately and bypass the graceful path. Running
+	// Stop first means cancel() only fires on an already-terminated child; it stays
+	// the crash/early-return backstop against orphaning the engine.
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutCancel()
+	_ = srv.Shutdown(shutCtx)
+	sup.Stop(10 * time.Second)
+	cancel()
+	return nil
 }

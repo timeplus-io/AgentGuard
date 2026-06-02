@@ -120,3 +120,23 @@ func TestRequestCfg_InjectsFromContext(t *testing.T) {
 		t.Error("base config should not be mutated")
 	}
 }
+
+func TestHasValidSession(t *testing.T) {
+	store := auth.NewSessionStore()
+	sess := store.Create("bob", "pw")
+
+	// Valid cookie -> true
+	c1, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c1.Request = httptest.NewRequest("POST", "/x", nil)
+	c1.Request.AddCookie(&http.Cookie{Name: "agentguard_session", Value: sess.ID})
+	if !auth.HasValidSession(c1, store) {
+		t.Error("valid cookie should yield true")
+	}
+
+	// No cookie -> false
+	c2, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c2.Request = httptest.NewRequest("POST", "/x", nil)
+	if auth.HasValidSession(c2, store) {
+		t.Error("missing cookie should yield false")
+	}
+}

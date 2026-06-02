@@ -27,6 +27,18 @@ func AuthRequired(store *SessionStore) gin.HandlerFunc {
 	}
 }
 
+// HasValidSession reports whether the request carries a valid session cookie.
+// Used by endpoints whose auth requirement depends on runtime phase
+// (e.g. /api/supervisor/retry: open during setup, protected afterward).
+func HasValidSession(c *gin.Context, store *SessionStore) bool {
+	cookie, err := c.Cookie("agentguard_session")
+	if err != nil {
+		return false
+	}
+	_, ok := store.Get(cookie)
+	return ok
+}
+
 // RequestCfg returns a copy of cfg with Timeplus credentials populated from
 // the current request's session context. Call this at the top of every
 // handler closure that queries Timeplus.
