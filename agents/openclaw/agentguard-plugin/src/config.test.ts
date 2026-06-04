@@ -8,7 +8,7 @@ describe("resolveConfig", () => {
     "AGENTGUARD_FLUSH_MS",
     "AGENTGUARD_BATCH_SIZE",
     "AGENTGUARD_URL",
-    "AGENTGUARD_HOLD_FAIL_POLICY",
+    "AGENTGUARD_HOLDS_FAIL_POLICY",
     "AGENTGUARD_HOLDS_ENABLED",
   ];
 
@@ -98,9 +98,9 @@ describe("resolveConfig", () => {
   });
 
   it("holdFailPolicy defaults to deny and reads env override to allow", () => {
-    delete process.env.AGENTGUARD_HOLD_FAIL_POLICY;
+    delete process.env.AGENTGUARD_HOLDS_FAIL_POLICY;
     expect(resolveConfig().holdFailPolicy).toBe("deny");
-    process.env.AGENTGUARD_HOLD_FAIL_POLICY = "allow";
+    process.env.AGENTGUARD_HOLDS_FAIL_POLICY = "allow";
     expect(resolveConfig().holdFailPolicy).toBe("allow");
   });
 

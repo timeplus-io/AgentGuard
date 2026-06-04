@@ -36,7 +36,7 @@ Install: drop plugin.yaml + __init__.py into ~/.hermes/plugins/agentguard/
 Config via environment variables:
   AGENTGUARD_TIMEPLUS_URL       AGENTGUARD_STREAM       AGENTGUARD_USERNAME
   AGENTGUARD_PASSWORD           AGENTGUARD_AGENT_ID     AGENTGUARD_DEPLOYMENT_ID
-  AGENTGUARD_DEPLOYMENT_NAME    AGENTGUARD_URL          AGENTGUARD_HOLD_FAIL_POLICY
+  AGENTGUARD_DEPLOYMENT_NAME    AGENTGUARD_URL          AGENTGUARD_HOLDS_FAIL_POLICY
   AGENTGUARD_HOLDS_ENABLED
 
 Server-side prerequisite: TIMEPLUS_USER and TIMEPLUS_PASSWORD must be set
@@ -62,7 +62,7 @@ _DEPLOYMENT_NAME = os.environ.get("AGENTGUARD_DEPLOYMENT_NAME", "Local Dev")
 
 # Synchronous hold-and-wait config — same shape as the openclaw and claudecode plugins.
 _AGENTGUARD_URL    = os.environ.get("AGENTGUARD_URL", "http://localhost:8080")
-_HOLD_FAIL_POLICY  = "allow" if os.environ.get("AGENTGUARD_HOLD_FAIL_POLICY", "deny").lower() == "allow" else "deny"
+_HOLD_FAIL_POLICY  = "allow" if os.environ.get("AGENTGUARD_HOLDS_FAIL_POLICY", "deny").lower() == "allow" else "deny"
 _HOLDS_ENABLED     = os.environ.get("AGENTGUARD_HOLDS_ENABLED", "true").lower() != "false"
 
 # Self-imposed timeout for the /api/holds request. Hermes provides no hook

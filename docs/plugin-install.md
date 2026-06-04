@@ -129,7 +129,7 @@ All variables written by the installer:
 | `AGENTGUARD_STREAM` | CC, OC | Target Timeplus stream (`agentguard_hook_events`) |
 | `AGENTGUARD_URL` | CC, OC, Hermes | AgentGuard server for hold callbacks |
 | `AGENTGUARD_HOLDS_ENABLED` | CC, OC, Hermes | `true` / `false` |
-| `AGENTGUARD_HOLD_FAIL_POLICY` | CC, OC, Hermes | `deny` / `allow` |
+| `AGENTGUARD_HOLDS_FAIL_POLICY` | CC, OC, Hermes | `deny` / `allow` |
 | `CLAUDE_CODE_ENABLE_TELEMETRY` | CC | Enables Claude Code OTel export |
 | `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA` | CC | Enables enhanced telemetry |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | CC | OTLP HTTP endpoint (port 4318) |

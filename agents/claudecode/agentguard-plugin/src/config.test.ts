@@ -77,17 +77,17 @@ describe("resolveConfig", () => {
   });
 
   it("holdFailPolicy defaults to deny", () => {
-    delete process.env.AGENTGUARD_HOLD_FAIL_POLICY;
+    delete process.env.AGENTGUARD_HOLDS_FAIL_POLICY;
     expect(resolveConfig().holdFailPolicy).toBe("deny");
   });
 
-  it("holdFailPolicy reads AGENTGUARD_HOLD_FAIL_POLICY=allow", () => {
-    process.env.AGENTGUARD_HOLD_FAIL_POLICY = "allow";
+  it("holdFailPolicy reads AGENTGUARD_HOLDS_FAIL_POLICY=allow", () => {
+    process.env.AGENTGUARD_HOLDS_FAIL_POLICY = "allow";
     expect(resolveConfig().holdFailPolicy).toBe("allow");
   });
 
   it("holdFailPolicy unknown value falls back to deny", () => {
-    process.env.AGENTGUARD_HOLD_FAIL_POLICY = "bogus";
+    process.env.AGENTGUARD_HOLDS_FAIL_POLICY = "bogus";
     expect(resolveConfig().holdFailPolicy).toBe("deny");
   });
 

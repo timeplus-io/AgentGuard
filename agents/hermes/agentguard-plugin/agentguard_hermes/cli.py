@@ -55,7 +55,7 @@ def _install(hermes_dir: str) -> None:
     print()
     print("  Synchronous tool blocking (pre_tool_call → AgentGuard /api/holds):")
     print("    AGENTGUARD_URL              (default: http://localhost:8080)")
-    print("    AGENTGUARD_HOLD_FAIL_POLICY (default: deny — set 'allow' to skip on backend failure)")
+    print("    AGENTGUARD_HOLDS_FAIL_POLICY (default: deny — set 'allow' to skip on backend failure)")
     print("    AGENTGUARD_HOLDS_ENABLED    (default: true — set 'false' for observation-only)")
     print()
     print("  Server-side prerequisite for the synchronous path:")

@@ -139,7 +139,7 @@ These settings control how the plugin talks to Timeplus (for async event ingest)
 | `username`          | `AGENTGUARD_USERNAME`         | `proton`                   | Timeplus username (for async ingest)                                        |
 | `password`          | `AGENTGUARD_PASSWORD`         | `""`                       | Timeplus password (for async ingest)                                        |
 | `agentguardUrl`     | `AGENTGUARD_URL`              | `http://localhost:8080`    | AgentGuard server base URL (for `/api/holds` synchronous decisions)         |
-| `holdFailPolicy`    | `AGENTGUARD_HOLD_FAIL_POLICY` | `deny`                     | What to return when `/api/holds` is unreachable: `deny` blocks, `allow` lets call through |
+| `holdFailPolicy`    | `AGENTGUARD_HOLDS_FAIL_POLICY`| `deny`                     | What to return when `/api/holds` is unreachable: `deny` blocks, `allow` lets call through |
 | `holdsEnabled`      | `AGENTGUARD_HOLDS_ENABLED`    | `true`                     | When `false`, `before_tool_call` reverts to async observation-only mode     |
 | `deploymentId`      | *(config-only)*               | `default`                  | Deployment group identifier                                                 |
 | `deploymentName`    | *(config-only)*               | `Default`                  | Human-readable deployment name                                              |

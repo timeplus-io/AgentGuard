@@ -141,7 +141,7 @@ export default function Onboarding() {
     `# Synchronous tool-call blocking (pre_tool_call → AgentGuard /api/holds)\n` +
     `export AGENTGUARD_URL="${agentguardUrl}"\n` +
     `export AGENTGUARD_HOLDS_ENABLED="${holdsEnabled}"\n` +
-    `export AGENTGUARD_HOLD_FAIL_POLICY="${holdFailPolicy}"`
+    `export AGENTGUARD_HOLDS_FAIL_POLICY="${holdFailPolicy}"`
 
   // Step 2 OTel config — derived from timeplusUrl host, port 4318; user can override
   const [otelEndpointOverride, setOtelEndpointOverride] = useState(null)
@@ -231,7 +231,7 @@ export default function Onboarding() {
       AGENTGUARD_PASSWORD:         timeplusPassword || '<your-password>',
       AGENTGUARD_URL:              agentguardUrl,
       AGENTGUARD_HOLDS_ENABLED:    String(holdsEnabled),
-      AGENTGUARD_HOLD_FAIL_POLICY: holdFailPolicy,
+      AGENTGUARD_HOLDS_FAIL_POLICY: holdFailPolicy,
     },
   }, null, 2)
 
