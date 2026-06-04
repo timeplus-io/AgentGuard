@@ -127,22 +127,6 @@ export default function Onboarding() {
   const [holdsEnabled, setHoldsEnabled] = useState(true)
   const [holdFailPolicy, setHoldFailPolicy] = useState('deny')
 
-  const hermesEnvCode =
-    `# Async event ingest (Hermes → Timeplus)\n` +
-    `export AGENTGUARD_TIMEPLUS_URL="${timeplusUrl}"\n` +
-    `export AGENTGUARD_USERNAME="${timeplusUsername}"\n` +
-    `export AGENTGUARD_PASSWORD="${timeplusPassword || '<your-password>'}"\n` +
-    `\n` +
-    `# Identity\n` +
-    `export AGENTGUARD_AGENT_ID="${agentId || '<your-hostname>'}"\n` +
-    `export AGENTGUARD_DEPLOYMENT_ID="${deploymentId}"\n` +
-    `export AGENTGUARD_DEPLOYMENT_NAME="${deploymentName}"\n` +
-    `\n` +
-    `# Synchronous tool-call blocking (pre_tool_call → AgentGuard /api/holds)\n` +
-    `export AGENTGUARD_URL="${agentguardUrl}"\n` +
-    `export AGENTGUARD_HOLDS_ENABLED="${holdsEnabled}"\n` +
-    `export AGENTGUARD_HOLD_FAIL_POLICY="${holdFailPolicy}"`
-
   // Step 2 OTel config — derived from timeplusUrl host, port 4318; user can override
   const [otelEndpointOverride, setOtelEndpointOverride] = useState(null)
   const derivedOtelEndpoint = useMemo(() => {
@@ -153,35 +137,6 @@ export default function Onboarding() {
   }, [timeplusUrl])
   const otelEndpoint = otelEndpointOverride ?? derivedOtelEndpoint
   const setOtelEndpoint = val => setOtelEndpointOverride(val === derivedOtelEndpoint ? null : val)
-
-
-  const jsonConfigCode = JSON.stringify({
-    plugins: {
-      load: {
-        paths: [
-          '/absolute/path/to/agentguard-plugin',
-        ],
-      },
-      entries: {
-        agentguard: {
-          enabled: true,
-          config: {
-            timeplusUrl,
-            username: timeplusUsername,
-            password: timeplusPassword || '<your-password>',
-            deploymentId,
-            deploymentName,
-            stream: 'agentguard_hook_events',
-            flushMs: 2000,
-            batchSize: 50,
-            agentguardUrl,
-            holdsEnabled,
-            holdFailPolicy,
-          },
-        },
-      },
-    },
-  }, null, 2)
 
   const otelConfigCode = JSON.stringify({
     diagnostics: {
@@ -207,34 +162,6 @@ export default function Onboarding() {
   // ── Claude Code computed snippets ──────────────────────────────────────────
   // PreToolUse runs synchronously (no async:true) so the plugin can pause
   // the tool call while AgentGuard evaluates rules. Other hooks stay async.
-  const ccAsyncHookEntry = { matcher: '*', hooks: [{ type: 'command', command: 'agentguard-hook', async: true }] }
-  const ccSyncHookEntry  = { matcher: '*', hooks: [{ type: 'command', command: 'agentguard-hook', timeout: 600000 }] }
-  const ccSettingsJsonCode = JSON.stringify({
-    hooks: {
-      PreToolUse:         [ccSyncHookEntry],
-      SessionStart:       [ccAsyncHookEntry],
-      SessionEnd:         [ccAsyncHookEntry],
-      UserPromptSubmit:   [ccAsyncHookEntry],
-      PostToolUse:        [ccAsyncHookEntry],
-      PostToolUseFailure: [ccAsyncHookEntry],
-      SubagentStart:      [ccAsyncHookEntry],
-      SubagentStop:       [ccAsyncHookEntry],
-      Stop:               [ccAsyncHookEntry],
-      PermissionDenied:   [ccAsyncHookEntry],
-    },
-    env: {
-      AGENTGUARD_AGENT_ID:         agentId || '<your-hostname>',
-      AGENTGUARD_DEPLOYMENT_ID:    deploymentId,
-      AGENTGUARD_DEPLOYMENT_NAME:  deploymentName,
-      AGENTGUARD_TIMEPLUS_URL:     timeplusUrl,
-      AGENTGUARD_USERNAME:         timeplusUsername,
-      AGENTGUARD_PASSWORD:         timeplusPassword || '<your-password>',
-      AGENTGUARD_URL:              agentguardUrl,
-      AGENTGUARD_HOLDS_ENABLED:    String(holdsEnabled),
-      AGENTGUARD_HOLD_FAIL_POLICY: holdFailPolicy,
-    },
-  }, null, 2)
-
   const ccOtelSettingsCode = JSON.stringify({
     env: {
       CLAUDE_CODE_ENABLE_TELEMETRY:        '1',
@@ -288,7 +215,7 @@ export default function Onboarding() {
             try {
               await api.installRule(ruleId)
             } catch (e) {
-              console.warn('Install failed for', ruleId, e)
+              console.warn('Install failed for', ruleId, e)  // eslint-disable-line no-console
               failures.push(`${entry?.name || ruleId}: install failed (${e?.message ?? String(e)})`)
               continue  // skip the policy step for a rule we couldn't install
             }
@@ -298,7 +225,7 @@ export default function Onboarding() {
             try {
               await api.setRuleBlockPolicy(ruleId, policy)
             } catch (e) {
-              console.warn('Set policy failed for', ruleId, e)
+              console.warn('Set policy failed for', ruleId, e)  // eslint-disable-line no-console
               failures.push(`${entry?.name || ruleId}: set ${policy} policy failed (${e?.message ?? String(e)})`)
             }
           }

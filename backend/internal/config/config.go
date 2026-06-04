@@ -117,7 +117,7 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 
 	_ = v.BindEnv("holds.mv_wait_ms", "AGENTGUARD_HOLD_MV_WAIT_MS")
 	_ = v.BindEnv("holds.timeout_seconds", "AGENTGUARD_HOLD_TIMEOUT_SECONDS")
-	_ = v.BindEnv("holds.fail_policy", "AGENTGUARD_HOLD_FAIL_POLICY")
+	_ = v.BindEnv("holds.fail_policy", "AGENTGUARD_HOLDS_FAIL_POLICY")
 	_ = v.BindEnv("holds.disabled", "AGENTGUARD_HOLDS_DISABLED")
 	_ = v.BindEnv("timeplus.user", "TIMEPLUS_USER")
 	_ = v.BindEnv("timeplus.password", "TIMEPLUS_PASSWORD")

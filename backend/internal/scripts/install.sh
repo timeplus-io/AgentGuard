@@ -167,7 +167,7 @@ if [[ "$AGENT_TYPE" == "claude-code" ]]; then
   AGENTGUARD_USERNAME="$TIMEPLUS_USERNAME" \
   AGENTGUARD_PASSWORD="$TIMEPLUS_PASSWORD" \
   AGENTGUARD_URL="$AGENTGUARD_URL" \
-  AGENTGUARD_HOLD_FAIL_POLICY="$HOLD_FAIL_POLICY" \
+  AGENTGUARD_HOLDS_FAIL_POLICY="$HOLD_FAIL_POLICY" \
   AGENTGUARD_HOLDS_ENABLED="$HOLDS_ENABLED" \
   AGENTGUARD_OTEL_ENDPOINT="$OTEL_ENDPOINT" \
   python3 - <<PYEOF
@@ -224,7 +224,7 @@ data.setdefault("env", {}).update({
     "AGENTGUARD_USERNAME":                  _e["AGENTGUARD_USERNAME"],
     "AGENTGUARD_PASSWORD":                  _e["AGENTGUARD_PASSWORD"],
     "AGENTGUARD_URL":                       _e["AGENTGUARD_URL"],
-    "AGENTGUARD_HOLD_FAIL_POLICY":          _e["AGENTGUARD_HOLD_FAIL_POLICY"],
+    "AGENTGUARD_HOLDS_FAIL_POLICY":          _e["AGENTGUARD_HOLDS_FAIL_POLICY"],
     "AGENTGUARD_HOLDS_ENABLED":             _e["AGENTGUARD_HOLDS_ENABLED"],
     "CLAUDE_CODE_ENABLE_TELEMETRY":         "1",
     "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA":  "1",
@@ -302,7 +302,7 @@ if [[ "$AGENT_TYPE" == "openclaw" ]]; then
   AGENTGUARD_DEPLOYMENT_ID="$DEPLOYMENT_ID" \
   AGENTGUARD_DEPLOYMENT_NAME="$DEPLOYMENT_NAME" \
   AGENTGUARD_URL="$AGENTGUARD_URL" \
-  AGENTGUARD_HOLD_FAIL_POLICY="$HOLD_FAIL_POLICY" \
+  AGENTGUARD_HOLDS_FAIL_POLICY="$HOLD_FAIL_POLICY" \
   AGENTGUARD_HOLDS_ENABLED="$HOLDS_ENABLED" \
   python3 - <<PYEOF
 import json, os, sys
@@ -342,7 +342,7 @@ entries["agentguard"] = {
         "deploymentId":    _e["AGENTGUARD_DEPLOYMENT_ID"],
         "deploymentName":  _e["AGENTGUARD_DEPLOYMENT_NAME"],
         "agentguardUrl":   _e["AGENTGUARD_URL"],
-        "holdFailPolicy":  _e["AGENTGUARD_HOLD_FAIL_POLICY"],
+        "holdFailPolicy":  _e["AGENTGUARD_HOLDS_FAIL_POLICY"],
         "holdsEnabled":    _e["AGENTGUARD_HOLDS_ENABLED"].lower() != "false",
     },
 }
@@ -406,7 +406,7 @@ printf 'export AGENTGUARD_DEPLOYMENT_ID=%q\n'    "$DEPLOYMENT_ID"
 printf 'export AGENTGUARD_DEPLOYMENT_NAME=%q\n'  "$DEPLOYMENT_NAME"
 printf 'export AGENTGUARD_URL=%q\n'              "$AGENTGUARD_URL"
 printf 'export AGENTGUARD_HOLDS_ENABLED=%q\n'    "$HOLDS_ENABLED"
-printf 'export AGENTGUARD_HOLD_FAIL_POLICY=%q\n' "$HOLD_FAIL_POLICY")"
+printf 'export AGENTGUARD_HOLDS_FAIL_POLICY=%q\n' "$HOLD_FAIL_POLICY")"
 
   echo ""
   echo "Environment variables:"

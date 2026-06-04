@@ -263,7 +263,7 @@ The full timeline (for `GET /api/holds/:id`) queries the raw `agentguard_holds` 
 |---|---|---|---|
 | `holds.mv_wait_ms` | `AGENTGUARD_HOLD_MV_WAIT_MS` | `500` | How long to poll `agentguard_security_events` for fresh MV detections before deciding |
 | `holds.timeout_seconds` | `AGENTGUARD_HOLD_TIMEOUT_SECONDS` | `300` | How long to long-poll waiting for a human decision. Clamped to a 540 s ceiling — under Claude Code's 600 s hook cap |
-| `holds.fail_policy` | `AGENTGUARD_HOLD_FAIL_POLICY` | `deny` | What to return on hold timeout: `deny` (block) or `allow` (proceed) |
+| `holds.fail_policy` | `AGENTGUARD_HOLDS_FAIL_POLICY` | `deny` | What to return on hold timeout: `deny` (block) or `allow` (proceed) |
 | `holds.disabled` | `AGENTGUARD_HOLDS_DISABLED` | `false` | Master kill-switch — bypass all decision logic, always `allow` |
 
 ### Plugin side (per agent)
@@ -272,7 +272,7 @@ The full timeline (for `GET /api/holds/:id`) queries the raw `agentguard_holds` 
 |---|---|
 | `AGENTGUARD_URL` | Where to POST the `/api/holds` request (e.g. `http://localhost:8080`) |
 | `AGENTGUARD_HOLDS_ENABLED` | Per-plugin opt-in. Claude Code's `make install` writes `false`; OpenClaw / Hermes default to `true` |
-| `AGENTGUARD_HOLD_FAIL_POLICY` | What the plugin returns to the agent if the `/api/holds` call itself fails (network error, 5xx) — `deny` or `allow` |
+| `AGENTGUARD_HOLDS_FAIL_POLICY` | What the plugin returns to the agent if the `/api/holds` call itself fails (network error, 5xx) — `deny` or `allow` |
 
 When `AGENTGUARD_HOLDS_ENABLED=false`, the Claude Code plugin still fires `PreToolUse` synchronously (the hook entry has no `async:true`), but short-circuits inside the plugin: it writes a permissive `permissionDecision` to stdout and falls through to the regular async `send()` so the event still lands in `agentguard_hook_events` for observation. **No `/api/holds` call is made.** This keeps observability intact while removing all blocking latency.
 

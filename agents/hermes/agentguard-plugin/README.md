@@ -65,7 +65,7 @@ Set environment variables before starting Hermes:
 | Variable | Default | Description |
 |---|---|---|
 | `AGENTGUARD_URL` | `http://localhost:8080` | AgentGuard server base URL — where `pre_tool_call` POSTs its hold request |
-| `AGENTGUARD_HOLD_FAIL_POLICY` | `deny` | What to return when `/api/holds` is unreachable: `deny` blocks the tool call, `allow` lets it proceed |
+| `AGENTGUARD_HOLDS_FAIL_POLICY` | `deny` | What to return when `/api/holds` is unreachable: `deny` blocks the tool call, `allow` lets it proceed |
 | `AGENTGUARD_HOLDS_ENABLED` | `true` | When `false`, `pre_tool_call` reverts to async observation-only mode (no blocking, event still ingested) |
 
 ### Server-side prerequisite — Timeplus service credentials
@@ -95,7 +95,7 @@ export AGENTGUARD_DEPLOYMENT_NAME="Production Hermes"
 
 # Sync tool blocking
 export AGENTGUARD_URL=http://agentguard.example.com:8080
-export AGENTGUARD_HOLD_FAIL_POLICY=deny
+export AGENTGUARD_HOLDS_FAIL_POLICY=deny
 # AGENTGUARD_HOLDS_ENABLED defaults to true
 
 hermes
