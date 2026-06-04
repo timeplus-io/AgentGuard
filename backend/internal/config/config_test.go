@@ -47,3 +47,18 @@ func TestSave_RoundTrip(t *testing.T) {
 		t.Errorf("agentguard_url: want http://example.com:8080, got %s", loaded.AgentGuardURL)
 	}
 }
+
+func TestSave_CreatesParentDir(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "config.yaml")
+	cfg := &config.Config{
+		Server:        config.ServerConfig{Port: 8080},
+		Timeplus:      config.TimeplusConfig{Host: "localhost", Port: 3218, NativePort: 8463},
+		AgentGuardURL: "http://localhost:8080",
+	}
+	if err := config.Save(cfg, path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := config.LoadFrom(path); err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+}

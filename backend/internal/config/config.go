@@ -152,6 +152,11 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 // Save writes non-sensitive config fields to the specified path (typically "config.yaml").
 // Credentials are never written.
 func Save(cfg *Config, path string) error {
+	if dir := filepath.Dir(path); dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("creating config dir %s: %w", dir, err)
+		}
+	}
 	v := viper.New()
 	v.SetConfigType("yaml")
 	v.Set("server.port", cfg.Server.Port)

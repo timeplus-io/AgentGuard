@@ -12,6 +12,7 @@ const LABELS = {
 export default function BootStatus({ status: initial, onReady }) {
   const [status, setStatus] = useState(initial)
   const [retrying, setRetrying] = useState(false)
+  const [retryError, setRetryError] = useState('')
 
   const poll = useCallback(async () => {
     const s = await api.supervisorStatus()
@@ -28,10 +29,11 @@ export default function BootStatus({ status: initial, onReady }) {
 
   const handleRetry = async () => {
     setRetrying(true)
+    setRetryError('')
     try {
       await api.supervisorRetry()
     } catch (e) {
-      console.error('retry failed', e)
+      setRetryError(e?.message || 'Retry failed')
     } finally {
       setRetrying(false)
     }
@@ -73,6 +75,7 @@ export default function BootStatus({ status: initial, onReady }) {
             >
               {retrying ? 'Retrying…' : 'Retry'}
             </button>
+            {retryError && <p className="text-error text-xs mt-3">{retryError}</p>}
           </div>
         )}
       </div>

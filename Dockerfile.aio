@@ -21,11 +21,19 @@ RUN CGO_ENABLED=0 GOOS=linux go build -tags embed -o agentguard cmd/server/main.
 
 # Stage 3: all-in-one on top of the engine image
 FROM timeplus/timeplus-enterprise:${TIMEPLUS_ENTERPRISE_TAG}
+USER root
+WORKDIR /app
 COPY --from=backend-builder /app/backend/agentguard /usr/local/bin/agentguard
-EXPOSE 8080 3218 8463 4317 4318 8000
-# timeplusd is on PATH in this base image; agentguard supervises it (`timeplusd server`).
+ENV TIMEPLUSD_CONFIG=/timeplus/conf/timeplusd.yaml
+RUN mkdir -p /app/data /timeplus/data/timeplusd /timeplus/logs /timeplus/tmp \
+    && chown -R 101:101 /app /timeplus/data /timeplus/logs /timeplus/tmp
+USER 101:101
+WORKDIR /timeplus/bin
+EXPOSE 8080
+# AgentGuard supervises the image's timeplusd directly with the image config.
+# The base Enterprise entrypoint starts appserver/connectors and is intentionally
+# bypassed here; this image owns only AgentGuard + the child DBMS process.
 # State lives in two places — mount volumes to persist across container replacement:
-#   /app/data                 AgentGuard state (config.yaml, catalog, extracted binary)
-#   /timeplus/timeplusd-data  timeplusd engine data (base image default <path>; v1 does
-#                             not relocate it under --data-dir — see design spec §5.5)
-ENTRYPOINT ["agentguard", "up", "--data-dir", "/app/data"]
+#   /app/data          AgentGuard state (config.yaml, catalog, extracted binary)
+#   /timeplus/data     timeplusd engine data (base image layout)
+ENTRYPOINT ["agentguard", "up", "--timeplusd-bin", "/timeplus/bin/timeplusd", "--config", "/app/data/config.yaml", "--catalog-dir", "/app/data/catalog", "--data-dir", "/app/data"]

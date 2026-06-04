@@ -2,7 +2,7 @@
         backend-build backend-build-embedded-timeplusd backend-run backend-clean backend-fmt backend-lint \
         frontend-install frontend-dev frontend-build frontend-preview frontend-lint \
         lint \
-        docker-build docker-run docker-stop docker-push docker-release docker-build-aio docker-run-aio \
+        docker-build docker-run docker-stop docker-push docker-release docker-build-aio docker-run-aio docker-run-aio-dbms-ports \
         compose-up compose-down compose-restart \
         scripts-sync package-plugins \
         docs-api
@@ -151,9 +151,13 @@ TE_TAG ?= 3.2.11
 docker-build-aio:
 	docker build -f Dockerfile.aio --build-arg TIMEPLUS_ENTERPRISE_TAG=$(TE_TAG) -t $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG) .
 
-## docker-run-aio: run the all-in-one image (UI/API on :8080)
+## docker-run-aio: run the all-in-one image (UI/API on localhost:8080)
 docker-run-aio:
-	docker run --rm -p $(PORT):8080 -p 3218:3218 -p 8463:8463 --name $(IMAGE)-aio $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG)
+	docker run --rm -p 127.0.0.1:$(PORT):8080 --name $(IMAGE)-aio $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG)
+
+## docker-run-aio-dbms-ports: run AIO and expose DBMS ports on localhost for local debugging
+docker-run-aio-dbms-ports:
+	docker run --rm -p 127.0.0.1:$(PORT):8080 -p 127.0.0.1:3218:3218 -p 127.0.0.1:8463:8463 --name $(IMAGE)-aio $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG)
 
 # ── Docker Compose ───────────────────────────────────────────────────────────
 

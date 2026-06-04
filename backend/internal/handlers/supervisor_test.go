@@ -77,7 +77,7 @@ func TestSupervisorRetry_ConflictWhenRetryErrors(t *testing.T) {
 }
 
 func TestSupervisorRetry_ProtectedAfterSetup(t *testing.T) {
-	ctrl := &fakeCtrl{}
+	ctrl := &fakeCtrl{status: supervisor.Status{State: supervisor.StateFailed, Provisioned: true}}
 	cfg := &config.Config{SetupComplete: true}
 	store := auth.NewSessionStore()
 	r := gin.New()
@@ -101,5 +101,22 @@ func TestSupervisorRetry_ProtectedAfterSetup(t *testing.T) {
 	r.ServeHTTP(w2, req)
 	if w2.Code != 202 {
 		t.Fatalf("want 202 with session, got %d", w2.Code)
+	}
+}
+
+func TestSupervisorRetry_OpenForFailedPreReadyRecoveryAfterSetup(t *testing.T) {
+	ctrl := &fakeCtrl{status: supervisor.Status{State: supervisor.StateFailed, Provisioned: false}}
+	cfg := &config.Config{SetupComplete: true}
+	store := auth.NewSessionStore()
+	r := gin.New()
+	r.POST("/api/supervisor/retry", handlers.SupervisorRetry(ctrl, cfg, store))
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("POST", "/api/supervisor/retry", nil))
+	if w.Code != 202 {
+		t.Fatalf("want 202 for failed pre-ready recovery, got %d", w.Code)
+	}
+	if !ctrl.retried {
+		t.Error("retry should have been invoked")
 	}
 }

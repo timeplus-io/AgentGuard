@@ -25,15 +25,17 @@ func SupervisorStatus(ctrl SupervisorController) gin.HandlerFunc {
 }
 
 // SupervisorRetry re-runs a failed boot transition. Auth is phase-based: open
-// during setup (so a first-boot failure is recoverable before any session
-// exists), session-protected once setup.complete (spec §5.7).
+// during setup and for a failed pre-ready recovery window, session-protected
+// once the app has reached ready after setup.complete (spec §5.7).
 func SupervisorRetry(ctrl SupervisorController, cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		config.Mu.RLock()
 		complete := cfg.SetupComplete
 		config.Mu.RUnlock()
 
-		if complete && !auth.HasValidSession(c, store) {
+		status := ctrl.Status()
+		recoverablePreReadyFailure := status.State == supervisor.StateFailed && !status.Provisioned
+		if complete && !recoverablePreReadyFailure && !auth.HasValidSession(c, store) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
 			return
 		}

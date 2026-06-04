@@ -257,13 +257,24 @@ func newUpCmd() *cobra.Command {
 	}
 	flags := up.Flags()
 	flags.String("timeplusd-bin", "", "path to timeplusd (default: $TIMEPLUSD_BIN, then $PATH, then embedded)")
-	flags.StringSlice("timeplusd-args", []string{"server"}, "arguments passed to timeplusd")
+	flags.StringSlice("timeplusd-args", defaultTimeplusdArgs(), "arguments passed to timeplusd")
 	flags.String("data-dir", "/app/data", "AgentGuard state dir (holds the extracted timeplusd binary; engine data persistence is documented in Dockerfile.aio)")
 	// Shared config flags (--port, --config, --timeplus-*, --catalog-dir, …) are
 	// inherited from the root command's persistent flags.
 	_ = viper.BindPFlag("supervisor.timeplusd_bin", flags.Lookup("timeplusd-bin"))
 	_ = viper.BindPFlag("supervisor.data_dir", flags.Lookup("data-dir"))
 	return up
+}
+
+func defaultTimeplusdArgs() []string {
+	if p := os.Getenv("TIMEPLUSD_CONFIG"); p != "" {
+		return []string{"server", "--config-file", p}
+	}
+	const imageConfig = "/etc/timeplusd-server/config.yaml"
+	if _, err := os.Stat(imageConfig); err == nil {
+		return []string{"server", "--config-file", imageConfig}
+	}
+	return []string{"server"}
 }
 
 func runUp(cmd *cobra.Command, args []string) error {
@@ -299,7 +310,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("pre-flight: %w", err) // fail fast, no HTTP bind
 	}
 
-	creds := supervisor.DefaultDevCredentials()
+	creds := supervisor.DefaultCredentialsFromEnv()
 	// Service creds for server-to-server handlers (plugin → /api/holds etc.).
 	cfg.Timeplus.User = creds.User()
 	cfg.Timeplus.Password = creds.Password()
