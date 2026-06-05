@@ -101,12 +101,15 @@ echo ""
 # ── Shared config ──────────────────────────────────────────────────────────
 echo "Configuration (press Enter to accept defaults):"
 echo ""
+echo "  Timeplus credentials are reused by AgentGuard; AgentGuard does not create a separate user."
+echo "  For the all-in-one image, use proton / replaceme unless TIMEPLUSD_ADMIN_PASSWORD was set."
+echo ""
 AGENT_ID=$(prompt      "Agent ID (this machine's identifier)" "$AGENT_TYPE.$(hostname)")
 DEPLOYMENT_ID=$(prompt "Deployment ID"                        "local")
 DEPLOYMENT_NAME=$(prompt "Deployment Name"                   "Local Dev")
 TIMEPLUS_URL=$(prompt  "Timeplus URL"                         "http://localhost:3218")
 TIMEPLUS_USERNAME=$(prompt "Timeplus Username"                "proton")
-TIMEPLUS_PASSWORD=$(prompt_secret "Timeplus Password")
+TIMEPLUS_PASSWORD=$(prompt_secret "Timeplus Password (AIO default: replaceme)")
 echo ""
 AGENTGUARD_URL=$(prompt "AgentGuard URL"                     "http://localhost:8080")
 

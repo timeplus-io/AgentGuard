@@ -33,10 +33,12 @@ The script asks for these values before branching per-agent. Press Enter to acce
 | Deployment Name | `Local Dev` | Human-readable deployment label |
 | Timeplus URL | `http://localhost:3218` | Timeplus HTTP endpoint |
 | Timeplus Username | `proton` | Timeplus auth |
-| Timeplus Password | _(none)_ | Timeplus auth (input is hidden) |
+| Timeplus Password | _(none)_ | Timeplus auth (input is hidden); for the all-in-one image use `replaceme` unless `TIMEPLUSD_ADMIN_PASSWORD` was set |
 | AgentGuard URL | `http://localhost:8080` | AgentGuard server for hold callbacks |
 | Enable holds | `Y` | Whether PreToolUse blocking is active |
 | Hold fail policy | `deny` | What happens if AgentGuard is unreachable: `deny` blocks the tool call, `allow` passes it through |
+
+AgentGuard reuses the Timeplus account for provisioning and login; it does not create a second persistent user account. For local all-in-one runs, `make docker-run-aio` publishes AgentGuard on `8080`, Timeplus HTTP ingest/query on `3218`, and OTLP/HTTP telemetry on `4318`, which are the ports this installer configures.
 
 ### Claude Code
 

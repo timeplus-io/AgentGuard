@@ -151,13 +151,13 @@ TE_TAG ?= 3.2.11
 docker-build-aio:
 	docker build -f Dockerfile.aio --build-arg TIMEPLUS_ENTERPRISE_TAG=$(TE_TAG) -t $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG) .
 
-## docker-run-aio: run the all-in-one image (UI/API on localhost:8080)
+## docker-run-aio: run AIO for local agent plugins (UI/API :8080, Timeplus HTTP :3218, OTLP/HTTP :4318)
 docker-run-aio:
-	docker run --rm -p 127.0.0.1:$(PORT):8080 --name $(IMAGE)-aio $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG)
+	docker run --rm -p 127.0.0.1:$(PORT):8080 -p 127.0.0.1:3218:3218 -p 127.0.0.1:4318:4318 --name $(IMAGE)-aio $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG)
 
-## docker-run-aio-dbms-ports: run AIO and expose DBMS ports on localhost for local debugging
+## docker-run-aio-dbms-ports: run AIO and expose DBMS/native ports on localhost for local debugging
 docker-run-aio-dbms-ports:
-	docker run --rm -p 127.0.0.1:$(PORT):8080 -p 127.0.0.1:3218:3218 -p 127.0.0.1:8463:8463 --name $(IMAGE)-aio $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG)
+	docker run --rm -p 127.0.0.1:$(PORT):8080 -p 127.0.0.1:3218:3218 -p 127.0.0.1:4318:4318 -p 127.0.0.1:8463:8463 --name $(IMAGE)-aio $(DOCKER_REPO)/$(IMAGE)-aio:$(TAG)
 
 # ── Docker Compose ───────────────────────────────────────────────────────────
 

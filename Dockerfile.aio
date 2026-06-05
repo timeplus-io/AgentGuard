@@ -29,10 +29,13 @@ RUN mkdir -p /app/data /timeplus/data/timeplusd /timeplus/logs /timeplus/tmp \
     && chown -R 101:101 /app /timeplus/data /timeplus/logs /timeplus/tmp
 USER 101:101
 WORKDIR /timeplus/bin
-EXPOSE 8080
+EXPOSE 8080 3218 4318 8463
 # AgentGuard supervises the image's timeplusd directly with the image config.
 # The base Enterprise entrypoint starts appserver/connectors and is intentionally
 # bypassed here; this image owns only AgentGuard + the child DBMS process.
+# Local agent plugins still send async hook events directly to Timeplus HTTP
+# (3218), and Claude/OpenClaw OTel data to the AgentGuard-provisioned OTLP/HTTP
+# input (4318). The native port (8463) is exposed for admin/debug tooling.
 # State lives in two places — mount volumes to persist across container replacement:
 #   /app/data          AgentGuard state (config.yaml, catalog, extracted binary)
 #   /timeplus/data     timeplusd engine data (base image layout)
