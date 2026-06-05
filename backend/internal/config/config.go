@@ -97,11 +97,18 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("holds.disabled", false)
 
 	if searchPaths {
-		v.SetConfigName("config")
 		v.SetConfigType("yaml")
-		v.AddConfigPath(".")
-		if home, err := os.UserHomeDir(); err == nil {
-			v.AddConfigPath(filepath.Join(home, ".agentguard"))
+		// Only configure the default search paths when no explicit config file
+		// has been set (e.g. via --config / viper.SetConfigFile). viper's
+		// SetConfigName resets the internal configFile, so calling it here would
+		// discard an explicit --config path and make ReadInConfig search "."
+		// instead — silently ignoring every field in the user's config file.
+		if v.ConfigFileUsed() == "" {
+			v.SetConfigName("config")
+			v.AddConfigPath(".")
+			if home, err := os.UserHomeDir(); err == nil {
+				v.AddConfigPath(filepath.Join(home, ".agentguard"))
+			}
 		}
 
 		if err := v.ReadInConfig(); err != nil {
