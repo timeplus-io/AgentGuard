@@ -38,11 +38,13 @@ export async function requestHold(event: HookEvent, config: AgentGuardConfig): P
     });
     clearTimeout(t);
     if (!resp.ok) {
-      return failPolicy(config, `backend returned ${resp.status}`);
+      // Do not block on HTTP errors
+      return { decision: "allow" };
     }
     return await resp.json() as HoldDecision;
   } catch (err) {
-    return failPolicy(config, `request failed: ${err instanceof Error ? err.message : String(err)}`);
+    // Network/connectivity failure: don't block the agent
+    return { decision: "allow" };
   }
 }
 

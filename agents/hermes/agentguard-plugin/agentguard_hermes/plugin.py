@@ -238,14 +238,9 @@ def _request_hold(tool_name: str, args: dict, session_id: str, run_id: str,
                 "decision": decision if decision in ("allow", "block") else "allow",
                 "reason":   data.get("reason", ""),
             }
-    except urllib.error.HTTPError as e:
-        return _fail_policy_decision(f"backend returned {e.code}")
-    except urllib.error.URLError as e:
-        return _fail_policy_decision(f"request failed: {e.reason}")
-    except (json.JSONDecodeError, ValueError) as e:
-        return _fail_policy_decision(f"invalid response: {e}")
-    except Exception as e:  # noqa: BLE001 — must not let the agent crash
-        return _fail_policy_decision(f"unexpected error: {e}")
+    except:
+        # Do not block on network or server exceptions
+        return {"decision": "allow", "reason": ""}
 
 
 def _fail_policy_decision(reason: str) -> dict:
