@@ -28,6 +28,7 @@ services:
       # Falls back to the LiteLLM dummy key only when NVIDIA_API_KEY is unset
       # — useful if you switch base_url back to the LiteLLM proxy on :4000.
       OPENAI_API_KEY: ${NVIDIA_API_KEY:-${LITELLM_API_KEY:-sk-openclaw-proxy}}
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:-}
     restart: unless-stopped
 
   web:

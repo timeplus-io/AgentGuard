@@ -92,7 +92,7 @@ Set these environment variables in your shell profile (e.g. `~/.zshrc` or `~/.ba
 | `AGENTGUARD_USERNAME`                 | `proton`                    | Timeplus username                                                           |
 | `AGENTGUARD_PASSWORD`                 | `""`                        | Timeplus password                                                           |
 | `AGENTGUARD_URL`                      | `http://localhost:8080`     | AgentGuard server base URL (for `/api/holds` synchronous decisions)         |
-| `AGENTGUARD_HOLD_FAIL_POLICY`         | `deny`                      | What to return when `/api/holds` is unreachable: `deny` blocks, `allow` lets call through |
+| `AGENTGUARD_HOLDS_FAIL_POLICY`        | `deny`                      | What to return when `/api/holds` is unreachable: `deny` blocks, `allow` lets call through |
 | `AGENTGUARD_HOLDS_ENABLED`            | `true`                      | When `false`, `PreToolUse` skips `/api/holds` and reverts to async observation-only mode |
 | `AGENTGUARD_TRANSCRIPT_MESSAGES`      | `50`                        | Max messages included in context events                                     |
 | `AGENTGUARD_TRANSCRIPT_CONTENT_CHARS` | `10000`                     | Max chars per content block in transcript                                   |

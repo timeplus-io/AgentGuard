@@ -85,7 +85,7 @@ export function resolveConfig(
     DEFAULTS.agentguardUrl;
 
   const holdFailPolicy: "deny" | "allow" =
-    process.env.AGENTGUARD_HOLD_FAIL_POLICY === "allow" ||
+    process.env.AGENTGUARD_HOLDS_FAIL_POLICY === "allow" ||
     (pluginConfig?.holdFailPolicy as string | undefined) === "allow"
       ? "allow"
       : "deny";

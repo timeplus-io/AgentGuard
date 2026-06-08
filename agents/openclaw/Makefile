@@ -19,7 +19,7 @@ ENV_FILE_FLAG := $(if $(wildcard $(ENV_FILE)),--env-file $(ENV_FILE),)
 # running outside Docker.
 AGENTGUARD_URL ?= http://host.docker.internal:8080
 AGENTGUARD_HOLDS_ENABLED ?= true
-AGENTGUARD_HOLD_FAIL_POLICY ?= deny
+AGENTGUARD_HOLDS_FAIL_POLICY ?= deny
 
 .PHONY: workspace init run start configure add-agents url devices approve clean install-plugin build-plugin deploy-plugin test
 
@@ -102,7 +102,7 @@ data["plugins"]["entries"]["agentguard"] = {
         "deploymentId": "local",
         "deploymentName": "Local Dev",
         "agentguardUrl": "$(AGENTGUARD_URL)",
-        "holdFailPolicy": "$(AGENTGUARD_HOLD_FAIL_POLICY)",
+        "holdFailPolicy": "$(AGENTGUARD_HOLDS_FAIL_POLICY)",
         "holdsEnabled": "$(AGENTGUARD_HOLDS_ENABLED)".lower() != "false",
     }
 }

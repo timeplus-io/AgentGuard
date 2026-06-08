@@ -58,16 +58,37 @@ describe("requestHold (openclaw)", () => {
     expect(d.reason).toBe("destructive command");
   });
 
-  it("applies fail-policy=deny on HTTP 503", async () => {
+  it("allows on HTTP 503 regardless of fail policy", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("oops", { status: 503 })));
     const d = await requestHold(BASE_EVENT, {}, BASE_CONFIG);
-    expect(d.decision).toBe("block");
-    expect(d.reason).toContain("503");
+    expect(d.decision).toBe("allow");
   });
 
-  it("applies fail-policy=allow when configured", async () => {
+  it("allows on network error regardless of fail policy", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("network down"); }));
-    const d = await requestHold(BASE_EVENT, {}, { ...BASE_CONFIG, holdFailPolicy: "allow" });
+    const d = await requestHold(BASE_EVENT, {}, BASE_CONFIG);
+    expect(d.decision).toBe("allow");
+  });
+
+  it("allows on auth failure (401)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("Unauthorized", { status: 401 })));
+    const d = await requestHold(BASE_EVENT, {}, BASE_CONFIG);
+    expect(d.decision).toBe("allow");
+  });
+
+  it("allows on auth failure (403)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("Forbidden", { status: 403 })));
+    const d = await requestHold(BASE_EVENT, {}, BASE_CONFIG);
+    expect(d.decision).toBe("allow");
+  });
+
+  it("allows on timeout regardless of fail policy", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      const err = new Error("The operation was aborted");
+      err.name = "AbortError";
+      throw err;
+    }));
+    const d = await requestHold(BASE_EVENT, {}, BASE_CONFIG);
     expect(d.decision).toBe("allow");
   });
 

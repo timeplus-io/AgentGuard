@@ -36,7 +36,7 @@ export function resolveConfig(): AgentGuardConfig {
     deploymentId: process.env.AGENTGUARD_DEPLOYMENT_ID || DEFAULTS.deploymentId,
     deploymentName: process.env.AGENTGUARD_DEPLOYMENT_NAME || DEFAULTS.deploymentName,
     agentguardUrl: process.env.AGENTGUARD_URL ?? DEFAULTS.agentguardUrl,
-    holdFailPolicy: (process.env.AGENTGUARD_HOLD_FAIL_POLICY === "allow") ? "allow" : "deny",
+    holdFailPolicy: (process.env.AGENTGUARD_HOLDS_FAIL_POLICY === "allow") ? "allow" : "deny",
     holdsEnabled: process.env.AGENTGUARD_HOLDS_ENABLED?.toLowerCase() !== "false",
   };
 }

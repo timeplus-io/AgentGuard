@@ -23,7 +23,7 @@ func isolate(t *testing.T) {
 		"TIMEPLUS_USER", "TIMEPLUS_PASSWORD",
 		"SERVER_PORT", "CATALOG_DIR", "AGENTGUARD_URL", "SETUP_COMPLETE",
 		"AGENTGUARD_HOLD_MV_WAIT_MS", "AGENTGUARD_HOLD_TIMEOUT_SECONDS",
-		"AGENTGUARD_HOLD_FAIL_POLICY", "AGENTGUARD_HOLDS_DISABLED",
+		"AGENTGUARD_HOLDS_FAIL_POLICY", "AGENTGUARD_HOLDS_DISABLED",
 	} {
 		if v, ok := os.LookupEnv(k); ok {
 			os.Unsetenv(k)
@@ -103,7 +103,7 @@ func TestLoad_ExplicitEnvOverridesConfig(t *testing.T) {
 	t.Setenv("SETUP_COMPLETE", "true")
 	t.Setenv("AGENTGUARD_HOLD_MV_WAIT_MS", "1500")
 	t.Setenv("AGENTGUARD_HOLD_TIMEOUT_SECONDS", "120")
-	t.Setenv("AGENTGUARD_HOLD_FAIL_POLICY", "allow")
+	t.Setenv("AGENTGUARD_HOLDS_FAIL_POLICY", "allow")
 	t.Setenv("AGENTGUARD_HOLDS_DISABLED", "true")
 	t.Setenv("TIMEPLUS_USER", "svc")
 	t.Setenv("TIMEPLUS_PASSWORD", "secret")

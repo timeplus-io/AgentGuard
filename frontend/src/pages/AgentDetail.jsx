@@ -38,14 +38,6 @@ function fmtTime(iso) {
 
 const fmtShortTime = formatLocalTime
 
-function dotColor(event) {
-  if (event.hook_decision === 'block') return '#ffb4ab'
-  const n = event.hook_name
-  if (n === 'llm_input' || n === 'llm_output' || n === 'pre_llm_call' || n === 'post_llm_call' || n === 'pre_api_request' || n === 'post_api_request') return '#ffb0cf'
-  if (n === 'before_tool_call' || n === 'after_tool_call' || n === 'tool_result_persist' || n === 'pre_tool_call' || n === 'post_tool_call') return '#93c5fd'
-  if (n === 'before_agent_start' || n === 'agent_end' || n === 'on_session_start' || n === 'on_session_end' || n === 'on_session_finalize' || n === 'on_session_reset') return '#a1a1aa'
-  return '#52525b'
-}
 
 function sessionTypeIcon(type) {
   switch (type) {
@@ -175,294 +167,6 @@ function SessionHeader({ sessionDetail }) {
       <span className="text-[10px] text-gray-400">{sessionDetail.total_tool_calls ?? 0} Tool Calls</span>
     </div>
   )
-}
-
-// ── buildRunData ──────────────────────────────────────────────────────────────
-// Returns { runInfo, steps } for a single run's events.
-// runInfo: general info (model, provider, systemPrompt) shown at top of card.
-// steps: time-ordered events (user input → tool calls → response).
-
-function parseEvtData(evt) {
-  const raw = safeParse(evt?.event_data)
-  return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {}
-}
-
-function buildRunData(events) {
-  // Detect Hermes by agent_type (primary) or by hook names unique to Hermes plugins:
-  //   installed plugin: session_start / session_end / user_prompt_submit / llm_output (with response field)
-  //   dev plugin:       pre_llm_call / post_llm_call
-  const isHermes = events.some(e =>
-    e.agent_type === 'hermes' ||
-    e.hook_name === 'pre_llm_call' ||
-    e.hook_name === 'post_llm_call' ||
-    e.hook_name === 'session_start' ||
-    e.hook_name === 'session_end'
-  )
-  if (isHermes) return buildRunDataHermes(events)
-
-  const llmIn       = events.find(e => e.hook_name === 'llm_input')
-  const llmOut      = events.find(e => e.hook_name === 'llm_output')
-  const beforeTools = events.filter(e => e.hook_name === 'before_tool_call')
-  const afterTools  = events.filter(e => e.hook_name === 'after_tool_call')
-
-  const llmInData = llmIn ? parseEvtData(llmIn) : {}
-
-  // General run info — not time-ordered, shown above the timeline
-  const runInfo = {
-    model:        llmIn?.model    || llmInData.model    || null,
-    provider:     llmIn?.provider || llmInData.provider || null,
-    systemPrompt: llmInData.systemPrompt || null,
-    historyCount: Array.isArray(llmInData.historyMessages) ? llmInData.historyMessages.length : null,
-    imagesCount:  (llmInData.imagesCount > 0) ? llmInData.imagesCount : null,
-  }
-
-  const steps = []
-
-  // ── User Input ────────────────────────────────────────────────────────────
-  // Use event_data.prompt (the direct user message) rather than parsing historyMessages.
-  if (llmIn) {
-    const prompt = llmInData.prompt
-    if (prompt && String(prompt).trim()) {
-      const t = String(prompt).trim()
-      steps.push({
-        type:    'user_input',
-        label:   'User Input',
-        content: t.slice(0, 400) + (t.length > 400 ? '…' : ''),
-      })
-    }
-  }
-
-  // ── Tool Calls (before + after paired by toolCallId, then position) ───────
-  for (let i = 0; i < beforeTools.length; i++) {
-    const before     = beforeTools[i]
-    const beforeData = parseEvtData(before)
-    const blocked    = before.hook_decision === 'block'
-    const toolCallId = beforeData.toolCallId || null
-    const params     = (beforeData.params && typeof beforeData.params === 'object' && Object.keys(beforeData.params).length > 0)
-      ? beforeData.params : null
-
-    // Find matching after_tool_call
-    const after = toolCallId
-      ? afterTools.find(a => parseEvtData(a).toolCallId === toolCallId)
-      : afterTools[i]
-
-    let resultError = null, duration = null
-    if (after) {
-      const afterData = parseEvtData(after)
-      resultError = afterData.error || null
-      duration    = afterData.durationMs ?? null
-    }
-
-    steps.push({
-      type:        'tool_call',
-      label:       blocked ? 'Tool Blocked' : 'Tool Called',
-      content:     before.tool_name || beforeData.toolName || '—',
-      blocked,
-      params,
-      // after_tool_call present means tool completed (success unless resultError set)
-      hasResult:   after != null,
-      resultError,
-      duration,
-    })
-  }
-
-  // ── LLM Response ─────────────────────────────────────────────────────────
-  if (llmOut) {
-    const llmOutData = parseEvtData(llmOut)
-    const usage      = llmOutData.usage ?? llmOutData.usageTotals ?? {}
-    const tokenParts = [
-      usage.input  != null              ? `${fmtTokens(usage.input)} in`           : null,
-      usage.output != null              ? `${fmtTokens(usage.output)} out`          : null,
-      usage.cacheRead != null && usage.cacheRead > 0 ? `${fmtTokens(usage.cacheRead)} cached` : null,
-      usage.total  != null              ? `${fmtTokens(usage.total)} total`         : null,
-    ].filter(Boolean)
-
-    const texts = llmOutData.assistantTexts ?? llmOutData.assistant_texts ?? []
-    const responseText = Array.isArray(texts) ? texts.join('\n').trim() : ''
-
-    steps.push({
-      type:    'llm_response',
-      label:   'Response',
-      tokens:  tokenParts.length > 0 ? tokenParts.join(' · ') : null,
-      content: responseText ? responseText.slice(0, 500) + (responseText.length > 500 ? '…' : '') : null,
-    })
-  }
-
-  return { runInfo, steps }
-}
-
-function buildRunDataHermes(events) {
-  // Handles two Hermes plugin formats in a single pass (time-ordered):
-  //
-  // Installed plugin (~/.hermes/plugins/agentguard/plugin.py):
-  //   user_prompt_submit  → event_data.message  = user message text
-  //   llm_output          → event_data.response = assistant response text
-  //   before_tool_call    → event_data.args (params), paired with after_tool_call by index
-  //   after_tool_call     → event_data.result
-  //
-  // Dev/package plugin (agentguard-plugin/):
-  //   pre_llm_call        → token count from paired pre_api_request
-  //   post_api_request    → usage tokens + latency
-  //   pre_tool_call       → event_data.args, paired with post_tool_call by tool_call_id
-  //   post_tool_call      → event_data.result
-
-  const runInfo = { model: null, provider: null, systemPrompt: null, historyCount: null, imagesCount: null }
-  const steps = []
-  const consumed = new Set()
-  let stashedApiTokens = null  // set by post_api_request, consumed by post_llm_call
-
-  // Pre-index after_tool_call (installed plugin) by position for sequential pairing.
-  const afterTools = events.reduce((acc, e, i) => {
-    if (e.hook_name === 'after_tool_call') acc.push(i)
-    return acc
-  }, [])
-  let afterToolCursor = 0
-
-  // Pre-index post_tool_call (dev plugin) by tool_call_id.
-  const postToolByTcID = {}
-  for (let i = 0; i < events.length; i++) {
-    if (events[i].hook_name === 'post_tool_call') {
-      const d = parseEvtData(events[i])
-      if (d.tool_call_id) postToolByTcID[d.tool_call_id] = i
-    }
-  }
-
-  for (let i = 0; i < events.length; i++) {
-    if (consumed.has(i)) continue
-    const e = events[i]
-    const data = parseEvtData(e)
-
-    // ── Installed plugin: user message ────────────────────────────────────────
-    if (e.hook_name === 'user_prompt_submit') {
-      consumed.add(i)
-      if (!runInfo.model) runInfo.model = e.model || data.model || null
-      const msg = typeof data.message === 'string' ? data.message.trim() : ''
-      steps.push({
-        type: 'user_input',
-        label: 'User Message',
-        content: msg || '(message content not captured)',
-        contentMuted: !msg,
-      })
-    }
-
-    // ── Installed plugin: LLM response ────────────────────────────────────────
-    else if (e.hook_name === 'llm_output') {
-      consumed.add(i)
-      if (!runInfo.model) runInfo.model = e.model || data.model || null
-      const resp = typeof data.response === 'string' ? data.response.trim() : ''
-      steps.push({
-        type: 'llm_response',
-        label: 'LLM Response',
-        content: resp || '(response content not captured)',
-        contentMuted: !resp,
-      })
-    }
-
-    // ── Installed plugin: tool call (paired by sequential order) ─────────────
-    else if (e.hook_name === 'before_tool_call') {
-      consumed.add(i)
-      const blocked  = e.hook_decision === 'block'
-      const toolName = e.tool_name || data.tool_name || '—'
-      const args     = (data.args && typeof data.args === 'object' && Object.keys(data.args).length > 0) ? data.args : null
-      let hasResult = false, resultError = null, result = null
-      while (afterToolCursor < afterTools.length) {
-        const idx = afterTools[afterToolCursor++]
-        if (!consumed.has(idx)) {
-          consumed.add(idx)
-          hasResult = true
-          const pd = parseEvtData(events[idx])
-          resultError = pd.error || null
-          result = pd.result ?? null
-          break
-        }
-      }
-      steps.push({
-        type: 'tool_call', label: blocked ? 'Tool Blocked' : 'Tool Called',
-        content: toolName, blocked, params: args, hasResult, resultError, result, duration: null,
-      })
-    }
-
-    // ── Dev plugin: user turn ────────────────────────────────────────────────
-    else if (e.hook_name === 'pre_llm_call') {
-      consumed.add(i)
-      if (!runInfo.model)    runInfo.model    = e.model    || data.model    || null
-      if (!runInfo.provider) runInfo.provider = e.provider || data.provider || null
-      // Absorb next pre_api_request for approx token count
-      let approxTokens = null
-      for (let j = i + 1; j < events.length; j++) {
-        if (consumed.has(j)) continue
-        if (events[j].hook_name === 'pre_api_request') {
-          approxTokens = parseEvtData(events[j]).approx_input_tokens ?? null
-          consumed.add(j)
-          break
-        }
-        if (events[j].hook_name === 'pre_llm_call') break
-      }
-      const userMsg = typeof data.user_message === 'string' ? data.user_message.trim() : ''
-      steps.push({
-        type: 'user_input', label: 'User Message',
-        content: userMsg || null,
-        contentMuted: !userMsg,
-        tokens: approxTokens != null ? `~${fmtTokens(approxTokens)} tokens` : null,
-      })
-    }
-
-    // ── Dev plugin: API response — stash token counts for post_llm_call ────────
-    // post_api_request always arrives before post_llm_call; stash so we don't
-    // push a standalone empty step and post_llm_call picks it up.
-    else if (e.hook_name === 'post_api_request') {
-      consumed.add(i)
-      const usage = data.usage ?? {}
-      const parts = [
-        usage.input_tokens  != null ? `${fmtTokens(usage.input_tokens)} in`  : null,
-        usage.output_tokens != null ? `${fmtTokens(usage.output_tokens)} out` : null,
-        (usage.cache_read_input_tokens > 0) ? `${fmtTokens(usage.cache_read_input_tokens)} cached` : null,
-      ].filter(Boolean)
-      if (data.api_duration != null) parts.push(`${Math.round(data.api_duration * 1000)} ms`)
-      stashedApiTokens = parts.length > 0 ? parts.join(' · ') : null
-    }
-
-    // ── Dev plugin: LLM response text from assistant_response ────────────────
-    else if (e.hook_name === 'post_llm_call') {
-      consumed.add(i)
-      const assistantMsg = typeof data.assistant_response === 'string' ? data.assistant_response.trim() : ''
-      const tokens = stashedApiTokens
-      stashedApiTokens = null
-      steps.push({
-        type: 'llm_response', label: 'LLM Response',
-        content: assistantMsg || null,
-        contentMuted: !assistantMsg,
-        tokens,
-      })
-    }
-
-    // ── Dev plugin: tool call (paired by tool_call_id) ────────────────────────
-    else if (e.hook_name === 'pre_tool_call') {
-      consumed.add(i)
-      const blocked = e.hook_decision === 'block'
-      const tcID    = data.tool_call_id || null
-      const args    = (data.args && typeof data.args === 'object' && Object.keys(data.args).length > 0) ? data.args : null
-      let hasResult = false, resultError = null, result = null
-      if (tcID != null && postToolByTcID[tcID] != null && !consumed.has(postToolByTcID[tcID])) {
-        const postIdx = postToolByTcID[tcID]
-        consumed.add(postIdx)
-        hasResult = true
-        const pd = parseEvtData(events[postIdx])
-        resultError = pd.error || null
-        result      = pd.result ?? null
-      }
-      steps.push({
-        type: 'tool_call', label: blocked ? 'Tool Blocked' : 'Tool Called',
-        content: e.tool_name || data.tool_name || '—', blocked, params: args,
-        hasResult, resultError, result, duration: null,
-      })
-    }
-
-    // after_tool_call (consumed by before_tool_call), post_llm_call,
-    // conversation_end, session_start/end: silently skip.
-  }
-
-  return { runInfo, steps }
 }
 
 // ── JsonValue ─────────────────────────────────────────────────────────────────
@@ -1129,167 +833,79 @@ function RunWaterfall({ spans }) {
   )
 }
 
-// ── RunTimeline ───────────────────────────────────────────────────────────────
-
-function stepDot(step) {
-  if (step.type === 'tool_call') return step.blocked ? '#ffb4ab' : '#93c5fd'
-  return '#ffb0cf'
+const TIMELINE_KIND_META = {
+  user_input:    { label: 'User Input',     dot: '#a5b4fc' },
+  llm_response:  { label: 'LLM Response',   dot: '#ffb0cf' },
+  tool_request:  { label: 'Tool Request',   dot: '#93c5fd' },
+  tool_result:   { label: 'Tool Result',    dot: '#93c5fd' },
+  session_start: { label: 'Session Start',  dot: '#6b7280' },
+  session_end:   { label: 'Session End',    dot: '#6b7280' },
 }
 
-function RunTimeline({ runIndex, run, events }) {
-  const [sysExpanded, setSysExpanded] = useState(false)
-  const rid = run.run_id ?? ''
-  const { runInfo, steps } = buildRunData(events)
-  const start = fmtShortTime(run.start_time)
-  const end   = fmtShortTime(run.end_time)
-  const timeRange = start && end ? `${start} → ${end}` : start || ''
+function TimelineBody({ kind, body }) {
+  if (!body) return null
+  const isCode = kind === 'tool_request' || kind === 'tool_result'
+  const text = body.length > 800 ? body.slice(0, 800) + '…' : body
+  if (isCode) {
+    return (
+      <pre className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5 text-[10px] font-mono text-gray-100 break-all whitespace-pre-wrap overflow-x-auto">
+        {text}
+      </pre>
+    )
+  }
+  return (
+    <p className="text-xs mt-0.5 break-words leading-relaxed whitespace-pre-wrap text-gray-100">
+      {text}
+    </p>
+  )
+}
 
+function TurnTimeline({ turnIndex, events }) {
   return (
     <div className="bg-[#1d1a25] rounded-sm p-5 mb-3 last:mb-0">
-      {/* Run header */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
-        <span className="text-xs font-semibold text-gray-100">Run #{runIndex + 1}</span>
-        <code className="text-[10px] font-mono text-gray-400 break-all">
-          {rid || '—'}
-        </code>
-        {timeRange && <span className="text-[10px] text-gray-400">{timeRange}</span>}
-        {run.tool_count > 0 && (
-          <span className="text-[9px] bg-[#93c5fd]/10 text-[#93c5fd] px-1.5 py-0.5 rounded-full">
-            {run.tool_count} tools
-          </span>
-        )}
-        {run.has_block && (
-          <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">block</span>
-        )}
+        <span className="text-xs font-semibold text-gray-100">
+          {turnIndex === 0 ? 'Session' : `Turn #${turnIndex}`}
+        </span>
+        <span className="text-[10px] text-gray-400">{events.length} events</span>
       </div>
-
-      {/* General run info — model, system prompt (not time-ordered) */}
-      {(runInfo.model || runInfo.systemPrompt) && (
-        <div className="mb-4 bg-[#0f0c17] rounded-sm px-3 py-2.5 space-y-2">
-          {runInfo.model && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="material-symbols-outlined text-[13px] text-gray-400">smart_toy</span>
-              <span className="text-[10px] text-gray-100 font-mono">
-                {[runInfo.model, runInfo.provider].filter(Boolean).join(' · ')}
-              </span>
-              {runInfo.historyCount != null && (
-                <span className="text-[10px] text-gray-400">{runInfo.historyCount} messages in history</span>
-              )}
-              {runInfo.imagesCount != null && (
-                <span className="text-[10px] text-gray-400">{runInfo.imagesCount} images</span>
-              )}
-            </div>
-          )}
-          {runInfo.systemPrompt && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="material-symbols-outlined text-[13px] text-gray-400">tune</span>
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">System Prompt</span>
-                <button
-                  onClick={() => setSysExpanded(e => !e)}
-                  className="text-[10px] text-gray-400 hover:text-[#ffb0cf] transition-colors"
-                >
-                  {sysExpanded ? '▲ collapse' : '▼ expand'}
-                </button>
-              </div>
-              <p className="text-[10px] text-gray-400 break-words leading-relaxed font-mono whitespace-pre-wrap">
-                {sysExpanded
-                  ? runInfo.systemPrompt
-                  : runInfo.systemPrompt.slice(0, 150) + (runInfo.systemPrompt.length > 150 ? '…' : '')}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Timeline steps */}
-      {steps.length === 0 ? (
-        <p className="text-[11px] text-gray-400">No structured events for this run.</p>
-      ) : (
-        <div>
-          {steps.map((step, i) => (
-            <div key={`${step.type}-${i}`} className="flex gap-3">
+      <div>
+        {events.map((ev, i) => {
+          const meta = TIMELINE_KIND_META[ev.kind] ?? { label: ev.kind, dot: '#6b7280' }
+          const alert = ev.status === 'blocked' || ev.status === 'error'
+          return (
+            <div key={`${ev.kind}-${i}`} className="flex gap-3">
               <div className="flex flex-col items-center">
                 <div
                   className="w-2 h-2 rounded-full shrink-0 mt-1"
-                  style={{ backgroundColor: stepDot(step) }}
+                  style={{ backgroundColor: alert ? '#ffb4ab' : meta.dot }}
                 />
-                {i < steps.length - 1 && (
+                {i < events.length - 1 && (
                   <div className="w-px flex-1 bg-[#574149]/20 my-1" style={{ minHeight: '12px' }} />
                 )}
               </div>
               <div className="pb-3 flex-1 min-w-0">
-                <span className={`text-[10px] font-semibold uppercase tracking-wide ${
-                  step.blocked ? 'text-[#ffb4ab]' : 'text-gray-400'
-                }`}>
-                  {step.label}
-                </span>
-
-                {/* Main content: tool name or prompt text or response text */}
-                {step.content && (
-                  <p className={`text-xs mt-0.5 break-words leading-relaxed whitespace-pre-wrap ${
-                    step.contentMuted ? 'text-gray-400 italic' : 'text-gray-100'
-                  }`}>
-                    {step.content}
-                  </p>
-                )}
-
-                {/* Tool params (key-value) */}
-                {step.params && (
-                  <div className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5 space-y-0.5">
-                    {Object.entries(step.params).map(([k, v]) => (
-                      <div key={k} className="grid grid-cols-[90px_1fr] gap-1.5">
-                        <span className="text-[10px] text-gray-400 truncate">{k}</span>
-                        <span className="text-[10px] font-mono text-gray-100 break-all whitespace-pre-wrap">
-                          {typeof v === 'object' ? JSON.stringify(v) : String(v ?? '—')}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Tool result: success/fail indicator + error reason */}
-                {step.type === 'tool_call' && step.hasResult && (
-                  <div className="mt-1.5 flex items-start gap-2">
-                    {step.resultError ? (
-                      <>
-                        <span className="material-symbols-outlined text-[13px] text-[#ffb4ab] shrink-0 mt-0.5">cancel</span>
-                        <span className="text-[10px] text-[#ffb4ab] break-words">{step.resultError}</span>
-                      </>
-                    ) : (
-                      <span className="flex items-center gap-1.5 text-[10px] text-emerald-400">
-                        <span className="material-symbols-outlined text-[13px]">check_circle</span>
-                        Success{step.duration != null ? ` · ${step.duration} ms` : ''}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Tool result content */}
-                {step.type === 'tool_call' && step.result != null && !step.resultError && (
-                  <div className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5">
-                    <span className="text-[10px] text-gray-400 uppercase tracking-wide block mb-1">Result</span>
-                    {typeof step.result === 'string' ? (
-                      <p className="text-[10px] font-mono text-gray-100 break-all whitespace-pre-wrap">
-                        {step.result.length > 600 ? step.result.slice(0, 600) + '…' : step.result}
-                      </p>
-                    ) : (
-                      <p className="text-[10px] font-mono text-gray-100 break-all whitespace-pre-wrap">
-                        {(() => { const s = JSON.stringify(step.result, null, 2); return s.length > 600 ? s.slice(0, 600) + '…' : s })()}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Token usage (llm_response) */}
-                {step.tokens && (
-                  <p className="text-[10px] text-gray-400 mt-0.5">{step.tokens}</p>
-                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-[10px] font-semibold uppercase tracking-wide ${alert ? 'text-[#ffb4ab]' : 'text-gray-400'}`}>
+                    {meta.label}
+                  </span>
+                  {ev.tool_name && <code className="text-[10px] font-mono text-[#93c5fd]">{ev.tool_name}</code>}
+                  {ev.provider && <span className="text-[10px] text-gray-500 font-mono">{ev.provider}</span>}
+                  {ev.model && <span className="text-[10px] text-gray-400 font-mono">{ev.model}</span>}
+                  {ev.status === 'blocked' && (
+                    <span className="text-[10px] text-[#ffb4ab]">
+                      blocked{ev.attributes?.block_reason ? `: ${ev.attributes.block_reason}` : ''}
+                    </span>
+                  )}
+                  {ev.status === 'error' && <span className="text-[10px] text-[#ffb4ab]">error</span>}
+                  <span className="ml-auto text-[10px] font-mono text-gray-400">{fmtShortTime(ev.event_time)}</span>
+                </div>
+                <TimelineBody kind={ev.kind} body={ev.body} />
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1311,6 +927,9 @@ export default function AgentDetail() {
   const [events, setEvents] = useState([])
   const [eventsTruncated, setEventsTruncated] = useState(false)
   const [eventsError, setEventsError] = useState(null)
+  const [timeline, setTimeline] = useState([])
+  const [timelineError, setTimelineError] = useState(null)
+  const [loadingTimeline, setLoadingTimeline] = useState(false)
   const [traceData, setTraceData] = useState(null)
   const [traceError, setTraceError] = useState(null)
   const [loadingTrace, setLoadingTrace] = useState(false)
@@ -1412,6 +1031,22 @@ export default function AgentDetail() {
       })
       .finally(() => setLoadingEvents(false))
   }, [id, selectedSession, selectedRun, timePreset, refreshTick])
+
+  useEffect(() => {
+    if (!selectedSession) { setTimeline([]); setTimelineError(null); setLoadingTimeline(false); return }
+    let cancelled = false
+    const params = {}
+    if (selectedRun) params.run_id = selectedRun
+
+    setTimeline([])
+    setTimelineError(null)
+    setLoadingTimeline(true)
+    api.getSessionTimeline(id, selectedSession, params)
+      .then(r => { if (!cancelled) { setTimeline(r.events ?? []); setTimelineError(null) } })
+      .catch(err => { if (!cancelled) { setTimeline([]); setTimelineError(err?.message || 'Failed to load timeline') } })
+      .finally(() => { if (!cancelled) setLoadingTimeline(false) })
+    return () => { cancelled = true }
+  }, [id, selectedSession, selectedRun, refreshTick])
 
   useEffect(() => {
     setTraceData(null)
@@ -1740,6 +1375,12 @@ export default function AgentDetail() {
               ) : !selectedRun ? (
                 sessionDetail ? (
                   <SessionSummary sessionDetail={sessionDetail} />
+                ) : sessionDetailError ? (
+                  <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
+                    <span className="material-symbols-outlined text-4xl">error</span>
+                    <p className="text-sm font-semibold">Failed to load session</p>
+                    <p className="text-xs text-gray-400 max-w-md break-words">{sessionDetailError}</p>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-full">
                     <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
@@ -1783,65 +1424,43 @@ export default function AgentDetail() {
                     ))}
                   </div>
                 )
-              ) : loadingEvents ? (
-                <div className="flex items-center justify-center h-full">
-                  <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
-                </div>
               ) : (
                 // Timeline tab
                 (() => {
-                  if (sessionDetailError) {
+                  if (timelineError) {
                     return (
                       <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
                         <span className="material-symbols-outlined text-4xl">error</span>
-                        <p className="text-sm font-semibold">Failed to load session</p>
-                        <p className="text-xs text-gray-400 max-w-md break-words">{sessionDetailError}</p>
+                        <p className="text-sm font-semibold">Failed to load timeline</p>
+                        <p className="text-xs text-gray-400 max-w-md break-words">{timelineError}</p>
                       </div>
                     )
                   }
-                  if (!sessionDetail) {
+                  if (loadingTimeline && timeline.length === 0) {
                     return (
                       <div className="flex items-center justify-center h-full">
                         <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
                       </div>
                     )
                   }
-                  const runs = selectedRun
-                    ? (sessionDetail?.runs ?? []).filter(r => r.run_id === selectedRun)
-                    : (sessionDetail?.runs ?? [])
-                  if (runs.length === 0) {
+                  if (timeline.length === 0) {
                     return (
                       <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
                         <span className="material-symbols-outlined text-4xl">inbox</span>
-                        <p className="text-sm">No runs found for this session</p>
+                        <p className="text-sm">No timeline events for this session</p>
                       </div>
                     )
                   }
-                  const byRun = {}
-                  for (const e of events) {
-                    if (!e.run_id) continue
-                    if (!byRun[e.run_id]) byRun[e.run_id] = []
-                    byRun[e.run_id].push(e)
+                  const turns = new Map()
+                  for (const ev of timeline) {
+                    if (!turns.has(ev.turn_index)) turns.set(ev.turn_index, [])
+                    turns.get(ev.turn_index).push(ev)
                   }
-                  for (const rid of Object.keys(byRun)) {
-                    byRun[rid].sort((a, b) => {
-                      const toMs = (v) => {
-                        let s = typeof v === 'string' ? v.replace(' ', 'T') : v
-                        if (typeof s === 'string' && !s.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(s)) s = s + 'Z'
-                        return new Date(s)
-                      }
-                      return toMs(a.event_time) - toMs(b.event_time)
-                    })
-                  }
+                  const indexes = [...turns.keys()].sort((a, b) => a - b)
                   return (
                     <div className="p-4">
-                      {runs.map((run) => (
-                        <RunTimeline
-                          key={run.run_id}
-                          runIndex={sessionDetail.runs.findIndex(r => r.run_id === run.run_id)}
-                          run={run}
-                          events={byRun[run.run_id] ?? []}
-                        />
+                      {indexes.map(idx => (
+                        <TurnTimeline key={idx} turnIndex={idx} events={turns.get(idx)} />
                       ))}
                     </div>
                   )

@@ -183,7 +183,7 @@ AgentGuard can synchronously **pause an agent's tool call** while a human review
 - `auto_block` — rule fires and the tool call is denied immediately, no human prompt.
 - `hold` — rule fires, the agent's hot path is paused, a Pending Hold appears under `/threats` and on the threat detail page (`/threats/:id`); the agent resumes (or rejects) within ~1 s of an Approve / Deny click. No LLM tokens are burned while waiting.
 
-Set the policy on the rule detail page (`/rules/:id` → Block Policy panel). All three plugins ([OpenClaw](agents/openclaw/agentguard-plugin/README.md), [Claude Code](agents/claudecode/agentguard-plugin/README.md), [Hermes](agents/hermes/agentguard-plugin/README.md)) implement the synchronous hold-and-wait path in their `PreToolUse` / `pre_tool_call` / `before_tool_call` hook. See each plugin's README for the env vars (`AGENTGUARD_URL`, `AGENTGUARD_HOLD_FAIL_POLICY`, `AGENTGUARD_HOLDS_ENABLED`) and the end-to-end walkthrough.
+Set the policy on the rule detail page (`/rules/:id` → Block Policy panel). All three plugins ([OpenClaw](agents/openclaw/agentguard-plugin/README.md), [Claude Code](agents/claudecode/agentguard-plugin/README.md), [Hermes](agents/hermes/agentguard-plugin/README.md)) implement the synchronous hold-and-wait path in their `PreToolUse` / `pre_tool_call` / `before_tool_call` hook. See each plugin's README for the env vars (`AGENTGUARD_URL`, `AGENTGUARD_HOLDS_FAIL_POLICY`, `AGENTGUARD_HOLDS_ENABLED`) and the end-to-end walkthrough.
 
 > **Server-side prerequisite:** the `/api/holds` endpoint requires `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process — see [Environment variables](#environment-variables) below.
 

@@ -336,7 +336,7 @@ export AGENTGUARD_PASSWORD=""
 # Disabled by default — set to "true" to enable hold-and-wait gating.
 export AGENTGUARD_URL="http://localhost:8080"
 export AGENTGUARD_HOLDS_ENABLED="false"           # "true" to enable blocking
-export AGENTGUARD_HOLD_FAIL_POLICY="deny"         # or "allow" if /api/holds unreachable
+export AGENTGUARD_HOLDS_FAIL_POLICY="deny"         # or "allow" if /api/holds unreachable
 ```
 
 | Variable | Default | Purpose |
@@ -348,7 +348,7 @@ export AGENTGUARD_HOLD_FAIL_POLICY="deny"         # or "allow" if /api/holds unr
 | `AGENTGUARD_DEPLOYMENT_NAME` | `Local Dev` | Human-readable deployment name |
 | `AGENTGUARD_URL` | `http://localhost:8080` | AgentGuard server base URL — where `PreToolUse` POSTs its hold request |
 | `AGENTGUARD_HOLDS_ENABLED` | `false` | When `true`, `PreToolUse` runs synchronously and can block; when `false`, observation-only |
-| `AGENTGUARD_HOLD_FAIL_POLICY` | `deny` | What to return when `/api/holds` is unreachable: `deny` blocks the tool call, `allow` lets it proceed |
+| `AGENTGUARD_HOLDS_FAIL_POLICY` | `deny` | What to return when `/api/holds` is unreachable: `deny` blocks the tool call, `allow` lets it proceed |
 
 > **Why `false` by default:** synchronous PreToolUse blocking adds round-trip latency to every tool call and requires the AgentGuard server to be reachable. Most users want async observation first, then opt in to blocking once rules are tuned. The bundled `agents/claudecode/Makefile` (`make install`) writes the same `false` default into `~/.claude/settings.json`. Override with `AGENTGUARD_HOLDS_ENABLED=true make configure`.
 
@@ -438,7 +438,7 @@ export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
 
 # Synchronous tool-call blocking (pre_tool_call → AgentGuard /api/holds)
 export AGENTGUARD_URL="http://localhost:8080"
-export AGENTGUARD_HOLD_FAIL_POLICY="deny"   # or "allow"
+export AGENTGUARD_HOLDS_FAIL_POLICY="deny"   # or "allow"
 export AGENTGUARD_HOLDS_ENABLED="true"      # set "false" for observation-only
 ```
 
@@ -450,7 +450,7 @@ export AGENTGUARD_HOLDS_ENABLED="true"      # set "false" for observation-only
 | `AGENTGUARD_DEPLOYMENT_ID` | `local` | Deployment environment tag |
 | `AGENTGUARD_DEPLOYMENT_NAME` | `Local Dev` | Human-readable deployment name |
 | `AGENTGUARD_URL` | `http://localhost:8080` | AgentGuard server base URL — where `pre_tool_call` POSTs its hold request |
-| `AGENTGUARD_HOLD_FAIL_POLICY` | `deny` | What to return when `/api/holds` is unreachable: `deny` blocks the tool call, `allow` lets it proceed |
+| `AGENTGUARD_HOLDS_FAIL_POLICY` | `deny` | What to return when `/api/holds` is unreachable: `deny` blocks the tool call, `allow` lets it proceed |
 | `AGENTGUARD_HOLDS_ENABLED` | `true` | When `false`, `pre_tool_call` reverts to async observation-only (no blocking) |
 
 > **Docker (Hermes in container, Timeplus on host):** use `http://host.docker.internal:3218` for `AGENTGUARD_TIMEPLUS_URL` and `http://host.docker.internal:8080` for `AGENTGUARD_URL`.
@@ -492,7 +492,7 @@ Out of the box, every rule is `log_only` — matches are recorded as threats but
    - `hold` — pause the agent and require a human Approve / Deny in the UI (Pending Holds appear under `/threats` and `/threats/:id`). Tool resumes within ~1 s of the click.
 3. Make sure your plugin's `AGENTGUARD_URL` points at the AgentGuard server and `AGENTGUARD_HOLDS_ENABLED=true`. Defaults differ per plugin: OpenClaw and Hermes default to `true`, **Claude Code defaults to `false`** — re-run `cd agents/claudecode && AGENTGUARD_HOLDS_ENABLED=true make configure` (or set the env var in `~/.claude/settings.json`) to opt in.
 
-> **Server-side prerequisite (same as section 7c):** the `/api/holds` endpoint requires `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process. The bundled `docker-compose.yaml` pre-sets these to `proton` / `timeplus@t+`. Without them every plugin hold request fails with HTTP 503 — and depending on `AGENTGUARD_HOLD_FAIL_POLICY`, every tool call will be either denied or allowed unconditionally.
+> **Server-side prerequisite (same as section 7c):** the `/api/holds` endpoint requires `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process. The bundled `docker-compose.yaml` pre-sets these to `proton` / `timeplus@t+`. Without them every plugin hold request fails with HTTP 503 — and depending on `AGENTGUARD_HOLDS_FAIL_POLICY`, every tool call will be either denied or allowed unconditionally.
 
 For per-plugin config and end-to-end walkthroughs, see the plugin READMEs: [OpenClaw](agents/openclaw/agentguard-plugin/README.md), [Claude Code](agents/claudecode/agentguard-plugin/README.md), [Hermes](agents/hermes/agentguard-plugin/README.md).
 
