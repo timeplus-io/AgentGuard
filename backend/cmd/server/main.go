@@ -77,15 +77,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	// viper's AutomaticEnv() prevents nested YAML keys (like setup.complete) from
-	// being read correctly via the global viper. Read setup.complete directly from
-	// the config file using a fresh viper instance that has no AutomaticEnv.
-	if cfgFile != "" {
-		if fileCfg, err := config.LoadFrom(cfgFile); err == nil {
-			cfg.SetupComplete = fileCfg.SetupComplete
-		}
-	}
-
 	// Record the config file path so Provision writes to the same file the
 	// server reads from (important when --config points to a non-default path).
 	if p := viper.ConfigFileUsed(); p != "" {
