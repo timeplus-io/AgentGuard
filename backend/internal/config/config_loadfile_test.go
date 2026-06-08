@@ -185,6 +185,26 @@ func TestLoad_MissingExplicitConfigFileErrors(t *testing.T) {
 	}
 }
 
+func TestLoad_ClampsHoldTimeoutSeconds(t *testing.T) {
+	isolate(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agentguard.yaml")
+	content := "holds:\n  timeout_seconds: 999\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	viper.SetConfigFile(path)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Holds.TimeoutSeconds != 540 {
+		t.Errorf("Holds.TimeoutSeconds = %d, want clamp to 540", cfg.Holds.TimeoutSeconds)
+	}
+}
+
 // TestLoad_DefaultsWithoutConfigFile guards the no-explicit-file path: the fix
 // must not break default loading (returns defaults, no error).
 func TestLoad_DefaultsWithoutConfigFile(t *testing.T) {
