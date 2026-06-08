@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/spf13/viper"
@@ -67,7 +66,8 @@ func Load() (*Config, error) {
 	return load(viper.GetViper(), true)
 }
 
-// LoadFrom reads configuration from a specific file path.
+// LoadFrom reads configuration from a specific file path without applying
+// process environment overrides.
 // Returns a config with defaults if the file does not exist.
 func LoadFrom(path string) (*Config, error) {
 	v := viper.New()
@@ -97,13 +97,14 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("holds.disabled", false)
 
 	if searchPaths {
+		explicitConfigFile := v.ConfigFileUsed()
 		v.SetConfigType("yaml")
 		// Only configure the default search paths when no explicit config file
 		// has been set (e.g. via --config / viper.SetConfigFile). viper's
 		// SetConfigName resets the internal configFile, so calling it here would
 		// discard an explicit --config path and make ReadInConfig search "."
 		// instead — silently ignoring every field in the user's config file.
-		if v.ConfigFileUsed() == "" {
+		if explicitConfigFile == "" {
 			v.SetConfigName("config")
 			v.AddConfigPath(".")
 			if home, err := os.UserHomeDir(); err == nil {
@@ -112,22 +113,17 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 		}
 
 		if err := v.ReadInConfig(); err != nil {
+			if explicitConfigFile != "" {
+				return nil, fmt.Errorf("reading explicit config file %s: %w", explicitConfigFile, err)
+			}
 			var notFound viper.ConfigFileNotFoundError
 			if !errors.As(err, &notFound) && !errors.Is(err, os.ErrNotExist) {
 				return nil, fmt.Errorf("reading config file: %w", err)
 			}
 		}
 
-		v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-		v.AutomaticEnv()
+		bindEnv(v)
 	}
-
-	_ = v.BindEnv("holds.mv_wait_ms", "AGENTGUARD_HOLD_MV_WAIT_MS")
-	_ = v.BindEnv("holds.timeout_seconds", "AGENTGUARD_HOLD_TIMEOUT_SECONDS")
-	_ = v.BindEnv("holds.fail_policy", "AGENTGUARD_HOLD_FAIL_POLICY")
-	_ = v.BindEnv("holds.disabled", "AGENTGUARD_HOLDS_DISABLED")
-	_ = v.BindEnv("timeplus.user", "TIMEPLUS_USER")
-	_ = v.BindEnv("timeplus.password", "TIMEPLUS_PASSWORD")
 
 	cfg := &Config{}
 	cfg.Server.Port = v.GetInt("server.port")
@@ -154,6 +150,22 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func bindEnv(v *viper.Viper) {
+	_ = v.BindEnv("server.port", "SERVER_PORT")
+	_ = v.BindEnv("catalog.dir", "CATALOG_DIR")
+	_ = v.BindEnv("agentguard.url", "AGENTGUARD_URL")
+	_ = v.BindEnv("setup.complete", "SETUP_COMPLETE")
+	_ = v.BindEnv("timeplus.host", "TIMEPLUS_HOST")
+	_ = v.BindEnv("timeplus.port", "TIMEPLUS_PORT")
+	_ = v.BindEnv("timeplus.native-port", "TIMEPLUS_NATIVE_PORT")
+	_ = v.BindEnv("holds.mv_wait_ms", "AGENTGUARD_HOLD_MV_WAIT_MS")
+	_ = v.BindEnv("holds.timeout_seconds", "AGENTGUARD_HOLD_TIMEOUT_SECONDS")
+	_ = v.BindEnv("holds.fail_policy", "AGENTGUARD_HOLD_FAIL_POLICY")
+	_ = v.BindEnv("holds.disabled", "AGENTGUARD_HOLDS_DISABLED")
+	_ = v.BindEnv("timeplus.user", "TIMEPLUS_USER")
+	_ = v.BindEnv("timeplus.password", "TIMEPLUS_PASSWORD")
 }
 
 // Save writes non-sensitive config fields to the specified path (typically "config.yaml").
