@@ -147,6 +147,18 @@ func CreateHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster
 			holdID := uuid.NewString()
 			argsSummary := truncateJSON(req.ToolInput, argsSummaryMaxBytes)
 			now := time.Now().UTC()
+
+			// Register the in-memory waiter BEFORE persisting the pending row.
+			// Every terminalizer (decide / abandon / drain / rule-cleanup /
+			// reconcile) discovers a hold either via storage or via the SSE publish
+			// below — both of which happen only AFTER the row is written here. By
+			// registering first we guarantee that by the time the hold is
+			// observable, its waiter already exists, so a terminalizer can never
+			// resolve-and-signal-nobody in the gap and leave this request to block
+			// until timeout and return fail-policy instead of the real decision.
+			ch := registry.Register(holdID)
+			defer registry.Cancel(holdID)
+
 			if err := writeHoldRow(cfg, models.Hold{
 				HoldID:       holdID,
 				DeploymentID: req.DeploymentID,
@@ -166,9 +178,6 @@ func CreateHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster
 				return
 			}
 
-			ch := registry.Register(holdID)
-			defer registry.Cancel(holdID)
-
 			// Notify the UI via the existing SSE notification stream.
 			broadcaster.Publish(models.AlertWebhookPayload{
 				RuleID:     out.RuleID,
@@ -179,31 +188,54 @@ func CreateHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster
 				DetectedAt: now.Format(time.RFC3339),
 			})
 
-			timeout := time.Duration(cfg.Holds.TimeoutSeconds) * time.Second
-			select {
-			case d := <-ch:
-				// Human decided.
-				decision := "block"
-				if d.Allow {
-					decision = "allow"
+			timer := time.NewTimer(time.Duration(cfg.Holds.TimeoutSeconds) * time.Second)
+			defer timer.Stop()
+			for {
+				select {
+				case d := <-ch:
+					decision := "block"
+					if d.Allow {
+						decision = "allow"
+					}
+					c.JSON(http.StatusOK, models.HoldResponse{
+						Decision: decision,
+						Reason:   d.Reason,
+						HoldID:   holdID,
+					})
+					return
+				case <-timer.C:
+					term, won := registry.TryBeginTerminalization(holdID)
+					if !won {
+						// Another in-process terminalizer is persisting the final
+						// status and will signal this waiter when it wins.
+						timer.Reset(100 * time.Millisecond)
+						continue
+					}
+					// Timeout owns the plugin response once the hold's configured
+					// wait budget has elapsed. Persist best-effort, matching the
+					// previous behavior if Timeplus is unavailable.
+					if err := writeHoldStatus(cfg, holdID, "timeout", "system", "hold timeout"); err != nil {
+						log.Printf("holds: writeHoldStatus timeout %s: %v", holdID, err)
+						// Nothing persisted — release the claim so a later sweep can
+						// retry rather than leaving a tombstone over a still-pending row.
+						term.Abort()
+					} else {
+						// Record the tombstone (this goroutine is the waiter; no
+						// external signal is coming) so a concurrent abandon/drain
+						// can't clobber the timeout during flush lag.
+						term.Commit(holdregistry.Decision{
+							Allow:  cfg.Holds.FailPolicy == "allow",
+							Reason: "AgentGuard hold timed out",
+						})
+					}
+					c.JSON(http.StatusOK, models.HoldResponse{
+						Decision: failPolicyToDecision(cfg.Holds.FailPolicy),
+						Reason:   "AgentGuard hold timed out",
+						HoldID:   holdID,
+					})
+					return
 				}
-				c.JSON(http.StatusOK, models.HoldResponse{
-					Decision: decision,
-					Reason:   d.Reason,
-					HoldID:   holdID,
-				})
-			case <-time.After(timeout):
-				// Timeout — apply fail-policy and write timeout row.
-				if err := writeHoldStatus(cfg, holdID, "timeout", "system", "hold timeout"); err != nil {
-					log.Printf("holds: writeHoldStatus timeout %s: %v", holdID, err)
-				}
-				c.JSON(http.StatusOK, models.HoldResponse{
-					Decision: failPolicyToDecision(cfg.Holds.FailPolicy),
-					Reason:   "AgentGuard hold timed out",
-					HoldID:   holdID,
-				})
 			}
-			return
 		}
 	}
 }
@@ -411,7 +443,56 @@ VALUES
 // approved / denied / timeout / abandoned).
 func writeHoldStatus(cfg *config.Config, holdID, status, decidedBy, decidedReason string) error {
 	now := time.Now().UTC().Format("2006-01-02 15:04:05.999")
-	sql := fmt.Sprintf(`
+	return tp.ExecHTTP(&cfg.Timeplus, buildHoldStatusSQL(holdID, status, decidedBy, decidedReason, now))
+}
+
+func terminalizeHold(
+	cfg *config.Config,
+	registry *holdregistry.Registry,
+	holdID, status, decidedBy, decidedReason string,
+	decision holdregistry.Decision,
+) (bool, error) {
+	if registry == nil {
+		return true, writeHoldStatus(cfg, holdID, status, decidedBy, decidedReason)
+	}
+	terminalization, won := registry.TryBeginTerminalization(holdID)
+	if !won {
+		return false, nil
+	}
+	if err := writeHoldStatus(cfg, holdID, status, decidedBy, decidedReason); err != nil {
+		terminalization.Abort()
+		return false, err
+	}
+	terminalization.Commit(decision)
+	return true, nil
+}
+
+// buildHoldStatusSQL appends a status-update row for a hold, copying its
+// immutable fields from the latest state and setting the new status/decision
+// metadata.
+//
+// The `AND status = 'pending'` guard skips the write when the hold has ALREADY
+// committed a terminal state: every caller transitions pending→terminal, so a
+// SELECT that yields no row means it was already resolved. This is the backstop
+// against stale overwrites of committed state — e.g. a late timeout overwriting
+// an abandon, or the startup reconcile clobbering an earlier decision.
+//
+// It is NOT a concurrency-atomic compare-and-set: streams are append-only and
+// these reads are flush-lagged, so two writers racing on the same still-pending
+// hold can both pass the guard and append competing terminal rows (last
+// updated_at wins). Single-writer-per-hold within a process is enforced by the
+// holdregistry claim (TryBeginTerminalization, which covers orphaned holds too);
+// this guard is the cross-restart / cross-process backstop on top of that.
+//
+// The guard MUST live in a nested subquery, not the outer SELECT. Proton (like
+// ClickHouse) makes SELECT-list aliases visible in WHERE, so a `'<new>' AS
+// status` projection in the same scope as `WHERE status = 'pending'` shadows the
+// real column — the predicate compares the literal new status to 'pending',
+// is always false, and the INSERT silently writes zero rows (every terminal
+// transition becomes a no-op). Filtering one level down, where `status` is still
+// the arg_max'd column, avoids the shadowing.
+func buildHoldStatusSQL(holdID, status, decidedBy, decidedReason, now string) string {
+	return fmt.Sprintf(`
 INSERT INTO agentguard_holds
   (hold_id, deployment_id, agent_id, session_id, run_id, tool_name, rule_id,
    severity, args_summary, message, created_at, status,
@@ -424,12 +505,13 @@ SELECT
   '%s' AS decided_at,
   '%s' AS decided_reason,
   '%s' AS updated_at
-FROM ` + holdsLatestSubquery + `
-WHERE hold_id = '%s'
+FROM (
+  SELECT * FROM `+holdsLatestSubquery+`
+  WHERE hold_id = '%s' AND status = 'pending'
+)
 LIMIT 1`,
 		status, escapeSQLStr(decidedBy), now, escapeSQLStr(decidedReason), now,
 		escapeSQLStr(holdID))
-	return tp.ExecHTTP(&cfg.Timeplus, sql)
 }
 
 // DecideHold handles POST /api/holds/:hold_id/decide.
@@ -465,17 +547,19 @@ func DecideHold(cfg *config.Config, registry *holdregistry.Registry, broadcaster
 		}
 
 		newStatus := body.Decision // "approved" | "denied"
-		if err := writeHoldStatus(cfg, holdID, newStatus, body.DecidedBy, body.DecidedReason); err != nil {
+		won, err := terminalizeHold(cfg, registry, holdID, newStatus, body.DecidedBy, body.DecidedReason, holdregistry.Decision{
+			Allow:  newStatus == "approved",
+			Reason: body.DecidedReason,
+		})
+		if err != nil {
 			log.Printf("holds: DecideHold writeHoldStatus: %v", err)
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("write decision: %v", err)})
 			return
 		}
-
-		// Wake the long-poll goroutine.
-		registry.Signal(holdID, holdregistry.Decision{
-			Allow:  newStatus == "approved",
-			Reason: body.DecidedReason,
-		})
+		if !won {
+			c.JSON(http.StatusConflict, gin.H{"error": "hold is already being resolved"})
+			return
+		}
 
 		// Push SSE so toasts/list refresh.
 		broadcaster.Publish(models.AlertWebhookPayload{
@@ -506,7 +590,7 @@ func ListHolds(cfg *config.Config) gin.HandlerFunc {
 SELECT hold_id, deployment_id, agent_id, session_id, run_id, tool_name,
        rule_id, severity, args_summary, message, created_at, status,
        decided_by, decided_at, decided_reason
-FROM ` + holdsLatestSubquery + `
+FROM `+holdsLatestSubquery+`
 WHERE status = '%s'
 ORDER BY created_at DESC
 LIMIT %d`, escapeSQLStr(status), limit)
@@ -581,7 +665,7 @@ func AbandonSession(cfg *config.Config, registry *holdregistry.Registry) gin.Han
 		sessionID := c.Param("session_id")
 
 		sql := fmt.Sprintf(`
-SELECT hold_id FROM ` + holdsLatestSubquery + `
+SELECT hold_id FROM `+holdsLatestSubquery+`
 WHERE session_id = '%s' AND status = 'pending'`, escapeSQLStr(sessionID))
 		rows, err := tp.Query(&cfg.Timeplus, sql)
 		if err != nil {
@@ -597,16 +681,21 @@ WHERE session_id = '%s' AND status = 'pending'`, escapeSQLStr(sessionID))
 		}
 
 		failAllow := cfg.Holds.FailPolicy == "allow"
+		abandoned := 0
 		for _, id := range holdIDs {
-			if err := writeHoldStatus(cfg, id, "abandoned", "system", "session ended"); err != nil {
-				log.Printf("holds: writeHoldStatus abandon %s: %v", id, err)
-			}
-			registry.Signal(id, holdregistry.Decision{
+			won, err := terminalizeHold(cfg, registry, id, "abandoned", "system", "session ended", holdregistry.Decision{
 				Allow:  failAllow,
 				Reason: "session ended",
 			})
+			if err != nil {
+				log.Printf("holds: writeHoldStatus abandon %s: %v", id, err)
+				continue
+			}
+			if won {
+				abandoned++
+			}
 		}
-		c.JSON(http.StatusOK, gin.H{"abandoned": len(holdIDs)})
+		c.JSON(http.StatusOK, gin.H{"abandoned": abandoned})
 	}
 }
 
@@ -628,13 +717,21 @@ func DrainHolds(cfg *config.Config, registry *holdregistry.Registry) gin.Handler
 			}
 		}
 		failAllow := cfg.Holds.FailPolicy == "allow"
+		drained := 0
 		for _, id := range holdIDs {
-			if err := writeHoldStatus(cfg, id, "abandoned", "operator", "drained"); err != nil {
+			won, err := terminalizeHold(cfg, registry, id, "abandoned", "operator", "drained", holdregistry.Decision{
+				Allow:  failAllow,
+				Reason: "drained",
+			})
+			if err != nil {
 				log.Printf("holds: writeHoldStatus drain %s: %v", id, err)
+				continue
 			}
-			registry.Signal(id, holdregistry.Decision{Allow: failAllow, Reason: "drained"})
+			if won {
+				drained++
+			}
 		}
-		c.JSON(http.StatusOK, gin.H{"drained": len(holdIDs)})
+		c.JSON(http.StatusOK, gin.H{"drained": drained})
 	}
 }
 
@@ -665,11 +762,17 @@ WHERE rule_id = '%s' AND status = 'pending'`, escapeSQLStr(ruleID))
 		if holdID == "" {
 			continue
 		}
-		if err := writeHoldStatus(cfg, holdID, "abandoned", "system", reason); err != nil {
+		won, err := terminalizeHold(cfg, registry, holdID, "abandoned", "system", reason, holdregistry.Decision{
+			Allow:  failAllow,
+			Reason: reason,
+		})
+		if err != nil {
 			log.Printf("holds: AbandonHoldsForRule writeHoldStatus(%s): %v", holdID, err)
 			continue
 		}
-		registry.Signal(holdID, holdregistry.Decision{Allow: failAllow, Reason: reason})
+		if !won {
+			continue
+		}
 		// Push hold_decided so NotificationsProvider drops the toast right away.
 		if broadcaster != nil {
 			broadcaster.Publish(models.AlertWebhookPayload{
@@ -689,6 +792,80 @@ WHERE rule_id = '%s' AND status = 'pending'`, escapeSQLStr(ruleID))
 	return count
 }
 
+// reconcile tuning: under Timeplus-CLI management AgentGuard can boot before
+// timeplusd is query-ready, so the startup reconcile retries until the query
+// succeeds once (or attempts run out — a restart will try again). Vars, not
+// consts, so tests can shrink them.
+var (
+	reconcileRetryInterval = 5 * time.Second
+	reconcileMaxAttempts   = 24 // ~2 min of timeplusd warmup
+)
+
+// buildOrphanedPendingHoldsSQL returns the IDs of holds still 'pending' that
+// were created before `before` — i.e. by a previous AgentGuard process. Holds
+// created at/after this process's start have a live waiter in the in-memory
+// registry, so the strict created_at threshold deliberately excludes them.
+func buildOrphanedPendingHoldsSQL(before time.Time) string {
+	return fmt.Sprintf(`SELECT hold_id FROM `+holdsLatestSubquery+`
+WHERE status = 'pending' AND created_at < '%s'`,
+		before.UTC().Format("2006-01-02 15:04:05.999"))
+}
+
+// ReconcileOrphanedHolds marks holds left 'pending' by a previous process as
+// 'abandoned', so they don't linger as actionable in the UI / hold list. A
+// hold becomes orphaned when the process that owned its in-memory waiter goes
+// away (crash, or a graceful-shutdown drain that signalled the plugin but did
+// not persist a terminal status — shutdown intentionally does no Timeplus
+// writes). The in-memory registry is empty at startup, so any pending hold
+// created before `startedAt` has no waiter and is safe to abandon; holds
+// created by this process are excluded by the threshold.
+//
+// Best-effort and availability-tolerant: retries until Timeplus is reachable
+// (timeplusd may still be warming up under the CLI), then runs a single pass.
+// Intended to run in a background goroutine — it never blocks or fails startup.
+func ReconcileOrphanedHolds(cfg *config.Config, registry *holdregistry.Registry, startedAt time.Time) {
+	sql := buildOrphanedPendingHoldsSQL(startedAt)
+	var rows []tp.Row
+	var err error
+	for attempt := 1; attempt <= reconcileMaxAttempts; attempt++ {
+		if rows, err = tp.Query(&cfg.Timeplus, sql); err == nil {
+			break
+		}
+		time.Sleep(reconcileRetryInterval)
+	}
+	if err != nil {
+		log.Printf("holds: reconcile gave up after %d attempts (Timeplus unreachable): %v", reconcileMaxAttempts, err)
+		return
+	}
+
+	// Route through terminalizeHold (not a raw writeHoldStatus) so reconcile
+	// participates in the same in-process single-writer claim as an operator
+	// decide/drain — otherwise a decision landing on the same orphaned hold while
+	// reconcile runs could append a competing terminal row (last updated_at wins).
+	failAllow := cfg.Holds.FailPolicy == "allow"
+	count := 0
+	for _, row := range rows {
+		id := parseStr(row["hold_id"])
+		if id == "" {
+			continue
+		}
+		won, werr := terminalizeHold(cfg, registry, id, "abandoned", "system", "reconciled on restart", holdregistry.Decision{
+			Allow:  failAllow,
+			Reason: "reconciled on restart",
+		})
+		if werr != nil {
+			log.Printf("holds: reconcile terminalize(%s): %v", id, werr)
+			continue
+		}
+		if won {
+			count++
+		}
+	}
+	if count > 0 {
+		log.Printf("holds: reconciled %d orphaned pending hold(s) on startup", count)
+	}
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 func getHoldByID(cfg *config.Config, holdID string) (*models.Hold, error) {
@@ -696,7 +873,7 @@ func getHoldByID(cfg *config.Config, holdID string) (*models.Hold, error) {
 SELECT hold_id, deployment_id, agent_id, session_id, run_id, tool_name,
        rule_id, severity, args_summary, message, created_at, status,
        decided_by, decided_at, decided_reason
-FROM ` + holdsLatestSubquery + `
+FROM `+holdsLatestSubquery+`
 WHERE hold_id = '%s'
 LIMIT 1`, escapeSQLStr(holdID))
 	rows, err := tp.Query(&cfg.Timeplus, sql)
