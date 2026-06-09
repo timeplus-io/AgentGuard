@@ -84,13 +84,13 @@ class AgentGuard:
     def enable_instrumentors(
         self,
         *,
-        enabled: list[str] = [],
-        disabled: list[str] = [],
+        enabled: list[str] | None = None,
+        disabled: list[str] | None = None
     ) -> None:
         _init_instrumentor(
             tracer_provider=self._provider,
-            enabled_instrumentors=enabled,
-            disabled_instrumentors=disabled,
+            enabled_instrumentors=enabled or [],
+            disabled_instrumentors=disabled or [],
         )
 
     def flush(self):
@@ -99,6 +99,8 @@ class AgentGuard:
 
     def shutdown(self):
         self.flush()
+        if self._provider is not None:
+            self._provider.shutdown()
 
     def start_span(
         self,
@@ -112,8 +114,8 @@ class AgentGuard:
         span = self.tracer.start_span(name, **kwargs)
         if session_id is not None:
             span.set_attribute("session.id", session_id)
-        elif parent_sesion_id := get_value("session.id") is not None:
-            span.set_attribute("session.id", str(parent_sesion_id))
+        elif (parent_session_id := get_value("session.id")) is not None:
+            span.set_attribute("session.id", str(parent_session_id))
 
         if run_id is not None:
             span.set_attribute("run.id", run_id)
@@ -148,10 +150,11 @@ class AgentGuard:
             if task_id is not None:
                 span.set_attribute("task.id", task_id)
 
-            yield span
-
-            if token is not None:
-                detach(token)
+            try:
+                yield span
+            finally:
+                if token is not None:
+                    detach(token)
 
     def _attach_context(self, session_id: str | None):
         if session_id is not None:

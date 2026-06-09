@@ -32,14 +32,14 @@ INSTRUMENTORS: list[InstrumentorInfo] = [
 
 def init(
     tracer_provider,
-    enabled_instrumentors: list[str] = [],
-    disabled_instrumentors: list[str] = [],
+    enabled_instrumentors: list[str],
+    disabled_instrumentors: list[str],
     tracing_enabled: bool = True,
 ) -> None:
     """
     Initialize AgentGuard auto-instrumentation.
     """
-    def filter(name, module):
+    def _should_enable(name, module):
         if enabled_instrumentors and name not in enabled_instrumentors:
             return False
 
@@ -52,7 +52,7 @@ def init(
         return True
 
     for instrumentor in INSTRUMENTORS:
-        if tracing_enabled and filter(instrumentor.name, instrumentor.module):
+        if tracing_enabled and _should_enable(instrumentor.name, instrumentor.module):
             try:
                 module = importlib.import_module(instrumentor.instrumentor_module)
                 instrumentor_class = getattr(module, instrumentor.instrumentor_class)

@@ -46,7 +46,6 @@ tests/
 
 - **Singleton** via `__new__` with double-checked locking for thread safety.
 - On first call, creates a `TracerProvider` with an `OTLPSpanExporter` and `BatchSpanProcessor`.
-- Registers the provider globally via `trace.set_tracer_provider`.
 - Exposes `self.tracer` — the raw OTel `Tracer` instance.
 - `start_span(name, session_id, run_id, task_id, **attributes)` — creates a span (must call `.end()`)
 - `start_as_current_span(name, session_id, run_id, task_id, **attributes)` — context manager (auto-ends)
@@ -120,8 +119,6 @@ with ag.start_as_current_span("child", context=ctx) as child:
 ## Conventions
 
 - Follow ruff rules: E, F, I, N, W, UP (import sorting, no unused vars, pyupgrade).
-- No comments unless necessary.
 - `requires-python >= 3.10, < 4`.
-- Opentelemetry deps pinned to `>= 1.42, < 2`.
 - Tests live in `tests/`, discovered by pytest via `pyproject.toml`.
 - Build system: hatchling.

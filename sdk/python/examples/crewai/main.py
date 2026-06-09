@@ -20,6 +20,9 @@ from pydantic import BaseModel, Field
 
 from agentguard import AgentGuard
 
+# LLM API Key
+API_KEY = ''
+
 # Disable CrewAI's built-in telemetry
 os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
 
@@ -34,7 +37,7 @@ ag.enable_instrumentors()
 
 llm = LLM(
     base_url="https://openrouter.ai/api/v1",
-    api_key="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",
+    api_key=API_KEY,
     model="openrouter/openrouter/free",
 )
 

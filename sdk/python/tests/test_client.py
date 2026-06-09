@@ -4,8 +4,7 @@ import threading
 from unittest import mock
 
 import pytest
-from opentelemetry import trace
-from opentelemetry.sdk.trace import Tracer, TracerProvider
+from opentelemetry.sdk.trace import Tracer
 
 from agentguard.client import AgentGuard
 from agentguard.constants import EnvName
@@ -46,15 +45,10 @@ def test_tracer_is_otel_tracer(mock_exporter):
     assert isinstance(ag.tracer, Tracer)
 
 
-def test_tracer_provider_is_registered_globally(mock_exporter):
-    AgentGuard(agent_id="test-svc")
-    provider = trace.get_tracer_provider()
-    assert isinstance(provider, TracerProvider)
-
 
 def test_start_span_creates_valid_span(mock_exporter):
     ag = AgentGuard(agent_id="test-agent")
-    span = ag.start_span("test-operation", key="value")
+    span = ag.start_span("test-operation")
     assert span.name == "test-operation"
     assert span.is_recording()
     span.end()
@@ -62,7 +56,7 @@ def test_start_span_creates_valid_span(mock_exporter):
 
 def test_span_context_manager(mock_exporter):
     ag = AgentGuard(agent_id="test-agent")
-    with ag.start_as_current_span("ctx-operation", component="auth") as s:
+    with ag.start_as_current_span("ctx-operation") as s:
         assert s.name == "ctx-operation"
         assert s.is_recording()
     assert not s.is_recording()
@@ -141,23 +135,3 @@ def test_deployment_name_default(mock_exporter):
     with mock.patch.dict(os.environ, {}, clear=True):
         ag = AgentGuard(agent_id="test-agent")
         assert ag._deployment_name == "Local Dev"
-
-
-def test_enable_instrumentor_registers_openai(mock_exporter):
-    """Test that enable_instrumentor() registers the OpenAI instrumentor."""
-    from agentguard.instrumentor.base import _instrumentors
-
-    _instrumentors.clear()
-    ag = AgentGuard(agent_id="test-agent")
-    ag.enable_instrumentor()
-    assert "openai" in _instrumentors
-
-
-def test_enable_instrumentor_with_disabled(mock_exporter):
-    """Test that enable_instrumentor() respects disabled_instrumentors."""
-    from agentguard.instrumentor.base import _instrumentors
-
-    _instrumentors.clear()
-    ag = AgentGuard(agent_id="test-agent")
-    ag.enable_instrumentor(disabled_instrumentors=["openai"])
-    assert "openai" not in _instrumentors

@@ -978,7 +978,7 @@ SELECT
     to_datetime64(end_time_ns / 1000000000, 3, 'UTC')
   )                                                                       AS event_time,
   coalesce(span_attributes['session.id'], trace_id)                       AS session_id,
-  session_id                                                              AS run_id,
+  coalesce(span_attributes['session.id'], trace_id)                       AS run_id,
   resource_attributes['agent.id']                                         AS agent_id,
   resource_attributes['deployment.id']                                    AS deployment_id,
   resource_attributes['deployment.name']                                  AS deployment_name,
