@@ -471,18 +471,22 @@ func terminalizeHold(
 // immutable fields from the latest state and setting the new status/decision
 // metadata.
 //
-// The `AND status = 'pending'` guard skips the write when the hold has ALREADY
-// committed a terminal state: every caller transitions pending→terminal, so a
-// SELECT that yields no row means it was already resolved. This is the backstop
-// against stale overwrites of committed state — e.g. a late timeout overwriting
-// an abandon, or the startup reconcile clobbering an earlier decision.
+// The `AND status = 'pending'` guard skips the write when a terminal state is
+// ALREADY VISIBLE to this read: every caller transitions pending→terminal, so a
+// SELECT that yields no row means it was already resolved. This suppresses
+// overwrites of already-visible terminal state — e.g. a late timeout finding an
+// abandon that has flushed.
 //
-// It is NOT a concurrency-atomic compare-and-set: streams are append-only and
-// these reads are flush-lagged, so two writers racing on the same still-pending
-// hold can both pass the guard and append competing terminal rows (last
-// updated_at wins). Single-writer-per-hold within a process is enforced by the
-// holdregistry claim (TryBeginTerminalization, which covers orphaned holds too);
-// this guard is the cross-restart / cross-process backstop on top of that.
+// It is NOT a cross-process guarantee, and NOT a concurrency-atomic
+// compare-and-set. The guard reads table(agentguard_holds) via holdsLatestSubquery,
+// a flush-lagged historical read: a terminal row another process committed just
+// before a fast restart may not be visible yet, so the guard sees 'pending',
+// passes, and this write wins arg_max (later updated_at) over the real decision.
+// Single-writer-per-hold WITHIN a process is enforced by the holdregistry claim
+// (TryBeginTerminalization, which covers orphaned holds too); the startup
+// reconcile only NARROWS the cross-process window with a settle delay
+// (reconcileSettleDelay), it does not close it. The durable fix is to stop
+// persisting reconcile's abandoned row — see ReconcileOrphanedHolds.
 //
 // The guard MUST live in a nested subquery, not the outer SELECT. Proton (like
 // ClickHouse) makes SELECT-list aliases visible in WHERE, so a `'<new>' AS
@@ -796,7 +800,19 @@ WHERE rule_id = '%s' AND status = 'pending'`, escapeSQLStr(ruleID))
 // timeplusd is query-ready, so the startup reconcile retries until the query
 // succeeds once (or attempts run out — a restart will try again). Vars, not
 // consts, so tests can shrink them.
+//
+// reconcileSettleDelay is a one-shot sleep before the FIRST query: it gives
+// terminal rows the previous process wrote just before this restart time to
+// flush into table() visibility before the sweep reads, so a freshly-decided
+// hold isn't read as still-'pending' and abandoned (which would clobber the real
+// decision — see buildHoldStatusSQL). This MITIGATES that race by narrowing the
+// window; it does NOT eliminate it — Timeplus gives no hard visibility bound, so
+// a flush slower than the delay reopens it. It also assumes a single active
+// AgentGuard process per deployment/storage: under HA, another running
+// instance's writes are not bounded by this process's startedAt. Set <= 0 to
+// skip the sleep (tests).
 var (
+	reconcileSettleDelay   = 10 * time.Second
 	reconcileRetryInterval = 5 * time.Second
 	reconcileMaxAttempts   = 24 // ~2 min of timeplusd warmup
 )
@@ -820,10 +836,39 @@ WHERE status = 'pending' AND created_at < '%s'`,
 // created before `startedAt` has no waiter and is safe to abandon; holds
 // created by this process are excluded by the threshold.
 //
+// A pending hold the previous process actually DECIDED just before a fast
+// restart can still be read as 'pending' here while its terminal row is
+// flush-lagged; reconcileSettleDelay narrows but does not close that window (and
+// the scheme assumes a single active process — see the var comment). Abandoning
+// such a hold corrupts persistent hold/audit state; it is NOT a deny-to-allow
+// bypass — the plugin's live enforcement already completed independently of this
+// row, via the real synchronous response or (if the process died before
+// responding) the plugin's own fail-policy.
+//
 // Best-effort and availability-tolerant: retries until Timeplus is reachable
 // (timeplusd may still be warming up under the CLI), then runs a single pass.
 // Intended to run in a background goroutine — it never blocks or fails startup.
 func ReconcileOrphanedHolds(cfg *config.Config, registry *holdregistry.Registry, startedAt time.Time) {
+	// Settle before the first read (see reconcileSettleDelay). Anchored at process
+	// start — this one-shot sleep runs up front — so the gap between the prior
+	// process's last terminal write (<= startedAt) and our first read is at least
+	// reconcileSettleDelay regardless of timeplusd warmup. Do NOT fold this into
+	// the retry-only path: a query that succeeds on the first attempt (timeplusd
+	// already up — the common "only AgentGuard restarted" case) is exactly when
+	// the flush-lag window is open and the settle matters.
+	//
+	// TODO(holds) #170: durable fix — stop persisting an 'abandoned' row here and
+	// derive orphan state at read time (list / get / actionable-hold), so there
+	// is no competing write to lose the arg_max race at all. Must stay back-compat
+	// with holds that already carry an explicit persisted 'abandoned' row. A
+	// deferred raw-timeline detector (after abandoning, scan table(agentguard_holds)
+	// for a now-visible approved/denied/timeout and WARN) belongs with that work,
+	// not here: an immediate re-read sits inside the same visibility window and is
+	// false reassurance.
+	if reconcileSettleDelay > 0 {
+		time.Sleep(reconcileSettleDelay)
+	}
+
 	sql := buildOrphanedPendingHoldsSQL(startedAt)
 	var rows []tp.Row
 	var err error

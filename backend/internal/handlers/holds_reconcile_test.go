@@ -1,6 +1,11 @@
 package handlers
 
 import (
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -47,14 +52,15 @@ func TestBuildOrphanedPendingHoldsSQL(t *testing.T) {
 	}
 }
 
-// The `AND status = 'pending'` guard skips the write when the hold has already
-// committed a terminal state: every caller transitions pending→terminal, so a
+// The `AND status = 'pending'` guard skips the write when a terminal state is
+// already VISIBLE to this read: every caller transitions pending→terminal, so a
 // late 'abandoned' write (startup reconcile, session-end drain, rule-disable)
-// finds no pending row and no-ops instead of clobbering a decision an operator
-// just made. It is NOT a concurrency-atomic compare-and-set — streams are
-// append-only and these reads are flush-lagged, so single-writer-per-hold is
-// enforced by the holdregistry claim; this guard is the cross-restart /
-// cross-process backstop on top of it.
+// that finds no pending row no-ops instead of clobbering an already-flushed
+// decision. It is NOT a cross-process guarantee — table() reads are flush-lagged,
+// so a terminal row committed just before a fast restart can be invisible here
+// and get clobbered; the startup reconcile only narrows that window with a settle
+// delay. Single-writer-per-hold WITHIN a process is enforced by the holdregistry
+// claim.
 func TestBuildHoldStatusSQLGuardsOnPending(t *testing.T) {
 	sql := buildHoldStatusSQL("h-1", "abandoned", "system", "reconciled on restart", "2026-06-08 03:21:41.123")
 	for _, frag := range []string{
@@ -88,10 +94,13 @@ func TestBuildHoldStatusSQLGuardsOnPending(t *testing.T) {
 // (timeplusd still warming up under the CLI): it retries a bounded number of
 // times and then returns — it must never block startup forever or panic.
 func TestReconcileOrphanedHoldsGivesUpWhenTimeplusUnreachable(t *testing.T) {
-	origInterval, origAttempts := reconcileRetryInterval, reconcileMaxAttempts
+	origDelay, origInterval, origAttempts := reconcileSettleDelay, reconcileRetryInterval, reconcileMaxAttempts
+	reconcileSettleDelay = 0 // skip the startup settle sleep
 	reconcileRetryInterval = time.Millisecond
 	reconcileMaxAttempts = 3
-	defer func() { reconcileRetryInterval, reconcileMaxAttempts = origInterval, origAttempts }()
+	defer func() {
+		reconcileSettleDelay, reconcileRetryInterval, reconcileMaxAttempts = origDelay, origInterval, origAttempts
+	}()
 
 	cfg := &config.Config{}
 	cfg.Timeplus.Host = "127.0.0.1"
@@ -108,4 +117,59 @@ func TestReconcileOrphanedHoldsGivesUpWhenTimeplusUnreachable(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("ReconcileOrphanedHolds blocked when Timeplus is unreachable")
 	}
+}
+
+// The settle delay must precede the FIRST Timeplus query, not just sit between
+// failed retries — a query that succeeds on the first attempt (timeplusd already
+// up) is exactly when the flush-lag window is open. We stand up a server that
+// timestamps its first request and assert it arrives no sooner than the delay.
+func TestReconcileOrphanedHoldsSettlesBeforeFirstQuery(t *testing.T) {
+	origDelay, origInterval, origAttempts := reconcileSettleDelay, reconcileRetryInterval, reconcileMaxAttempts
+	reconcileSettleDelay = 150 * time.Millisecond
+	reconcileRetryInterval = time.Millisecond
+	reconcileMaxAttempts = 1
+	defer func() {
+		reconcileSettleDelay, reconcileRetryInterval, reconcileMaxAttempts = origDelay, origInterval, origAttempts
+	}()
+
+	start := time.Now()
+	firstQuery := make(chan time.Duration, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case firstQuery <- time.Since(start):
+		default: // only record the first hit
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[]}`)
+	}))
+	defer srv.Close()
+
+	host, portStr, err := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatalf("parse test server url %q: %v", srv.URL, err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		t.Fatalf("parse test server port %q: %v", portStr, err)
+	}
+
+	cfg := &config.Config{}
+	cfg.Timeplus.Host = host
+	cfg.Timeplus.Port = port
+
+	done := make(chan struct{})
+	go func() {
+		ReconcileOrphanedHolds(cfg, holdregistry.New(), time.Now().UTC())
+		close(done)
+	}()
+
+	select {
+	case elapsed := <-firstQuery:
+		if elapsed < reconcileSettleDelay {
+			t.Errorf("first Timeplus query at %v, before settle delay %v — the sleep must precede the query", elapsed, reconcileSettleDelay)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ReconcileOrphanedHolds never queried Timeplus")
+	}
+	<-done
 }
