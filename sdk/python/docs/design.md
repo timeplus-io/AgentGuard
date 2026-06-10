@@ -137,7 +137,7 @@ with ag.start_as_current_span("child", context=ctx) as child:
 
 ```python
 ag.enable_instrumentors()  # instruments all detected providers
-ag.enable_instrumentors(disabled_instrumentors=["openai"])  # skip specific
+ag.enable_instrumentors(disabled=["openai"])  # skip specific
 ```
 
 **Supported instrumentors:**

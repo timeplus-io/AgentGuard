@@ -49,7 +49,7 @@ tests/
 - Exposes `self.tracer` — the raw OTel `Tracer` instance.
 - `start_span(name, session_id, run_id, task_id, **attributes)` — creates a span (must call `.end()`)
 - `start_as_current_span(name, session_id, run_id, task_id, **attributes)` — context manager (auto-ends)
-- `enable_instrumentor(disabled_instrumentors)` — auto-instrument detected LLM providers
+- `enable_instrumentors(disabled)` — auto-instrument detected LLM providers
 
 ### SpanContext (spans/span.py)
 
