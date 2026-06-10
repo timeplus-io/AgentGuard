@@ -1,13 +1,19 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"mime"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	// Embed IANA tzdata so the Proton native driver can resolve the server's
 	// timezone (e.g. America/Los_Angeles) during the handshake without relying
@@ -26,6 +32,8 @@ import (
 	"github.com/timeplus/agentguard/internal/web"
 )
 
+const gracefulShutdownTimeout = 5 * time.Second
+
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -38,6 +46,11 @@ func newRootCmd() *cobra.Command {
 		Use:   "agentguard",
 		Short: "AgentGuard — AI agent security monitoring platform",
 		RunE:  runServer,
+		// Runtime failures (bind error, config load) are operational, not usage
+		// mistakes — don't dump the full flag help. main() prints the error itself,
+		// so silence Cobra's own error print to avoid a duplicate line.
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 
 	flags := cmd.Flags()
@@ -214,5 +227,84 @@ func runServer(cmd *cobra.Command, args []string) error {
 		c.Data(http.StatusOK, mimeType, data)
 	})
 
-	return r.Run(fmt.Sprintf(":%d", cfg.Server.Port))
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Server.Port))
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
+	// Clean up holds left 'pending' by a previous process — a crash, or a
+	// graceful-shutdown drain that signalled the plugin but (by design) wrote
+	// nothing to Timeplus. startedAt is captured before Serve accepts any
+	// request, so the reconcile's strict created_at threshold can never touch a
+	// hold this process owns. Background + best-effort: never blocks startup.
+	if cfg.SetupComplete {
+		startedAt := time.Now().UTC()
+		go handlers.ReconcileOrphanedHolds(cfg, holdReg, startedAt)
+	}
+
+	shutdownCh, stopSignals := shutdownSignalChannel()
+	defer stopSignals()
+	return serveWithGracefulShutdown(ln, r, holdReg, cfg.Holds.FailPolicy, shutdownCh)
+}
+
+func shutdownSignalChannel() (<-chan os.Signal, func()) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	return ch, func() {
+		signal.Stop(ch)
+		close(ch)
+	}
+}
+
+func shutdownDecision(failPolicy string) holdregistry.Decision {
+	return holdregistry.Decision{
+		Allow:  failPolicy == "allow",
+		Reason: "AgentGuard is shutting down",
+	}
+}
+
+func serveWithGracefulShutdown(
+	ln net.Listener,
+	handler http.Handler,
+	holdReg *holdregistry.Registry,
+	failPolicy string,
+	shutdownCh <-chan os.Signal,
+) error {
+	baseCtx, cancelBase := context.WithCancel(context.Background())
+	defer cancelBase()
+
+	srv := &http.Server{
+		Handler: handler,
+		BaseContext: func(net.Listener) context.Context {
+			return baseCtx
+		},
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.Serve(ln)
+	}()
+
+	select {
+	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return fmt.Errorf("http server: %w", err)
+	case sig := <-shutdownCh:
+		fmt.Printf("AgentGuard shutting down (%s)\n", sig)
+	}
+
+	holdReg.Drain(shutdownDecision(failPolicy))
+	cancelBase()
+
+	ctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown http server: %w", err)
+	}
+	if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("http server: %w", err)
+	}
+	return nil
 }
