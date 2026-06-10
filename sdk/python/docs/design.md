@@ -5,7 +5,7 @@
 The AgentGuard Python SDK (`agentguard`) is an **OpenTelemetry-native observability and security SDK** for integrating third-party AI agent programs with AgentGuard. It provides:
 
 1. **Singleton tracer** — thread-safe OTel tracer with OTLP HTTP exporter
-2. **Auto-instrumentation** — `enable_instrumentor()` automatically traces OpenAI SDK and other LLM providers
+2. **Auto-instrumentation** — `enable_instrumentors()` automatically traces OpenAI SDK and other LLM providers
 3. **Manual span APIs** — context managers and helpers with session/run/task context
 > 2026-06-02 updates: Tried implement internal span tracer by session/run/task. But it turns out hard to maintain and integrate with otel context. 
 > Maybe should let user to implement the ops relationship by the ids. We only provide some util functions.
@@ -133,11 +133,11 @@ with ag.start_as_current_span("child", context=ctx) as child:
 
 ### 4. Auto-Instrumentation (`instrumentor/`)
 
-`enable_instrumentor()` automatically patches known LLM provider SDKs to capture spans:
+`enable_instrumentors()` automatically patches known LLM provider SDKs to capture spans:
 
 ```python
-ag.enable_instrumentor()  # instruments all detected providers
-ag.enable_instrumentor(disabled_instrumentors=["openai"])  # skip specific
+ag.enable_instrumentors()  # instruments all detected providers
+ag.enable_instrumentors(disabled_instrumentors=["openai"])  # skip specific
 ```
 
 **Supported instrumentors:**

@@ -929,7 +929,7 @@ SELECT
   resource_attributes['deployment.id']                              AS deployment_id,
   span_attributes['session.id']                                     AS session_id,
   ''                                                                AS run_id,
-  if (span_attributes['llm.provider'] != null,
+  if (map_contains(span_attributes, 'llm.provider'),
     span_attributes['llm.provider'],
     split_by_string('/', span_attributes['llm.model_name'])[1])     AS provider,
   split_by_string('/', span_attributes['llm.model_name'])[-1]       AS model,
@@ -950,7 +950,8 @@ SELECT
   to_json_string(span_attributes)                                   AS raw_event_data
 FROM otel_traces
 ARRAY JOIN array_cast(1, 2) AS idx
-WHERE event_type != 'other'
+WHERE _tp_time > earliest_ts()
+  AND event_type != 'other'
 `
 
 const ddlHookBridgeOpenInferenceMV = `
@@ -984,7 +985,7 @@ SELECT
   resource_attributes['deployment.name']                                  AS deployment_name,
   ''                                                                      AS session_key,
   span_attributes['tool.name']                                            AS tool_name,
-  if (span_attributes['llm.provider'] != null,
+  if (map_contains(span_attributes, 'llm.provider'),
     span_attributes['llm.provider'],
     split_by_string('/', span_attributes['llm.model_name'])[1])           AS provider,
   split_by_string('/', span_attributes['llm.model_name'])[-1]             AS model,
@@ -994,6 +995,7 @@ SELECT
   service_name                                                            AS agent_type
 FROM otel_traces
 ARRAY JOIN array_cast(1, 2) AS idx
+WHERE _tp_time > earliest_ts()
 `
 
 // ddlCIMMetricsHermesLlmMV extracts LLM token and latency metrics from
@@ -1073,7 +1075,7 @@ SELECT
     ['model', 'provider', 'trace_id'],
     [
       split_by_string('/', span_attributes['llm.model_name'])[-1],
-      if (span_attributes['llm.provider'] != null,
+      if (map_contains(span_attributes, 'llm.provider'),
         span_attributes['llm.provider'],
         split_by_string('/', span_attributes['llm.model_name'])[1]),
       trace_id
@@ -1090,7 +1092,8 @@ ARRAY JOIN
     to_float64_or_zero(span_attributes['llm.token_count.prompt_details.cache_read']),
     (end_time_ns - start_time_ns) / 1000000
   ]                                                                          AS metric_value
-WHERE span_attributes['openinference.span.kind'] = 'LLM'
+WHERE _tp_time > earliest_ts()
+  AND span_attributes['openinference.span.kind'] = 'LLM'
 `
 
 // ddlSessionAgentsStream is a mutable stream keyed by session_id that maps each

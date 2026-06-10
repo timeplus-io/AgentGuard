@@ -8,7 +8,7 @@ Python SDK for [AgentGuard](https://github.com/timeplus-io/agentguard) — a rea
 ## Features
 
 - **OpenTelemetry Tracing** — thread-safe singleton tracer with OTLP HTTP exporter
-- **Auto-Instrumentation** — `enable_instrumentor()` automatically traces OpenAI SDK calls
+- **Auto-Instrumentation** — `enable_instrumentors()` automatically traces OpenAI SDK calls
 - **Span Helpers** — manual and context-manager APIs with session/run/task context
 - **Agent Scope Tracking** — `SpanContext` ties spans to session_id, run_id, task_id
 
@@ -33,7 +33,7 @@ ag = AgentGuard(
 )
 
 # Enable auto-instrumentation for OpenAI SDK
-ag.enable_instrumentor()
+ag.enable_instrumentors()
 
 # Manual span (must call .end())
 span = ag.start_span(
