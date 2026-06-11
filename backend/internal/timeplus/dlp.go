@@ -320,6 +320,9 @@ func InitDLP(ctx context.Context, conn proton.Conn, dlpCfg config.DLPConfig, emi
 // POST /api/rules/sync so config changes (endpoint, models) can be applied
 // without re-running the setup wizard.
 func SyncDLP(timeplusCfg config.TimeplusConfig, dlpCfg config.DLPConfig) error {
+	if !dlpCfg.Enabled {
+		return nil // nothing to do; avoid an unnecessary connection
+	}
 	conn, err := connectOnce(&timeplusCfg)
 	if err != nil {
 		return fmt.Errorf("dlp sync: connect: %w", err)

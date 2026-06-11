@@ -151,6 +151,7 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	emit("running", "$ Provisioning Semantic DLP…")
 	if err := InitDLP(ctx, conn, dlpCfg, emit); err != nil {
 		log.Printf("timeplus init: warning provisioning DLP: %v (continuing)", err)
+		emit("ok", "  - Semantic DLP provisioning failed (non-fatal): "+err.Error())
 	}
 
 	emit("ok", "  ✓ All resources provisioned")
