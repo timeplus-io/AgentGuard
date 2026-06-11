@@ -111,13 +111,16 @@ UDF source (same pattern as the existing `notify_agentguard_udf` in
 | UDF | Signature | Behavior |
 |-----|-----------|----------|
 | `dlp_extract_entities` | `(content string) -> map(string, array(string))` | Regex + small trie dictionary for phone, email, IP, domain, secrets (AK/SK, tokens, private keys), person/company names. Secret values masked before return (`type:abcd…wxyz`). No network. Returns the entity map directly (Python dict → SQL map); the MV stores it as-is in `entities` — adding an entity type later touches only this UDF. |
-| `dlp_embed` | `(content string) -> array(float32)` | Batched `POST {base_url}/embeddings` with `{embedding_model}`. Truncates input to a safe length. On any error returns `[]` for the batch. |
-| `dlp_risk` | `(content string, entities map(string, array(string))) -> string` (JSON) | Internally gated: if the entity map is empty and no risk keywords match, returns `{"score":0,"tags":[]}` without network. Otherwise one batched chat-completion to `{risk_model}` asking for strict-JSON multi-label classification. On error, falls back to a heuristic score derived from entity counts. Returns `{"score":0.91,"tags":["PII","PHONE"]}`. |
+| `dlp_embed` | `(content string, role string) -> array(float32)` | Batched `POST {base_url}/embeddings` with `{embedding_model}`. The `role` param gates embedding inside Python (tool rows get `[]`) because SQL `if()` evaluates both branches. Truncates input to a safe length. On any error returns `[]` for the batch. |
+| `dlp_risk` | `(content string, entity_types array(string)) -> string` (JSON) | Receives `map_keys(entities)` rather than the map (simpler UDF param typing). Internally gated: if no entity types and no risk keywords match, returns `{"score":0,"tags":[]}` without network. Otherwise a chat-completion to `{risk_model}` asking for strict-JSON multi-label classification. On error, falls back to a heuristic score derived from entity types. Returns `{"score":0.91,"tags":["PII","PHONE"]}`. |
 
-If the deployed Timeplus version's Python UDFs cannot return
-`map(string, array(string))` directly, the fallback is returning a JSON string
-and casting in the MV (`cast(json, 'map(string, array(string))')` /
-`json_extract`); verified against the live server in sub-issue 1.
+**Verified against Timeplus Enterprise 3.2.1 (sub-issue 1, 2026-06-11):**
+Python UDFs return `map(string, array(string))` natively — no JSON-cast
+fallback needed (note: UDF *names* ending in `_map` are reserved). `SHOW
+FUNCTIONS` returns a `name` column over HTTP JSON. The `vector_similarity`
+HNSW index type does **not** exist on this build, so brute-force
+`cosine_distance` (which works) is the retrieval path until the instance is
+upgraded; the index DDL remains best-effort for newer builds.
 
 **Fail-open invariant:** no UDF may raise; enrichment degradation produces
 empty/zero columns, never blocks the MV. This matches the repo's recent
