@@ -75,11 +75,18 @@ func TestDLPAPIKeyFromEnv(t *testing.T) {
 	if cfg.DLP.APIKey != "sk-test-123" {
 		t.Errorf("APIKey = %q, want sk-test-123", cfg.DLP.APIKey)
 	}
+	if cfg.DLP.Enabled {
+		t.Error("Enabled should default to false when only DLP_API_KEY is set")
+	}
+	if cfg.DLP.EmbeddingModel != "text-embedding-3-small" {
+		t.Errorf("EmbeddingModel = %q, want default", cfg.DLP.EmbeddingModel)
+	}
 }
 
 func TestDLPSaveRoundTrip(t *testing.T) {
 	// Provision rewrites config.yaml via Save; the dlp section must survive
-	// (except api_key, which is never written).
+	// (except api_key, which is never written). Save must also not drop the
+	// holds section — both sections are written in the same call.
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	cfg, err := config.LoadFrom(filepath.Join(t.TempDir(), "missing.yaml"))
 	if err != nil {
@@ -88,6 +95,7 @@ func TestDLPSaveRoundTrip(t *testing.T) {
 	cfg.DLP.Enabled = true
 	cfg.DLP.BaseURL = "http://litellm:4000/v1"
 	cfg.DLP.APIKey = "sk-never-saved"
+	cfg.Holds.TimeoutSeconds = 120
 	if err := config.Save(cfg, path); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -100,5 +108,8 @@ func TestDLPSaveRoundTrip(t *testing.T) {
 	}
 	if reloaded.DLP.APIKey != "" {
 		t.Error("api_key must never be written to config.yaml")
+	}
+	if reloaded.Holds.TimeoutSeconds != 120 {
+		t.Errorf("Holds.TimeoutSeconds = %d after round-trip, want 120 (Save must not drop holds section)", reloaded.Holds.TimeoutSeconds)
 	}
 }
