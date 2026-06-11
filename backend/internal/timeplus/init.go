@@ -237,6 +237,8 @@ func createCIMMVs(ctx context.Context, conn proton.Conn, emit func(string, strin
 		{"mv_cim_claudecode", ddlCIMClaudeCodeMV},
 		{"mv_cim_openclaw", ddlCIMOpenClawMV},
 		{"mv_cim_hermes", ddlCIMHermesMV},
+		{"mv_cim_openinference", ddlCIMOpenInferenceMV},
+		{"mv_hook_bridge_openinference", ddlHookBridgeOpenInferenceMV},
 	}
 	for _, mv := range mvs {
 		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl, emit); err != nil {
@@ -271,6 +273,7 @@ func createCIMMetricsMVs(ctx context.Context, conn proton.Conn, emit func(string
 		{"mv_cim_metrics_claudecode_tools", ddlCIMMetricsClaudeCodeToolsMV},
 		{"mv_cim_metrics_hermes_llm", ddlCIMMetricsHermesLlmMV},
 		{"mv_cim_metrics_hermes_tools", ddlCIMMetricsHermesToolsMV},
+		{"mv_cim_metrics_openinference_llm", ddlCIMMetricsOpenInferenceLlmMV},
 	}
 	for _, mv := range mvs {
 		if err := execIfNotExists(ctx, conn, "view", mv.name, mv.ddl, emit); err != nil {
@@ -897,6 +900,104 @@ WHERE _tp_time > earliest_ts()
     'pre_tool_call', 'post_tool_call'
   )`
 
+const ddlCIMOpenInferenceMV = `
+CREATE MATERIALIZED VIEW mv_cim_openinference
+INTO agentguard_cim_event AS
+SELECT
+  multi_if(
+    idx = 1,
+    to_datetime64(start_time_ns / 1000000000, 3, 'UTC'),
+    to_datetime64(end_time_ns / 1000000000, 3, 'UTC')
+  )                                                                 AS event_time,
+  multi_if(
+    idx = 1,
+    multi_if(
+      span_attributes['openinference.span.kind'] == 'LLM', 'llm_request',
+      span_attributes['openinference.span.kind'] == 'TOOL', 'tool_invoke',
+      span_attributes['agentguard.span.kind'] == 'SESSION', 'session_start',
+      'other'
+    ),
+    multi_if(
+	  span_attributes['openinference.span.kind'] == 'LLM', 'llm_response',
+      span_attributes['openinference.span.kind'] == 'TOOL', 'tool_complete',
+      span_attributes['agentguard.span.kind'] == 'SESSION', 'session_end',
+      'other'
+    )
+  )                                                                 AS event_type,
+  service_name                                                      AS agent_type,
+  resource_attributes['agent.id']                                   AS agent_id,
+  resource_attributes['deployment.id']                              AS deployment_id,
+  span_attributes['session.id']                                     AS session_id,
+  ''                                                                AS run_id,
+  if (map_contains(span_attributes, 'llm.provider'),
+    span_attributes['llm.provider'],
+    split_by_string('/', span_attributes['llm.model_name'])[1])     AS provider,
+  split_by_string('/', span_attributes['llm.model_name'])[-1]       AS model,
+  span_attributes['tool.name']                                      AS tool_name,
+  span_attributes['tool.parameters']                                AS tool_input,
+  if (span_attributes['openinference.span.kind'] == 'TOOL',
+    span_attributes['output.value'], '')                            AS tool_result,
+  true                                                              AS tool_success,
+  if(idx = 2, int_div(end_time_ns - start_time_ns, 1000000), 0)     AS tool_duration_ms,
+  json_value(array_filter(
+      m -> json_value(m, '$.role') = 'user',
+      json_extract_array(span_attributes['input.value'], 'messages')
+    )[-1], '$.content')                                             AS user_message,
+  span_attributes['llm.output_messages.0.message.content']          AS assistant_message,
+  ''                                                                AS hook_decision,
+  ''                                                                AS block_reason,
+  span_name                                                         AS raw_hook_name,
+  to_json_string(span_attributes)                                   AS raw_event_data
+FROM otel_traces
+ARRAY JOIN array_cast(1, 2) AS idx
+WHERE _tp_time > earliest_ts()
+  AND event_type != 'other'
+`
+
+const ddlHookBridgeOpenInferenceMV = `
+CREATE MATERIALIZED VIEW mv_hook_bridge_openinference
+INTO agentguard_hook_events AS
+SELECT
+  multi_if(
+    idx = 1,
+    multi_if(
+      span_attributes['openinference.span.kind'] = 'LLM', 'llm_input',
+      span_attributes['openinference.span.kind'] = 'TOOL', 'before_tool_call',
+      span_attributes['agentguard.span.kind'] == 'SESSION', 'session_start',
+      'span_start'
+    ),
+    multi_if(
+      span_attributes['openinference.span.kind'] = 'LLM', 'llm_output',
+      span_attributes['openinference.span.kind'] = 'TOOL', 'after_tool_call',
+      span_attributes['agentguard.span.kind'] == 'SESSION', 'session_end',
+      'span_end'
+    )
+  )                                                                       AS hook_name,
+  multi_if(
+    idx = 1,
+    to_datetime64(start_time_ns / 1000000000, 3, 'UTC'),
+    to_datetime64(end_time_ns / 1000000000, 3, 'UTC')
+  )                                                                       AS event_time,
+  coalesce(span_attributes['session.id'], trace_id)                       AS session_id,
+  coalesce(span_attributes['session.id'], trace_id)                       AS run_id,
+  resource_attributes['agent.id']                                         AS agent_id,
+  resource_attributes['deployment.id']                                    AS deployment_id,
+  resource_attributes['deployment.name']                                  AS deployment_name,
+  ''                                                                      AS session_key,
+  span_attributes['tool.name']                                            AS tool_name,
+  if (map_contains(span_attributes, 'llm.provider'),
+    span_attributes['llm.provider'],
+    split_by_string('/', span_attributes['llm.model_name'])[1])           AS provider,
+  split_by_string('/', span_attributes['llm.model_name'])[-1]             AS model,
+  'observe'                                                               AS hook_decision,
+  ''                                                                      AS block_reason,
+  to_json_string(span_attributes)                                         AS event_data,
+  service_name                                                            AS agent_type
+FROM otel_traces
+ARRAY JOIN array_cast(1, 2) AS idx
+WHERE _tp_time > earliest_ts()
+`
+
 // ddlCIMMetricsHermesLlmMV extracts LLM token and latency metrics from
 // post_api_request events, which carry the usage dict with token counts and
 // api_duration in seconds. Reads directly from agentguard_hook_events so that
@@ -956,6 +1057,44 @@ ARRAY JOIN
 WHERE _tp_time > earliest_ts()
   AND agent_type = 'hermes'
   AND event_type = 'tool_complete'`
+
+// ddlCIMMetricsOpenInferenceLlmMV extracts LLM token metrics from
+// OpenInference OTel traces (openinference.span.kind = 'LLM').
+const ddlCIMMetricsOpenInferenceLlmMV = `
+CREATE MATERIALIZED VIEW mv_cim_metrics_openinference_llm
+INTO agentguard_cim_metrics AS
+SELECT
+  to_datetime64(end_time_ns / 1000000000, 3, 'UTC')                          AS event_time,
+  metric_name,
+  metric_value,
+  service_name                                                               AS agent_type,
+  resource_attributes['agent.id']                                            AS agent_id,
+  resource_attributes['deployment.id']                                       AS deployment_id,
+  span_attributes['session.id']                                              AS session_id,
+  map_cast(
+    ['model', 'provider', 'trace_id'],
+    [
+      split_by_string('/', span_attributes['llm.model_name'])[-1],
+      if (map_contains(span_attributes, 'llm.provider'),
+        span_attributes['llm.provider'],
+        split_by_string('/', span_attributes['llm.model_name'])[1]),
+      trace_id
+    ]
+  )                                                                          AS tags
+FROM otel_traces
+ARRAY JOIN
+  ['llm.call', 'llm.total_tokens', 'llm.input_tokens', 'llm.output_tokens', 'llm.cache_read_tokens', 'llm.latency_ms'] AS metric_name,
+  [
+    to_float64(1),
+    to_float64_or_zero(span_attributes['llm.token_count.total']),
+    to_float64_or_zero(span_attributes['llm.token_count.prompt']),
+    to_float64_or_zero(span_attributes['llm.token_count.completion']),
+    to_float64_or_zero(span_attributes['llm.token_count.prompt_details.cache_read']),
+    (end_time_ns - start_time_ns) / 1000000
+  ]                                                                          AS metric_value
+WHERE _tp_time > earliest_ts()
+  AND span_attributes['openinference.span.kind'] = 'LLM'
+`
 
 // ddlSessionAgentsStream is a mutable stream keyed by session_id that maps each
 // Claude Code session to its agent_id and deployment_id (set by the plugin via

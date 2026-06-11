@@ -1,0 +1,8 @@
+agentguard
+crewai>=1.10.1
+crewai-tools>=1.10.1
+openinference-instrumentation-crewai
+openinference-instrumentation-openai
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp
