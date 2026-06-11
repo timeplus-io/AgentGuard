@@ -634,6 +634,12 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 			results = append(results, res)
 		}
 
+		// Best-effort DLP re-provision so endpoint/model config changes apply
+		// without the setup wizard. Failure must not fail rule-MV sync.
+		if err := tp.SyncDLP(cfg.Timeplus, cfg.DLP); err != nil {
+			log.Printf("rules: SyncMVs DLP sync: %v", err)
+		}
+
 		c.JSON(http.StatusOK, gin.H{"results": results})
 	}
 }

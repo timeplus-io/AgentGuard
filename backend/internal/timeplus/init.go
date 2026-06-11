@@ -44,7 +44,7 @@ func bt(s string) string { return btReplacer.Replace(s) }
 // place. It is called from the setup wizard (not at server startup), so it
 // receives explicit credentials rather than reading them from the config file.
 // emit is a progress-reporting callback; if nil, progress is logged instead.
-func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntries []catalog.Entry, emit func(status, msg string)) error {
+func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntries []catalog.Entry, dlpCfg config.DLPConfig, emit func(status, msg string)) error {
 	if emit == nil {
 		emit = func(status, msg string) { log.Printf("[provision:%s] %s", status, msg) }
 	}
@@ -146,6 +146,11 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	// Setup holds storage (stream + MV).
 	if err := SetupHoldsStorage(ctx, conn, emit); err != nil {
 		log.Printf("timeplus: holds storage setup failed: %v (continuing — /api/holds will return 503)", err)
+	}
+
+	emit("running", "$ Provisioning Semantic DLP…")
+	if err := InitDLP(ctx, conn, dlpCfg, emit); err != nil {
+		log.Printf("timeplus init: warning provisioning DLP: %v (continuing)", err)
 	}
 
 	emit("ok", "  ✓ All resources provisioned")

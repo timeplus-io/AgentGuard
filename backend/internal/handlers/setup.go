@@ -106,7 +106,7 @@ func Provision(cfg *config.Config, mgr *catalog.Manager, store *auth.SessionStor
 			Password:   body.Password,
 		}
 
-		if err := tp.Init(timeplusCfg, agentGuardURL, mgr.All(), sendEvent); err != nil {
+		if err := tp.Init(timeplusCfg, agentGuardURL, mgr.All(), cfg.DLP, sendEvent); err != nil {
 			sendEvent("error", "Setup failed: "+err.Error())
 			return
 		}
