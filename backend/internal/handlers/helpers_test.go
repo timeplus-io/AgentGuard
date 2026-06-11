@@ -78,6 +78,10 @@ func TestParseInt64(t *testing.T) {
 		{"json.Number max uint64 wraps", json.Number("18446744073709551615"), int64(-1)},
 		{"int64", int64(42), 42},
 		{"uint64", uint64(42), 42},
+		// String case: Timeplus FORMAT JSON quotes 64-bit integers as strings.
+		{"string decimal", "42", 42},
+		{"string negative", "-7", -7},
+		{"string bogus", "bogus", 0},
 		{"nil", nil, 0},
 	}
 	for _, c := range cases {

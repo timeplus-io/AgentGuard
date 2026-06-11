@@ -49,7 +49,8 @@ func parseInt(v any) int {
 	return 0
 }
 
-// parseInt64 handles json.Number / float64 / int64 / uint64 from Proton rows.
+// parseInt64 handles json.Number / float64 / int64 / uint64 / string from Proton rows.
+// The string case covers FORMAT JSON responses where Timeplus quotes 64-bit integers.
 func parseInt64(v any) int64 {
 	switch n := v.(type) {
 	case float64:
@@ -62,6 +63,9 @@ func parseInt64(v any) int64 {
 		if u, err := strconv.ParseUint(string(n), 10, 64); err == nil {
 			return int64(u)
 		}
+	case string:
+		i, _ := strconv.ParseInt(n, 10, 64)
+		return i
 	case int64:
 		return n
 	case uint64:
