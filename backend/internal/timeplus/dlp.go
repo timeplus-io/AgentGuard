@@ -35,10 +35,12 @@ CREATE STREAM IF NOT EXISTS agentguard_dlp_enriched
 // HNSW index support/syntax varies across Timeplus Enterprise versions; if
 // every candidate fails, queries fall back to brute-force cosine_distance,
 // which is acceptable at MVP scale (spec §2.1).
+// Both candidates use IF NOT EXISTS so re-runs are no-ops when the index
+// already exists (e.g. repeated calls to InitDLP / SyncDLP).
 func dlpIndexDDLCandidates(dim int) []string {
 	return []string{
-		fmt.Sprintf(`ALTER STREAM agentguard_dlp_enriched ADD INDEX idx_dlp_embedding embedding TYPE vector_similarity('hnsw', 'cosineDistance', %d)`, dim),
-		fmt.Sprintf(`ALTER STREAM agentguard_dlp_enriched ADD INDEX idx_dlp_embedding embedding TYPE vector_similarity('hnsw', 'cosine_distance', %d)`, dim),
+		fmt.Sprintf(`ALTER STREAM agentguard_dlp_enriched ADD INDEX IF NOT EXISTS idx_dlp_embedding embedding TYPE vector_similarity('hnsw', 'cosineDistance', %d)`, dim),
+		fmt.Sprintf(`ALTER STREAM agentguard_dlp_enriched ADD INDEX IF NOT EXISTS idx_dlp_embedding embedding TYPE vector_similarity('hnsw', 'cosine_distance', %d)`, dim),
 	}
 }
 
@@ -96,6 +98,11 @@ def dlp_extract_entities(contents):
 $$`
 
 // dlpEmbedUDFTemplate interpolation order: BaseURL, APIKey, EmbeddingModel.
+//
+// Security note: cfg.APIKey is embedded verbatim in the UDF source, so
+// SHOW FUNCTIONS exposes it to anyone with Timeplus DDL access. Known,
+// accepted limitation (spec §3.2): Timeplus credentials already gate the
+// raw conversation content; use a scoped key for the model endpoint.
 const dlpEmbedUDFTemplate = `CREATE OR REPLACE FUNCTION dlp_embed(content string, role string)
 RETURNS array(float32)
 LANGUAGE PYTHON AS $$
@@ -135,7 +142,7 @@ func DLPEmbedUDFDDL(cfg config.DLPConfig) string {
 	return fmt.Sprintf(dlpEmbedUDFTemplate, cfg.BaseURL, cfg.APIKey, cfg.EmbeddingModel)
 }
 
-// dlpRiskUDFTemplate interpolation order: BaseURL, APIKey, RiskModel.
+// dlpRiskUDFTemplate interpolation order: BaseURL, APIKey, RiskModel. Same API-key exposure note as dlpEmbedUDFTemplate.
 const dlpRiskUDFTemplate = `CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string))
 RETURNS string
 LANGUAGE PYTHON AS $$
@@ -287,16 +294,17 @@ func InitDLP(ctx context.Context, conn proton.Conn, dlpCfg config.DLPConfig, emi
 	}
 
 	emit("running", "$ Creating DLP enrichment UDFs…")
-	for name, ddl := range map[string]string{
-		"dlp_extract_entities": ddlDLPEntitiesUDF,
-		"dlp_embed":            DLPEmbedUDFDDL(dlpCfg),
-		"dlp_risk":             DLPRiskUDFDDL(dlpCfg),
-	} {
-		if err := conn.Exec(ctx, ddl); err != nil {
-			emit("error", "  ✗ "+name+": "+err.Error())
-			return fmt.Errorf("dlp: creating UDF %s: %w", name, err)
+	udfs := []struct{ name, ddl string }{
+		{"dlp_extract_entities", ddlDLPEntitiesUDF},
+		{"dlp_embed", DLPEmbedUDFDDL(dlpCfg)},
+		{"dlp_risk", DLPRiskUDFDDL(dlpCfg)},
+	}
+	for _, u := range udfs {
+		if err := conn.Exec(ctx, u.ddl); err != nil {
+			emit("error", "  ✗ "+u.name+": "+err.Error())
+			return fmt.Errorf("dlp: creating UDF %s: %w", u.name, err)
 		}
-		emit("ok", "  ✓ "+name)
+		emit("ok", "  ✓ "+u.name)
 	}
 
 	emit("running", "$ Creating DLP enrichment materialized view…")
