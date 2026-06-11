@@ -3,7 +3,6 @@ package handlers
 import (
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/auth"
@@ -13,19 +12,6 @@ import (
 )
 
 var dlpUDFNames = []string{"dlp_extract_entities", "dlp_embed", "dlp_risk"}
-
-// dlpRowInt64 reads a numeric column that Timeplus may return as string, float64,
-// or json.Number depending on type/format. Used for count columns in the DLP
-// status query where quoted-string encoding is also possible.
-func dlpRowInt64(row map[string]any, key string) int64 {
-	switch v := row[key].(type) {
-	case string:
-		n, _ := strconv.ParseInt(v, 10, 64)
-		return n
-	default:
-		return parseInt64(row[key])
-	}
-}
 
 // DLPStatusHandler reports Semantic DLP provisioning + enrichment health.
 func DLPStatusHandler(cfg *config.Config) gin.HandlerFunc {
@@ -79,9 +65,9 @@ func DLPStatusHandler(cfg *config.Config) gin.HandlerFunc {
 				       count_if(risk_score > 0) AS flagged
 				FROM table(agentguard_dlp_enriched)`)
 			if err == nil && len(counts) == 1 {
-				status.TotalRows = dlpRowInt64(counts[0], "total")
-				status.EmbeddedRows = dlpRowInt64(counts[0], "embedded")
-				status.FlaggedRows = dlpRowInt64(counts[0], "flagged")
+				status.TotalRows = parseInt64(counts[0]["total"])
+				status.EmbeddedRows = parseInt64(counts[0]["embedded"])
+				status.FlaggedRows = parseInt64(counts[0]["flagged"])
 				if status.TotalRows > 0 {
 					status.EmbeddingCoverage = float64(status.EmbeddedRows) / float64(status.TotalRows)
 				}

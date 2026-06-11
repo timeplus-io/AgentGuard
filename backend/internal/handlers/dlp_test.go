@@ -46,6 +46,9 @@ func TestDLPStatusDisabled(t *testing.T) {
 	if got.Enabled {
 		t.Error("Enabled should be false")
 	}
+	if len(got.UDFs) != 3 {
+		t.Errorf("UDFs map should list all 3 tracked UDFs even when disabled, got %d", len(got.UDFs))
+	}
 }
 
 func TestDLPStatusHealthy(t *testing.T) {
@@ -89,8 +92,8 @@ func TestDLPStatusHealthy(t *testing.T) {
 			t.Errorf("UDF %s should be present", fn)
 		}
 	}
-	if got.TotalRows != 100 || got.EmbeddedRows != 80 {
-		t.Errorf("rows = %d/%d", got.TotalRows, got.EmbeddedRows)
+	if got.TotalRows != 100 || got.EmbeddedRows != 80 || got.FlaggedRows != 7 {
+		t.Errorf("rows = total %d, embedded %d, flagged %d (want 100/80/7)", got.TotalRows, got.EmbeddedRows, got.FlaggedRows)
 	}
 	if got.EmbeddingCoverage < 0.79 || got.EmbeddingCoverage > 0.81 {
 		t.Errorf("coverage = %f, want 0.80", got.EmbeddingCoverage)
