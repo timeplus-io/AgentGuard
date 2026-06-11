@@ -19,7 +19,8 @@ func testDLPCfg() config.DLPConfig {
 	}
 }
 
-// assertCleanDDL fails on leftover fmt verbs or failed interpolation markers.
+// assertCleanDDL fails on leftover fmt verbs, failed interpolation markers,
+// or unreplaced {{...}} template placeholders.
 func assertCleanDDL(t *testing.T, name, ddl string) {
 	t.Helper()
 	if strings.Contains(ddl, "%!") {
@@ -27,6 +28,23 @@ func assertCleanDDL(t *testing.T, name, ddl string) {
 	}
 	if strings.Contains(ddl, "%s") || strings.Contains(ddl, "%d") {
 		t.Errorf("%s: leftover fmt verb in DDL", name)
+	}
+	if strings.Contains(ddl, "{{") || strings.Contains(ddl, "}}") {
+		t.Errorf("%s: unreplaced template placeholder in DDL", name)
+	}
+}
+
+func TestDLPUDFDDLPercentSafe(t *testing.T) {
+	cfg := testDLPCfg()
+	cfg.APIKey = "sk-100%weird%2Fkey"
+	for name, ddl := range map[string]string{
+		"embed": DLPEmbedUDFDDL(cfg),
+		"risk":  DLPRiskUDFDDL(cfg),
+	} {
+		assertCleanDDL(t, name, ddl)
+		if !strings.Contains(ddl, `API_KEY = "sk-100%weird%2Fkey"`) {
+			t.Errorf("%s: percent-bearing API key not interpolated verbatim", name)
+		}
 	}
 }
 

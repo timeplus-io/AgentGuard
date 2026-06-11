@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	proton "github.com/timeplus-io/proton-go-driver/v2"
 	"github.com/timeplus/agentguard/internal/config"
@@ -26,7 +27,7 @@ CREATE STREAM IF NOT EXISTS agentguard_dlp_enriched
   tool_name      string,
   content        string,
   entities       map(string, array(string)),
-  risk_tags      array(string),
+  risk_tags      array(low_cardinality(string)),
   risk_score     float64,
   embedding      array(float32)
 )`
@@ -97,7 +98,7 @@ def dlp_extract_entities(contents):
     return out
 $$`
 
-// dlpEmbedUDFTemplate interpolation order: BaseURL, APIKey, EmbeddingModel.
+// dlpEmbedUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}.
 //
 // Security note: cfg.APIKey is embedded verbatim in the UDF source, so
 // SHOW FUNCTIONS exposes it to anyone with Timeplus DDL access. Known,
@@ -108,9 +109,9 @@ RETURNS array(float32)
 LANGUAGE PYTHON AS $$
 import requests
 
-BASE_URL = "%s"
-API_KEY = "%s"
-MODEL = "%s"
+BASE_URL = "{{BASE_URL}}"
+API_KEY = "{{API_KEY}}"
+MODEL = "{{MODEL}}"
 MAX_CHARS = 8000
 
 def dlp_embed(contents, roles):
@@ -139,19 +140,23 @@ def dlp_embed(contents, roles):
 $$`
 
 func DLPEmbedUDFDDL(cfg config.DLPConfig) string {
-	return fmt.Sprintf(dlpEmbedUDFTemplate, cfg.BaseURL, cfg.APIKey, cfg.EmbeddingModel)
+	return strings.NewReplacer(
+		"{{BASE_URL}}", cfg.BaseURL,
+		"{{API_KEY}}", cfg.APIKey,
+		"{{MODEL}}", cfg.EmbeddingModel,
+	).Replace(dlpEmbedUDFTemplate)
 }
 
-// dlpRiskUDFTemplate interpolation order: BaseURL, APIKey, RiskModel. Same API-key exposure note as dlpEmbedUDFTemplate.
+// dlpRiskUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}. Same API-key exposure note as dlpEmbedUDFTemplate.
 const dlpRiskUDFTemplate = `CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string))
 RETURNS string
 LANGUAGE PYTHON AS $$
 import json
 import requests
 
-BASE_URL = "%s"
-API_KEY = "%s"
-MODEL = "%s"
+BASE_URL = "{{BASE_URL}}"
+API_KEY = "{{API_KEY}}"
+MODEL = "{{MODEL}}"
 
 KEYWORDS = ('password', 'secret', 'api key', 'apikey', 'token', 'credential',
             'customer', 'contact list', 'address book', 'export', 'confidential',
@@ -206,7 +211,11 @@ def dlp_risk(contents, entity_types_list):
 $$`
 
 func DLPRiskUDFDDL(cfg config.DLPConfig) string {
-	return fmt.Sprintf(dlpRiskUDFTemplate, cfg.BaseURL, cfg.APIKey, cfg.RiskModel)
+	return strings.NewReplacer(
+		"{{BASE_URL}}", cfg.BaseURL,
+		"{{API_KEY}}", cfg.APIKey,
+		"{{MODEL}}", cfg.RiskModel,
+	).Replace(dlpRiskUDFTemplate)
 }
 
 // ---------- Materialized view ----------

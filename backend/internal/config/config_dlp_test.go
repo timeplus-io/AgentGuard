@@ -95,6 +95,7 @@ func TestDLPSaveRoundTrip(t *testing.T) {
 	cfg.DLP.Enabled = true
 	cfg.DLP.BaseURL = "http://litellm:4000/v1"
 	cfg.DLP.APIKey = "sk-never-saved"
+	cfg.DLP.EmbeddingDim = 8
 	cfg.Holds.TimeoutSeconds = 120
 	if err := config.Save(cfg, path); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -105,6 +106,9 @@ func TestDLPSaveRoundTrip(t *testing.T) {
 	}
 	if !reloaded.DLP.Enabled || reloaded.DLP.BaseURL != "http://litellm:4000/v1" {
 		t.Errorf("dlp section lost on Save round-trip: %+v", reloaded.DLP)
+	}
+	if reloaded.DLP.EmbeddingDim != 8 {
+		t.Errorf("EmbeddingDim = %d after round-trip, want 8", reloaded.DLP.EmbeddingDim)
 	}
 	if reloaded.DLP.APIKey != "" {
 		t.Error("api_key must never be written to config.yaml")

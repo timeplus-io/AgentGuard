@@ -2,16 +2,18 @@
 """Mock OpenAI-compatible endpoint for Semantic DLP verification.
 
 Serves deterministic responses with no dependencies:
-  POST /v1/embeddings        -> 8-dim vectors derived from input hash
+  POST /v1/embeddings        -> DIM-dim vectors derived from input hash
   POST /v1/chat/completions  -> fixed risk JSON / canned completion
 
-Usage: python3 backend/scripts/dlp_mock_model.py [port]   (default 4000)
+Usage: python3 backend/scripts/dlp_mock_model.py [port] [dim]   (default 4000, 8)
 """
 import hashlib
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+# DIM defaults to 8 for fast verification; set dlp.embedding_dim to match in
+# config.yaml when using this mock.
 DIM = 8
 
 
@@ -48,5 +50,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 4000
+    if len(sys.argv) > 2:
+        DIM = int(sys.argv[2])
     print(f"mock model endpoint on :{port} (dim={DIM})")
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()
