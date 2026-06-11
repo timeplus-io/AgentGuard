@@ -43,13 +43,7 @@ CREATE STREAM agentguard_dlp_enriched
   model           low_cardinality(string),
   tool_name       string,                        -- '' except role='tool'
   content         string,                        -- message text (PII-bearing; behind auth)
-  entity_phone    array(string),
-  entity_email    array(string),
-  entity_ip       array(string),
-  entity_domain   array(string),
-  entity_person   array(string),
-  entity_company  array(string),
-  entity_secret   array(string),                 -- masked: type + first/last 4 chars only
+  entities        map(string, array(string)),    -- entity type -> values; secrets masked
   risk_tags       array(low_cardinality(string)),
   risk_score      float64,
   embedding       array(float32)                 -- [] for tool rows and on enrichment failure
@@ -61,6 +55,18 @@ Differences from the research doc (§5.2): no `user_uid`/`user_name`/
 "who" in Phase 1 means agent + deployment + session. No `attachments` column —
 CIM has no attachment field. Both can be added in Phase 2 without migration
 pain (new columns).
+
+**Entities as a map, not fixed columns.** The research doc used one array
+column per entity type (`entity_phone`, `entity_email`, …). This spec uses a
+single `entities map(string, array(string))` instead: the entity taxonomy is
+the part most likely to evolve (org-specific dictionaries, new secret
+formats), and with a map a new entity type is a **UDF-only change** — no
+`ALTER STREAM`, no MV rebuild. Canonical keys in Phase 1: `phone`, `email`,
+`ip`, `domain`, `person`, `company`, `secret` (values under `secret` are
+masked: type + first/last 4 chars). Query patterns:
+`not empty(entities['phone'])`, `has(entities['person'], '张三')`,
+`map_keys(entities)` for type filters. The per-type filter cost of a map is
+marginally higher than dedicated columns, which is irrelevant at MVP scale.
 
 **Vector index:** after creating the stream, provisioning attempts an HNSW
 vector-similarity index on `embedding` (cosine). If the deployed Timeplus
@@ -92,7 +98,7 @@ agentguard_cim_event ──► mv_dlp_enrich ──► agentguard_dlp_enriched
                               │
                               ├─ dlp_extract_entities(content)        L0/L1, pure Python
                               ├─ dlp_embed(content)                   L2, API callout
-                              └─ dlp_risk(content, entities_json)     L3, gated API callout
+                              └─ dlp_risk(content, entities)          L3, gated API callout
 ```
 
 ### 3.2 UDFs (Python, `CREATE OR REPLACE FUNCTION ... LANGUAGE PYTHON`)
@@ -104,9 +110,14 @@ UDF source (same pattern as the existing `notify_agentguard_udf` in
 
 | UDF | Signature | Behavior |
 |-----|-----------|----------|
-| `dlp_extract_entities` | `(content string) -> string` (JSON) | Regex + small trie dictionary for phone, email, IP, domain, secrets (AK/SK, tokens, private keys), person/company names. Secret values masked before return (`type:abcd…wxyz`). No network. Returns `{"phone":[…],"email":[…],…}`; the MV projects per-type array columns from it. |
+| `dlp_extract_entities` | `(content string) -> map(string, array(string))` | Regex + small trie dictionary for phone, email, IP, domain, secrets (AK/SK, tokens, private keys), person/company names. Secret values masked before return (`type:abcd…wxyz`). No network. Returns the entity map directly (Python dict → SQL map); the MV stores it as-is in `entities` — adding an entity type later touches only this UDF. |
 | `dlp_embed` | `(content string) -> array(float32)` | Batched `POST {base_url}/embeddings` with `{embedding_model}`. Truncates input to a safe length. On any error returns `[]` for the batch. |
-| `dlp_risk` | `(content string, entities_json string) -> string` (JSON) | Internally gated: if no entities and no risk keywords, returns `{"score":0,"tags":[]}` without network. Otherwise one batched chat-completion to `{risk_model}` asking for strict-JSON multi-label classification. On error, falls back to a heuristic score derived from entity counts. Returns `{"score":0.91,"tags":["PII","PHONE"]}`. |
+| `dlp_risk` | `(content string, entities map(string, array(string))) -> string` (JSON) | Internally gated: if the entity map is empty and no risk keywords match, returns `{"score":0,"tags":[]}` without network. Otherwise one batched chat-completion to `{risk_model}` asking for strict-JSON multi-label classification. On error, falls back to a heuristic score derived from entity counts. Returns `{"score":0.91,"tags":["PII","PHONE"]}`. |
+
+If the deployed Timeplus version's Python UDFs cannot return
+`map(string, array(string))` directly, the fallback is returning a JSON string
+and casting in the MV (`cast(json, 'map(string, array(string))')` /
+`json_extract`); verified against the live server in sub-issue 1.
 
 **Fail-open invariant:** no UDF may raise; enrichment degradation produces
 empty/zero columns, never blocks the MV. This matches the repo's recent
