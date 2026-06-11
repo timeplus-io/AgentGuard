@@ -40,6 +40,16 @@ type HoldsConfig struct {
 	Disabled       bool   `mapstructure:"disabled"`
 }
 
+type DLPConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	BaseURL        string `mapstructure:"base_url"`
+	APIKey         string `mapstructure:"api_key"`
+	EmbeddingModel string `mapstructure:"embedding_model"`
+	EmbeddingDim   int    `mapstructure:"embedding_dim"`
+	RiskModel      string `mapstructure:"risk_model"`
+	SummaryModel   string `mapstructure:"summary_model"`
+}
+
 type Config struct {
 	Server        ServerConfig
 	Timeplus      TimeplusConfig
@@ -47,6 +57,7 @@ type Config struct {
 	AgentGuardURL string
 	SetupComplete bool
 	Holds         HoldsConfig `mapstructure:"holds"`
+	DLP           DLPConfig   `mapstructure:"dlp"`
 	// ConfigPath is the file path this config was loaded from (or will be written to).
 	// Populated by the caller after Load(); not read from the config file itself.
 	ConfigPath string
@@ -95,6 +106,13 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("holds.timeout_seconds", 300)
 	v.SetDefault("holds.fail_policy", "deny")
 	v.SetDefault("holds.disabled", false)
+	v.SetDefault("dlp.enabled", false)
+	v.SetDefault("dlp.base_url", "http://localhost:4000/v1")
+	v.SetDefault("dlp.api_key", "")
+	v.SetDefault("dlp.embedding_model", "text-embedding-3-small")
+	v.SetDefault("dlp.embedding_dim", 1536)
+	v.SetDefault("dlp.risk_model", "gpt-4o-mini")
+	v.SetDefault("dlp.summary_model", "gpt-4o")
 
 	if searchPaths {
 		explicitConfigFile := v.ConfigFileUsed()
@@ -137,6 +155,13 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.Holds.TimeoutSeconds = v.GetInt("holds.timeout_seconds")
 	cfg.Holds.FailPolicy = v.GetString("holds.fail_policy")
 	cfg.Holds.Disabled = v.GetBool("holds.disabled")
+	cfg.DLP.Enabled = v.GetBool("dlp.enabled")
+	cfg.DLP.BaseURL = v.GetString("dlp.base_url")
+	cfg.DLP.APIKey = v.GetString("dlp.api_key")
+	cfg.DLP.EmbeddingModel = v.GetString("dlp.embedding_model")
+	cfg.DLP.EmbeddingDim = v.GetInt("dlp.embedding_dim")
+	cfg.DLP.RiskModel = v.GetString("dlp.risk_model")
+	cfg.DLP.SummaryModel = v.GetString("dlp.summary_model")
 	// TIMEPLUS_USER / TIMEPLUS_PASSWORD: optional canonical service account
 	// for server-to-server endpoints. Never written to the config file.
 	cfg.Timeplus.User = v.GetString("timeplus.user")
@@ -166,6 +191,13 @@ func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("holds.disabled", "AGENTGUARD_HOLDS_DISABLED")
 	_ = v.BindEnv("timeplus.user", "TIMEPLUS_USER")
 	_ = v.BindEnv("timeplus.password", "TIMEPLUS_PASSWORD")
+	_ = v.BindEnv("dlp.enabled", "DLP_ENABLED")
+	_ = v.BindEnv("dlp.base_url", "DLP_BASE_URL")
+	_ = v.BindEnv("dlp.api_key", "DLP_API_KEY")
+	_ = v.BindEnv("dlp.embedding_model", "DLP_EMBEDDING_MODEL")
+	_ = v.BindEnv("dlp.embedding_dim", "DLP_EMBEDDING_DIM")
+	_ = v.BindEnv("dlp.risk_model", "DLP_RISK_MODEL")
+	_ = v.BindEnv("dlp.summary_model", "DLP_SUMMARY_MODEL")
 }
 
 // Save writes non-sensitive config fields to the specified path (typically "config.yaml").
@@ -180,5 +212,11 @@ func Save(cfg *Config, path string) error {
 	v.Set("timeplus.port", cfg.Timeplus.Port)
 	v.Set("timeplus.native-port", cfg.Timeplus.NativePort)
 	v.Set("setup.complete", cfg.SetupComplete)
+	v.Set("dlp.enabled", cfg.DLP.Enabled)
+	v.Set("dlp.base_url", cfg.DLP.BaseURL)
+	v.Set("dlp.embedding_model", cfg.DLP.EmbeddingModel)
+	v.Set("dlp.embedding_dim", cfg.DLP.EmbeddingDim)
+	v.Set("dlp.risk_model", cfg.DLP.RiskModel)
+	v.Set("dlp.summary_model", cfg.DLP.SummaryModel)
 	return v.WriteConfigAs(path)
 }
