@@ -532,3 +532,15 @@ type TableInfo struct {
 	Columns []ColumnInfo `json:"columns"`
 }
 
+// DLPStatus reports Semantic DLP provisioning and enrichment health.
+type DLPStatus struct {
+	Enabled           bool            `json:"enabled"`
+	StreamExists      bool            `json:"stream_exists"`
+	MVExists          bool            `json:"mv_exists"`
+	UDFs              map[string]bool `json:"udfs"`
+	TotalRows         int64           `json:"total_rows"`
+	EmbeddedRows      int64           `json:"embedded_rows"`
+	FlaggedRows       int64           `json:"flagged_rows"`
+	EmbeddingCoverage float64         `json:"embedding_coverage"`
+}
+
