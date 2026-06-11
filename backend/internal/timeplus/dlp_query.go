@@ -13,6 +13,10 @@ import (
 //
 // The "TASK: <NAME>" prompt prefixes are load-bearing: the mock model server
 // (backend/scripts/dlp_mock_model.py) dispatches on them for keyless tests.
+//
+// Security note: question and evidence text are interpolated verbatim into
+// model prompts. Prompt injection is an accepted risk for this internal
+// operator tool — same rationale as the API-key exposure note in dlp.go.
 
 // dlpUnderstandUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}.
 const dlpUnderstandUDFTemplate = `CREATE OR REPLACE FUNCTION dlp_understand_query(question string)
@@ -112,6 +116,9 @@ def dlp_rerank(questions, contents):
     for start in range(0, n, CHUNK):
         idx = list(range(start, min(start + CHUNK, n)))
         try:
+            # Assumes all rows in a batch share the same question (one audit query
+            # per invocation); mixed-question batches would score every row against
+            # questions[idx[0]].
             scores = _score_chunk(questions[idx[0]] or '', [contents[i] or '' for i in idx])
             for j, i in enumerate(idx):
                 if j < len(scores):

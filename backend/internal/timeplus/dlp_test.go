@@ -38,8 +38,11 @@ func TestDLPUDFDDLPercentSafe(t *testing.T) {
 	cfg := testDLPCfg()
 	cfg.APIKey = "sk-100%weird%2Fkey"
 	for name, ddl := range map[string]string{
-		"embed": DLPEmbedUDFDDL(cfg),
-		"risk":  DLPRiskUDFDDL(cfg),
+		"embed":      DLPEmbedUDFDDL(cfg),
+		"risk":       DLPRiskUDFDDL(cfg),
+		"understand": DLPUnderstandUDFDDL(cfg),
+		"rerank":     DLPRerankUDFDDL(cfg),
+		"summarize":  DLPSummarizeUDFDDL(cfg),
 	} {
 		assertCleanDDL(t, name, ddl)
 		if !strings.Contains(ddl, `API_KEY = "sk-100%weird%2Fkey"`) {
