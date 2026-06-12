@@ -3,9 +3,11 @@ package handlers
 import (
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/auth"
@@ -157,14 +159,36 @@ func ListEnrichedMessages(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := auth.RequestCfg(c, cfg)
 		minScore, _ := strconv.ParseFloat(c.Query("min_score"), 64)
+		if math.IsInf(minScore, 0) || math.IsNaN(minScore) || minScore < 0 {
+			minScore = 0
+		}
+
+		var since, until string
+		if s := c.Query("since"); s != "" {
+			t, err := time.Parse(time.RFC3339, s)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid since: use RFC3339"})
+				return
+			}
+			since = t.UTC().Format("2006-01-02 15:04:05.999")
+		}
+		if u := c.Query("until"); u != "" {
+			t, err := time.Parse(time.RFC3339, u)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid until: use RFC3339"})
+				return
+			}
+			until = t.UTC().Format("2006-01-02 15:04:05.999")
+		}
+
 		filters := dlpMessagesFilters{
 			RiskTag:    c.Query("risk_tag"),
 			EntityType: c.Query("entity_type"),
 			AgentID:    c.Query("agent_id"),
 			SessionID:  c.Query("session_id"),
 			Role:       c.Query("role"),
-			Since:      c.Query("since"),
-			Until:      c.Query("until"),
+			Since:      since,
+			Until:      until,
 			MinScore:   minScore,
 		}
 		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -186,6 +210,11 @@ func ListEnrichedMessages(cfg *config.Config) gin.HandlerFunc {
 		total := int64(0)
 		if len(countRows) == 1 {
 			total = parseInt64(countRows[0]["total"])
+		}
+
+		if total == 0 || int64((page-1)*limit) >= total {
+			c.JSON(http.StatusOK, gin.H{"messages": []models.DLPEnrichedMessage{}, "total": total, "page": page, "limit": limit})
+			return
 		}
 
 		rows, err := tp.QueryNative(&cfg.Timeplus, fmt.Sprintf(`
@@ -241,7 +270,12 @@ func DLPProfilesHandler(cfg *config.Config) gin.HandlerFunc {
 			days = 30
 		}
 		sqls := buildDLPProfilesSQLs(days)
-		out := models.DLPProfiles{WindowDays: days}
+		out := models.DLPProfiles{
+			WindowDays:  days,
+			TopAgents:   []models.DLPProfileEntry{},
+			TopSessions: []models.DLPProfileEntry{},
+			TopTags:     []models.DLPProfileEntry{},
+		}
 		dests := []*[]models.DLPProfileEntry{&out.TopAgents, &out.TopSessions, &out.TopTags}
 		for i, sql := range sqls {
 			rows, err := tp.Query(&cfg.Timeplus, sql)

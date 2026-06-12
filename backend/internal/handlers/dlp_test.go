@@ -15,6 +15,40 @@ import (
 	"github.com/timeplus/agentguard/internal/models"
 )
 
+func TestDLPProfilesEmptyArrays(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tpCfg := mockTimeplus(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"data":[]}`)
+	})
+	cfg := &config.Config{Timeplus: tpCfg}
+	cfg.DLP.Enabled = true
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/dlp/profiles?days=30", nil)
+
+	DLPProfilesHandler(cfg)(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, want := range []string{`"top_agents":[]`, `"top_sessions":[]`, `"top_tags":[]`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q (got null instead of []?):\n%s", want, body)
+		}
+	}
+	var got models.DLPProfiles
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.TopAgents == nil || got.TopSessions == nil || got.TopTags == nil {
+		t.Errorf("slices must not be nil: agents=%v sessions=%v tags=%v",
+			got.TopAgents, got.TopSessions, got.TopTags)
+	}
+}
+
 func mockTimeplus(t *testing.T, handler http.HandlerFunc) config.TimeplusConfig {
 	t.Helper()
 	srv := httptest.NewServer(handler)

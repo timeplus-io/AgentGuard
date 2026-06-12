@@ -142,3 +142,20 @@ func parseTime(v any) time.Time {
 func escapeSQL(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
 }
+
+// rowStrSlice extracts a string slice from a row value, handling both
+// []any (HTTP+JSON path) and []string (native driver path).
+func rowStrSlice(row map[string]any, key string) []string {
+	var out []string
+	switch v := row[key].(type) {
+	case []any:
+		for _, x := range v {
+			if s, ok := x.(string); ok {
+				out = append(out, s)
+			}
+		}
+	case []string:
+		out = v
+	}
+	return out
+}

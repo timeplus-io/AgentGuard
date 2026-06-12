@@ -115,21 +115,6 @@ FROM table(agentguard_dlp_enriched)
 WHERE message_id IN (%s)`, escapeSQLStr(question), strings.Join(quoted, ", "))
 }
 
-func rowStrSlice(row tp.Row, key string) []string {
-	var out []string
-	switch v := row[key].(type) {
-	case []any:
-		for _, x := range v {
-			if s, ok := x.(string); ok {
-				out = append(out, s)
-			}
-		}
-	case []string:
-		out = v
-	}
-	return out
-}
-
 // rowToDLPEvidence maps a recall row to a cited-evidence record, truncating
 // content for the summarizer/UI.
 func rowToDLPEvidence(row tp.Row, rerankScore float64) models.DLPEvidence {
