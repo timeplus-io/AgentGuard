@@ -136,7 +136,7 @@ func rowToDLPEvidence(row tp.Row, rerankScore float64) models.DLPEvidence {
 	content := parseStr(row["content"])
 	if len(content) > dlpEvidenceChars {
 		i := dlpEvidenceChars
-		for i > 0 && !utf8.ValidString(content[:i]) {
+		for i > 0 && !utf8.RuneStart(content[i]) {
 			i--
 		}
 		content = content[:i]
@@ -283,8 +283,10 @@ func DLPQuery(cfg *config.Config) gin.HandlerFunc {
 				})
 			}
 			candidates = candidates[:topN]
+			dlpStage(c, flusher, gin.H{"stage": "reranked", "kept": len(candidates)})
+		} else {
+			dlpStage(c, flusher, gin.H{"stage": "reranked", "kept": len(candidates), "skipped": true})
 		}
-		dlpStage(c, flusher, gin.H{"stage": "reranked", "kept": len(candidates)})
 
 		// 4. Summarize over the top-N evidence.
 		evidence := make([]models.DLPEvidence, len(candidates))

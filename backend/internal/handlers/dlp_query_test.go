@@ -127,6 +127,21 @@ func TestRowToDLPEvidence(t *testing.T) {
 	if len(ev2.Content) > 500 || !utf8.ValidString(ev2.Content) {
 		t.Errorf("multibyte truncation broken: len=%d valid=%v", len(ev2.Content), utf8.ValidString(ev2.Content))
 	}
+
+	// Malformed-UTF-8: RuneStart(0xff)==true so the loop does not walk back;
+	// truncation lands at byte 500 (the first 'y'), keeping len==500 and non-empty.
+	row3 := tp.Row{}
+	for k, v := range row {
+		row3[k] = v
+	}
+	row3["content"] = strings.Repeat("x", 499) + "\xff" + strings.Repeat("y", 200)
+	ev3 := rowToDLPEvidence(row3, 0.0)
+	if len(ev3.Content) > 500 {
+		t.Errorf("malformed-UTF-8 truncation: len=%d > 500", len(ev3.Content))
+	}
+	if len(ev3.Content) == 0 {
+		t.Errorf("malformed-UTF-8 truncation: result must not be empty")
+	}
 }
 
 func TestDLPQueryUnprovisioned(t *testing.T) {
