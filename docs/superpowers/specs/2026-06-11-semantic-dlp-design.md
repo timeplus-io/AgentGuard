@@ -139,12 +139,16 @@ every model touch is a UDF invoked via SQL through the existing
 
 1. **Understand** — `SELECT dlp_understand_query(:question)` → intent JSON:
    `{intent, entities:{person, data_type…}, risk_tags, time_range, keywords}`.
-2. **Multi-recall** — Go builds hybrid SQL over
-   `table(agentguard_dlp_enriched)`:
-   - Channel A (hybrid structured+vector): entity/tag/keyword/time predicates
-     from the intent, `ORDER BY cosine_distance(embedding, dlp_embed(:question)) LIMIT 200`.
-   - Channel B (pure vector, no predicates): catches semantic matches the
-     structured filters would exclude. `LIMIT 100`.
+2. **Multi-recall** — Go builds two channel queries over
+   `table(agentguard_dlp_enriched)` (implemented in sub-issue 2; deviates
+   from the original single hybrid statement because `cosine_distance`
+   errors on empty embeddings, and fail-open rows have `embedding = []`):
+   - Channel A (structured): entity/tag/keyword/time predicates from the
+     intent, `ORDER BY risk_score DESC, event_time DESC LIMIT 200` —
+     recalls rows regardless of embedding presence.
+   - Channel B (vector): time filter + `length(embedding) > 0`,
+     `ORDER BY cosine_distance(embedding, dlp_embed(:question, 'user')) LIMIT 100`;
+     best-effort — failure degrades to structured-only.
    Results merged + deduped by `message_id` in Go → candidate set (≤300).
 3. **Rerank** — `SELECT dlp_rerank(:question, candidate)` over the candidate
    batch; the UDF scores relevance 0–1 with `{risk_model}` in chunked batched
