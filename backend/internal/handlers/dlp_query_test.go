@@ -3,6 +3,7 @@ package handlers
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
@@ -109,5 +110,16 @@ func TestRowToDLPEvidence(t *testing.T) {
 	}
 	if len(ev.RiskTags) != 1 || ev.RiskTags[0] != "PII" {
 		t.Errorf("risk tags wrong: %v", ev.RiskTags)
+	}
+
+	// Multibyte truncation: 200 CJK runes = 600 bytes; must stay ≤500 bytes and be valid UTF-8.
+	row2 := tp.Row{}
+	for k, v := range row {
+		row2[k] = v
+	}
+	row2["content"] = strings.Repeat("世", 200) // 600 bytes, 200 runes
+	ev2 := rowToDLPEvidence(row2, 0.1)
+	if len(ev2.Content) > 500 || !utf8.ValidString(ev2.Content) {
+		t.Errorf("multibyte truncation broken: len=%d valid=%v", len(ev2.Content), utf8.ValidString(ev2.Content))
 	}
 }

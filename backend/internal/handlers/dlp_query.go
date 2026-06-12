@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/timeplus/agentguard/internal/models"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
@@ -108,11 +109,6 @@ FROM table(agentguard_dlp_enriched)
 WHERE message_id IN (%s)`, escapeSQLStr(question), strings.Join(quoted, ", "))
 }
 
-func rowStr(row tp.Row, key string) string {
-	s, _ := row[key].(string)
-	return s
-}
-
 func rowStrSlice(row tp.Row, key string) []string {
 	var out []string
 	switch v := row[key].(type) {
@@ -131,18 +127,22 @@ func rowStrSlice(row tp.Row, key string) []string {
 // rowToDLPEvidence maps a recall row to a cited-evidence record, truncating
 // content for the summarizer/UI.
 func rowToDLPEvidence(row tp.Row, rerankScore float64) models.DLPEvidence {
-	content := rowStr(row, "content")
+	content := parseStr(row["content"])
 	if len(content) > dlpEvidenceChars {
-		content = content[:dlpEvidenceChars]
+		i := dlpEvidenceChars
+		for i > 0 && !utf8.ValidString(content[:i]) {
+			i--
+		}
+		content = content[:i]
 	}
 	return models.DLPEvidence{
-		MessageID:   rowStr(row, "message_id"),
-		SessionID:   rowStr(row, "session_id"),
-		RunID:       rowStr(row, "run_id"),
-		EventTime:   rowStr(row, "event_time"),
-		AgentID:     rowStr(row, "agent_id"),
-		AgentType:   rowStr(row, "agent_type"),
-		Role:        rowStr(row, "role"),
+		MessageID:   parseStr(row["message_id"]),
+		SessionID:   parseStr(row["session_id"]),
+		RunID:       parseStr(row["run_id"]),
+		EventTime:   parseStr(row["event_time"]),
+		AgentID:     parseStr(row["agent_id"]),
+		AgentType:   parseStr(row["agent_type"]),
+		Role:        parseStr(row["role"]),
 		Content:     content,
 		RiskTags:    rowStrSlice(row, "risk_tags"),
 		RiskScore:   parseFloat64(row["risk_score"]),
