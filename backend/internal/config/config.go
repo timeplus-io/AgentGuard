@@ -132,11 +132,16 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 
 		if err := v.ReadInConfig(); err != nil {
 			if explicitConfigFile != "" {
-				return nil, fmt.Errorf("reading explicit config file %s: %w", explicitConfigFile, err)
-			}
-			var notFound viper.ConfigFileNotFoundError
-			if !errors.As(err, &notFound) && !errors.Is(err, os.ErrNotExist) {
-				return nil, fmt.Errorf("reading config file: %w", err)
+				if errors.Is(err, os.ErrNotExist) {
+					log.Printf("config: %s not found, using defaults and environment variables", explicitConfigFile)
+				} else {
+					return nil, fmt.Errorf("reading explicit config file %s: %w", explicitConfigFile, err)
+				}
+			} else {
+				var notFound viper.ConfigFileNotFoundError
+				if !errors.As(err, &notFound) && !errors.Is(err, os.ErrNotExist) {
+					return nil, fmt.Errorf("reading config file: %w", err)
+				}
 			}
 		}
 

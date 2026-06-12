@@ -3,7 +3,6 @@ package config_test
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -170,20 +169,17 @@ func TestLoad_ExplicitEnvOverridesConfig(t *testing.T) {
 	}
 }
 
-func TestLoad_MissingExplicitConfigFileErrors(t *testing.T) {
+func TestLoad_MissingExplicitConfigFileWarnsAndUsesDefaults(t *testing.T) {
 	isolate(t)
 
 	path := filepath.Join(t.TempDir(), "missing.yaml")
 	viper.SetConfigFile(path)
-	_, err := config.Load()
-	if err == nil {
-		t.Fatal("Load returned nil error for missing explicit config file")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load returned error for missing explicit config file: %v", err)
 	}
-	if !strings.Contains(err.Error(), "reading explicit config file") {
-		t.Fatalf("Load error = %q, want explicit config file context", err)
-	}
-	if !strings.Contains(err.Error(), path) {
-		t.Fatalf("Load error = %q, want missing path %q", err, path)
+	if cfg.Server.Port != 8080 {
+		t.Fatalf("expected default port 8080, got %d", cfg.Server.Port)
 	}
 }
 
