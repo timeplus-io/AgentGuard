@@ -16,7 +16,10 @@ import (
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
-var dlpUDFNames = []string{"dlp_extract_entities", "dlp_embed", "dlp_risk"}
+var dlpUDFNames = []string{
+	"dlp_extract_entities", "dlp_embed", "dlp_risk",
+	"dlp_understand_query", "dlp_rerank", "dlp_summarize",
+}
 
 // DLPStatusHandler reports Semantic DLP provisioning + enrichment health.
 func DLPStatusHandler(cfg *config.Config) gin.HandlerFunc {
