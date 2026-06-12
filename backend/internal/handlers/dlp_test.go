@@ -51,6 +51,51 @@ func TestDLPStatusDisabled(t *testing.T) {
 	}
 }
 
+func TestBuildDLPMessagesSQL(t *testing.T) {
+	where, args := buildDLPMessagesWhere(dlpMessagesFilters{
+		RiskTag:    "PII",
+		EntityType: "phone",
+		AgentID:    "a'1",
+		SessionID:  "s1",
+		Role:       "user",
+		Since:      "2026-06-01 00:00:00",
+		Until:      "2026-06-11 00:00:00",
+		MinScore:   0.5,
+	})
+	_ = args
+	for _, want := range []string{
+		`has(risk_tags, 'PII')`,
+		`not empty(entities['phone'])`,
+		`agent_id = 'a''1'`,
+		`session_id = 's1'`,
+		`role = 'user'`,
+		`event_time >= '2026-06-01 00:00:00'`,
+		`event_time <= '2026-06-11 00:00:00'`,
+		`risk_score >= 0.500000`,
+	} {
+		if !strings.Contains(where, want) {
+			t.Errorf("WHERE missing %q:\n%s", want, where)
+		}
+	}
+	// Empty filters → trivially-true clause, no stray AND.
+	empty, _ := buildDLPMessagesWhere(dlpMessagesFilters{})
+	if empty != "1 = 1" {
+		t.Errorf("empty where = %q", empty)
+	}
+}
+
+func TestDLPProfilesSQLWindow(t *testing.T) {
+	sqls := buildDLPProfilesSQLs(14)
+	if len(sqls) != 3 {
+		t.Fatalf("want 3 profile queries, got %d", len(sqls))
+	}
+	for _, q := range sqls {
+		if !strings.Contains(q, "INTERVAL 14 DAY") || !strings.Contains(q, "risk_score > 0") {
+			t.Errorf("profile SQL missing window/flag filter:\n%s", q)
+		}
+	}
+}
+
 func TestDLPStatusHealthy(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	tpCfg := mockTimeplus(t, func(w http.ResponseWriter, r *http.Request) {
