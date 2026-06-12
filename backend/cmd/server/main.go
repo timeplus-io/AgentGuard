@@ -195,6 +195,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.GET("/notifications/stream", handlers.NotificationsSSEHandler())
 			protected.GET("/investigate/tables", handlers.ListTables(cfg))
 			protected.GET("/dlp/status", handlers.DLPStatusHandler(cfg))
+			protected.POST("/dlp/query", handlers.DLPQuery(cfg))
 			protected.POST("/onboarding/generate", handlers.GenerateConfig)
 			protected.GET("/onboarding/install-script", handlers.ServeInstallScript)
 			protected.POST("/proton/query", handlers.ProtonQueryHandler(cfg))
