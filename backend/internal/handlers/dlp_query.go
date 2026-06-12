@@ -47,7 +47,7 @@ func parseDLPIntent(raw, question string) models.DLPIntent {
 }
 
 const dlpRecallCols = `event_time, message_id, session_id, run_id, role,
-       agent_type, agent_id, content, risk_tags, risk_score`
+       agent_type, agent_id, deployment_id, content, risk_tags, risk_score`
 
 // buildDLPRecallSQL produces the two recall channels. The structured channel
 // catches rows by entity/tag/keyword predicates regardless of embedding
@@ -127,17 +127,18 @@ func rowToDLPEvidence(row tp.Row, rerankScore float64) models.DLPEvidence {
 		content = content[:i]
 	}
 	return models.DLPEvidence{
-		MessageID:   parseStr(row["message_id"]),
-		SessionID:   parseStr(row["session_id"]),
-		RunID:       parseStr(row["run_id"]),
-		EventTime:   parseStr(row["event_time"]),
-		AgentID:     parseStr(row["agent_id"]),
-		AgentType:   parseStr(row["agent_type"]),
-		Role:        parseStr(row["role"]),
-		Content:     content,
-		RiskTags:    rowStrSlice(row, "risk_tags"),
-		RiskScore:   parseFloat64(row["risk_score"]),
-		RerankScore: rerankScore,
+		MessageID:    parseStr(row["message_id"]),
+		SessionID:    parseStr(row["session_id"]),
+		RunID:        parseStr(row["run_id"]),
+		EventTime:    parseStr(row["event_time"]),
+		AgentID:      parseStr(row["agent_id"]),
+		AgentType:    parseStr(row["agent_type"]),
+		DeploymentID: parseStr(row["deployment_id"]),
+		Role:         parseStr(row["role"]),
+		Content:      content,
+		RiskTags:     rowStrSlice(row, "risk_tags"),
+		RiskScore:    parseFloat64(row["risk_score"]),
+		RerankScore:  rerankScore,
 	}
 }
 

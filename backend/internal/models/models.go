@@ -164,10 +164,10 @@ type Hold struct {
 // It is sourced from agentguard_holds (is_hold_event=true) or from
 // agentguard_hook_events when include_allowed=true (is_hold_event=false).
 type ActivityEvent struct {
-	ID            string     `json:"id"`           // hold_id for hold rows; synthetic hex for hook-only rows
+	ID            string     `json:"id"` // hold_id for hold rows; synthetic hex for hook-only rows
 	EventTime     time.Time  `json:"event_time"`
 	ToolName      string     `json:"tool_name"`
-	Status        string     `json:"status"`       // pending|approved|denied|timeout|abandoned|auto_block|allowed
+	Status        string     `json:"status"` // pending|approved|denied|timeout|abandoned|auto_block|allowed
 	RuleID        string     `json:"rule_id"`
 	RuleName      string     `json:"rule_name"`
 	Severity      string     `json:"severity"`
@@ -205,7 +205,7 @@ type HoldRequest struct {
 
 // HoldResponse is what the plugin receives from POST /api/holds.
 type HoldResponse struct {
-	Decision string `json:"decision"`          // "allow" | "block"
+	Decision string `json:"decision"` // "allow" | "block"
 	Reason   string `json:"reason,omitempty"`
 	HoldID   string `json:"hold_id,omitempty"` // populated when a hold record was opened
 }
@@ -345,8 +345,10 @@ type TraceResponse struct {
 
 // TimelineEvent is one normalized item in the session timeline, built from
 // agentguard_cim_event. Kind is one of:
-//   "user_input" | "llm_response" | "tool_request" | "tool_result"
-//   | "session_start" | "session_end".
+//
+//	"user_input" | "llm_response" | "tool_request" | "tool_result"
+//	| "session_start" | "session_end".
+//
 // Status is "ok" | "blocked" | "error".
 type TimelineEvent struct {
 	EventTime  time.Time         `json:"event_time"`
@@ -466,17 +468,17 @@ type PricingListResponse struct {
 }
 
 type RulePack struct {
-	ID                string `json:"id"`
-	Name              string `json:"name"`
-	Version           string `json:"version"`
-	Description       string `json:"description"`
-	QuerySQL          string `json:"query_sql"`
-	Enabled           bool   `json:"enabled"`
-	Severity          string `json:"severity"`
-	Category          string `json:"category"`
-	RequiredTelemetry string `json:"required_telemetry"`
-	FPRate            string `json:"fp_rate"`
-	HookSources       string `json:"hook_sources"`
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	Version           string   `json:"version"`
+	Description       string   `json:"description"`
+	QuerySQL          string   `json:"query_sql"`
+	Enabled           bool     `json:"enabled"`
+	Severity          string   `json:"severity"`
+	Category          string   `json:"category"`
+	RequiredTelemetry string   `json:"required_telemetry"`
+	FPRate            string   `json:"fp_rate"`
+	HookSources       string   `json:"hook_sources"`
 	Detections24h     int      `json:"detections_24h"`
 	LatestVersion     string   `json:"latest_version,omitempty"`
 	UDFs              []string `json:"udfs,omitempty"`
@@ -542,17 +544,18 @@ type DLPIntent struct {
 
 // DLPEvidence is one cited message in a DLP query answer.
 type DLPEvidence struct {
-	MessageID   string   `json:"message_id"`
-	SessionID   string   `json:"session_id"`
-	RunID       string   `json:"run_id"`
-	EventTime   string   `json:"event_time"`
-	AgentID     string   `json:"agent_id"`
-	AgentType   string   `json:"agent_type"`
-	Role        string   `json:"role"`
-	Content     string   `json:"content"`
-	RiskTags    []string `json:"risk_tags"`
-	RiskScore   float64  `json:"risk_score"`
-	RerankScore float64  `json:"rerank_score"`
+	MessageID    string   `json:"message_id"`
+	SessionID    string   `json:"session_id"`
+	RunID        string   `json:"run_id"`
+	EventTime    string   `json:"event_time"`
+	AgentID      string   `json:"agent_id"`
+	AgentType    string   `json:"agent_type"`
+	DeploymentID string   `json:"deployment_id"`
+	Role         string   `json:"role"`
+	Content      string   `json:"content"`
+	RiskTags     []string `json:"risk_tags"`
+	RiskScore    float64  `json:"risk_score"`
+	RerankScore  float64  `json:"rerank_score"`
 }
 
 // DLPEnrichedMessage is a row of agentguard_dlp_enriched for the browser API.
@@ -602,4 +605,3 @@ type DLPStatus struct {
 	FlaggedRows       int64           `json:"flagged_rows"`
 	EmbeddingCoverage float64         `json:"embedding_coverage"`
 }
-

@@ -8,6 +8,7 @@ const navItems = [
   { label: 'Threats', to: '/threats', icon: 'gpp_maybe' },
   { label: 'Cost', to: '/cost', icon: 'payments' },
   { label: 'Rules', to: '/rules', icon: 'rule' },
+  { label: 'Semantic DLP', to: '/dlp', icon: 'policy' },
   { label: 'Investigate', to: '/investigate', icon: 'search' },
 ]
 

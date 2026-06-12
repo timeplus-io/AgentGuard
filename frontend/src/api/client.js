@@ -166,6 +166,36 @@ export const api = {
     post(`/rules/${encodeURIComponent(ruleId)}/policy`, { block_policy: blockPolicy }),
   getThreatDetail: (threatId) => get(`/threats/${encodeURIComponent(threatId)}`),
 
+  // ── Semantic DLP ───────────────────────────────────────────────────────────
+  dlpStatus: () => get('/dlp/status'),
+  dlpProfiles: (days = 30) => get(`/dlp/profiles?days=${days}`),
+  dlpMessages: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''))
+    ).toString()
+    return get(`/dlp/messages${q ? '?' + q : ''}`)
+  },
+  dlpMessage: (id) => get(`/dlp/messages/${encodeURIComponent(id)}`),
+  syncRules: () => post('/rules/sync', {}),
+
+  // dlpQuery streams NDJSON stage events from the forensic funnel:
+  // {stage:"intent"} → {stage:"candidates"} → {stage:"reranked"} → {stage:"answer"}
+  // or a terminal {stage:"error"}.
+  async *dlpQuery(question, { topN, signal } = {}) {
+    const res = await fetch(`${BASE}/dlp/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(topN ? { question, top_n: topN } : { question }),
+      signal,
+      credentials: 'include',
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || `HTTP ${res.status}`)
+    }
+    yield* ndjsonStreamParser(res.body.getReader())
+  },
+
   async *protonQuery(sql, { signal } = {}) {
     const res = await fetch(`${BASE}/proton/query`, {
       method: 'POST',
