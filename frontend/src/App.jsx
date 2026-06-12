@@ -14,6 +14,7 @@ import RulePacks from './pages/RulePacks'
 import RuleDetail from './pages/RuleDetail'
 import RuleCreate from './pages/RuleCreate'
 import Investigate from './pages/Investigate'
+import SemanticDLP from './pages/SemanticDLP'
 import Onboarding from './pages/Onboarding'
 
 function AuthGuard({ children }) {
@@ -54,6 +55,7 @@ export default function App() {
             <Route path="/rules/new" element={<RuleCreate />} />
             <Route path="/rules/:id" element={<RuleDetail />} />
             <Route path="/investigate" element={<Investigate />} />
+            <Route path="/dlp" element={<SemanticDLP />} />
             <Route path="/onboarding" element={<Onboarding />} />
           </Routes>
         </AuthGuard>
