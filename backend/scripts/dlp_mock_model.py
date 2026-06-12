@@ -9,6 +9,7 @@ Usage: python3 backend/scripts/dlp_mock_model.py [port] [dim]   (default 4000, 8
 """
 import hashlib
 import json
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -31,8 +32,24 @@ class Handler(BaseHTTPRequestHandler):
                 inputs = [inputs]
             resp = {"data": [{"index": i, "embedding": embed(t)} for i, t in enumerate(inputs)]}
         elif self.path.endswith("/chat/completions"):
-            resp = {"choices": [{"message": {
-                "content": '{"score": 0.9, "tags": ["PII", "CUSTOMER_DATA"]}'}}]}
+            msgs = body.get("messages", [])
+            prompt = msgs[-1].get("content", "") if msgs else ""
+            if "TASK: QUERY_UNDERSTANDING" in prompt:
+                content = json.dumps({"keywords": ["customer", "phone", "export"],
+                                      "entity_types": ["phone"],
+                                      "risk_tags": ["PII"],
+                                      "time_range_days": 30})
+            elif "TASK: RERANK" in prompt:
+                m = re.search(r"ITEMS: (\d+)", prompt)
+                n = int(m.group(1)) if m else 1
+                content = json.dumps(
+                    {"scores": [round(max(0.05, 0.95 - 0.05 * i), 2) for i in range(n)]})
+            elif "TASK: AUDIT_SUMMARY" in prompt:
+                content = ("Suspected leak: an agent exported customer phone numbers. "
+                           "Evidence in the cited messages.")
+            else:
+                content = '{"score": 0.9, "tags": ["PII", "CUSTOMER_DATA"]}'
+            resp = {"choices": [{"message": {"content": content}}]}
         else:
             self.send_response(404)
             self.end_headers()

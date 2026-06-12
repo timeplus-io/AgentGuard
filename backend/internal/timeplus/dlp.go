@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 
 	proton "github.com/timeplus-io/proton-go-driver/v2"
 	"github.com/timeplus/agentguard/internal/config"
@@ -140,11 +139,7 @@ def dlp_embed(contents, roles):
 $$`
 
 func DLPEmbedUDFDDL(cfg config.DLPConfig) string {
-	return strings.NewReplacer(
-		"{{BASE_URL}}", cfg.BaseURL,
-		"{{API_KEY}}", cfg.APIKey,
-		"{{MODEL}}", cfg.EmbeddingModel,
-	).Replace(dlpEmbedUDFTemplate)
+	return dlpReplacer(cfg, cfg.EmbeddingModel).Replace(dlpEmbedUDFTemplate)
 }
 
 // dlpRiskUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}. Same API-key exposure note as dlpEmbedUDFTemplate.
@@ -211,11 +206,7 @@ def dlp_risk(contents, entity_types_list):
 $$`
 
 func DLPRiskUDFDDL(cfg config.DLPConfig) string {
-	return strings.NewReplacer(
-		"{{BASE_URL}}", cfg.BaseURL,
-		"{{API_KEY}}", cfg.APIKey,
-		"{{MODEL}}", cfg.RiskModel,
-	).Replace(dlpRiskUDFTemplate)
+	return dlpReplacer(cfg, cfg.RiskModel).Replace(dlpRiskUDFTemplate)
 }
 
 // ---------- Materialized view ----------
@@ -307,6 +298,9 @@ func InitDLP(ctx context.Context, conn proton.Conn, dlpCfg config.DLPConfig, emi
 		{"dlp_extract_entities", ddlDLPEntitiesUDF},
 		{"dlp_embed", DLPEmbedUDFDDL(dlpCfg)},
 		{"dlp_risk", DLPRiskUDFDDL(dlpCfg)},
+		{"dlp_understand_query", DLPUnderstandUDFDDL(dlpCfg)},
+		{"dlp_rerank", DLPRerankUDFDDL(dlpCfg)},
+		{"dlp_summarize", DLPSummarizeUDFDDL(dlpCfg)},
 	}
 	for _, u := range udfs {
 		if err := conn.Exec(ctx, u.ddl); err != nil {

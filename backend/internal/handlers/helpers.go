@@ -11,10 +11,16 @@ import (
 // All helpers accept the raw `any` value from a tp.Row map entry so callers
 // can write parseStr(row["key"]) without a helper that takes a map+key pair.
 
-// parseStr safely casts any to string.
+// parseStr safely casts any to string. DateTime columns arrive as time.Time
+// through the native driver; format them like Timeplus to_string(datetime64).
 func parseStr(v any) string {
-	s, _ := v.(string)
-	return s
+	switch s := v.(type) {
+	case string:
+		return s
+	case time.Time:
+		return s.UTC().Format("2006-01-02 15:04:05.000")
+	}
+	return ""
 }
 
 // parseInt handles json.Number / float64 / int from Proton rows.
@@ -141,4 +147,21 @@ func parseTime(v any) time.Time {
 // escapeSQL replaces single quotes to prevent SQL injection in string literals.
 func escapeSQL(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
+}
+
+// rowStrSlice extracts a string slice from a row value, handling both
+// []any (HTTP+JSON path) and []string (native driver path).
+func rowStrSlice(row map[string]any, key string) []string {
+	var out []string
+	switch v := row[key].(type) {
+	case []any:
+		for _, x := range v {
+			if s, ok := x.(string); ok {
+				out = append(out, s)
+			}
+		}
+	case []string:
+		out = v
+	}
+	return out
 }

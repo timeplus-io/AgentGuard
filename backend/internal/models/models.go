@@ -532,6 +532,65 @@ type TableInfo struct {
 	Columns []ColumnInfo `json:"columns"`
 }
 
+// DLPIntent is the structured retrieval intent parsed from an NL question.
+type DLPIntent struct {
+	Keywords      []string `json:"keywords"`
+	EntityTypes   []string `json:"entity_types"`
+	RiskTags      []string `json:"risk_tags"`
+	TimeRangeDays int      `json:"time_range_days"`
+}
+
+// DLPEvidence is one cited message in a DLP query answer.
+type DLPEvidence struct {
+	MessageID   string   `json:"message_id"`
+	SessionID   string   `json:"session_id"`
+	RunID       string   `json:"run_id"`
+	EventTime   string   `json:"event_time"`
+	AgentID     string   `json:"agent_id"`
+	AgentType   string   `json:"agent_type"`
+	Role        string   `json:"role"`
+	Content     string   `json:"content"`
+	RiskTags    []string `json:"risk_tags"`
+	RiskScore   float64  `json:"risk_score"`
+	RerankScore float64  `json:"rerank_score"`
+}
+
+// DLPEnrichedMessage is a row of agentguard_dlp_enriched for the browser API.
+type DLPEnrichedMessage struct {
+	EventTime    string              `json:"event_time"`
+	MessageID    string              `json:"message_id"`
+	SessionID    string              `json:"session_id"`
+	RunID        string              `json:"run_id"`
+	Role         string              `json:"role"`
+	AgentType    string              `json:"agent_type"`
+	AgentID      string              `json:"agent_id"`
+	DeploymentID string              `json:"deployment_id"`
+	Model        string              `json:"model"`
+	ToolName     string              `json:"tool_name"`
+	Content      string              `json:"content"`
+	Entities     map[string][]string `json:"entities"`
+	RiskTags     []string            `json:"risk_tags"`
+	RiskScore    float64             `json:"risk_score"`
+	EmbeddingDim int                 `json:"embedding_dim"`
+}
+
+// DLPProfileEntry is one row of a risk-profile ranking.
+type DLPProfileEntry struct {
+	Key          string  `json:"key"`
+	FlaggedCount int64   `json:"flagged_count"`
+	MaxRiskScore float64 `json:"max_risk_score"`
+	AvgRiskScore float64 `json:"avg_risk_score"`
+	LastSeen     string  `json:"last_seen"`
+}
+
+// DLPProfiles aggregates top risk agents/sessions/tags over a window.
+type DLPProfiles struct {
+	WindowDays  int               `json:"window_days"`
+	TopAgents   []DLPProfileEntry `json:"top_agents"`
+	TopSessions []DLPProfileEntry `json:"top_sessions"`
+	TopTags     []DLPProfileEntry `json:"top_tags"`
+}
+
 // DLPStatus reports Semantic DLP provisioning and enrichment health.
 type DLPStatus struct {
 	Enabled           bool            `json:"enabled"`
