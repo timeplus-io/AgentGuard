@@ -115,3 +115,84 @@ func GetConfig(cfg *config.Config, changedFlags map[string]bool) gin.HandlerFunc
 		c.JSON(http.StatusOK, view)
 	}
 }
+
+// UpdateConfig validates a batch of key changes, merge-writes them to the
+// config file, and hot-applies non-restart keys to the live config. The batch
+// is atomic: any invalid/unknown/read-only/overridden key rejects all changes.
+func UpdateConfig(cfg *config.Config, changedFlags map[string]bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body map[string]any
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if len(body) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no changes provided"})
+			return
+		}
+
+		fileKeys, _ := config.FileKeys(cfg.ConfigPath)
+		errs := map[string]string{}
+		coerced := map[string]any{}
+
+		for key, raw := range body {
+			meta, ok := config.MetaFor(key)
+			if !ok {
+				errs[key] = "unknown config key"
+				continue
+			}
+			if meta.ReadOnly {
+				errs[key] = "this key is read-only"
+				continue
+			}
+			src := config.ResolveSource(meta, fileKeys, changedFlags)
+			if src == config.SourceEnv {
+				errs[key] = "set by environment variable " + meta.EnvVar + "; remove it to edit here"
+				continue
+			}
+			if src == config.SourceFlag {
+				errs[key] = "set by the --" + meta.FlagName + " flag; file edits have no effect"
+				continue
+			}
+			val, err := config.CoerceAndValidate(key, raw)
+			if err != nil {
+				errs[key] = err.Error()
+				continue
+			}
+			coerced[key] = val
+		}
+
+		if len(errs) > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"errors": errs})
+			return
+		}
+
+		// Persist all changed keys to the file (restart keys included).
+		if err := config.SaveChanges(cfg.ConfigPath, coerced); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Hot-apply only non-restart keys to the live config.
+		config.Mu.Lock()
+		for key, val := range coerced {
+			meta, _ := config.MetaFor(key)
+			if meta.Restart {
+				continue
+			}
+			_ = config.ApplyChange(cfg, key, val)
+		}
+		saved := make([]string, 0, len(coerced))
+		for k := range coerced {
+			saved = append(saved, k)
+		}
+		view := buildConfigView(cfg, changedFlags)
+		config.Mu.Unlock()
+
+		c.JSON(http.StatusOK, gin.H{
+			"saved":                saved,
+			"restart_required":     view["restart_required"],
+			"reprovision_required": view["reprovision_required"],
+		})
+	}
+}
