@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+
 func TestCoerceAndValidate(t *testing.T) {
 	cases := []struct {
 		key     string
@@ -41,5 +42,59 @@ func TestCoerceAndValidate(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%s=%v: got %v (%T), want %v (%T)", c.key, c.raw, got, got, c.want, c.want)
 		}
+	}
+}
+
+func TestResolveSource(t *testing.T) {
+	fileKeys := map[string]bool{"dlp.base_url": true}
+	flags := map[string]bool{"port": true}
+
+	m, _ := MetaFor("server.port")
+	if got := ResolveSource(m, fileKeys, flags); got != SourceFlag {
+		t.Errorf("server.port: got %v, want flag", got)
+	}
+
+	t.Setenv("DLP_API_KEY", "sk-env")
+	mk, _ := MetaFor("dlp.api_key")
+	if got := ResolveSource(mk, fileKeys, flags); got != SourceEnv {
+		t.Errorf("dlp.api_key: got %v, want env", got)
+	}
+
+	mb, _ := MetaFor("dlp.base_url")
+	if got := ResolveSource(mb, fileKeys, flags); got != SourceFile {
+		t.Errorf("dlp.base_url: got %v, want file", got)
+	}
+
+	mh, _ := MetaFor("timeplus.host")
+	if got := ResolveSource(mh, fileKeys, flags); got != SourceDefault {
+		t.Errorf("timeplus.host: got %v, want default", got)
+	}
+}
+
+func TestEffectiveAndApply(t *testing.T) {
+	cfg := &Config{}
+	cfg.DLP.Enabled = false
+	cfg.Server.Port = 8080
+
+	if got := EffectiveValue(cfg, "server.port"); got != 8080 {
+		t.Errorf("EffectiveValue server.port: got %v", got)
+	}
+	if err := ApplyChange(cfg, "server.port", 9090); err != nil {
+		t.Fatalf("ApplyChange: %v", err)
+	}
+	if cfg.Server.Port != 9090 {
+		t.Errorf("ApplyChange server.port: cfg=%d", cfg.Server.Port)
+	}
+	if err := ApplyChange(cfg, "dlp.enabled", true); err != nil {
+		t.Fatalf("ApplyChange dlp.enabled: %v", err)
+	}
+	if !cfg.DLP.Enabled {
+		t.Error("ApplyChange dlp.enabled: cfg still false")
+	}
+	if err := ApplyChange(cfg, "dlp.api_key", "sk-x"); err != nil {
+		t.Fatalf("ApplyChange dlp.api_key: %v", err)
+	}
+	if cfg.DLP.APIKey != "sk-x" {
+		t.Error("ApplyChange dlp.api_key not applied")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 )
 
 // CoerceAndValidate converts a raw JSON value (float64/bool/string) to the Go
@@ -100,5 +101,148 @@ func validateString(key, v string) error {
 			return errors.New("must be a valid http(s) URL")
 		}
 	}
+	return nil
+}
+
+// Source indicates where a key's effective value comes from.
+type Source string
+
+const (
+	SourceDefault Source = "default"
+	SourceFile    Source = "file"
+	SourceEnv     Source = "env"
+	SourceFlag    Source = "flag"
+)
+
+// ResolveSource returns the highest-precedence source supplying a key:
+// flag > env > file > default.
+func ResolveSource(meta KeyMeta, fileKeys, changedFlags map[string]bool) Source {
+	if meta.FlagName != "" && changedFlags[meta.FlagName] {
+		return SourceFlag
+	}
+	if meta.EnvVar != "" && os.Getenv(meta.EnvVar) != "" {
+		return SourceEnv
+	}
+	if fileKeys[meta.Key] {
+		return SourceFile
+	}
+	return SourceDefault
+}
+
+// EffectiveValue returns the live value of a key from cfg as a comparable
+// scalar (int, bool, or string). Secrets are returned verbatim; callers that
+// expose values to clients must mask secrets themselves.
+func EffectiveValue(cfg *Config, key string) any {
+	switch key {
+	case "server.port":
+		return cfg.Server.Port
+	case "timeplus.host":
+		return cfg.Timeplus.Host
+	case "timeplus.port":
+		return cfg.Timeplus.Port
+	case "timeplus.native-port":
+		return cfg.Timeplus.NativePort
+	case "timeplus.user":
+		return cfg.Timeplus.User
+	case "timeplus.password":
+		return cfg.Timeplus.Password
+	case "agentguard.url":
+		return cfg.AgentGuardURL
+	case "catalog.dir":
+		return cfg.CatalogDir
+	case "holds.mv_wait_ms":
+		return cfg.Holds.MVWaitMs
+	case "holds.timeout_seconds":
+		return cfg.Holds.TimeoutSeconds
+	case "holds.fail_policy":
+		return cfg.Holds.FailPolicy
+	case "holds.disabled":
+		return cfg.Holds.Disabled
+	case "dlp.enabled":
+		return cfg.DLP.Enabled
+	case "dlp.base_url":
+		return cfg.DLP.BaseURL
+	case "dlp.api_key":
+		return cfg.DLP.APIKey
+	case "dlp.embedding_model":
+		return cfg.DLP.EmbeddingModel
+	case "dlp.embedding_dim":
+		return cfg.DLP.EmbeddingDim
+	case "dlp.risk_model":
+		return cfg.DLP.RiskModel
+	case "dlp.summary_model":
+		return cfg.DLP.SummaryModel
+	case "setup.complete":
+		return cfg.SetupComplete
+	}
+	return nil
+}
+
+// ApplyChange writes a single coerced value into cfg. The value must already
+// be coerced via CoerceAndValidate (int/bool/string). Callers must hold Mu.
+func ApplyChange(cfg *Config, key string, value any) error {
+	switch key {
+	case "server.port":
+		return setInt(&cfg.Server.Port, value)
+	case "timeplus.host":
+		return setString(&cfg.Timeplus.Host, value)
+	case "timeplus.port":
+		return setInt(&cfg.Timeplus.Port, value)
+	case "timeplus.native-port":
+		return setInt(&cfg.Timeplus.NativePort, value)
+	case "agentguard.url":
+		return setString(&cfg.AgentGuardURL, value)
+	case "catalog.dir":
+		return setString(&cfg.CatalogDir, value)
+	case "holds.mv_wait_ms":
+		return setInt(&cfg.Holds.MVWaitMs, value)
+	case "holds.timeout_seconds":
+		return setInt(&cfg.Holds.TimeoutSeconds, value)
+	case "holds.fail_policy":
+		return setString(&cfg.Holds.FailPolicy, value)
+	case "holds.disabled":
+		return setBool(&cfg.Holds.Disabled, value)
+	case "dlp.enabled":
+		return setBool(&cfg.DLP.Enabled, value)
+	case "dlp.base_url":
+		return setString(&cfg.DLP.BaseURL, value)
+	case "dlp.api_key":
+		return setString(&cfg.DLP.APIKey, value)
+	case "dlp.embedding_model":
+		return setString(&cfg.DLP.EmbeddingModel, value)
+	case "dlp.embedding_dim":
+		return setInt(&cfg.DLP.EmbeddingDim, value)
+	case "dlp.risk_model":
+		return setString(&cfg.DLP.RiskModel, value)
+	case "dlp.summary_model":
+		return setString(&cfg.DLP.SummaryModel, value)
+	}
+	return fmt.Errorf("key %q cannot be applied", key)
+}
+
+func setInt(dst *int, v any) error {
+	i, ok := v.(int)
+	if !ok {
+		return fmt.Errorf("expected int, got %T", v)
+	}
+	*dst = i
+	return nil
+}
+
+func setString(dst *string, v any) error {
+	s, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("expected string, got %T", v)
+	}
+	*dst = s
+	return nil
+}
+
+func setBool(dst *bool, v any) error {
+	b, ok := v.(bool)
+	if !ok {
+		return fmt.Errorf("expected bool, got %T", v)
+	}
+	*dst = b
 	return nil
 }
