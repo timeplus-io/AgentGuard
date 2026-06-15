@@ -79,8 +79,15 @@ masking variable/flag named, because a file write would be silently masked.
 `PUT /api/config` reads the existing `config.yaml` into a map, sets **only** the keys
 the user changed, and writes back with file mode `0600`. Effective values derived from
 env/flags are never frozen into the file. YAML comments are lost on round-trip
-(accepted). The existing `config.Save()` full-dump remains for the provision flow but
-gains `dlp.api_key` persistence; its doc comment is updated accordingly.
+(accepted). This merge-write is the path that persists `dlp.api_key` (when the user
+explicitly provides a non-empty value) — only ever the user-typed value, never an
+env-derived one.
+
+The existing `config.Save()` full-dump remains for the provision flow. It is **not**
+extended to write `dlp.api_key` (writing the in-memory key at provision time could
+duplicate an env-supplied `DLP_API_KEY` onto disk). It IS extended to write the
+`provisioned.dlp.*` snapshot (below). Existing unrelated keys in `config.yaml` are
+preserved by the merge-write because only changed keys are set.
 
 ### Apply semantics and the restart banner
 
@@ -108,8 +115,18 @@ nothing at query time.
   differ from the snapshot (only evaluated when a snapshot exists and `dlp.enabled`).
 - Deployments provisioned before this feature have no snapshot: no drift is shown until
   their next provision records one. Documented limitation.
-- The UI banner links to the existing setup/provision flow; `embedding_dim` changes
-  additionally warn that re-provisioning recreates the DLP stream.
+- **Re-provision path:** `/setup/provision` 409s once `setup.complete` is true, so it is
+  NOT the re-provision route. The working post-setup path is the existing
+  `POST /api/rules/sync` (`SyncMVs`), which uses `auth.RequestCfg` (session Timeplus
+  credentials) and calls `tp.SyncDLP(cfg.Timeplus, cfg.DLP)` with the live config —
+  re-running DLP provisioning (UDFs + stream + index) idempotently. Because `PUT /api/config`
+  hot-applies DLP changes to the live `cfg.DLP` first, a subsequent `/api/rules/sync` picks
+  up the new values. The settings page therefore exposes a **"Re-provision DLP now"** button
+  in the DLP section that calls `/api/rules/sync` and reports the result; no new backend
+  endpoint is needed. `embedding_dim` changes additionally warn that re-provisioning recreates
+  the DLP stream (note: `SyncDLP`/`InitDLP` use `CREATE STREAM IF NOT EXISTS`, so an
+  `embedding_dim` change is NOT auto-applied to an existing stream — the warning tells the
+  user a manual stream drop is required; an automated destructive recreate stays out of scope).
 
 ### API endpoints (all in the protected group; new `internal/handlers/settings.go`)
 
@@ -157,8 +174,10 @@ Per key:
 - On save, `PUT` only the changed keys; per-key validation errors map back to their inputs.
 - `restart_required` → persistent top banner: "Saved configuration differs from the
   running server — restart AgentGuard to apply."
-- `reprovision_required` → warning banner: "DLP model settings differ from what's
-  provisioned — re-run provisioning", linking to the setup/provision flow.
+- `reprovision_required` → warning banner in the DLP section: "DLP model settings differ
+  from what's provisioned". A **"Re-provision DLP now"** button calls `POST /api/rules/sync`,
+  shows a spinner, then reports success/failure inline. If `embedding_dim` changed, an extra
+  caution line notes the existing DLP stream is not recreated automatically.
 
 ### Test actions
 
