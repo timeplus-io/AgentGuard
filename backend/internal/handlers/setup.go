@@ -118,6 +118,13 @@ func Provision(cfg *config.Config, mgr *catalog.Manager, store *auth.SessionStor
 		newCfg.Timeplus.NativePort = body.NativePort
 		newCfg.AgentGuardURL = agentGuardURL
 		newCfg.SetupComplete = true
+		newCfg.ProvisionedDLP = config.ProvisionedDLP{
+			Recorded:       true,
+			EmbeddingModel: cfg.DLP.EmbeddingModel,
+			EmbeddingDim:   cfg.DLP.EmbeddingDim,
+			RiskModel:      cfg.DLP.RiskModel,
+			SummaryModel:   cfg.DLP.SummaryModel,
+		}
 		if err := config.Save(&newCfg, cfg.ConfigPath); err != nil {
 			sendEvent("error", "Failed to save config: "+err.Error())
 			return
@@ -130,6 +137,7 @@ func Provision(cfg *config.Config, mgr *catalog.Manager, store *auth.SessionStor
 		cfg.Timeplus.NativePort = body.NativePort
 		cfg.AgentGuardURL = agentGuardURL
 		cfg.SetupComplete = true
+		cfg.ProvisionedDLP = newCfg.ProvisionedDLP
 		config.Mu.Unlock()
 
 		// Session is created by the frontend calling /api/auth/login after receiving "done".
