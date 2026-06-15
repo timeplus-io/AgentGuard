@@ -10,6 +10,7 @@ const navItems = [
   { label: 'Rules', to: '/rules', icon: 'rule' },
   { label: 'Semantic DLP', to: '/dlp', icon: 'policy' },
   { label: 'Investigate', to: '/investigate', icon: 'search' },
+  { label: 'Settings', to: '/settings', icon: 'settings' },
 ]
 
 export default function Sidebar() {

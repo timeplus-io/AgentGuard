@@ -23,6 +23,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/catalog"
@@ -99,6 +100,13 @@ func runServer(cmd *cobra.Command, args []string) error {
 	} else {
 		cfg.ConfigPath = "config.yaml"
 	}
+
+	// Capture which CLI flags were explicitly set, so the config UI can mark
+	// flag-overridden keys read-only and show the correct source.
+	changedFlags := map[string]bool{}
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		changedFlags[f.Name] = true
+	})
 
 	frontendFS, err := web.FS()
 	if err != nil {
@@ -202,6 +210,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.POST("/onboarding/generate", handlers.GenerateConfig)
 			protected.GET("/onboarding/install-script", handlers.ServeInstallScript)
 			protected.POST("/proton/query", handlers.ProtonQueryHandler(cfg))
+			protected.GET("/config", handlers.GetConfig(cfg, changedFlags))
+			protected.PUT("/config", handlers.UpdateConfig(cfg, changedFlags))
+			protected.POST("/config/test-timeplus", handlers.TestTimeplusConfig(cfg))
+			protected.POST("/config/test-dlp", handlers.TestDLPConfig(cfg))
 		}
 	}
 

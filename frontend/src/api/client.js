@@ -27,6 +27,24 @@ async function post(path, body) {
   return res.json()
 }
 
+async function put(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    let payload = null
+    try { payload = await res.json() } catch { /* ignore */ }
+    const err = new Error(payload?.error || `HTTP ${res.status}`)
+    err.status = res.status
+    err.errors = payload?.errors || null // per-key validation errors
+    throw err
+  }
+  return res.json()
+}
+
 async function del(path) {
   const res = await fetch(`${BASE}${path}`, { method: 'DELETE', credentials: 'include' })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -177,6 +195,12 @@ export const api = {
   },
   dlpMessage: (id) => get(`/dlp/messages/${encodeURIComponent(id)}`),
   syncRules: () => post('/rules/sync', {}),
+
+  // ── Configuration (Settings page) ───────────────────────────────────────────
+  getConfig: () => get('/config'),
+  updateConfig: (changes) => put('/config', changes),
+  testTimeplusConfig: (host, port) => post('/config/test-timeplus', { host, port }),
+  testDLPConfig: (base_url, api_key) => post('/config/test-dlp', { base_url, api_key }),
 
   // dlpQuery streams NDJSON stage events from the forensic funnel:
   // {stage:"intent"} → {stage:"candidates"} → {stage:"reranked"} → {stage:"answer"}

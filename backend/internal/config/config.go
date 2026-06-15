@@ -50,6 +50,17 @@ type DLPConfig struct {
 	SummaryModel   string `mapstructure:"summary_model"`
 }
 
+// ProvisionedDLP records the DLP model settings that were baked into UDFs and
+// the enriched stream at the last successful provision. Used to detect drift
+// ("re-provision required") when the live DLP config changes afterward.
+type ProvisionedDLP struct {
+	Recorded       bool   `mapstructure:"recorded"`
+	EmbeddingModel string `mapstructure:"embedding_model"`
+	EmbeddingDim   int    `mapstructure:"embedding_dim"`
+	RiskModel      string `mapstructure:"risk_model"`
+	SummaryModel   string `mapstructure:"summary_model"`
+}
+
 type Config struct {
 	Server        ServerConfig
 	Timeplus      TimeplusConfig
@@ -58,6 +69,7 @@ type Config struct {
 	SetupComplete bool
 	Holds         HoldsConfig `mapstructure:"holds"`
 	DLP           DLPConfig   `mapstructure:"dlp"`
+	ProvisionedDLP ProvisionedDLP // loaded from provisioned.dlp.* in config.yaml
 	// ConfigPath is the file path this config was loaded from (or will be written to).
 	// Populated by the caller after Load(); not read from the config file itself.
 	ConfigPath string
@@ -113,6 +125,11 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("dlp.embedding_dim", 1536)
 	v.SetDefault("dlp.risk_model", "gpt-4o-mini")
 	v.SetDefault("dlp.summary_model", "gpt-4o")
+	v.SetDefault("provisioned.dlp.recorded", false)
+	v.SetDefault("provisioned.dlp.embedding_model", "")
+	v.SetDefault("provisioned.dlp.embedding_dim", 0)
+	v.SetDefault("provisioned.dlp.risk_model", "")
+	v.SetDefault("provisioned.dlp.summary_model", "")
 
 	if searchPaths {
 		explicitConfigFile := v.ConfigFileUsed()
@@ -167,6 +184,11 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.DLP.EmbeddingDim = v.GetInt("dlp.embedding_dim")
 	cfg.DLP.RiskModel = v.GetString("dlp.risk_model")
 	cfg.DLP.SummaryModel = v.GetString("dlp.summary_model")
+	cfg.ProvisionedDLP.Recorded = v.GetBool("provisioned.dlp.recorded")
+	cfg.ProvisionedDLP.EmbeddingModel = v.GetString("provisioned.dlp.embedding_model")
+	cfg.ProvisionedDLP.EmbeddingDim = v.GetInt("provisioned.dlp.embedding_dim")
+	cfg.ProvisionedDLP.RiskModel = v.GetString("provisioned.dlp.risk_model")
+	cfg.ProvisionedDLP.SummaryModel = v.GetString("provisioned.dlp.summary_model")
 	// TIMEPLUS_USER / TIMEPLUS_PASSWORD: optional canonical service account
 	// for server-to-server endpoints. Never written to the config file.
 	cfg.Timeplus.User = v.GetString("timeplus.user")
@@ -227,5 +249,10 @@ func Save(cfg *Config, path string) error {
 	v.Set("dlp.embedding_dim", cfg.DLP.EmbeddingDim)
 	v.Set("dlp.risk_model", cfg.DLP.RiskModel)
 	v.Set("dlp.summary_model", cfg.DLP.SummaryModel)
+	v.Set("provisioned.dlp.recorded", cfg.ProvisionedDLP.Recorded)
+	v.Set("provisioned.dlp.embedding_model", cfg.ProvisionedDLP.EmbeddingModel)
+	v.Set("provisioned.dlp.embedding_dim", cfg.ProvisionedDLP.EmbeddingDim)
+	v.Set("provisioned.dlp.risk_model", cfg.ProvisionedDLP.RiskModel)
+	v.Set("provisioned.dlp.summary_model", cfg.ProvisionedDLP.SummaryModel)
 	return v.WriteConfigAs(path)
 }
