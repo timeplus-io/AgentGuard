@@ -19,7 +19,7 @@ type configKeyView struct {
 	Label       string   `json:"label"`
 	Description string   `json:"description"`
 	Type        string   `json:"type"`
-	Value       any      `json:"value,omitempty"` // omitted for secrets
+	Value       any      `json:"value"` // left nil (→ JSON null) for secrets; never echoes the secret
 	Set         bool     `json:"set"`             // for secrets: whether a value exists
 	Source      string   `json:"source"`
 	EnvVar      string   `json:"env_var,omitempty"`

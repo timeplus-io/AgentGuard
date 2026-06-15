@@ -29,6 +29,9 @@ func TestCoerceAndValidate(t *testing.T) {
 		{"agentguard.url", "https://h:8080", false, "https://h:8080"},
 		{"dlp.api_key", "sk-123", false, "sk-123"},
 		{"holds.timeout_seconds", float64(-1), true, nil},
+		{"holds.timeout_seconds", float64(300), false, 300}, // within ceiling
+		{"holds.timeout_seconds", float64(541), true, nil},  // exceeds 540 ceiling
+		{"holds.mv_wait_ms", float64(0), false, 0},          // zero allowed
 		{"nope.key", "x", true, nil},                     // unknown key
 	}
 	for _, c := range cases {

@@ -84,7 +84,13 @@ func validateInt(key string, v int) error {
 		if v < 1 {
 			return errors.New("must be at least 1")
 		}
-	case "holds.mv_wait_ms", "holds.timeout_seconds":
+	case "holds.timeout_seconds":
+		// Mirror the ceiling enforced by config.load() so a saved value is not
+		// silently clamped only on the next restart.
+		if v < 0 || v > 540 {
+			return errors.New("must be between 0 and 540")
+		}
+	case "holds.mv_wait_ms":
 		if v < 0 {
 			return errors.New("must be zero or greater")
 		}
