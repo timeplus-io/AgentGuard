@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+
+	"github.com/spf13/viper"
 )
 
 // CoerceAndValidate converts a raw JSON value (float64/bool/string) to the Go
@@ -244,5 +246,45 @@ func setBool(dst *bool, v any) error {
 		return fmt.Errorf("expected bool, got %T", v)
 	}
 	*dst = b
+	return nil
+}
+
+// FileKeys returns the set of dotted keys present in the YAML file at path.
+// A missing file yields an empty set (not an error).
+func FileKeys(path string) (map[string]bool, error) {
+	out := map[string]bool{}
+	v := viper.New()
+	v.SetConfigFile(path)
+	if err := v.ReadInConfig(); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return out, nil
+		}
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	for _, k := range v.AllKeys() {
+		out[k] = true
+	}
+	return out, nil
+}
+
+// SaveChanges merge-writes only the given keys into the YAML file at path,
+// preserving every other existing key, then enforces 0600 permissions.
+// A missing file is created. Values must be pre-coerced.
+func SaveChanges(path string, changes map[string]any) error {
+	v := viper.New()
+	v.SetConfigType("yaml")
+	v.SetConfigFile(path)
+	if err := v.ReadInConfig(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+	for k, val := range changes {
+		v.Set(k, val)
+	}
+	if err := v.WriteConfigAs(path); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("chmod %s: %w", path, err)
+	}
 	return nil
 }

@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 
 func TestCoerceAndValidate(t *testing.T) {
@@ -96,5 +100,62 @@ func TestEffectiveAndApply(t *testing.T) {
 	}
 	if cfg.DLP.APIKey != "sk-x" {
 		t.Error("ApplyChange dlp.api_key not applied")
+	}
+}
+
+func TestFileKeysAndSaveChanges(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	seed := "" +
+		"server:\n  port: 8080\n" +
+		"dlp:\n  enabled: false\n" +
+		"provisioned:\n  dlp:\n    recorded: true\n    embedding_dim: 1536\n"
+	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	keys, err := FileKeys(path)
+	if err != nil {
+		t.Fatalf("FileKeys: %v", err)
+	}
+	if !keys["server.port"] || !keys["dlp.enabled"] {
+		t.Errorf("FileKeys missing expected keys: %v", keys)
+	}
+
+	// Merge-write only changed keys; unrelated keys must survive.
+	err = SaveChanges(path, map[string]any{
+		"dlp.enabled": true,
+		"dlp.api_key": "sk-merge",
+	})
+	if err != nil {
+		t.Fatalf("SaveChanges: %v", err)
+	}
+
+	reloaded, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if !reloaded.DLP.Enabled {
+		t.Error("dlp.enabled not persisted")
+	}
+	if reloaded.DLP.APIKey != "sk-merge" {
+		t.Error("dlp.api_key not persisted")
+	}
+	if reloaded.Server.Port != 8080 {
+		t.Errorf("unrelated server.port lost: %d", reloaded.Server.Port)
+	}
+	// provisioned.dlp.* must survive a merge-write.
+	k2, _ := FileKeys(path)
+	if !k2["provisioned.dlp.recorded"] {
+		t.Error("provisioned.dlp.recorded lost on merge-write")
+	}
+
+	// File mode must be 0600.
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("file mode = %o, want 600", perm)
 	}
 }
