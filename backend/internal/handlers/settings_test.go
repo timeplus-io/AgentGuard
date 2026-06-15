@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -220,5 +221,61 @@ func TestUpdateConfigClearSecret(t *testing.T) {
 	}
 	if cfg.DLP.APIKey != "" {
 		t.Error("empty secret should clear the value")
+	}
+}
+
+func TestTestDLPConfig(t *testing.T) {
+	// Stub an OpenAI-compatible /models endpoint.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer sk-test" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer upstream.Close()
+
+	cfg := newConfigForTest(t)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/config/test-dlp", TestDLPConfig(cfg))
+
+	body := `{"base_url":"` + upstream.URL + `","api_key":"sk-test"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/config/test-dlp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		OK bool `json:"ok"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if !resp.OK {
+		t.Errorf("expected ok=true, body = %s", w.Body.String())
+	}
+
+	// Wrong key → ok:false, still HTTP 200.
+	bad := `{"base_url":"` + upstream.URL + `","api_key":"wrong"}`
+	req2 := httptest.NewRequest(http.MethodPost, "/api/config/test-dlp", strings.NewReader(bad))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Errorf("unreachable/auth-fail should be 200 with ok:false, got %d", w2.Code)
+	}
+	var resp2 struct {
+		OK bool `json:"ok"`
+	}
+	_ = json.Unmarshal(w2.Body.Bytes(), &resp2)
+	if resp2.OK {
+		t.Error("expected ok=false for wrong key")
 	}
 }

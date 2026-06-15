@@ -1,10 +1,16 @@
 package handlers
 
 import (
+	"io"
 	"net/http"
+	"net/url"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
 // configKeyView is the per-key shape returned by GET /api/config.
@@ -194,5 +200,80 @@ func UpdateConfig(cfg *config.Config, changedFlags map[string]bool) gin.HandlerF
 			"restart_required":     view["restart_required"],
 			"reprovision_required": view["reprovision_required"],
 		})
+	}
+}
+
+// TestTimeplusConfig runs SELECT 1 against a candidate host/port using the
+// session's Timeplus credentials. Body: {"host":"...","port":3218}.
+func TestTimeplusConfig(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			Host string `json:"host" binding:"required"`
+			Port int    `json:"port" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
+			return
+		}
+		rc := auth.RequestCfg(c, cfg)
+		testCfg := config.TimeplusConfig{
+			Host: body.Host, Port: body.Port,
+			User: rc.Timeplus.User, Password: rc.Timeplus.Password,
+		}
+		if _, err := tp.Query(&testCfg, "SELECT 1 AS ok"); err != nil {
+			c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// TestDLPConfig checks that the DLP LLM endpoint is reachable by GETting
+// base_url + "/models" with the bearer key. An absent api_key falls back to the
+// currently-configured one. Body: {"base_url":"...","api_key":"..."}.
+// Reachability failures return HTTP 200 with ok:false (never 5xx).
+func TestDLPConfig(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			BaseURL string `json:"base_url" binding:"required"`
+			APIKey  string `json:"api_key"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
+			return
+		}
+		key := body.APIKey
+		if key == "" {
+			config.Mu.RLock()
+			key = cfg.DLP.APIKey
+			config.Mu.RUnlock()
+		}
+		target := strings.TrimRight(body.BaseURL, "/") + "/models"
+		if _, err := url.ParseRequestURI(target); err != nil {
+			c.JSON(http.StatusOK, gin.H{"ok": false, "error": "invalid base_url"})
+			return
+		}
+
+		client := &http.Client{Timeout: 8 * time.Second}
+		req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, target, nil)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})
+			return
+		}
+		if key != "" {
+			req.Header.Set("Authorization", "Bearer "+key)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})
+			return
+		}
+		defer resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": false, "error": "endpoint returned HTTP " + resp.Status})
 	}
 }
