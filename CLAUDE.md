@@ -141,6 +141,10 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | POST | `/api/onboarding/generate` | `GenerateConfig` | |
 | GET | `/api/onboarding/install-script` | `ServeInstallScript` | Returns agent install script |
 | POST | `/api/proton/query` | `ProtonQueryHandler` | Streaming proxy to Timeplus (NDJSON) |
+| GET | `/api/config` | `GetConfig` | Full effective config with per-key source (default/file/env/flag) + restart/reprovision flags; secrets report `set` not value |
+| PUT | `/api/config` | `UpdateConfig` | Atomic validate + merge-write changed keys to config.yaml; hot-applies non-restart keys to the live config |
+| POST | `/api/config/test-timeplus` | `TestTimeplusConfig` | Tests a candidate Timeplus host/port using session credentials |
+| POST | `/api/config/test-dlp` | `TestDLPConfig` | Tests DLP `base_url` reachability (GET `/models`); never 5xx on unreachable |
 
 ### Frontend (`frontend/src/`)
 
@@ -168,6 +172,7 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | `/rules` | `RulePacks` |
 | `/rules/:id` | `RuleDetail` |
 | `/investigate` | `Investigate` |
+| `/settings` | `Settings` |
 | `/onboarding` | `Onboarding` |
 
 The Onboarding page (`/onboarding`) is the only page that does **not** use the Sidebar/Footer layout (it's a full-page wizard).
