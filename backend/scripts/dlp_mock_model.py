@@ -4,6 +4,8 @@
 Serves deterministic responses with no dependencies:
   POST /v1/embeddings        -> DIM-dim vectors derived from input hash
   POST /v1/chat/completions  -> fixed risk JSON / canned completion
+  GET  /v1/models, /models   -> model list (used by POST /api/config/test-dlp)
+  GET  /, /health            -> liveness probe ("ok") for the integration scripts
 
 Usage: python3 backend/scripts/dlp_mock_model.py [port] [dim]   (default 4000, 8)
 """
@@ -23,7 +25,30 @@ def embed(text):
     return [round(b / 255.0 - 0.5, 4) for b in h[:DIM]]
 
 
+MODEL_IDS = ("mock-embed", "mock-risk", "mock-summary")
+
+
 class Handler(BaseHTTPRequestHandler):
+    def _send_json(self, resp, code=200):
+        out = json.dumps(resp).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+
+    def do_GET(self):
+        # /models and /v1/models back the POST /api/config/test-dlp reachability
+        # probe; / and /health are liveness checks for the integration scripts.
+        if self.path.rstrip("/").endswith("/models"):
+            self._send_json({"object": "list",
+                             "data": [{"id": m, "object": "model"} for m in MODEL_IDS]})
+        elif self.path in ("/", "/health", "/healthz"):
+            self._send_json({"status": "ok"})
+        else:
+            self.send_response(404)
+            self.end_headers()
+
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         if self.path.endswith("/embeddings"):
@@ -54,12 +79,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             return
-        out = json.dumps(resp).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(out)))
-        self.end_headers()
-        self.wfile.write(out)
+        self._send_json(resp)
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[mock-model] " + fmt % args + "\n")

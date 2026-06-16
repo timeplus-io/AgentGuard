@@ -173,6 +173,7 @@ If this URL is wrong, security rules will still detect events and write to the `
 | Rule Packs | `/rules` | Install, enable/disable, and upgrade detection rules; real-time MV health status |
 | Rule Detail | `/rules/:id` | Per-rule configuration including the **Block Policy** panel (`log_only` / `auto_block` / `hold`) |
 | Investigate | `/investigate` | Ad-hoc streaming SQL console backed by Timeplus |
+| Semantic DLP | `/dlp` | Natural-language forensic auditing of conversation logs: ask a question, get a cited report with risk profiles and an enriched-message browser |
 | Onboarding | `/onboarding` | 4-step wizard to connect an OpenClaw, Claude Code, or Hermes agent |
 
 ### Tool-call blocking (NEW)
@@ -186,6 +187,20 @@ AgentGuard can synchronously **pause an agent's tool call** while a human review
 Set the policy on the rule detail page (`/rules/:id` → Block Policy panel). All three plugins ([OpenClaw](agents/openclaw/agentguard-plugin/README.md), [Claude Code](agents/claudecode/agentguard-plugin/README.md), [Hermes](agents/hermes/agentguard-plugin/README.md)) implement the synchronous hold-and-wait path in their `PreToolUse` / `pre_tool_call` / `before_tool_call` hook. See each plugin's README for the env vars (`AGENTGUARD_URL`, `AGENTGUARD_HOLDS_FAIL_POLICY`, `AGENTGUARD_HOLDS_ENABLED`) and the end-to-end walkthrough.
 
 > **Server-side prerequisite:** the `/api/holds` endpoint requires `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process — see [Environment variables](#environment-variables) below.
+
+### Semantic DLP (NEW)
+
+Ask natural-language forensic questions about agent conversation logs — *"Who sent customer contact data to an external model?"* — and get a sourced answer with cited messages. All enrichment (PII/entity extraction, embeddings, risk classification) is pre-computed at ingest by **Timeplus Python UDFs** that call a configurable OpenAI-compatible endpoint; the large model only ever reasons over the final ~20 candidates. Configure it under the `dlp:` section of `config.yaml` (`enabled`, `base_url`, `embedding_model`, `embedding_dim`, `risk_model`, `summary_model`), then provision via the setup wizard.
+
+To try it without a real model endpoint, AgentGuard bundles a deterministic mock and an end-to-end test:
+
+```bash
+make compose-up        # bring up Timeplus + AgentGuard
+make dlp-integration   # mock model server + provision + enrich + query round-trip
+make dlp-seed          # (optional) load demo data, then open /dlp
+```
+
+See the **Semantic DLP** section of [`CLAUDE.md`](CLAUDE.md) and [`docs/cim.md`](docs/cim.md#6-downstream-semantic-dlp) for details.
 
 ---
 
