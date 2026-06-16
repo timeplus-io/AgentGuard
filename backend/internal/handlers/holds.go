@@ -317,10 +317,14 @@ func buildPreExistingOpenThreatsSQL(deploymentID, agentID, sessionID string) str
 SELECT t.rule_id, t.rule_name, t.severity, 'open' AS reported_status, r.block_policy
 FROM table(agentguard_threats) AS t
 INNER JOIN (
+  -- Current rule state is ordered by the monotonic revision column, never
+  -- updated_at: arg_max tie-breaks a tied max to first-seen, so a wall-clock
+  -- tie/backstep on updated_at could select a stale snapshot and block (or
+  -- fail to block) on out-of-date policy. Matches internal/rules store.go.
   SELECT rule_id,
-         arg_max(block_policy, updated_at) AS block_policy,
-         arg_max(enabled,      updated_at) AS enabled,
-         arg_max(deleted,      updated_at) AS deleted
+         arg_max(block_policy, revision) AS block_policy,
+         arg_max(enabled,      revision) AS enabled,
+         arg_max(deleted,      revision) AS deleted
   FROM table(agentguard_rules)
   GROUP BY rule_id
 ) AS r ON t.rule_id = r.rule_id
@@ -386,10 +390,14 @@ FROM (
     AND detected_at >= '%s'
 ) AS s
 INNER JOIN (
+  -- Current rule state is ordered by the monotonic revision column, never
+  -- updated_at: arg_max tie-breaks a tied max to first-seen, so a wall-clock
+  -- tie/backstep on updated_at could select a stale snapshot and block (or
+  -- fail to block) on out-of-date policy. Matches internal/rules store.go.
   SELECT rule_id,
-         arg_max(block_policy, updated_at) AS block_policy,
-         arg_max(enabled,      updated_at) AS enabled,
-         arg_max(deleted,      updated_at) AS deleted
+         arg_max(block_policy, revision) AS block_policy,
+         arg_max(enabled,      revision) AS enabled,
+         arg_max(deleted,      revision) AS deleted
   FROM table(agentguard_rules)
   GROUP BY rule_id
 ) AS r ON s.rule_id = r.rule_id

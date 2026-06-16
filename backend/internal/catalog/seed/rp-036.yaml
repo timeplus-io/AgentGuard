@@ -37,7 +37,7 @@ tags:
   - credential-exfiltration
   - owasp-llm05
   - aishellack
-query_sql: |
+sql_template: |
   -- rp-036 v0.2.0 (2026-04-21): Extended with CVE-2026-35022 (CVSS 9.8, RAXE-2026-051)
   --   Consolidated apiKeyHelper (CVE-2026-21852) + 3 new auth helpers:
   --   awsAuthRefresh, awsCredentialExport, gcpAuthRefresh — all shell=true, no validation

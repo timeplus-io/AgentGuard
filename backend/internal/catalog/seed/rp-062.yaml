@@ -33,7 +33,7 @@ tags:
   - owasp-asi05
   - agentleak
   - arxiv-2602.11510
-query_sql: |
+sql_template: |
   -- v0.2.0 changelog (2026-04-20):
   --   ADDED: agentguard_memory_ops UNION ALL branch — detects PII/PHI/credentials
   --   written into shared memory stores used as inter-agent relay channels.

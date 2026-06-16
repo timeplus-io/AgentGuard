@@ -33,7 +33,7 @@ tags:
   - packmonitor
   - ai-coding-agent
   - cross-ecosystem
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-18):
   --   Extended package manager coverage: added pnpm add/install, yarn add, conda install,
   --   gem install, go get, go install, brew install. Slopsquatting confirmed cross-ecosystem

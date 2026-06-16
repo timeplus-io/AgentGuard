@@ -37,7 +37,7 @@ tags:
   - vercel-incident-2026
   - context-ai
   - oauth-pivot
-query_sql: |
+sql_template: |
   -- v0.1.2: SQL correctness fixes:
   --   1. Phase 1a: removed leading OR (malformed WHERE clause in 0.1.1)
   --   2. Phase 2b: moved CTE to top-level so lag() works across all branches

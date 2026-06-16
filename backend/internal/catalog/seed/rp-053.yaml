@@ -73,7 +73,7 @@ udfs:
       });
     }
     $$;
-query_sql: |
+sql_template: |
   -- v0.2.0 (2026-04-19):
   -- ADDED ag_dns_exfil_check() JS UDF: detects high-entropy/base64-decodable
   --   subdomains in code interpreter output (tool_result) — catches the DNS

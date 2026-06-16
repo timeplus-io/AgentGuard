@@ -36,7 +36,7 @@ tags:
   - scapegoating-attack
   - owasp-asi02
   - mitre-t1565
-query_sql: |
+sql_template: |
   -- rp-084 v0.2.0 (2026-04-19)
   -- Sabotage-from-Within: Compromised Sub-Agent Task Fabrication & Capability Denial
   -- OpenReview ICLR 2026 submission (Sabotage from Within, NKUA): >70% ASR on MAS pipelines

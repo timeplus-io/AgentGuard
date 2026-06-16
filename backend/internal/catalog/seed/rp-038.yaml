@@ -32,7 +32,7 @@ tags:
   - giskard-ate
   - clawguard
   - redteams
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-17):
   -- Branch A: Tightened to reduce FP from developer queries.
   --   "how to invoke/call" now scoped to "your tool/agent's tool/available tool/function"

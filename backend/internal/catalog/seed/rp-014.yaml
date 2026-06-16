@@ -142,7 +142,7 @@ udfs:
       });
     }
     $$;
-query_sql: |
+sql_template: |
     -- v1.3.0 changelog (2026-04-21):
     --   Branch 4: Document-Font/Phantom-Token Natural-Language Directive Injection
     --   (arXiv:2506.00089 TrapDoc EMNLP 2025, arXiv:2505.16957 Malicious Font Injection May 2025,

@@ -2,13 +2,14 @@ package timeplus
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
 	proton "github.com/timeplus-io/proton-go-driver/v2"
-	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
 )
 
@@ -44,7 +45,12 @@ func bt(s string) string { return btReplacer.Replace(s) }
 // place. It is called from the setup wizard (not at server startup), so it
 // receives explicit credentials rather than reading them from the config file.
 // emit is a progress-reporting callback; if nil, progress is logged instead.
-func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntries []catalog.Entry, dlpCfg config.DLPConfig, emit func(status, msg string)) error {
+//
+// Provisioning creates an EMPTY agentguard_rules stream: catalog definitions
+// do not become rule instances until they are explicitly installed. If an
+// agentguard_rules stream from an earlier release already exists with an
+// incompatible schema, Init fails and asks the operator to reprovision.
+func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, dlpCfg config.DLPConfig, emit func(status, msg string)) error {
 	if emit == nil {
 		emit = func(status, msg string) { log.Printf("[provision:%s] %s", status, msg) }
 	}
@@ -119,9 +125,6 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 	if err := createMemoryMVs(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating memory MVs: %v", err)
 	}
-	if err := seedCatalogRules(ctx, conn, catalogEntries); err != nil {
-		log.Printf("timeplus init: warning seeding rules: %v", err)
-	}
 	emit("running", "$ Creating notification UDF and alert…")
 	if err := createNotifyUDF(ctx, conn, agentGuardURL); err != nil {
 		log.Printf("timeplus init: warning creating UDF: %v", err)
@@ -133,13 +136,7 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, catalogEntrie
 		log.Printf("timeplus init: warning creating alert: %v", err)
 	}
 	emit("running", "$ Syncing rule materialized views…")
-	udfsByRuleID := make(map[string][]string, len(catalogEntries))
-	for _, e := range catalogEntries {
-		if len(e.UDFs) > 0 {
-			udfsByRuleID[e.ID] = e.UDFs
-		}
-	}
-	if err := startupSyncMVs(ctx, conn, udfsByRuleID); err != nil {
+	if err := startupSyncMVs(ctx, conn, timeplusCfg); err != nil {
 		log.Printf("timeplus init: warning syncing MVs: %v", err)
 	}
 
@@ -230,7 +227,6 @@ func createAgentGuardStreams(ctx context.Context, conn proton.Conn, emit func(st
 	return execIfNotExists(ctx, conn, "stream", "agentguard_hook_events", ddlAgentGuardHookEvents, emit)
 }
 
-
 func createCIMStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "stream", "agentguard_cim_event", ddlCIMEvent, emit)
 }
@@ -296,53 +292,171 @@ func createSecurityStreams(ctx context.Context, conn proton.Conn, emit func(stri
 	if err := execIfNotExists(ctx, conn, "stream", "agentguard_notify_events", ddlNotifyEventsStream, emit); err != nil {
 		return err
 	}
-	return execIfNotExists(ctx, conn, "stream", "agentguard_rules", ddlRulesStream, emit)
+	return ensureRulesStream(ctx, conn, emit)
+}
+
+// ── Rules stream schema ───────────────────────────────────────────────────────
+
+// expectedRulesSchema is the complete column set of the snapshot-model
+// agentguard_rules stream, mapping column name → Proton type. It must stay in
+// sync with ddlRulesStream (guarded by a unit test).
+var expectedRulesSchema = map[string]string{
+	"rule_id":                  "low_cardinality(string)",
+	"snapshot_id":              "string",
+	"revision":                 "uint64",
+	"name":                     "string",
+	"definition_version":       "string",
+	"definition_hash":          "string",
+	"description":              "string",
+	"rendered_sql":             "string",
+	"deployed_udfs_json":       "string",
+	"parameter_overrides_json": "string",
+	"enabled":                  "bool",
+	"deleted":                  "bool",
+	"severity":                 "low_cardinality(string)",
+	"category":                 "low_cardinality(string)",
+	"required_telemetry":       "string",
+	"fp_rate":                  "low_cardinality(string)",
+	"hook_sources":             "string",
+	"block_policy":             "low_cardinality(string)",
+	"update_reason":            "low_cardinality(string)",
+	"updated_by":               "string",
+	"updated_at":               "datetime64(9)",
+}
+
+// rulesKeyColumnTypes are the columns whose exact type is load-bearing for the
+// snapshot model (ordering, SQL replay, JSON payloads). Presence alone is not
+// enough for these — the type must match exactly.
+var rulesKeyColumnTypes = map[string]string{
+	"snapshot_id":              "string",
+	"revision":                 "uint64",
+	"rendered_sql":             "string",
+	"deployed_udfs_json":       "string",
+	"parameter_overrides_json": "string",
+	"updated_at":               "datetime64(9)",
+}
+
+// validateRulesStreamSchema compares an existing agentguard_rules column set
+// (name → type, as reported by system.columns) against the complete expected
+// schema. Internal _tp_* columns are ignored. Any missing column, unexpected
+// extra column, or key-column type mismatch makes the stream incompatible: the
+// returned error tells the operator to drop the rule resources and reprovision.
+// It is a pure function so it can be unit-tested without a live Proton.
+func validateRulesStreamSchema(cols map[string]string) error {
+	var problems []string
+	actual := make(map[string]string, len(cols))
+	for name, typ := range cols {
+		if strings.HasPrefix(name, "_tp_") {
+			continue // Proton-internal bookkeeping columns
+		}
+		actual[name] = typ
+	}
+	for name := range expectedRulesSchema {
+		if _, ok := actual[name]; !ok {
+			problems = append(problems, fmt.Sprintf("missing column %q", name))
+		}
+	}
+	for name := range actual {
+		if _, ok := expectedRulesSchema[name]; !ok {
+			problems = append(problems, fmt.Sprintf("unexpected column %q", name))
+		}
+	}
+	for name, want := range rulesKeyColumnTypes {
+		if got, ok := actual[name]; ok && normalizeColumnType(got) != normalizeColumnType(want) {
+			problems = append(problems, fmt.Sprintf("column %q has type %s, want %s", name, got, want))
+		}
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	sort.Strings(problems)
+	return fmt.Errorf(
+		"agentguard_rules has an incompatible schema (%s); this AgentGuard release requires a clean reprovision of rule resources: drop the agentguard_rules stream and all mv_rule_* materialized views, then re-run setup",
+		strings.Join(problems, "; "),
+	)
+}
+
+// normalizeColumnType canonicalizes a Proton column type string before
+// comparison. system.columns may report a datetime type with a session
+// timezone argument (e.g. "datetime64(9, 'UTC')") even when the column was
+// declared without one, and may vary in casing/whitespace. The timezone is not
+// load-bearing for the snapshot model, so it is stripped; precision and kind
+// are preserved, so datetime64(9) vs datetime64(3) and uint64 vs uint32 still
+// compare as different. This keeps validateRulesStreamSchema from rejecting a
+// stream this code just created merely because of a cosmetic type-string
+// difference, while still catching genuine incompatibilities.
+func normalizeColumnType(t string) string {
+	t = strings.ToLower(strings.TrimSpace(t))
+	if strings.HasPrefix(t, "datetime") {
+		if open := strings.Index(t, "("); open != -1 && strings.HasSuffix(t, ")") {
+			inner := t[open+1 : len(t)-1]
+			if comma := strings.Index(inner, ","); comma != -1 {
+				inner = inner[:comma] // drop the timezone argument
+			}
+			inner = strings.TrimSpace(inner)
+			if inner == "" || strings.HasPrefix(inner, "'") {
+				return t[:open] // no precision, only a timezone: bare datetime[64]
+			}
+			return t[:open+1] + inner + ")"
+		}
+	}
+	return t
+}
+
+// ensureRulesStream creates the agentguard_rules stream if it does not exist.
+// If it already exists, its schema must match expectedRulesSchema exactly —
+// there is no migration path from the pre-snapshot schema, so a mismatch fails
+// provisioning instead of continuing partially.
+func ensureRulesStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	exists, err := streamExists(ctx, conn, "agentguard_rules")
+	if err != nil {
+		return fmt.Errorf("checking stream %q: %w", "agentguard_rules", err)
+	}
+	if !exists {
+		if err := conn.Exec(ctx, ddlRulesStream); err != nil {
+			return fmt.Errorf("creating stream %q: %w", "agentguard_rules", err)
+		}
+		emit("ok", "  ✓ agentguard_rules")
+		return nil
+	}
+	cols, err := fetchStreamColumns(ctx, conn, "agentguard_rules")
+	if err != nil {
+		return fmt.Errorf("reading agentguard_rules schema: %w", err)
+	}
+	if err := validateRulesStreamSchema(cols); err != nil {
+		emit("error", "  ✗ "+err.Error())
+		return err
+	}
+	emit("ok", "  ✓ agentguard_rules (already exists, schema compatible)")
+	return nil
+}
+
+// fetchStreamColumns returns the column name → type map for a stream in the
+// current database, as reported by system.columns.
+func fetchStreamColumns(ctx context.Context, conn proton.Conn, stream string) (map[string]string, error) {
+	q := fmt.Sprintf(
+		"SELECT name, type FROM system.columns WHERE database = current_database() AND table = '%s'",
+		stream,
+	)
+	rows, err := conn.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols := make(map[string]string)
+	for rows.Next() {
+		var name, typ string
+		if err := rows.Scan(&name, &typ); err != nil {
+			return nil, err
+		}
+		cols[name] = typ
+	}
+	return cols, rows.Err()
 }
 
 func createNotifyFilterMV(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "view", "mv_notify_filter", ddlNotifyFilterMV, emit)
-}
-
-// ── Catalog rule seeding ──────────────────────────────────────────────────────
-
-// seedCatalogRules seeds the agentguard_rules stream with entries from the
-// catalog on first startup (when the stream is empty). Subsequent starts skip
-// seeding so that user toggle/install state is preserved.
-func seedCatalogRules(ctx context.Context, conn proton.Conn, entries []catalog.Entry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	row := conn.QueryRow(ctx, "SELECT count() FROM table(agentguard_rules)")
-	var count uint64
-	if err := row.Scan(&count); err != nil {
-		return fmt.Errorf("seed check: %w", err)
-	}
-	if count > 0 {
-		log.Printf("timeplus: rules already seeded (%d records), skipping", count)
-		return nil
-	}
-
-	batch, err := conn.PrepareBatch(ctx, "INSERT INTO agentguard_rules (rule_id, name, version, description, query_sql, enabled, deleted, severity, category, required_telemetry, fp_rate, hook_sources, updated_at)")
-	if err != nil {
-		return fmt.Errorf("seed prepare: %w", err)
-	}
-	defer func() { _ = batch.Abort() }()
-
-	now := time.Now()
-	for _, e := range entries {
-		if err := batch.Append(
-			e.ID, e.Name, e.Version, e.Description, e.QuerySQL,
-			false, false, e.Severity, e.Category, e.RequiredTelemetry,
-			e.FPRate, e.HookSources, now,
-		); err != nil {
-			return fmt.Errorf("seed append %s: %w", e.ID, err)
-		}
-	}
-	if err := batch.Send(); err != nil {
-		return fmt.Errorf("seed send: %w", err)
-	}
-	log.Printf("timeplus: seeded %d catalog rules", len(entries))
-	return nil
 }
 
 func createNotifyUDF(ctx context.Context, conn proton.Conn, agentGuardURL string) error {
@@ -367,16 +481,39 @@ func createNotifierAlert(ctx context.Context, conn proton.Conn) error {
 	return fmt.Errorf("create alert: %w", err)
 }
 
+// sqlStartupRules reconstructs the current rule instances from the snapshot
+// log. Ordering is by revision — a monotonically increasing counter per rule —
+// not by wall-clock updated_at, so replays and clock skew cannot reorder
+// snapshots.
 const sqlStartupRules = `
 SELECT
   rule_id,
-  arg_max(query_sql, updated_at) AS query_sql,
-  arg_max(enabled,   updated_at) AS enabled
+  arg_max(rendered_sql,       revision) AS rendered_sql,
+  arg_max(deployed_udfs_json, revision) AS deployed_udfs_json,
+  arg_max(enabled,            revision) AS enabled
 FROM table(agentguard_rules)
 GROUP BY rule_id
-HAVING arg_max(deleted, updated_at) = false`
+HAVING arg_max(deleted, revision) = false`
 
-func startupSyncMVs(ctx context.Context, conn proton.Conn, udfsByRuleID map[string][]string) error {
+// decodeDeployedUDFs parses the deployed_udfs_json snapshot column: a JSON
+// array of UDF DDL statements. Empty or blank input means no UDFs.
+func decodeDeployedUDFs(s string) ([]string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	var udfs []string
+	if err := json.Unmarshal([]byte(s), &udfs); err != nil {
+		return nil, fmt.Errorf("decode deployed_udfs_json: %w", err)
+	}
+	return udfs, nil
+}
+
+// startupSyncMVs reconciles mv_rule_* materialized views with the current rule
+// instances in agentguard_rules. It reproduces exactly what was deployed —
+// rendered_sql and deployed_udfs_json from the latest snapshot — and never
+// consults catalog artifacts, which may have changed since deployment.
+func startupSyncMVs(ctx context.Context, conn proton.Conn, timeplusCfg config.TimeplusConfig) error {
 	rows, err := conn.Query(ctx, sqlStartupRules)
 	if err != nil {
 		return fmt.Errorf("startup sync query: %w", err)
@@ -384,14 +521,15 @@ func startupSyncMVs(ctx context.Context, conn proton.Conn, udfsByRuleID map[stri
 	defer rows.Close()
 
 	type ruleRow struct {
-		ruleID   string
-		querySQL string
-		enabled  bool
+		ruleID      string
+		renderedSQL string
+		udfsJSON    string
+		enabled     bool
 	}
 	var rules []ruleRow
 	for rows.Next() {
 		var r ruleRow
-		if err := rows.Scan(&r.ruleID, &r.querySQL, &r.enabled); err != nil {
+		if err := rows.Scan(&r.ruleID, &r.renderedSQL, &r.udfsJSON, &r.enabled); err != nil {
 			log.Printf("timeplus: startup sync scan error: %v", err)
 			continue
 		}
@@ -403,30 +541,49 @@ func startupSyncMVs(ctx context.Context, conn proton.Conn, udfsByRuleID map[stri
 
 	for _, r := range rules {
 		mvName := MVName(r.ruleID)
-		exists, _ := streamExists(ctx, conn, mvName)
+		// Drop/create, not pause/resume + IF NOT EXISTS: the lifecycle service
+		// (internal/rules) uses drop/create so it never trusts an existing MV,
+		// and startup must converge the same way. An MV that already exists but
+		// runs drifted SQL (e.g. left by a CriticalError) would survive an
+		// IF-NOT-EXISTS create or a RESUME; recreating from the snapshot's
+		// rendered_sql guarantees the live MV matches what was persisted.
 		if r.enabled {
-			if !exists {
-				for i, udf := range udfsByRuleID[r.ruleID] {
-					if err := conn.Exec(ctx, udf); err != nil {
-						log.Printf("timeplus: startup create UDF[%d] for %s: %v", i, r.ruleID, err)
-					} else {
-						log.Printf("timeplus: startup created/updated UDF[%d] for %s", i, r.ruleID)
-					}
-				}
-				ddl := fmt.Sprintf("CREATE MATERIALIZED VIEW IF NOT EXISTS %s INTO agentguard_security_events AS %s", mvName, r.querySQL)
-				if err := conn.Exec(ctx, ddl); err != nil {
-					log.Printf("timeplus: startup create MV %s: %v", mvName, err)
-				} else {
-					log.Printf("timeplus: startup created MV %s", mvName)
-				}
-			} else {
-				if err := conn.Exec(ctx, fmt.Sprintf("SYSTEM RESUME MATERIALIZED VIEW %s PERMANENT", mvName)); err != nil {
-					log.Printf("timeplus: startup resume MV %s: %v", mvName, err)
-				}
+			udfs, err := decodeDeployedUDFs(r.udfsJSON)
+			if err != nil {
+				log.Printf("timeplus: startup sync %s: %v — skipping MV creation", r.ruleID, err)
+				continue
 			}
-		} else if exists {
-			if err := conn.Exec(ctx, fmt.Sprintf("SYSTEM PAUSE MATERIALIZED VIEW %s PERMANENT", mvName)); err != nil {
-				log.Printf("timeplus: startup pause MV %s: %v", mvName, err)
+			// Apply ALL the snapshot's UDFs or do not touch the MV (fail-fast,
+			// like the lifecycle service's deployMV, via the shared ApplyUDFs).
+			// UDFs are global: a partial apply could leave the recreated MV bound
+			// to a stale function body, or mutate global UDF state while leaving
+			// the old MV in place. On error, skip — the existing MV keeps running
+			// on its current (unchanged) UDFs.
+			if err := ApplyUDFs(&timeplusCfg, udfs); err != nil {
+				log.Printf("timeplus: startup apply UDFs for %s failed, leaving existing MV intact: %v", r.ruleID, err)
+				continue
+			}
+			// Validate-first: prove the snapshot SQL builds against a disposable
+			// sink BEFORE the destructive drop, so a failed recreate can never
+			// turn a healthy MV into no MV. On failure, leave the existing MV
+			// untouched and move on.
+			if err := PreflightCandidate(&timeplusCfg, r.ruleID, r.renderedSQL); err != nil {
+				log.Printf("timeplus: startup preflight %s failed, leaving existing MV intact: %v", r.ruleID, err)
+				continue
+			}
+			if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s NO DELAY", mvName)); err != nil {
+				log.Printf("timeplus: startup drop stale MV %s: %v", mvName, err)
+			}
+			ddl := fmt.Sprintf("CREATE MATERIALIZED VIEW %s INTO agentguard_security_events AS %s", mvName, r.renderedSQL)
+			if err := conn.Exec(ctx, ddl); err != nil {
+				log.Printf("timeplus: startup create MV %s: %v", mvName, err)
+			} else {
+				log.Printf("timeplus: startup created MV %s", mvName)
+			}
+		} else {
+			// Disabled rules deploy no MV; drop any leftover unconditionally.
+			if err := conn.Exec(ctx, fmt.Sprintf("DROP VIEW IF EXISTS %s NO DELAY", mvName)); err != nil {
+				log.Printf("timeplus: startup drop disabled MV %s: %v", mvName, err)
 			}
 		}
 	}
@@ -716,23 +873,35 @@ LEFT JOIN agentguard_threats AS t
   AND se.rule_id       = t.rule_id
 WHERE t.status = '' OR t.status = 'cleared'`
 
+// ddlRulesStream is the snapshot-model agentguard_rules stream. Each row is one
+// immutable snapshot of a rule; current state is reconstructed with
+// arg_max(..., revision). It must stay in sync with expectedRulesSchema
+// (guarded by TestRulesStreamDDLMatchesExpectedSchema). No column carries a
+// DEFAULT: the snapshot store always writes every column explicitly.
 const ddlRulesStream = `
 CREATE STREAM agentguard_rules
 (
-  rule_id            low_cardinality(string),
-  name               string,
-  version            string,
-  description        string,
-  query_sql          string,
-  enabled            bool,
-  deleted            bool,
-  severity           low_cardinality(string),
-  category           low_cardinality(string),
-  required_telemetry string,
-  fp_rate            low_cardinality(string),
-  hook_sources       string,
-  block_policy       low_cardinality(string) DEFAULT 'log_only',
-  updated_at         datetime64(3)
+  rule_id                  low_cardinality(string),
+  snapshot_id              string,
+  revision                 uint64,
+  name                     string,
+  definition_version       string,
+  definition_hash          string,
+  description              string,
+  rendered_sql             string,
+  deployed_udfs_json       string,
+  parameter_overrides_json string,
+  enabled                  bool,
+  deleted                  bool,
+  severity                 low_cardinality(string),
+  category                 low_cardinality(string),
+  required_telemetry       string,
+  fp_rate                  low_cardinality(string),
+  hook_sources             string,
+  block_policy             low_cardinality(string),
+  update_reason            low_cardinality(string),
+  updated_by               string,
+  updated_at               datetime64(9)
 )`
 
 const ddlCIMEvent = `
@@ -1294,7 +1463,6 @@ ARRAY JOIN
   ]                                         AS metric_value
 WHERE agent_type = 'claudecode'
   AND event_type = 'tool_complete'`
-
 
 const ddlPricingStream = `
 CREATE MUTABLE STREAM IF NOT EXISTS agentguard_pricing

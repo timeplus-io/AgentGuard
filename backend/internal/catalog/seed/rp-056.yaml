@@ -23,7 +23,7 @@ tags:
   - steganography
   - covert-channel
   - owasp-llm01
-query_sql: |
+sql_template: |
   -- rp-056: Invisible Unicode Instruction Injection Detector v0.1.0
   -- arXiv:2603.00164 (Reverse CAPTCHA, Feb 2026)
   -- Zero-width chars: U+200B (E2 80 8B), U+200C (E2 80 8C), U+200D (E2 80 8D),

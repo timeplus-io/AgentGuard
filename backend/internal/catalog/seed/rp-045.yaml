@@ -30,7 +30,7 @@ tags:
   - owasp-llm05
   - arxiv-2601.21380
   - arxiv-2501.01818
-query_sql: |
+sql_template: |
   -- v0.1.0: Adversarial LLM router rerouting attack detection
   -- Covers three adversarial objectives from arXiv:2601.21380 + arXiv:2501.01818:
   --   (1) Cost escalation: Route to Rome — adversarial suffix forcing premium model routing

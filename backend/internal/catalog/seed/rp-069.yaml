@@ -27,7 +27,7 @@ tags:
   - owasp-asi03
   - arxiv-2512.04864
   - arxiv-2603.03116
-query_sql: |
+sql_template: |
   -- rp-069 v0.2.0 (2026-04-19)
   -- CRITICAL FIX: Removed all \b word boundaries — Timeplus RE2 does not support \b;
   -- patterns silently returned false. Replaced with context-sensitive anchors (.{0,N} / (^|[^a-z]))

@@ -34,7 +34,7 @@ tags:
   - neurips-2026
   - iclr-2026
   - arxiv-2510.05159
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-20):
   -- Branch 1 (Environment Poisoning): injection in fetched environment content
   --   followed by write to training trace file — arXiv:2510.05159 Threat Model 3.

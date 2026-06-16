@@ -27,7 +27,7 @@ tags:
   - owasp-llm05
   - mitre-t1195
   - arXiv-2604.08407
-query_sql: |
+sql_template: |
   -- Changelog v0.7.0 (2026-04-17):
   -- NEW Branch 3: AC-1.a Dependency-Targeted Injection (arXiv:2604.08407 Apr 2026)
   --   Malicious routers intercept coding agent LLM responses and rewrite package

@@ -41,7 +41,7 @@ tags:
   - owasp-asi05
   - owasp-llm01
   - arxiv-2508.12175
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-19):
   -- NEW: Targeted Promptware email/calendar injection → lateral device/app pivot detection.
   --

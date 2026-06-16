@@ -78,14 +78,19 @@ GROUP BY m.tags['provider'], m.tags['model']`)
 			totalCost += parseFloat64(r["cost"])
 		}
 
-		// Active rules — latest state per rule_id via arg_max.
+		// Active rules — latest state per rule_id by monotonic revision (not
+		// updated_at), excluding soft-deleted rules. An uninstalled rule's delete
+		// snapshot keeps its enabled flag, so without the deleted filter an
+		// uninstalled-while-enabled rule would still count as active. The deleted
+		// guard stays a raw aggregate in HAVING (not a `deleted` alias) so it can't
+		// shadow the base column inside arg_max(deleted, revision).
 		ruleRows, err := tp.Query(&cfg.Timeplus, `
 SELECT count() AS total
 FROM (
-  SELECT rule_id, arg_max(enabled, updated_at) AS active
+  SELECT rule_id, arg_max(enabled, revision) AS active
   FROM table(agentguard_rules)
   GROUP BY rule_id
-  HAVING active = true
+  HAVING active = true AND arg_max(deleted, revision) = false
 )`)
 		if err != nil {
 			log.Printf("[dashboard] active rules query failed: %v", err)

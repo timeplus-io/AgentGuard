@@ -33,7 +33,7 @@ tags:
   - owasp-asi05
   - inferlink
   - arxiv-2603.18382
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-19):
   -- NEW: Inference-Driven De-Anonymization attack detection.
   --

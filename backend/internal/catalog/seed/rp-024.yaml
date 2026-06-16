@@ -22,7 +22,7 @@ tags:
   - unauthorized-tool-call
   - json-grant-injection
   - clawguard
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-17):
   -- NEW: JSON tool definition injection — "available_tools" or "mcp:tools" array in tool_result
   --   Attacker returns a JSON blob claiming to expand the agent's tool namespace.

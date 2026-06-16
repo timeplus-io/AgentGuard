@@ -34,7 +34,7 @@ tags:
   - cwe-441
   - arxiv-2601.07395
   - arxiv-2603.24203
-query_sql: |
+sql_template: |
   -- rp-078 v0.1.0 (2026-04-19)
   -- MCP-ITP: Implicit Tool Poisoning — Stealthy Metadata-Driven High-Privilege Tool Redirect
   -- arXiv:2601.07395 (USTC, Jan 2026): 84.2% ASR, MDR 0.3% (vs explicit detection)

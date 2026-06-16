@@ -114,7 +114,7 @@ udfs:
       }
     }
     $$;
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-17):
   -- NEW: setcap Linux capability grant (cap_net_raw, cap_net_admin, all=+ep)
   --   Agents using setcap to grant raw network or privilege capabilities to binaries

@@ -31,7 +31,7 @@ tags:
   - owasp-llm05
   - sigmod-2026
   - arxiv-2503.05445
-query_sql: |
+sql_template: |
   -- rp-113 v0.1.1 — ToxicSQL backdoored text-to-SQL malicious query detector
   -- CHANGELOG v0.1.1 (2026-04-22):
   --   Added (H) mass DELETE: DELETE FROM <table> WHERE 1=1|true|broad-col

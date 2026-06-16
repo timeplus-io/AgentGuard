@@ -30,7 +30,7 @@ tags:
   - kill-chain-canaries
   - arXiv-2601.23088
   - arXiv-2603.28013
-query_sql: |
+sql_template: |
   -- rp-029 v0.1.0 — Semantic Cache Poisoning Detector
   -- Signals:
   --   1. Kill-chain canary token SECRET-[A-F0-9]{6,12} in tool_result — per arXiv:2603.28013

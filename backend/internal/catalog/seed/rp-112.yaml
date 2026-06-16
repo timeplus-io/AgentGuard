@@ -27,7 +27,7 @@ tags:
   - muzzle
   - search-agent
   - authority-abuse
-query_sql: |
+sql_template: |
   -- rp-112: Adversarial Search Ranking Epistemic Poisoning Detector v0.1.0
   -- 2-step lag() CTE: web search tool_complete with authority+action directive
   -- immediately followed by high-impact tool_invoke in the same session.

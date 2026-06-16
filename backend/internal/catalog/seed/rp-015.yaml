@@ -27,7 +27,7 @@ tags:
   - trust-exploitation
   - owasp-asi05
   - unit42
-query_sql: |
+sql_template: |
   -- v0.2.0 changelog:
   --   PRECISION: 'system override' plain LIKE → require directive marker (colon/period after)
   --     to avoid FP on inline phrases like "this system override policy is outdated"

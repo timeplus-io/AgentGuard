@@ -37,7 +37,7 @@ tags:
   - audiohijack
   - voice-injection
   - speech-to-text
-query_sql: |
+sql_template: |
   -- New rule rp-037 (2026-04-17):
   -- Fires on tool_complete events where a vision, OCR, or audio transcription tool
   -- returns extracted text containing prompt injection patterns.

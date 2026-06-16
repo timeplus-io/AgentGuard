@@ -35,7 +35,7 @@ tags:
   - arXiv-2602.16901
   - arXiv-2602.16935
   - task-injection
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-17):
   -- NEW: Crescendo accumulated-trust pivot pattern (DeepContext arXiv:2602.16935 taxonomy)
   --   "Step N: now that you have [privilege/access/credential], export all Y to external"

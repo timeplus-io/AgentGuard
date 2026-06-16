@@ -28,7 +28,7 @@ tags:
   - owasp-llm01
   - owasp-asi03
   - arxiv-2509.25624
-query_sql: |
+sql_template: |
   -- rp-068: STAC Sequential Tool Attack Chaining Detector v0.1.0
   -- arXiv:2509.25624 (STAC, ICLR 2026, AWS AI Labs / UC Berkeley)
   -- >90% ASR against GPT-4.1 across 483 evaluated attack cases.

@@ -21,7 +21,7 @@ tags:
   - embeddings
   - vector-database
   - embedding-inversion
-query_sql: |
+sql_template: |
   -- v0.3.1 changelog (2026-04-20):
   --   VERSION FIX: YAML version field was stuck at 0.2.1 despite v0.3.0 changelog block
   --   already present in query_sql (base64-encoded embedding exfil branch added in v0.3.0).

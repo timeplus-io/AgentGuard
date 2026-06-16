@@ -83,7 +83,10 @@ SELECT h.hold_id, h.deployment_id, h.agent_id, h.session_id, h.run_id,
        h.created_at, h.status, h.decided_by, h.decided_at, h.decided_reason
 FROM `+holdsLatestSubquery+` AS h
 LEFT JOIN (
-  SELECT rule_id, arg_max(name, updated_at) AS rule_name
+  -- Latest name per rule by monotonic revision (the snapshot invariant), not
+  -- updated_at. No deleted filter: a since-deleted rule's name is still the
+  -- correct label for a historical hold row.
+  SELECT rule_id, arg_max(name, revision) AS rule_name
   FROM table(agentguard_rules)
   GROUP BY rule_id
 ) AS r ON h.rule_id = r.rule_id

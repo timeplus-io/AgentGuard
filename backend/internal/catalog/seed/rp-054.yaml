@@ -28,7 +28,7 @@ tags:
   - owasp-asi05
   - owasp-llm08
   - arxiv-2602.13477
-query_sql: |
+sql_template: |
   -- rp-054 v0.1.0 (2026-04-17)
   -- OMNI-LEAK: Orchestrator outbound cascade exfiltration detector.
   --

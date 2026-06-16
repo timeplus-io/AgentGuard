@@ -21,7 +21,7 @@ tags:
   - toctou
   - browser-use
   - race-condition
-query_sql: |
+sql_template: |
   -- rp-092 v0.1.0: TOCTOU read→write race condition detection via lag() sequence
   WITH enriched AS (
     SELECT

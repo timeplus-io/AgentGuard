@@ -38,7 +38,7 @@ tags:
   - adaptools
   - owasp-llm01
   - owasp-asi02
-query_sql: |
+sql_template: |
   -- rp-118 v0.1.4 (2026-04-23) — Multi-Tool Source-to-Sink Workflow Exploitation Detector
   -- arXiv:2603.12614 (ChainFuzzer Mar 2026), GHSA-jwjx-mw2p-5wc7 (AnythingLLM SQL Agent)
   --

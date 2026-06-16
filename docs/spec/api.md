@@ -1965,7 +1965,9 @@ print(r.json())
 
 `GET /rules`
 
-Returns all non-deleted rules from the `agentguard_rules` append-only stream. Current state is computed via `arg_max(field, updated_at) GROUP BY rule_id`.
+Returns all non-deleted rules from the `agentguard_rules` append-only snapshot stream. Current state is reconstructed via `arg_max(field, revision) GROUP BY rule_id` (ordered by the per-rule monotonic `revision`, not `updated_at`).
+
+> **Note:** this reference is generated; the canonical, up-to-date OpenAPI spec is served at `/docs/openapi.json` (source: `backend/internal/handlers/docs.go`). For the editable-rule-parameters endpoints — `PUT /api/rules/{id}/configuration`, install-with-overrides, the bodyless `POST /api/rules/{id}/upgrade`, and the `RuleInstance` read model — consult that spec or `docs/design.md` §5.1 until this file is regenerated.
 
 > Example responses
 

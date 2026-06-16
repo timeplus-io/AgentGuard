@@ -27,7 +27,7 @@ tags:
   - arxiv-2503.24191
   - owasp-llm01
   - owasp-llm07
-query_sql: |
+sql_template: |
   -- v0.1.0 — three detection branches:
   --   Branch A: EnumAttack — harmful multi-word instructions in enum array values
   --     in tool_input (schema supplied to structured-output tool)

@@ -21,7 +21,7 @@ tags:
   - mitm
   - mast
   - inter-agent
-query_sql: |
+sql_template: |
   -- rp-122 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrapper to CTE source
   --   (FROM agentguard_cim_event → FROM agentguard_cim_event) to prevent streaming
   --   mode hang on port 3218. SQL validated, count=0 on test corpus.

@@ -29,7 +29,15 @@ tags:
   - owasp-llm04
   - arxiv-2601.17566
   - metrics
-query_sql: |
+parameters:
+  - id: tool_call_rate_threshold
+    label: "Tool-call rate threshold"
+    description: "Maximum tool.call events per session in the 5-minute window before the metrics branch flags reasoning inflation."
+    type: integer
+    default: 25
+    min: 1
+    max: 10000
+sql_template: |
   -- v0.1.0 (2026-04-18):
   -- Sponge Tool Attack detection. Two branches:
   --
@@ -141,4 +149,4 @@ query_sql: |
   WHERE metric_name = 'tool.call'
     AND event_time > now() - INTERVAL 5 MINUTE
   GROUP BY session_id, agent_id, deployment_id
-  HAVING count() > 25
+  HAVING count() > {{params.tool_call_rate_threshold}}

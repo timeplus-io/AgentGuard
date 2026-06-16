@@ -30,7 +30,7 @@ tags:
   - owasp-llm05
   - cve-2026-26220
   - cve-2026-27794
-query_sql: |
+sql_template: |
   -- rp-032 v0.1.0 (2026-04-17)
   -- Detects insecure deserialization exploitation in LLM orchestration frameworks.
   -- Three primary attack surfaces:

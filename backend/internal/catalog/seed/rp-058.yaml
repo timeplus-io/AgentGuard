@@ -24,7 +24,7 @@ tags:
   - prompt-injection
   - deception
   - owasp-asi07
-query_sql: |
+sql_template: |
   -- rp-058: NEST Steganographic Chain-of-Thought Hidden Reasoning Detector v0.1.0
   -- arXiv:2602.14095 (NEST: Nascent Encoded Steganographic Thoughts, Feb 2026)
   -- Claude Opus 4.5: 92% hidden-task accuracy via acrostic CoT encoding

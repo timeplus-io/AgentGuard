@@ -30,7 +30,7 @@ tags:
   - langgraph
   - crewai
   - owasp-agentic-ai
-query_sql: |
+sql_template: |
   -- Branch A's arg_max carriers are aliased `sample_tool` / `sample_hook` (not
   -- `tool_name` / `hook_name`) to avoid Proton ILLEGAL_AGGREGATION when the
   -- same column name is referenced in the pre-aggregation WHERE filter.

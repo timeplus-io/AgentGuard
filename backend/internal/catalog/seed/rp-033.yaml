@@ -30,7 +30,7 @@ tags:
   - adaptive-querying
   - owasp-llm02
   - arXiv-2604.09747
-query_sql: |
+sql_template: |
   -- v0.3.0 changelog (2026-04-22):
   --   FIX: Removed \b word boundaries from multi-word phrases (broken in Proton RE2).
   --   FIX: Replaced window function in memory_ops branch with simple predicate matching

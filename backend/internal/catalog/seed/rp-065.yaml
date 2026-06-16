@@ -29,7 +29,7 @@ tags:
   - cot-poisoning
   - owasp-asi02
   - arxiv-2602.05066
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-18):
   -- Agent-as-a-Proxy attack detection: adversarial compliance tokens in agent output
   -- that impersonate monitoring system verdicts, indicating the agent has echoed

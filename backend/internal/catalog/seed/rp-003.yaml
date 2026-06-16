@@ -29,7 +29,22 @@ tags:
   - env-poisoning
   - compound-command
   - aishellack
-query_sql: |
+parameters:
+  - id: dangerous_tools
+    label: "Dangerous tools"
+    description: "Tool names treated as inherently high-risk shell/exec surfaces."
+    type: string_list
+    default: [bash, shell, exec, run_terminal_cmd, computer]
+    min_items: 1
+    max_items: 64
+  - id: command_chain_threshold
+    label: "Maximum chained commands"
+    description: "Number of &&-separated subcommands that trips the CC-643 compound-command complexity-evasion branch."
+    type: integer
+    default: 15
+    min: 1
+    max: 100
+sql_template: |
   -- Changelog v1.2.0 (2026-04-17):
   -- NEW: CVE-2026-22708 Cursor shell built-in env var poisoning.
   --   export/declare targeting interpreter hook variables (case-sensitive: always uppercase in shell):
@@ -68,7 +83,7 @@ query_sql: |
   WHERE event_type = 'tool_invoke'
     AND (
       -- Original: dangerous tool names
-         lower(tool_name) IN ('bash', 'shell', 'exec', 'run_terminal_cmd', 'computer')
+         lower(tool_name) IN {{params.dangerous_tools}}
       -- Original: dangerous command patterns
       OR lower(tool_input) LIKE '%sudo %'
       OR lower(tool_input) LIKE '%rm -rf%'
@@ -104,7 +119,7 @@ query_sql: |
       -- PYTHONWARNINGS=...antigravity triggers BROWSER → PERL5OPT → arbitrary code execution
       OR match(lower(tool_input), 'pythonwarnings.{0,30}antigravity')
       -- v1.2.0: CC-643 compound command complexity evasion (Claude Code deny-rule bypass)
-      -- 15+ occurrences of '&&' detected via string length diff (RE2 lacks {N,} open quantifier)
-      -- (length - length_without_&&) >= 30 means at least 15 '&&' pairs present
-      OR (length(tool_input) - length(replace_all(tool_input, '&&', ''))) >= 30
+      -- N+ occurrences of '&&' detected via string length diff (RE2 lacks {N,} open quantifier)
+      -- (length - length_without_&&) / 2 = number of '&&' pairs present
+      OR ((length(tool_input) - length(replace_all(tool_input, '&&', ''))) / 2) >= {{params.command_chain_threshold}}
     )

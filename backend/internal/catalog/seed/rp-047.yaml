@@ -26,7 +26,7 @@ tags:
   - owasp-llm05
   - arxiv-2505.18471
   - arxiv-2604.08407
-query_sql: |
+sql_template: |
   -- Branch 1: latency collapse in a 5-min hop window per session
   SELECT
     max(event_time) AS detected_at,

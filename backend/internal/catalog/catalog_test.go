@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -125,12 +126,14 @@ func TestAll_SortedAndMerged(t *testing.T) {
 	}
 	tmp := t.TempDir()
 	// Local override that should win over seed's rp-002, plus a fresh entry.
+	// Local-dir definitions must pass Validate to load (unlike seed test
+	// fixtures), so they carry the required fields.
 	if err := os.WriteFile(filepath.Join(tmp, "rp-002.yaml"),
-		[]byte("id: rp-002\nname: Local Override\n"), 0o644); err != nil {
+		[]byte("id: rp-002\nname: Local Override\nversion: 1.0.0\nsql_template: SELECT 1\n"), 0o644); err != nil {
 		t.Fatalf("write override: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(tmp, "rp-003.yaml"),
-		[]byte("id: rp-003\nname: Local New\n"), 0o644); err != nil {
+		[]byte("id: rp-003\nname: Local New\nversion: 1.0.0\nsql_template: SELECT 1\n"), 0o644); err != nil {
 		t.Fatalf("write new: %v", err)
 	}
 
@@ -160,7 +163,8 @@ func TestSave_PersistsAndUpdatesMemory(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	entry := Entry{ID: "rp-new", Name: "New Rule", Severity: "warning"}
+	entry := Definition{ID: "rp-new", Name: "New Rule", Version: "1.0.0",
+		SQLTemplate: "SELECT 1", Severity: "warning"}
 	if err := m.Save(entry); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -181,12 +185,121 @@ func TestSave_PersistsAndUpdatesMemory(t *testing.T) {
 	}
 }
 
+// TestNew_SemanticValidatorSkipsInvalidLocalDef proves the validator injected via
+// WithSemanticValidator is applied while local-directory files load (not only at
+// Save/Import): a structurally-valid YAML that fails the validator is skipped, so
+// a hand-placed non-compiling local file never enters the served catalog.
+func TestNew_SemanticValidatorSkipsInvalidLocalDef(t *testing.T) {
+	tmp := t.TempDir()
+	good := "id: rp-good\nname: Good\nversion: 1.0.0\nsql_template: SELECT 1\n"
+	bad := "id: rp-bad\nname: Bad\nversion: 1.0.0\nsql_template: SELECT 1\n"
+	if err := os.WriteFile(filepath.Join(tmp, "good.yaml"), []byte(good), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "bad.yaml"), []byte(bad), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(fstest.MapFS{}, tmp, WithSemanticValidator(func(d Definition) error {
+		if d.ID == "rp-bad" {
+			return errors.New("does not compile")
+		}
+		return nil
+	}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, ok := m.Lookup("rp-good"); !ok {
+		t.Error("compiling local definition should load")
+	}
+	if _, ok := m.Lookup("rp-bad"); ok {
+		t.Error("non-compiling local definition must be skipped at load")
+	}
+}
+
+// TestSave_SemanticValidatorRejects proves the injected compiler-semantic check
+// runs at Save time: a definition that passes structural Validate() but fails the
+// validator is rejected before it is written to disk or added to memory (so an
+// authoring defect surfaces as a client error at create time, not a 500 at first
+// install).
+func TestSave_SemanticValidatorRejects(t *testing.T) {
+	tmp := t.TempDir()
+	m, err := New(fstest.MapFS{}, tmp)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	m.SemanticValidator = func(d Definition) error {
+		return errors.New("compiler said no")
+	}
+	entry := Definition{ID: "rp-bad", Name: "Bad", Version: "1.0.0",
+		SQLTemplate: "SELECT 1", Severity: "warning"}
+	if err := m.Save(entry); err == nil || !strings.Contains(err.Error(), "compiler said no") {
+		t.Fatalf("Save should surface the semantic validator error, got %v", err)
+	}
+	if _, ok := m.Lookup("rp-bad"); ok {
+		t.Errorf("rejected definition must not be added to the catalog")
+	}
+	if _, statErr := os.Stat(filepath.Join(tmp, "rp-bad.yaml")); statErr == nil {
+		t.Errorf("rejected definition must not be written to disk")
+	}
+}
+
+func TestDelete_RemovesLocalDefinitionAndFile(t *testing.T) {
+	tmp := t.TempDir()
+	seed := fstest.MapFS{"a.yaml": {Data: []byte("id: rp-001\nname: Builtin\n")}}
+	m, err := New(seed, tmp)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	entry := Definition{ID: "custom-x", Name: "Custom", Version: "1.0.0",
+		SQLTemplate: "SELECT 1", Severity: "warning"}
+	if err := m.Save(entry); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, ok := m.Lookup("custom-x"); !ok {
+		t.Fatal("custom-x should exist after Save")
+	}
+
+	if err := m.Delete("custom-x"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, ok := m.Lookup("custom-x"); ok {
+		t.Error("custom-x should be gone after Delete")
+	}
+	if _, err := os.Stat(filepath.Join(tmp, "custom-x.yaml")); !os.IsNotExist(err) {
+		t.Errorf("file should be removed, stat err = %v", err)
+	}
+
+	// Deleting an unknown local ID is a no-op (no error).
+	if err := m.Delete("nope"); err != nil {
+		t.Errorf("Delete unknown should be a no-op, got %v", err)
+	}
+
+	// Deleting a builtin's ID removes no file and leaves the seed entry intact.
+	if err := m.Delete("rp-001"); err != nil {
+		t.Errorf("Delete builtin: %v", err)
+	}
+	if !m.Exists("rp-001") {
+		t.Error("builtin rp-001 must survive Delete (it is not file-backed)")
+	}
+}
+
+func TestDelete_NoCatalogDirErrors(t *testing.T) {
+	m, err := New(fstest.MapFS{}, "")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := m.Delete("x"); err == nil {
+		t.Error("expected error when no catalog dir is configured")
+	}
+}
+
 func TestSave_NoCatalogDirErrors(t *testing.T) {
 	m, err := New(fstest.MapFS{}, "")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if err := m.Save(Entry{ID: "x"}); err == nil {
+	if err := m.Save(Definition{ID: "x"}); err == nil {
 		t.Error("expected error when no catalog dir is configured")
 	}
 }
@@ -210,6 +323,38 @@ func TestLoadFS_SkipsNonYAMLAndInvalid(t *testing.T) {
 	}
 	if len(m.All()) != 2 {
 		t.Errorf("expected 2 entries, got %d", len(m.All()))
+	}
+}
+
+// loadDir must validate each local definition and skip (not fail startup on)
+// invalid or unparseable files, so anything reachable via Lookup/All has
+// passed Validate.
+func TestLoadDir_SkipsInvalidDefinitions(t *testing.T) {
+	tmp := t.TempDir()
+	write := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(tmp, name), []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	write("good.yaml", "id: rp-good\nname: Good\nversion: 1.0.0\nsql_template: SELECT 1\n")
+	// Fails Validate: missing sql_template.
+	write("invalid.yaml", "id: rp-invalid\nname: Invalid\nversion: 1.0.0\n")
+	// Unparseable YAML.
+	write("broken.yaml", "id: [this-is: not-valid-yaml-at-all")
+
+	m, err := New(fstest.MapFS{}, tmp)
+	if err != nil {
+		t.Fatalf("New must not fail on invalid local files: %v", err)
+	}
+	if !m.Exists("rp-good") {
+		t.Error("valid local definition should be loaded")
+	}
+	if m.Exists("rp-invalid") {
+		t.Error("Validate-failing local definition must be skipped")
+	}
+	if got := len(m.All()); got != 1 {
+		t.Errorf("expected 1 entry, got %d", got)
 	}
 }
 
@@ -248,12 +393,12 @@ func TestLoadFS_PropagatesReadErrors(t *testing.T) {
 	}
 }
 
-// Compile-time check that Entry is the type returned from Lookup/All — guards
-// against accidental field renames downstream consumers depend on.
-var _ = func() Entry {
-	return Entry{ID: "_", Name: "_", Version: "_", Description: "_", Severity: "_",
+// Compile-time check that Definition is the type returned from Lookup/All —
+// guards against accidental field renames downstream consumers depend on.
+var _ = func() Definition {
+	return Definition{ID: "_", Name: "_", Version: "_", Description: "_", Severity: "_",
 		Category: "_", FPRate: "_", HookSources: "_", RequiredTelemetry: "_",
-		Author: "_", Tags: nil, UDFs: nil, QuerySQL: "_"}
+		Author: "_", Tags: nil, UDFs: nil, SQLTemplate: "_", Parameters: nil, Origin: "_"}
 }
 
 // Ensure the embedded fs.FS interface is honored — gives a sensible compile
@@ -285,7 +430,7 @@ func TestSeedFS_NoUnsupportedStreamingSQL(t *testing.T) {
 		// Strip SQL line comments — changelogs often mention the banned
 		// patterns when explaining why they were removed.
 		var stripped strings.Builder
-		for _, line := range strings.Split(e.QuerySQL, "\n") {
+		for _, line := range strings.Split(e.SQLTemplate, "\n") {
 			if idx := strings.Index(line, "--"); idx >= 0 {
 				line = line[:idx]
 			}
@@ -313,8 +458,8 @@ func TestSeedFS_HasRP013(t *testing.T) {
 	if !ok {
 		t.Fatal("rp-013 missing from seed catalog")
 	}
-	if e.Name == "" || e.QuerySQL == "" {
-		t.Errorf("rp-013 has empty Name or QuerySQL: %+v", e)
+	if e.Name == "" || e.SQLTemplate == "" {
+		t.Errorf("rp-013 has empty Name or SQLTemplate: %+v", e)
 	}
 }
 
@@ -338,7 +483,7 @@ func TestSeedFS_RP013HasWindowFallback(t *testing.T) {
 		t.Fatalf("rp-013 RequiredTelemetry = %q, want input and output token metrics", e.RequiredTelemetry)
 	}
 
-	query := e.QuerySQL
+	query := e.SQLTemplate
 	required := []string{
 		// Branch A is tumble-bounded (load-bearing — see SQL changelog).
 		"FROM tumble(agentguard_cim_metrics, event_time, interval 5 minute)",
@@ -350,7 +495,7 @@ func TestSeedFS_RP013HasWindowFallback(t *testing.T) {
 	}
 	for _, want := range required {
 		if !strings.Contains(query, want) {
-			t.Fatalf("rp-013 QuerySQL missing %q", want)
+			t.Fatalf("rp-013 SQLTemplate missing %q", want)
 		}
 	}
 }
@@ -370,7 +515,7 @@ func TestSeedFS_RP013SemanticScenarios(t *testing.T) {
 	if !ok {
 		t.Fatal("rp-013 missing from seed catalog")
 	}
-	query := e.QuerySQL
+	query := e.SQLTemplate
 
 	mustContain := func(t *testing.T, needle, why string) {
 		t.Helper()
@@ -492,7 +637,7 @@ func TestSeedFS_RP018EventWindowRewrite(t *testing.T) {
 		t.Fatal("rp-018 UDAF must use Object.create(null) for tool-count map to prevent prototype-key evasion")
 	}
 
-	q := e.QuerySQL
+	q := e.SQLTemplate
 	required := []string{
 		"WITH unified_run_events AS",
 		"UNION ALL",
@@ -512,7 +657,7 @@ func TestSeedFS_RP018EventWindowRewrite(t *testing.T) {
 	}
 	for _, want := range required {
 		if !strings.Contains(q, want) {
-			t.Errorf("rp-018 QuerySQL missing %q", want)
+			t.Errorf("rp-018 SQLTemplate missing %q", want)
 		}
 	}
 
@@ -525,7 +670,7 @@ func TestSeedFS_RP018EventWindowRewrite(t *testing.T) {
 	}
 	for _, bad := range forbidden {
 		if strings.Contains(stripped, bad) {
-			t.Errorf("rp-018 QuerySQL still contains forbidden pre-v0.3.0 pattern %q", bad)
+			t.Errorf("rp-018 SQLTemplate still contains forbidden pre-v0.3.0 pattern %q", bad)
 		}
 	}
 }
@@ -547,7 +692,7 @@ func TestSeedFS_RP047HasHopWindow(t *testing.T) {
 	if e.Version != "0.2.1" {
 		t.Fatalf("rp-047 version = %q, want 0.2.1", e.Version)
 	}
-	q := e.QuerySQL
+	q := e.SQLTemplate
 	required := []string{
 		// Branch 1: 5-min hop over cim_metrics
 		"FROM hop(agentguard_cim_metrics, event_time, interval 1 minute, interval 5 minute)",
@@ -567,7 +712,7 @@ func TestSeedFS_RP047HasHopWindow(t *testing.T) {
 	}
 	for _, want := range required {
 		if !strings.Contains(q, want) {
-			t.Errorf("rp-047 QuerySQL missing %q", want)
+			t.Errorf("rp-047 SQLTemplate missing %q", want)
 		}
 	}
 	// Regex word-boundaries in Branch 2 must be `\\b` so the SQL string-
@@ -602,7 +747,7 @@ func TestSeedFS_RP050HasHopWindow(t *testing.T) {
 	if e.Version != "0.2.0" {
 		t.Fatalf("rp-050 version = %q, want 0.2.0", e.Version)
 	}
-	q := e.QuerySQL
+	q := e.SQLTemplate
 	required := []string{
 		// Branch A: 5-min hop over cim_event, grouped by run_id, count > 1
 		"FROM hop(agentguard_cim_event, event_time, interval 1 minute, interval 5 minute)",
@@ -630,7 +775,7 @@ func TestSeedFS_RP050HasHopWindow(t *testing.T) {
 	}
 	for _, want := range required {
 		if !strings.Contains(q, want) {
-			t.Errorf("rp-050 QuerySQL missing %q", want)
+			t.Errorf("rp-050 SQLTemplate missing %q", want)
 		}
 	}
 	// Anti-regression: the v0.1.0 correlated subquery referenced
@@ -686,13 +831,13 @@ func TestSeedFS_Issue43RulesUseJSAggregateUDFs(t *testing.T) {
 					t.Errorf("%s UDF missing %q", c.id, want)
 				}
 			}
-			if !strings.Contains(e.QuerySQL, c.queryUse) {
-				t.Errorf("%s QuerySQL missing %q", c.id, c.queryUse)
+			if !strings.Contains(e.SQLTemplate, c.queryUse) {
+				t.Errorf("%s SQLTemplate missing %q", c.id, c.queryUse)
 			}
-			sqlWithoutComments := stripSQLComments(e.QuerySQL)
+			sqlWithoutComments := stripSQLComments(e.SQLTemplate)
 			for _, forbidden := range c.antiSnippets {
 				if strings.Contains(sqlWithoutComments, forbidden) {
-					t.Errorf("%s QuerySQL still contains pre-UDA snippet %q", c.id, forbidden)
+					t.Errorf("%s SQLTemplate still contains pre-UDA snippet %q", c.id, forbidden)
 				}
 			}
 		})
@@ -769,7 +914,7 @@ func TestSeedFS_RP102HasHopWindow(t *testing.T) {
 	if e.Version != "0.3.0" {
 		t.Fatalf("rp-102 version = %q, want 0.3.0", e.Version)
 	}
-	q := e.QuerySQL
+	q := e.SQLTemplate
 	required := []string{
 		// Branch A: 5-min hop over cim_event
 		"FROM hop(agentguard_cim_event, event_time, interval 1 minute, interval 5 minute)",
@@ -783,7 +928,7 @@ func TestSeedFS_RP102HasHopWindow(t *testing.T) {
 	}
 	for _, want := range required {
 		if !strings.Contains(q, want) {
-			t.Errorf("rp-102 QuerySQL missing %q", want)
+			t.Errorf("rp-102 SQLTemplate missing %q", want)
 		}
 	}
 	// Anti-regression: ROWS BETWEEN must not appear in the live SQL.
@@ -811,7 +956,7 @@ func TestSeedFS_RP123HasHopWindow(t *testing.T) {
 	if e.Version != "0.2.0" {
 		t.Fatalf("rp-123 version = %q, want 0.2.0", e.Version)
 	}
-	q := e.QuerySQL
+	q := e.SQLTemplate
 	required := []string{
 		// Branch A: single-event advertising match (presence of the regex prefix)
 		"'(for (best|optimal) (results|performance|outcomes)",
@@ -830,7 +975,7 @@ func TestSeedFS_RP123HasHopWindow(t *testing.T) {
 	}
 	for _, want := range required {
 		if !strings.Contains(q, want) {
-			t.Errorf("rp-123 QuerySQL missing %q", want)
+			t.Errorf("rp-123 SQLTemplate missing %q", want)
 		}
 	}
 	// Anti-regression: the w1/w2 CTE chain with table()-wrapped CTE refs
@@ -864,29 +1009,13 @@ func TestSeedFS_TouchedRulesNoBareBackslashB(t *testing.T) {
 		}
 		// Strip line comments first so changelog prose mentioning the
 		// historical bare-`\b` bug does not false-positive.
-		stripped := stripSQLComments(e.QuerySQL)
+		stripped := stripSQLComments(e.SQLTemplate)
 		// Remove escaped occurrences; anything left is bare.
 		bareSearch := strings.ReplaceAll(stripped, `\\b`, "")
 		if strings.Contains(bareSearch, `\b`) {
 			t.Errorf("rule %s contains bare \\b in SQL — escape as \\\\b (Proton parses \\b inside string literals as backspace 0x08)", id)
 		}
 	}
-}
-
-// stripSQLComments removes `--` line comments from a SQL string. The changelog
-// inside a rule's query_sql block reasonably mentions banned-pattern names
-// when explaining why they were rewritten; the comment-strip avoids those
-// references being treated as live SQL by anti-regression assertions.
-func stripSQLComments(q string) string {
-	var b strings.Builder
-	for _, line := range strings.Split(q, "\n") {
-		if idx := strings.Index(line, "--"); idx >= 0 {
-			line = line[:idx]
-		}
-		b.WriteString(line)
-		b.WriteByte('\n')
-	}
-	return b.String()
 }
 
 // TestSeedFS_RP048Branch2Lowercased locks in the issue #155 fix: Branch 2's
@@ -905,11 +1034,11 @@ func TestSeedFS_RP048Branch2Lowercased(t *testing.T) {
 	if e.Version != "0.1.2" {
 		t.Fatalf("rp-048 version = %q, want 0.1.2", e.Version)
 	}
-	q := e.QuerySQL
+	q := e.SQLTemplate
 	mustContain := func(needle string) {
 		t.Helper()
 		if !strings.Contains(q, needle) {
-			t.Errorf("rp-048 QuerySQL missing %q", needle)
+			t.Errorf("rp-048 SQLTemplate missing %q", needle)
 		}
 	}
 	mustContain("match(lower(tool_result), 'redirect_uri=')")
@@ -938,7 +1067,7 @@ func TestSeedFS_RP048HostDelimiter(t *testing.T) {
 	if !ok {
 		t.Fatal("rp-048 missing from seed catalog")
 	}
-	q := e.QuerySQL
+	q := e.SQLTemplate
 	if !strings.Contains(q, `(localhost|127\.0\.0\.1|0\.0\.0\.0)["/:?#]`) {
 		t.Error("rp-048 Branch 1 localhost exclusion missing the trailing host delimiter")
 	}
@@ -969,7 +1098,7 @@ func TestSeedFS_RP082APCDCSAllVariants(t *testing.T) {
 	if e.Version != "0.2.1" {
 		t.Fatalf("rp-082 version = %q, want 0.2.1", e.Version)
 	}
-	q := e.QuerySQL
+	q := e.SQLTemplate
 	apcdcs := `(\\x1b|\\033|\\\\x1b|\\\\033)[_p]`
 	if c := strings.Count(q, apcdcs); c < 2 {
 		t.Errorf("rp-082 APC/DCS 4-variant pattern appears %d time(s), want >=2 (tool_result + assistant_message)", c)
@@ -996,7 +1125,7 @@ func TestSeedFS_RP042WindowedBranches(t *testing.T) {
 	if e.Version != "0.5.0" {
 		t.Fatalf("rp-042 version = %q, want 0.5.0", e.Version)
 	}
-	q := e.QuerySQL
+	q := e.SQLTemplate
 	must := func(needle, why string) {
 		t.Helper()
 		if !strings.Contains(q, needle) {

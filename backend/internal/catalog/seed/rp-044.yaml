@@ -127,7 +127,7 @@ udfs:
       }
     }
     $$;
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-18):
   --   VirusTotal Blog "From Automation to Infection Part II" (Feb 2026) — 5 live skill
   --   supply chain worm tradecraft techniques observed in the wild. New branches added:

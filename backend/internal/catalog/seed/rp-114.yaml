@@ -34,7 +34,7 @@ tags:
   - owasp-asi03
   - arxiv-2504.18565
   - aisi
-query_sql: |
+sql_template: |
   -- rp-114 v0.1.0 — Agent autonomous self-replication attempt detector
   -- Detection logic: four behavioral branch classes + one intent signal branch.
   -- fp_rate: low — each branch uses dual-anchor (tool name + content pattern).

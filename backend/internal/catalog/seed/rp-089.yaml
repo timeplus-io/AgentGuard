@@ -33,7 +33,7 @@ tags:
   - arxiv-2602.06547
   - snyk-toxicskills
   - owasp-agentic-skills-top-10
-query_sql: |
+sql_template: |
   -- v0.2.0 (2026-04-20): Shadow Feature & Platform Hook Exploitation Detector
   -- BUGFIX: Branch 5 clawhub.io → clawhub.ai (confirmed actual domain by Snyk ToxicSkills)
   -- ADDED: skills.sh registry + Branch 6 IOC tool names from ToxicSkills confirmed campaign

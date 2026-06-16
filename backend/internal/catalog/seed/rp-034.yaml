@@ -27,7 +27,7 @@ tags:
   - rag
   - owasp-llm06
   - arXiv-2604.05432
-query_sql: |
+sql_template: |
   SELECT
     event_time AS detected_at,
     'rp-034' AS rule_id,

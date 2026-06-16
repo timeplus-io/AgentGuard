@@ -64,7 +64,7 @@ with open('backend/internal/catalog/seed/rp-013.yaml') as f:
 print("CREATE MATERIALIZED VIEW mv_rule_rp013 INTO agentguard_security_events AS")
 # Strip the leading -- changelog comments so the parser only sees SQL.
 in_header = True
-for line in rule['query_sql'].split('\n'):
+for line in rule['sql_template'].split('\n'):
     if in_header and (line.strip().startswith('--') or line.strip() == ''):
         continue
     in_header = False

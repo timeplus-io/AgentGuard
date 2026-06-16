@@ -37,7 +37,7 @@ tags:
   - owasp-asi01
   - wuhan-university
   - naacl-2025
-query_sql: |
+sql_template: |
   -- rp-081 v0.1.0 (2026-04-19)
   -- AI²: Knowledge-Aware Action Plan Hijacking (arXiv:2412.10807, Wuhan Univ./NTU)
   -- Phase 1 (Recon): user extracts tool vocabulary via enumeration queries

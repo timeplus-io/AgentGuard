@@ -29,7 +29,7 @@ tags:
   - owasp-llm01
   - arxiv-2508.14070
   - claude-code-29489
-query_sql: |
+sql_template: |
   -- rp-067: Unicode Confusable Homoglyph Permission Bypass Detector v0.1.0
   -- arXiv:2508.14070 (58.7% filter bypass via special-char substitution, Nov 2025)
   -- Claude Code #29489 and OpenAI Codex #13095: permission rule bypass via homoglyphs

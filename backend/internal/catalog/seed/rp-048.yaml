@@ -27,7 +27,7 @@ tags:
   - rfc7591
   - owasp-llm09
   - obsidian-security
-query_sql: |
+sql_template: |
   -- Implementation notes:
   --   Matching is case-insensitive — the redirect_uri checks and the localhost/
   --   loopback exclusions wrap lower(tool_result)/lower(tool_input). The exclusion's

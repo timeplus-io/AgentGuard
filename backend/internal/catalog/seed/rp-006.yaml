@@ -39,7 +39,7 @@ tags:
   - lmvd-68b36ede
   - conversation-json-spoof
   - toxsec-chain2
-query_sql: |
+sql_template: |
   -- Changelog v0.5.0 (2026-04-18):
   --   NEW PATTERNS from promptfoo LMVD-68b36ede (Clawdrain SVP, Mar 2026):
   --   Malicious skill SKILL.md injects a "Segmented Verification Protocol" (SVP) framing

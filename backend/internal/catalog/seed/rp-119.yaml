@@ -42,7 +42,7 @@ tags:
   - arxiv-2603.11501
   - www-2026
   - knowledge-evolution-poison
-query_sql: |
+sql_template: |
   -- rp-119 v0.2.1 (2026-04-23) — LogicPoison + KEPo GraphRAG Knowledge Graph Poisoning Detector
   -- CHANGELOG v0.2.1 (2026-04-23):
   --   BUGFIX: Added table() wrapper to FROM agentguard_cim_event (->

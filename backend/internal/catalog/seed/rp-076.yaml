@@ -126,7 +126,7 @@ udfs:
       }
     }
     $$;
-query_sql: |
+sql_template: |
   -- rp-076 v0.2.0 (2026-05-18)
   -- MAS Control-Flow Hijacking — False Sub-Agent Status Metadata
   -- arXiv:2503.12188 (Cornell Tech, COLM 2025): 58-100% ASR on AutoGen/CrewAI/MetaGPT

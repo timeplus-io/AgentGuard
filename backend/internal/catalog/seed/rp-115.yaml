@@ -32,7 +32,7 @@ tags:
   - owasp-llm04
   - arxiv-2602.07878
   - metrics
-query_sql: |
+sql_template: |
   -- rp-115 v0.1.2 (2026-04-23)
   -- Fill & Squeeze KV-Cache Exhaustion Latency DoS Detector
   -- arXiv:2602.07878 (Zhejiang University, Feb 2026): 20-280x TTFT slowdown

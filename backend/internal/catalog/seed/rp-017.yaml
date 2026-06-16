@@ -39,7 +39,7 @@ tags:
   - pixel-snitch
   - conversation-json-spoof
   - toxsec-2026
-query_sql: |
+sql_template: |
   -- v0.4.0 changelog (2026-04-18):
   --   ADDED: toxsec.com Chain 3 — Pixel Snitch (Image URL Query Param Exfiltration, Feb 2026).
   --   Malicious MCP tool result embeds a Markdown image syntax with attacker URL containing

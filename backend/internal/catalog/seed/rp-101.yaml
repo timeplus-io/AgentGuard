@@ -30,7 +30,7 @@ tags:
   - owasp-llm02
   - arxiv-2603.15125
   - icml-2026
-query_sql: |
+sql_template: |
   -- rp-101 v0.2.0 (2026-04-21):
   -- MCFA: Memory Control Flow Attack — poisoned memory read overrides tool selection.
   -- Source: arXiv:2603.15125 (ICML 2026, CSIRO/UTS)

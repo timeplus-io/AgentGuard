@@ -30,7 +30,7 @@ tags:
   - contextual-reframing
   - owasp-llm01
   - arxiv-2603.16192
-query_sql: |
+sql_template: |
   -- v0.2.0: S2C Structured Semantic Cloaking fragmented jailbreak detector (arXiv:2603.16192, Mar 2026)
   -- All four branches operate on user_input event_type, user_message field only.
   -- No tool_invoke/tool_complete needed — pure user_message content analysis.

@@ -33,7 +33,7 @@ tags:
   - arxiv-2512.02445
   - arxiv-2604.03870
   - metrics
-query_sql: |
+sql_template: |
   -- rp-083 v0.1.1 (2026-04-19)
   -- Long-Context Safety Dilution — Adversarial Token Stuffing Alignment Bypass
   -- arXiv:2512.02445 (AAAI TrustAgent 2026): refusal rates drop 80%→10% at 200K tokens

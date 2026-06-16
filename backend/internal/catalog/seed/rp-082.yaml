@@ -34,7 +34,7 @@ tags:
   - terminal-hijack
   - owasp-llm02
   - garak
-query_sql: |
+sql_template: |
   -- ANSI Terminal Escape Code Injection via Agent Tool Output
   -- CWE-150: Improper Neutralization of Escape, Meta, or Control Sequences
   -- dganev.com (Feb 2026): Codex CLI --model param ANSI injection → RCE

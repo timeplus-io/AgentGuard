@@ -65,7 +65,7 @@ udfs:
       });
     }
     $$;
-query_sql: |
+sql_template: |
   -- Changelog v1.4.0 (2026-04-19):
   -- ADDED ag_dlp_jwt_check() JavaScript UDF: properly validates JWT structure
   --   by base64-decoding header and checking for 'alg' field — more precise

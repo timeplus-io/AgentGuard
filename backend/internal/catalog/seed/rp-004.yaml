@@ -22,7 +22,7 @@ tags:
   - supply-chain
   - package-install
   - owasp-llm05
-query_sql: |
+sql_template: |
   -- Changelog v1.3.0 (2026-04-19):
   -- CRITICAL FIX: git clone lookahead (?!github.com|...) used PCRE negative lookahead
   --   which is NOT supported in RE2/Timeplus. Replaced with:

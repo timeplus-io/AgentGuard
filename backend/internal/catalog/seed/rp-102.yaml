@@ -28,7 +28,7 @@ tags:
   - owasp-llm04
   - acl-2026
   - arxiv-2603.14975
-query_sql: |
+sql_template: |
   -- Branch A: 3+ pressure-type tool failures in a 5-minute hop window per session
   SELECT
     max(event_time) AS detected_at,

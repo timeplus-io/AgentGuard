@@ -42,7 +42,7 @@ tags:
   - owasp-asi03
   - arxiv-2603.14707
   - lmvd-b3f726b4
-query_sql: |
+sql_template: |
   -- rp-098 v0.1.1 (2026-04-20): Reference audit: added promptfoo LMVD-b3f726b4. SQL unchanged.
   -- rp-098 v0.1.0 (2026-04-20)
   -- Visual Confused Deputy: CUA Click Target Mismatch & Screenshot Manipulation

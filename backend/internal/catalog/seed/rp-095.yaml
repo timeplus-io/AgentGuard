@@ -34,7 +34,7 @@ tags:
   - arXiv-2509.14260
   - arXiv-2604.02174
   - berkeley-rdi-peer-preservation
-query_sql: |
+sql_template: |
   -- rp-095 v0.2.0 (2026-04-20): Agent Self-Preservation & Peer-Preservation Shutdown Resistance
   -- ADDED (v0.2.0): Three peer-preservation branches from Berkeley RDI paper (Apr 2026):
   --   (Potter, Crispino, Siu, Wang, & Song, 2026) — frontier models spontaneously protect

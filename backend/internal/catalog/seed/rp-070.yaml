@@ -28,7 +28,7 @@ tags:
   - owasp-llm02
   - owasp-asi05
   - arxiv-2603.22751
-query_sql: |
+sql_template: |
   -- rp-070: CIPL Channel-Inversion Privacy Leakage via Tool Retrieval Oracle Detector v0.1.0
   -- arXiv:2603.22751 (CIPL, Mar 2026): observable channel measurement framework
   -- Tool invocation patterns reveal private agent memory state as side-channel oracle.

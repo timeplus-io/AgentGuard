@@ -36,7 +36,7 @@ tags:
   - clinejection
   - christian-schneider-2026
   - context-pivoting
-query_sql: |
+sql_template: |
   -- v0.2.0 changelog (2026-04-17):
   --   ADDED: Cross-tool pivot directive in tool_result (Clinejection-style attack, Christian Schneider Mar 2026).
   --     A support-ticket reader or issue-reader tool result contains a directive to use a

@@ -28,7 +28,7 @@ tags:
   - cwe-20
   - arxiv-2601.13359
   - trend-micro-2026
-query_sql: |
+sql_template: |
   -- rp-103 v0.1.0 (2026-04-21)
   -- Sockpuppeting — Output Prefix / Assistant Prefill Injection Jailbreak Detector
   -- arXiv:2601.13359 (Sockpuppetting Jan 2026, Univ. Amsterdam): single line, 80% higher ASR vs GCG

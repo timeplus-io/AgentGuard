@@ -34,7 +34,7 @@ tags:
   - fm-2026
   - arXiv-2602.12194
   - mitre-t1195
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-19): MalTool malicious tool code behavioral execution detection
   -- arXiv:2602.12194 (MalTool, Berkeley RDI, FM 2026 Research Track)
   -- Three CIA triad signal families:

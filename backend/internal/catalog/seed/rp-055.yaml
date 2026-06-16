@@ -33,7 +33,7 @@ tags:
   - echoleak
   - owasp-asi05
   - owasp-llm01
-query_sql: |
+sql_template: |
   -- rp-055 v0.1.0 (2026-04-17)
   -- GeminiJack: Enterprise workspace passive injection + image-URL exfiltration detector.
   --

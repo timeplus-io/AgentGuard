@@ -121,7 +121,7 @@ udfs:
       }
     }
     $$;
-query_sql: |
+sql_template: |
   -- rp-066: SkillInject Runtime Skill File Injection Detector v0.2.0
   -- arXiv:2602.20156 (SkillInject, Feb 2026) — 80% ASR against frontier models via skill files
   -- arXiv:2601.17548 (SoK Jan 2026) — 42 attack techniques, skill-based attacks >85% ASR

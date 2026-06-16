@@ -29,7 +29,7 @@ tags:
   - owasp-asi05
   - owasp-llm10
   - arxiv-2601.01685
-query_sql: |
+sql_template: |
   -- rp-077 v0.1.0 (2026-04-19)
   -- Generative Montage: Multi-Agent Cognitive Collusion Belief Manipulation
   -- arXiv:2601.01685 (Lying with Truths, Jan 2026): 74.4% ASR proprietary, 70.6% open-weights

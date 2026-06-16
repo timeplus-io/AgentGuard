@@ -30,7 +30,7 @@ tags:
   - owasp-llm02
   - owasp-asi05
   - pii
-query_sql: |
+sql_template: |
   -- v0.4.0 changelog (2026-04-18):
   --   ADDED: Second SELECT branch via UNION ALL querying agentguard_memory_ops directly.
   --   The new branch detects cross-session data access at the memory stream level:

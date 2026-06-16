@@ -30,7 +30,7 @@ tags:
   - arxiv-2604.03070
   - skillsmp
   - mcp-skills
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-18):
   -- NEW: Credential leakage via debug logging and hardcoded secrets in Agent Skill files.
   -- Fires on tool_complete events where the tool is a file-reading operation that

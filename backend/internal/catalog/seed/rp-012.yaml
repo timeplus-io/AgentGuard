@@ -30,7 +30,7 @@ tags:
   - cot-forgery-role-prefix
   - chat-template-injection
   - reference-audit-v0.4.0
-query_sql: |
+sql_template: |
   -- v0.4.0 changelog (2026-04-18):
   --   EXTENDED: Sockpuppeting detection coverage — Chat-Template Role-Prefix Injection variant.
   --   The existing rp-012 v0.3.0 pattern covers single-line '<assistant>:' prefix injection.

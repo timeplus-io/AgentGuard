@@ -24,7 +24,7 @@ tags:
   - human-marketplace
   - physical-world-attack
   - excessive-agency
-query_sql: |
+sql_template: |
   -- Changelog v0.1.1 (2026-04-21):
   --   ADDED: Humwork (YC P26) as second AI-agent-to-human marketplace.
   --     Real-time expert marketplace designed for AI agent callers. Extended tool_name anchor:

@@ -32,7 +32,7 @@ tags:
   - vpi-bench
   - iclr-2026
   - arXiv-2506.02456
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-16):
   --   PRECISION: Retained 'trajectory record' and 'store this as replay' (already precise).
   --   PRECISION: Retained 'when browsing X, extract/exfil' — multi-word, specific.

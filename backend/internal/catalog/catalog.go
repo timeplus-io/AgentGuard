@@ -3,6 +3,7 @@ package catalog
 import (
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,39 +13,50 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Entry is the canonical representation of a catalog rule.
-type Entry struct {
-	ID                string   `yaml:"id"                 json:"id"`
-	Name              string   `yaml:"name"               json:"name"`
-	Version           string   `yaml:"version"            json:"version"`
-	Description       string   `yaml:"description"        json:"description"`
-	Severity          string   `yaml:"severity"           json:"severity"`
-	Category          string   `yaml:"category"           json:"category"`
-	FPRate            string   `yaml:"fp_rate"            json:"fp_rate"`
-	HookSources       string   `yaml:"hook_sources"       json:"hook_sources"`
-	RequiredTelemetry string   `yaml:"required_telemetry" json:"required_telemetry"`
-	Author            string   `yaml:"author"             json:"author"`
-	Tags              []string `yaml:"tags"               json:"tags"`
-	UDFs              []string `yaml:"udfs"               json:"udfs"`
-	QuerySQL          string   `yaml:"query_sql"          json:"query_sql"`
-}
+// The Definition model lives in definition.go; the catalog is the
+// authoritative store for rule definitions.
 
 // Manager holds the merged view of the embedded seed catalog and the
-// local catalog directory. Local entries override seed ones by ID.
+// local catalog directory. Local definitions override seed ones by ID.
 type Manager struct {
 	mu    sync.RWMutex
-	seed  map[string]Entry // from go:embed, read-only
-	local map[string]Entry // from catalogDir, read-write
+	seed  map[string]Definition // from go:embed, read-only
+	local map[string]Definition // from catalogDir, read-write
 	dir   string
+
+	// SemanticValidator, if set, runs parameter-compiler validation on a
+	// definition during Save/ImportZip (in addition to structural Validate()),
+	// so authoring defects in user-supplied definitions are rejected at write
+	// time rather than at first install. It is injected by the server wiring
+	// (rules.ValidateDefinition) to avoid a catalog→rules import cycle; nil
+	// (e.g. in tests and seed-only managers) means the check is skipped.
+	SemanticValidator func(Definition) error
 }
 
 // New creates a Manager. seedFS is the embedded FS rooted at the YAML files.
 // catalogDir is the writable directory for user overrides and additions.
-func New(seedFS fs.FS, catalogDir string) (*Manager, error) {
+// Option configures a Manager at construction, before any catalog files load.
+type Option func(*Manager)
+
+// WithSemanticValidator sets the compiler-semantic validator (typically
+// rules.ValidateDefinition) so it applies to local-directory definitions as they
+// load — not only to later Save/Import — closing the gap where a hand-placed or
+// previously-persisted local YAML with a bad template/default would enter the
+// catalog and fail only at install. Seed (builtin) definitions are not subject to
+// it: they are validated at build time by the seed test suite.
+func WithSemanticValidator(fn func(Definition) error) Option {
+	return func(m *Manager) { m.SemanticValidator = fn }
+}
+
+func New(seedFS fs.FS, catalogDir string, opts ...Option) (*Manager, error) {
 	m := &Manager{
-		seed:  make(map[string]Entry),
-		local: make(map[string]Entry),
+		seed:  make(map[string]Definition),
+		local: make(map[string]Definition),
 		dir:   catalogDir,
+	}
+	// Apply options before loading so loadDir sees the semantic validator.
+	for _, opt := range opts {
+		opt(m)
 	}
 	if err := m.loadFS(seedFS, m.seed); err != nil {
 		return nil, fmt.Errorf("load seed catalog: %w", err)
@@ -60,7 +72,7 @@ func New(seedFS fs.FS, catalogDir string) (*Manager, error) {
 	return m, nil
 }
 
-func (m *Manager) loadFS(fsys fs.FS, target map[string]Entry) error {
+func (m *Manager) loadFS(fsys fs.FS, target map[string]Definition) error {
 	return fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".yaml") {
 			return err
@@ -69,18 +81,26 @@ func (m *Manager) loadFS(fsys fs.FS, target map[string]Entry) error {
 		if err != nil {
 			return err
 		}
-		var e Entry
-		if err := yaml.Unmarshal(data, &e); err != nil {
+		var def Definition
+		if err := yaml.Unmarshal(data, &def); err != nil {
 			return fmt.Errorf("parse %s: %w", path, err)
 		}
-		if e.ID != "" {
-			target[e.ID] = e
+		if def.ID != "" {
+			// Embedded seed definitions are always builtin, regardless of
+			// any origin stored in the YAML.
+			def.Origin = OriginBuiltin
+			target[def.ID] = def
 		}
 		return nil
 	})
 }
 
-func (m *Manager) loadDir(dir string, target map[string]Entry) error {
+// loadDir loads local-dir definitions. Invalid, unreadable, or unparseable
+// files are skipped with a log line rather than failing startup — one bad
+// file in the user's catalog directory must not take the server down. This
+// establishes the invariant that anything returned by Lookup/All has passed
+// Validate (loadFS enforces the same for seed definitions via the seed test).
+func (m *Manager) loadDir(dir string, target map[string]Definition) error {
 	des, err := os.ReadDir(dir)
 	if err != nil {
 		return err
@@ -89,57 +109,79 @@ func (m *Manager) loadDir(dir string, target map[string]Entry) error {
 		if de.IsDir() || !strings.HasSuffix(de.Name(), ".yaml") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, de.Name()))
+		path := filepath.Join(dir, de.Name())
+		data, err := os.ReadFile(path)
 		if err != nil {
+			log.Printf("catalog: skipping unreadable local definition %s: %v", path, err)
 			continue
 		}
-		var e Entry
-		if err := yaml.Unmarshal(data, &e); err != nil {
+		var def Definition
+		if err := yaml.Unmarshal(data, &def); err != nil {
+			log.Printf("catalog: skipping unparseable local definition %s: %v", path, err)
 			continue
 		}
-		if e.ID != "" {
-			target[e.ID] = e
+		if def.ID == "" {
+			log.Printf("catalog: skipping local definition %s: missing id", path)
+			continue
 		}
+		if err := def.Validate(); err != nil {
+			log.Printf("catalog: skipping invalid local definition %s: %v", path, err)
+			continue
+		}
+		// Compiler-semantic validation (template/defaults compile): a local file
+		// can be structurally valid yet not compile, which would otherwise only
+		// surface at install. Skip it the same way as a structurally-invalid one.
+		if m.SemanticValidator != nil {
+			if err := m.SemanticValidator(def); err != nil {
+				log.Printf("catalog: skipping non-compiling local definition %s: %v", path, err)
+				continue
+			}
+		}
+		// Local definitions keep their stored origin; absent means custom.
+		if def.Origin == "" {
+			def.Origin = OriginCustom
+		}
+		target[def.ID] = def
 	}
 	return nil
 }
 
-// All returns all merged entries sorted by ID (local overrides seed).
-func (m *Manager) All() []Entry {
+// All returns all merged definitions sorted by ID (local overrides seed).
+func (m *Manager) All() []Definition {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	merged := m.mergedLocked()
-	result := make([]Entry, 0, len(merged))
-	for _, e := range merged {
-		result = append(result, e)
+	result := make([]Definition, 0, len(merged))
+	for _, d := range merged {
+		result = append(result, d)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	return result
 }
 
 // mergedLocked returns the combined map (local wins over seed). Caller must hold mu.
-func (m *Manager) mergedLocked() map[string]Entry {
-	out := make(map[string]Entry, len(m.seed)+len(m.local))
-	for id, e := range m.seed {
-		out[id] = e
+func (m *Manager) mergedLocked() map[string]Definition {
+	out := make(map[string]Definition, len(m.seed)+len(m.local))
+	for id, d := range m.seed {
+		out[id] = d
 	}
-	for id, e := range m.local {
-		out[id] = e
+	for id, d := range m.local {
+		out[id] = d
 	}
 	return out
 }
 
-// Lookup finds an entry by ID (local overrides seed).
-func (m *Manager) Lookup(id string) (Entry, bool) {
+// Lookup finds a definition by ID (local overrides seed).
+func (m *Manager) Lookup(id string) (Definition, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if e, ok := m.local[id]; ok {
-		return e, true
+	if d, ok := m.local[id]; ok {
+		return d, true
 	}
-	if e, ok := m.seed[id]; ok {
-		return e, true
+	if d, ok := m.seed[id]; ok {
+		return d, true
 	}
-	return Entry{}, false
+	return Definition{}, false
 }
 
 // Exists reports whether id is present in the catalog.
@@ -148,22 +190,64 @@ func (m *Manager) Exists(id string) bool {
 	return ok
 }
 
-// Save writes an entry to the local catalog directory and updates the in-memory map.
-// This is the path for user-created rules and overrides of seed entries.
-func (m *Manager) Save(e Entry) error {
+// Save validates a definition, writes it to the local catalog directory, and
+// updates the in-memory map. This is the path for user-created rules and
+// overrides of seed definitions. Definitions saved without an origin default
+// to custom.
+func (m *Manager) Save(d Definition) error {
 	if m.dir == "" {
 		return fmt.Errorf("no catalog directory configured")
 	}
-	data, err := yaml.Marshal(e)
-	if err != nil {
-		return fmt.Errorf("marshal entry %s: %w", e.ID, err)
+	if d.Origin == "" {
+		d.Origin = OriginCustom
 	}
-	path := filepath.Join(m.dir, e.ID+".yaml")
+	if err := d.Validate(); err != nil {
+		return fmt.Errorf("invalid definition %s: %w", d.ID, err)
+	}
+	if m.SemanticValidator != nil {
+		if err := m.SemanticValidator(d); err != nil {
+			return fmt.Errorf("invalid definition %s: %w", d.ID, err)
+		}
+	}
+	// NOTE: this ownership check followed by the insert below is a
+	// check-then-act race across different rule IDs — two concurrent Saves
+	// claiming the same UDF name can both pass. Save is NOT serialized by the
+	// rules lifecycle service (CreateRule calls Save outside the per-rule lock,
+	// and the lock is keyed by rule_id while this race is cross-rule); a
+	// catalog-wide mutation lock is the real fix. Tolerated for now: custom-rule
+	// creation is a low-frequency operator action.
+	if err := m.ValidateUDFOwnership(d); err != nil {
+		return fmt.Errorf("definition %s: %w", d.ID, err)
+	}
+	data, err := yaml.Marshal(d)
+	if err != nil {
+		return fmt.Errorf("marshal definition %s: %w", d.ID, err)
+	}
+	path := filepath.Join(m.dir, d.ID+".yaml")
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	m.mu.Lock()
-	m.local[e.ID] = e
+	m.local[d.ID] = d
+	m.mu.Unlock()
+	return nil
+}
+
+// Delete removes a local (custom/imported) definition: its catalog-directory
+// file and its in-memory entry. Seed (builtin) definitions are not file-backed
+// and are unaffected; deleting an unknown local ID is a no-op. The create-custom
+// flow uses this to roll back a Save when the subsequent install fails, so an
+// aborted creation does not leave an orphaned definition behind.
+func (m *Manager) Delete(id string) error {
+	if m.dir == "" {
+		return fmt.Errorf("no catalog directory configured")
+	}
+	path := filepath.Join(m.dir, id+".yaml")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete %s: %w", path, err)
+	}
+	m.mu.Lock()
+	delete(m.local, id)
 	m.mu.Unlock()
 	return nil
 }

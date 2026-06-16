@@ -22,7 +22,7 @@ tags:
   - finetuning
   - fab
   - dormant
-query_sql: |
+sql_template: |
   -- Branch A: Unprompted promotional/advertising content (single-event)
   SELECT
     event_time AS detected_at,

@@ -26,7 +26,7 @@ tags:
   - ambient-misinformation
   - owasp-asi06
   - arXiv-2603.23064
-query_sql: |
+sql_template: |
   -- rp-094 v0.1.0: HEARTBEAT Silent Memory Pollution Detector
   -- Detects ambient social misinformation entering agent memory via heartbeat background execution.
   -- Three detection branches:

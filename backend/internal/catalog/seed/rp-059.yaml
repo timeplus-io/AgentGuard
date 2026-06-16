@@ -31,7 +31,7 @@ tags:
   - cwe-116
   - svg-injection
   - javascript-uri
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-18):
   -- NEW: LLM assistant_message rendering injection detection.
   -- Fires when the LLM output contains HTML/JS constructs that would execute

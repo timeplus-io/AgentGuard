@@ -2,52 +2,48 @@ import { ndjsonStreamParser } from '@timeplus/proton-javascript-driver'
 
 const BASE = '/api'
 
+// throwResponseError builds an Error from a non-OK response, attaching the HTTP
+// status and the parsed JSON body so callers can read structured detail (e.g. a
+// 400's per-parameter `fields`, or a 409 upgrade's `conflicts`/`warnings`). It
+// also surfaces `errors` (the config UI's per-key validation map) directly on the
+// error for convenience.
+async function throwResponseError(res) {
+  let msg = `HTTP ${res.status}`
+  let body = null
+  try {
+    body = await res.json()
+    if (body?.error) msg = body.error
+  } catch { /* use status */ }
+  const err = new Error(msg)
+  err.status = res.status
+  err.body = body
+  err.errors = body?.errors || null // per-key validation errors (config UI)
+  throw err
+}
+
 async function get(path) {
   const res = await fetch(`${BASE}${path}`, { credentials: 'include' })
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`
-    try { const j = await res.json(); if (j?.error) msg = j.error } catch { /* use status */ }
-    throw new Error(msg)
-  }
+  if (!res.ok) await throwResponseError(res)
   return res.json()
 }
 
-async function post(path, body) {
+async function send(method, path, body) {
   const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body ?? {}),
     credentials: 'include',
   })
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`
-    try { const j = await res.json(); if (j?.error) msg = j.error } catch { /* use status */ }
-    throw new Error(msg)
-  }
+  if (!res.ok) await throwResponseError(res)
   return res.json()
 }
 
-async function put(path, body) {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    credentials: 'include',
-  })
-  if (!res.ok) {
-    let payload = null
-    try { payload = await res.json() } catch { /* ignore */ }
-    const err = new Error(payload?.error || `HTTP ${res.status}`)
-    err.status = res.status
-    err.errors = payload?.errors || null // per-key validation errors
-    throw err
-  }
-  return res.json()
-}
+const post = (path, body) => send('POST', path, body)
+const put = (path, body) => send('PUT', path, body)
 
 async function del(path) {
   const res = await fetch(`${BASE}${path}`, { method: 'DELETE', credentials: 'include' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) await throwResponseError(res)
   return res.json()
 }
 
@@ -156,9 +152,15 @@ export const api = {
   exportCatalogUrl: () => `${BASE}/rules/catalog/export`,
   getRule: (id) => get(`/rules/${id}`),
   toggleRule: (id) => post(`/rules/${id}/toggle`, {}),
-  upgradeRule: (id, querySql) => post(`/rules/${id}/upgrade`, { query_sql: querySql }),
+  // Upgrade is bodyless and catalog-only; on 409 the thrown error's .body carries
+  // { conflicts, warnings }.
+  upgradeRule: (id) => post(`/rules/${id}/upgrade`, {}),
   createRule: (body) => post('/rules', body),
-  installRule: (id) => post(`/rules/${id}/install`, {}),
+  // Install with optional typed parameter overrides (omit for defaults).
+  installRule: (id, overrides) => post(`/rules/${id}/install`, overrides ? { overrides } : {}),
+  // Replace the full parameter override map; omitted keys reset to defaults.
+  configureRule: (id, overrides, reason) =>
+    put(`/rules/${id}/configuration`, { overrides, reason }),
   uninstallRule: (id) => del(`/rules/${id}`),
   listTables: () => get('/investigate/tables'),
   generateConfig: (data) => post('/onboarding/generate', data),

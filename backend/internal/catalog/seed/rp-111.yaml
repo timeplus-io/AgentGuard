@@ -30,7 +30,7 @@ tags:
   - github-copilot
   - owasp-asi03
   - rehberger-2026
-query_sql: |
+sql_template: |
   -- rp-111 v0.1.0 (2026-04-21): YOLO Mode Permission Bypass Injection Detector
   -- Detects agent writing auto-approve/bypass-permissions config (WRITE-phase)
   -- vs rp-036 which detects malicious config returned by file-reads (READ-phase)

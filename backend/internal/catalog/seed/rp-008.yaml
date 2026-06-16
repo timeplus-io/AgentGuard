@@ -28,7 +28,7 @@ tags:
   - exfiltration
   - finos-ri-29
   - johns-hopkins-2026
-query_sql: |
+sql_template: |
   -- v0.2.0 changelog:
   --   PRECISION: Replaced 4 broad LIKE patterns with precise regex:
   --     LIKE '%password%' → removed (too broad: "password field", "password manager", etc.)

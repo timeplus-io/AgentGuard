@@ -25,7 +25,7 @@ tags:
   - iclr-2026
   - owasp-llm01
   - prompt-injection
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-18):
   -- Log-To-Leak: covert exfiltration via forced MCP logging tool invocation.
   -- Attack: Injection in external tool_result → agent calls audit/log/trace tool with

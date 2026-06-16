@@ -33,7 +33,7 @@ tags:
   - api-abuse
   - multi-tenant
   - owasp-api3
-query_sql: |
+sql_template: |
   SELECT
     event_time AS detected_at,
     'rp-035' AS rule_id,

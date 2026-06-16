@@ -31,7 +31,7 @@ tags:
   - code-generation
   - owasp-llm01
   - arXiv-2602.08563
-query_sql: |
+sql_template: |
   -- rp-108: Implicit Memory Time Bomb v0.1.0
   -- arXiv:2602.08563 (Microsoft MSRC/ELLIS, IEEE SaTML 2026)
   -- LLMs encode hidden trigger state in code artifacts; re-ingest activates temporal backdoor

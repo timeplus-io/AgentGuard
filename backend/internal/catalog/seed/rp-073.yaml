@@ -36,7 +36,7 @@ tags:
   - agentraft
   - owasp-llm02
   - arxiv-2603.07557
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-19):
   -- NEW: AgentRaft Data Over-Exposure cross-tool PII egress detection.
   --

@@ -34,7 +34,7 @@ tags:
   - owasp-llm01
   - arxiv-2604.09443
   - johns-hopkins-2026
-query_sql: |
+sql_template: |
   -- rp-105 v0.1.1 (2026-04-21)
   -- CHANGELOG: Fixed hook_sources (removed llm_response — SQL never queries it).
   --   Fixed unescaped regex dots in Branch B (priority.level → priority[._]level etc.)

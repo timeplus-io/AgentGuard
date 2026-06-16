@@ -43,7 +43,7 @@ tags:
   - rlvr-acb
   - arxiv-2603.11949
   - delayed-backdoor-dnd
-query_sql: |
+sql_template: |
   -- Detection covers four backdoor trigger surfaces (arXiv:2601.04566 +
   -- arXiv:2603.03371), plus two windowed legs:
   --   (1) Planning attack: trigger in user_message (event_type=user_input)

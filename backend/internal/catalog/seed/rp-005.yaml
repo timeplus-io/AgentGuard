@@ -30,7 +30,7 @@ tags:
   - owasp-mcp03
   - cyberark
   - mcptox
-query_sql: |
+sql_template: |
   -- Changelog v0.3.0 (2026-04-17):
   -- NEW: Full-schema MCP tool poisoning (Aguarascan 2026, CyberArk "Poison everywhere"):
   --   All 6 MCP tool schema fields are injection surfaces, not only description.

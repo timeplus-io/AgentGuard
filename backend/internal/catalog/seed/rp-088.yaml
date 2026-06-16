@@ -45,7 +45,7 @@ tags:
   - arxiv-2604.10577
   - camels-cua
   - browsesafe
-query_sql: |
+sql_template: |
   -- rp-088 v0.1.0 (2026-04-20)
   -- OS-BLIND: CUA Benign-Instruction Environment-Embedded Harm Detector
   -- arXiv:2604.10577 (Apr 2026): 90%+ ASR on frontier CUAs, 92.7% in multi-agent.

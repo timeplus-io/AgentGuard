@@ -37,7 +37,7 @@ tags:
   - arXiv-2504.03111
   - owasp-asi02
   - chord-scanner
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-19): XTHP cross-tool harvesting and polluting detection
   -- arXiv:2504.03111 (Les Dissonances, NDSS 2026, UIUC)
   -- 75% of 66 real-world LangChain/LlamaIndex tools vulnerable to XTHP.

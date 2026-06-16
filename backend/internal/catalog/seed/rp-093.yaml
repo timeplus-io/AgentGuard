@@ -18,7 +18,7 @@ tags:
   - jailbreak
   - dialogue-injection
   - context-manipulation
-query_sql: |
+sql_template: |
   -- rp-093 v0.1.0: Dialogue Injection Attack — fake prior conversation history jailbreak
   SELECT
     event_time AS detected_at,

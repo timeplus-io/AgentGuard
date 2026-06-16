@@ -32,7 +32,7 @@ tags:
   - owasp-asi07
   - mitre-t1195
   - arxiv-2604.09235
-query_sql: |
+sql_template: |
   -- rp-127 v0.1.0 (2026-04-23)
   -- TSBH CoT-Action Backdoor Divergence Detector
   -- arXiv:2604.09235 (Unreal Thinking: CoT Hijacking via Two-stage Backdoor, Apr 2026)

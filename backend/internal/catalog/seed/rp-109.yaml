@@ -29,7 +29,7 @@ tags:
   - decision-corruption
   - owasp-llm01
   - arXiv-2601.10294
-query_sql: |
+sql_template: |
   -- Changelog v0.1.1 (2026-04-21):
   --   TIGHTENED Branch B: Removed auto.?(approve|accept) — both appear frequently in legitimate
   --   business workflow JSON (CI/CD auto-approve, CRM auto-accept) causing high FP rate.

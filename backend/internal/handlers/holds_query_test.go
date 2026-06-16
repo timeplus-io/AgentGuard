@@ -32,6 +32,8 @@ func TestBuildPreExistingOpenThreatsSQL(t *testing.T) {
 		{"table(agentguard_threats)", "must read from threats stream, not security_events"},
 		{"'open' AS reported_status", "synthetic open marker must use unique alias to avoid colliding with t.status in WHERE"},
 		{"table(agentguard_rules)", "must still honor enabled/deleted via rules join"},
+		{"arg_max(block_policy, revision)", "current rule state must order by monotonic revision, not updated_at"},
+		{"revision) AS enabled", "enabled state must be reduced by revision"},
 		{"r.enabled", "must filter out disabled rules"},
 		{"NOT r.deleted", "must filter out deleted rules"},
 		{"t.status = ''", "first branch: never-touched threats are open"},
@@ -54,6 +56,7 @@ func TestBuildPreExistingOpenThreatsSQL(t *testing.T) {
 		why      string
 	}{
 		{"FROM table(agentguard_security_events)", "the bug: reading detections directly bypasses cleared status"},
+		{"updated_at) AS enabled", "rule state must not be ordered by wall-clock updated_at (revision is the invariant)"},
 	}
 	for _, m := range mustNot {
 		if strings.Contains(sql, m.fragment) {

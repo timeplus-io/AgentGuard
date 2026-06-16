@@ -22,7 +22,7 @@ tags:
   - owasp-llm10
   - back-reveal
   - arXiv-2604.05432
-query_sql: |
+sql_template: |
   -- Two load-bearing shapes (regression-tested in catalog_test.go; runbook
   -- in backend/internal/catalog/testdata/):
   --   Branch A must stay tumble-wrapped — unwindowed streaming GROUP BY +
