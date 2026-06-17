@@ -17,6 +17,8 @@ func TestLoadAndSaveProvisionedSnapshot(t *testing.T) {
 	cfg.ProvisionedDLP.EmbeddingDim = 1536
 	cfg.ProvisionedDLP.RiskModel = "gpt-4o-mini"
 	cfg.ProvisionedDLP.SummaryModel = "gpt-4o"
+	cfg.ProvisionedDLP.RequestTimeoutSeconds = 45
+	cfg.ProvisionedDLP.MaxOutputTokens = 300
 
 	if err := Save(cfg, path); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -34,6 +36,12 @@ func TestLoadAndSaveProvisionedSnapshot(t *testing.T) {
 	}
 	if got.ProvisionedDLP.RiskModel != "gpt-4o-mini" {
 		t.Errorf("RiskModel = %q", got.ProvisionedDLP.RiskModel)
+	}
+	if got.ProvisionedDLP.RequestTimeoutSeconds != 45 {
+		t.Errorf("RequestTimeoutSeconds = %d, want 45", got.ProvisionedDLP.RequestTimeoutSeconds)
+	}
+	if got.ProvisionedDLP.MaxOutputTokens != 300 {
+		t.Errorf("MaxOutputTokens = %d, want 300", got.ProvisionedDLP.MaxOutputTokens)
 	}
 
 	// Save must NOT persist dlp.api_key (avoid duplicating env secret).

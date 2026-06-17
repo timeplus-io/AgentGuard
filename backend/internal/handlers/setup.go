@@ -119,11 +119,13 @@ func Provision(cfg *config.Config, mgr *catalog.Manager, store *auth.SessionStor
 		newCfg.AgentGuardURL = agentGuardURL
 		newCfg.SetupComplete = true
 		newCfg.ProvisionedDLP = config.ProvisionedDLP{
-			Recorded:       true,
-			EmbeddingModel: cfg.DLP.EmbeddingModel,
-			EmbeddingDim:   cfg.DLP.EmbeddingDim,
-			RiskModel:      cfg.DLP.RiskModel,
-			SummaryModel:   cfg.DLP.SummaryModel,
+			Recorded:              true,
+			EmbeddingModel:        cfg.DLP.EmbeddingModel,
+			EmbeddingDim:          cfg.DLP.EmbeddingDim,
+			RiskModel:             cfg.DLP.RiskModel,
+			SummaryModel:          cfg.DLP.SummaryModel,
+			RequestTimeoutSeconds: cfg.DLP.RequestTimeoutSeconds,
+			MaxOutputTokens:       cfg.DLP.MaxOutputTokens,
 		}
 		if err := config.Save(&newCfg, cfg.ConfigPath); err != nil {
 			sendEvent("error", "Failed to save config: "+err.Error())

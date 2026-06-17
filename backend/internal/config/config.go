@@ -66,6 +66,10 @@ type ProvisionedDLP struct {
 	EmbeddingDim   int    `mapstructure:"embedding_dim"`
 	RiskModel      string `mapstructure:"risk_model"`
 	SummaryModel   string `mapstructure:"summary_model"`
+	// RequestTimeoutSeconds and MaxOutputTokens are also baked into the UDF DDL,
+	// so drift in them likewise requires a re-provision.
+	RequestTimeoutSeconds int `mapstructure:"request_timeout_seconds"`
+	MaxOutputTokens       int `mapstructure:"max_output_tokens"`
 }
 
 type Config struct {
@@ -139,6 +143,8 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("provisioned.dlp.embedding_dim", 0)
 	v.SetDefault("provisioned.dlp.risk_model", "")
 	v.SetDefault("provisioned.dlp.summary_model", "")
+	v.SetDefault("provisioned.dlp.request_timeout_seconds", 0)
+	v.SetDefault("provisioned.dlp.max_output_tokens", 0)
 
 	if searchPaths {
 		explicitConfigFile := v.ConfigFileUsed()
@@ -200,6 +206,8 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.ProvisionedDLP.EmbeddingDim = v.GetInt("provisioned.dlp.embedding_dim")
 	cfg.ProvisionedDLP.RiskModel = v.GetString("provisioned.dlp.risk_model")
 	cfg.ProvisionedDLP.SummaryModel = v.GetString("provisioned.dlp.summary_model")
+	cfg.ProvisionedDLP.RequestTimeoutSeconds = v.GetInt("provisioned.dlp.request_timeout_seconds")
+	cfg.ProvisionedDLP.MaxOutputTokens = v.GetInt("provisioned.dlp.max_output_tokens")
 	// TIMEPLUS_USER / TIMEPLUS_PASSWORD: optional canonical service account
 	// for server-to-server endpoints. Never written to the config file.
 	cfg.Timeplus.User = v.GetString("timeplus.user")
@@ -280,5 +288,7 @@ func Save(cfg *Config, path string) error {
 	v.Set("provisioned.dlp.embedding_dim", cfg.ProvisionedDLP.EmbeddingDim)
 	v.Set("provisioned.dlp.risk_model", cfg.ProvisionedDLP.RiskModel)
 	v.Set("provisioned.dlp.summary_model", cfg.ProvisionedDLP.SummaryModel)
+	v.Set("provisioned.dlp.request_timeout_seconds", cfg.ProvisionedDLP.RequestTimeoutSeconds)
+	v.Set("provisioned.dlp.max_output_tokens", cfg.ProvisionedDLP.MaxOutputTokens)
 	return v.WriteConfigAs(path)
 }

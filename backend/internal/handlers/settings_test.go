@@ -430,3 +430,47 @@ func TestTestDLPConfig(t *testing.T) {
 		t.Error("expected ok=false for unreachable URL")
 	}
 }
+
+// reprovisionRequired must flag drift for the timeout/token knobs too, not just
+// the model fields — both are baked into the UDF DDL at provision time.
+func TestReprovisionRequiredTracksTimeoutAndTokens(t *testing.T) {
+	base := &config.Config{}
+	base.DLP.Enabled = true
+	base.DLP.EmbeddingModel, base.DLP.EmbeddingDim = "e", 1024
+	base.DLP.RiskModel, base.DLP.SummaryModel = "r", "s"
+	base.DLP.RequestTimeoutSeconds, base.DLP.MaxOutputTokens = 50, 512
+	base.ProvisionedDLP = config.ProvisionedDLP{
+		Recorded:              true,
+		EmbeddingModel:        "e",
+		EmbeddingDim:          1024,
+		RiskModel:             "r",
+		SummaryModel:          "s",
+		RequestTimeoutSeconds: 50,
+		MaxOutputTokens:       512,
+	}
+
+	if reprovisionRequired(base) {
+		t.Fatal("no drift expected when every field matches the snapshot")
+	}
+
+	tokenDrift := *base
+	tokenDrift.DLP.MaxOutputTokens = 1024
+	if !reprovisionRequired(&tokenDrift) {
+		t.Error("expected reprovision required after max_output_tokens change")
+	}
+
+	timeoutDrift := *base
+	timeoutDrift.DLP.RequestTimeoutSeconds = 30
+	if !reprovisionRequired(&timeoutDrift) {
+		t.Error("expected reprovision required after request_timeout_seconds change")
+	}
+
+	// Legacy snapshot (recorded before these knobs existed) carries 0 for both
+	// new fields — must NOT spuriously flag a deployment whose models match.
+	legacy := *base
+	legacy.ProvisionedDLP.RequestTimeoutSeconds = 0
+	legacy.ProvisionedDLP.MaxOutputTokens = 0
+	if reprovisionRequired(&legacy) {
+		t.Error("legacy snapshot (0 timeout/tokens) must not flag reprovision when models match")
+	}
+}

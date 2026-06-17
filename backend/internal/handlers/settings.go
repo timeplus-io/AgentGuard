@@ -108,10 +108,17 @@ func reprovisionRequired(cfg *config.Config) bool {
 		return false
 	}
 	p := cfg.ProvisionedDLP
+	// RequestTimeoutSeconds/MaxOutputTokens were added after the snapshot
+	// format shipped, so a snapshot recorded before this change carries 0 for
+	// them. Recorded values are always clamped (>=5 / >=16), so 0 unambiguously
+	// means "legacy snapshot" — skip those comparisons rather than spuriously
+	// flagging every pre-existing deployment as needing a re-provision.
 	return cfg.DLP.EmbeddingModel != p.EmbeddingModel ||
 		cfg.DLP.EmbeddingDim != p.EmbeddingDim ||
 		cfg.DLP.RiskModel != p.RiskModel ||
-		cfg.DLP.SummaryModel != p.SummaryModel
+		cfg.DLP.SummaryModel != p.SummaryModel ||
+		(p.RequestTimeoutSeconds != 0 && cfg.DLP.RequestTimeoutSeconds != p.RequestTimeoutSeconds) ||
+		(p.MaxOutputTokens != 0 && cfg.DLP.MaxOutputTokens != p.MaxOutputTokens)
 }
 
 // GetConfig returns the full effective configuration with per-key sources.
