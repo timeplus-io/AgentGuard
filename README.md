@@ -200,7 +200,7 @@ make dlp-integration   # mock model server + provision + enrich + query round-tr
 make dlp-seed          # (optional) load demo data, then open /dlp
 ```
 
-See the **Semantic DLP** section of [`CLAUDE.md`](CLAUDE.md) and [`docs/cim.md`](docs/cim.md#6-downstream-semantic-dlp) for details.
+See [`docs/dlp.md`](docs/dlp.md) for the full feature documentation (and [`docs/cim.md`](docs/cim.md#6-downstream-semantic-dlp) for how it builds on the CIM layer).
 
 ---
 

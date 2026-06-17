@@ -239,7 +239,7 @@ Each enabled rule has a corresponding materialized view named `mv_rule_<id>` (e.
 
 ### Semantic DLP
 
-A natural-language forensic layer over conversation logs (design: `docs/superpowers/specs/2026-06-11-semantic-dlp-design.md`; parent issue #159). All ML inference runs as **Timeplus Python UDFs** that call a configurable OpenAI-compatible endpoint (`dlp.base_url`) — no sidecar, no model client in Go.
+A natural-language forensic layer over conversation logs (full doc: `docs/dlp.md`; design: `docs/superpowers/specs/2026-06-11-semantic-dlp-design.md`; parent issue #159). All ML inference runs as **Timeplus Python UDFs** that call a configurable OpenAI-compatible endpoint (`dlp.base_url`) — no sidecar, no model client in Go.
 
 - **Ingest enrichment** (`backend/internal/timeplus/dlp.go`): `mv_dlp_enrich` reads `agentguard_cim_event` (`user_input`/`llm_response`/`tool_complete`) and writes `agentguard_dlp_enriched`, calling three UDFs per message — `dlp_extract_entities` (regex/dictionary PII + masked secrets, no network), `dlp_embed` (batched embeddings; tool rows get `[]`), `dlp_risk` (gated risk classification → tags + score). All UDFs **fail open**: a model-endpoint outage yields empty/zero columns, never stalls ingest.
 - **Query funnel** (`backend/internal/handlers/dlp_query.go`): `dlp_understand_query` → two-channel recall (structured predicates + brute-force `cosine_distance` vector) → `dlp_rerank` → `dlp_summarize`, streamed as NDJSON stages.
