@@ -123,8 +123,8 @@ func TestDLPTimeoutTokenDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DLP.RequestTimeoutSeconds != 30 {
-		t.Errorf("RequestTimeoutSeconds = %d, want 30", cfg.DLP.RequestTimeoutSeconds)
+	if cfg.DLP.RequestTimeoutSeconds != 50 {
+		t.Errorf("RequestTimeoutSeconds = %d, want 50", cfg.DLP.RequestTimeoutSeconds)
 	}
 	if cfg.DLP.MaxOutputTokens != 512 {
 		t.Errorf("MaxOutputTokens = %d, want 512", cfg.DLP.MaxOutputTokens)

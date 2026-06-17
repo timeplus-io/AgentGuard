@@ -132,7 +132,7 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("dlp.embedding_dim", 1536)
 	v.SetDefault("dlp.risk_model", "gpt-4o-mini")
 	v.SetDefault("dlp.summary_model", "gpt-4o")
-	v.SetDefault("dlp.request_timeout_seconds", 30)
+	v.SetDefault("dlp.request_timeout_seconds", 50)
 	v.SetDefault("dlp.max_output_tokens", 512)
 	v.SetDefault("provisioned.dlp.recorded", false)
 	v.SetDefault("provisioned.dlp.embedding_model", "")
