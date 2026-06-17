@@ -377,3 +377,57 @@ Known limitations of the shipped surface:
 - Code: `backend/internal/timeplus/dlp.go`, `dlp_query.go`;
   `backend/internal/handlers/dlp.go`, `dlp_query.go`;
   `frontend/src/pages/SemanticDLP.jsx`; `backend/scripts/dlp_*`
+
+---
+
+## Local models (Ollama)
+
+Semantic DLP works with any OpenAI-compatible endpoint, including a local
+[Ollama](https://ollama.com) server. Because the model UDFs run **inside
+Timeplus**, `dlp.base_url` must be reachable from the Timeplus process.
+
+```yaml
+dlp:
+  enabled: true
+  base_url: http://host.docker.internal:11434/v1   # Timeplus in Docker, Ollama on host
+  # base_url: http://localhost:11434/v1            # Timeplus running natively
+  api_key: ""                                       # Ollama ignores auth
+  embedding_model: mxbai-embed-large                # 1024 dims
+  embedding_dim: 1024
+  risk_model: qwen2.5-coder:7b
+  summary_model: qwen2.5-coder:7b
+  request_timeout_seconds: 50                        # clamped to [5,55]
+  max_output_tokens: 512                             # raise for verbose/reasoning models
+```
+
+**Use direct-response models, not reasoning models.** Reasoning models
+(`gemma4`, `qwen3`, …) emit chain-of-thought into a separate `reasoning`
+field and only fill `content` afterward, so under a small token budget the
+UDF gets empty `content`. AgentGuard mitigates this by falling back to the
+`reasoning` field and by the configurable `max_output_tokens`, but a
+direct-response model (`qwen2.5-coder:7b`, `llama3.2:1b`) is recommended.
+The Settings → Semantic DLP **Test endpoint** button now verifies the
+embedding dimension and detects empty-content reasoning models.
+
+**Embedding dimension must match the model** and is baked into the
+`agentguard_dlp_enriched` stream. Changing `embedding_dim` requires
+dropping and recreating the stream + MV before re-provisioning:
+
+```sql
+DROP VIEW IF EXISTS mv_dlp_enrich;
+DROP STREAM IF EXISTS agentguard_dlp_enriched;
+```
+then `POST /api/rules/sync` (or re-run the setup wizard).
+
+**Timeouts.** `request_timeout_seconds` is the per-call model timeout in the
+UDFs. It is clamped to ≤ 55s so the query funnel returns before the 60s
+internal query-client ceiling. Local 7B summaries over ~20 evidence
+messages take ~15–20s warm.
+
+**Cold start.** Ollama unloads idle models after ~5 min; the first query
+after a gap pays a model-load penalty. Set `OLLAMA_KEEP_ALIVE=-1` (or a long
+duration) to keep models resident.
+
+**Vector index.** Timeplus builds where the `vector_similarity` (HNSW) index
+type is unavailable fall back to brute-force `cosine_distance`. This is
+correct, just slower at large row counts.
