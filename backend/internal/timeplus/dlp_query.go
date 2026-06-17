@@ -1,6 +1,7 @@
 package timeplus
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/timeplus/agentguard/internal/config"
@@ -18,7 +19,7 @@ import (
 // model prompts. Prompt injection is an accepted risk for this internal
 // operator tool — same rationale as the API-key exposure note in dlp.go.
 
-// dlpUnderstandUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}.
+// dlpUnderstandUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}, {{TIMEOUT}}, {{MAX_TOKENS}}.
 const dlpUnderstandUDFTemplate = `CREATE OR REPLACE FUNCTION dlp_understand_query(question string)
 RETURNS string
 LANGUAGE PYTHON AS $$
@@ -29,6 +30,11 @@ import requests
 BASE_URL = "{{BASE_URL}}"
 API_KEY = "{{API_KEY}}"
 MODEL = "{{MODEL}}"
+
+def _msg_content(resp):
+    m = resp.json()['choices'][0]['message']
+    return (m.get('content') or '').strip() or \
+           (m.get('reasoning') or m.get('reasoning_content') or '').strip()
 
 ENTITY_TYPES = ('phone', 'email', 'ip', 'domain', 'person', 'company', 'secret')
 RISK_TAGS = ('PII', 'PHONE', 'EMAIL', 'CREDENTIAL', 'SOURCE_CODE',
@@ -55,9 +61,9 @@ def _understand(question):
         'model': MODEL,
         'messages': [{'role': 'user', 'content': prompt}],
         'temperature': 0,
-        'max_tokens': 200,
-    }, timeout=30)
-    raw = resp.json()['choices'][0]['message']['content']
+        'max_tokens': {{MAX_TOKENS}},
+    }, timeout={{TIMEOUT}})
+    raw = _msg_content(resp)
     parsed = json.loads(raw[raw.find('{'):raw.rfind('}') + 1])
     return json.dumps({
         'keywords': [str(k).lower() for k in parsed.get('keywords', [])][:8],
@@ -77,7 +83,7 @@ def dlp_understand_query(questions):
     return out
 $$`
 
-// dlpRerankUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}.
+// dlpRerankUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}, {{TIMEOUT}}, {{MAX_TOKENS}}.
 // Scores each (question, content) pair 0..1. Chunks the batch into groups of
 // 20 per chat call; a failed chunk leaves its rows at the 0.5 default.
 const dlpRerankUDFTemplate = `CREATE OR REPLACE FUNCTION dlp_rerank(question string, content string)
@@ -90,6 +96,11 @@ BASE_URL = "{{BASE_URL}}"
 API_KEY = "{{API_KEY}}"
 MODEL = "{{MODEL}}"
 CHUNK = 20
+
+def _msg_content(resp):
+    m = resp.json()['choices'][0]['message']
+    return (m.get('content') or '').strip() or \
+           (m.get('reasoning') or m.get('reasoning_content') or '').strip()
 
 def _score_chunk(question, snippets):
     headers = {'Content-Type': 'application/json'}
@@ -104,9 +115,9 @@ def _score_chunk(question, snippets):
         'model': MODEL,
         'messages': [{'role': 'user', 'content': prompt}],
         'temperature': 0,
-        'max_tokens': 400,
-    }, timeout=30)
-    raw = resp.json()['choices'][0]['message']['content']
+        'max_tokens': {{MAX_TOKENS}},
+    }, timeout={{TIMEOUT}})
+    raw = _msg_content(resp)
     parsed = json.loads(raw[raw.find('{'):raw.rfind('}') + 1])
     return [float(s) for s in parsed.get('scores', [])]
 
@@ -128,7 +139,7 @@ def dlp_rerank(questions, contents):
     return out
 $$`
 
-// dlpSummarizeUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}.
+// dlpSummarizeUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}, {{TIMEOUT}}, {{MAX_TOKENS}}.
 // Produces the final audit report over the top-N evidence JSON. Returns ''
 // on failure; the Go handler substitutes a deterministic fallback line.
 const dlpSummarizeUDFTemplate = `CREATE OR REPLACE FUNCTION dlp_summarize(question string, evidence string)
@@ -139,6 +150,11 @@ import requests
 BASE_URL = "{{BASE_URL}}"
 API_KEY = "{{API_KEY}}"
 MODEL = "{{MODEL}}"
+
+def _msg_content(resp):
+    m = resp.json()['choices'][0]['message']
+    return (m.get('content') or '').strip() or \
+           (m.get('reasoning') or m.get('reasoning_content') or '').strip()
 
 def _summarize(question, evidence):
     headers = {'Content-Type': 'application/json'}
@@ -153,9 +169,9 @@ def _summarize(question, evidence):
         'model': MODEL,
         'messages': [{'role': 'user', 'content': prompt}],
         'temperature': 0,
-        'max_tokens': 800,
-    }, timeout=60)
-    return resp.json()['choices'][0]['message']['content']
+        'max_tokens': {{MAX_TOKENS}},
+    }, timeout={{TIMEOUT}})
+    return _msg_content(resp)
 
 def dlp_summarize(questions, evidences):
     out = []
@@ -167,15 +183,21 @@ def dlp_summarize(questions, evidences):
     return out
 $$`
 
-// dlpReplacer returns a strings.Replacer that fills in the three UDF
-// template placeholders from cfg. Centralised here so the embed and risk
-// builders in dlp.go also call it, keeping the placeholder set consistent.
-func dlpReplacer(cfg config.DLPConfig, model string) *strings.Replacer {
+// dlpReplacerWith fills the UDF template placeholders. maxTokens lets
+// dlp_summarize raise its budget above the global dlp.max_output_tokens.
+func dlpReplacerWith(cfg config.DLPConfig, model string, maxTokens int) *strings.Replacer {
 	return strings.NewReplacer(
 		"{{BASE_URL}}", cfg.BaseURL,
 		"{{API_KEY}}", cfg.APIKey,
 		"{{MODEL}}", model,
+		"{{TIMEOUT}}", strconv.Itoa(cfg.RequestTimeoutSeconds),
+		"{{MAX_TOKENS}}", strconv.Itoa(maxTokens),
 	)
+}
+
+// dlpReplacer is the common case: timeout + the global max_output_tokens.
+func dlpReplacer(cfg config.DLPConfig, model string) *strings.Replacer {
+	return dlpReplacerWith(cfg, model, cfg.MaxOutputTokens)
 }
 
 // DLPUnderstandUDFDDL returns the CREATE OR REPLACE FUNCTION DDL for
@@ -192,6 +214,11 @@ func DLPRerankUDFDDL(cfg config.DLPConfig) string {
 
 // DLPSummarizeUDFDDL returns the CREATE OR REPLACE FUNCTION DDL for
 // dlp_summarize, interpolated with cfg and the summary model.
+// The token budget is floored at 800 to ensure the summary is not truncated.
 func DLPSummarizeUDFDDL(cfg config.DLPConfig) string {
-	return dlpReplacer(cfg, cfg.SummaryModel).Replace(dlpSummarizeUDFTemplate)
+	tokens := cfg.MaxOutputTokens
+	if tokens < 800 {
+		tokens = 800
+	}
+	return dlpReplacerWith(cfg, cfg.SummaryModel, tokens).Replace(dlpSummarizeUDFTemplate)
 }
