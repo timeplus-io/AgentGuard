@@ -200,7 +200,7 @@ export const api = {
   getConfig: () => get('/config'),
   updateConfig: (changes) => put('/config', changes),
   testTimeplusConfig: (host, port) => post('/config/test-timeplus', { host, port }),
-  testDLPConfig: (base_url, api_key) => post('/config/test-dlp', { base_url, api_key }),
+  testDLPConfig: (payload) => post('/config/test-dlp', payload),
 
   // dlpQuery streams NDJSON stage events from the forensic funnel:
   // {stage:"intent"} → {stage:"candidates"} → {stage:"reranked"} → {stage:"answer"}

@@ -97,7 +97,7 @@ def dlp_extract_entities(contents):
     return out
 $$`
 
-// dlpEmbedUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}.
+// dlpEmbedUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}, {{TIMEOUT}}.
 //
 // Security note: cfg.APIKey is embedded verbatim in the UDF source, so
 // SHOW FUNCTIONS exposes it to anyone with Timeplus DDL access. Known,
@@ -129,7 +129,7 @@ def dlp_embed(contents, roles):
         if API_KEY:
             headers['Authorization'] = 'Bearer ' + API_KEY
         resp = requests.post(BASE_URL + '/embeddings', headers=headers,
-                             json={'model': MODEL, 'input': inputs}, timeout=30)
+                             json={'model': MODEL, 'input': inputs}, timeout={{TIMEOUT}})
         for j, item in enumerate(resp.json().get('data', [])):
             if j < len(idx):
                 out[idx[j]] = [float(x) for x in item.get('embedding', [])]
@@ -142,7 +142,8 @@ func DLPEmbedUDFDDL(cfg config.DLPConfig) string {
 	return dlpReplacer(cfg, cfg.EmbeddingModel).Replace(dlpEmbedUDFTemplate)
 }
 
-// dlpRiskUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}. Same API-key exposure note as dlpEmbedUDFTemplate.
+// dlpRiskUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}, {{TIMEOUT}}, {{MAX_TOKENS}}.
+// Same API-key exposure note as dlpEmbedUDFTemplate.
 const dlpRiskUDFTemplate = `CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string))
 RETURNS string
 LANGUAGE PYTHON AS $$
@@ -152,6 +153,11 @@ import requests
 BASE_URL = "{{BASE_URL}}"
 API_KEY = "{{API_KEY}}"
 MODEL = "{{MODEL}}"
+
+def _msg_content(resp):
+    m = resp.json()['choices'][0]['message']
+    return (m.get('content') or '').strip() or \
+           (m.get('reasoning') or m.get('reasoning_content') or '').strip()
 
 KEYWORDS = ('password', 'secret', 'api key', 'apikey', 'token', 'credential',
             'customer', 'contact list', 'address book', 'export', 'confidential',
@@ -183,9 +189,9 @@ def _classify(text, ets):
         'model': MODEL,
         'messages': [{'role': 'user', 'content': prompt}],
         'temperature': 0,
-        'max_tokens': 100,
-    }, timeout=30)
-    raw = resp.json()['choices'][0]['message']['content']
+        'max_tokens': {{MAX_TOKENS}},
+    }, timeout={{TIMEOUT}})
+    raw = _msg_content(resp)
     parsed = json.loads(raw[raw.find('{'):raw.rfind('}') + 1])
     return json.dumps({'score': float(parsed.get('score', 0)),
                        'tags': [str(x) for x in parsed.get('tags', [])]})

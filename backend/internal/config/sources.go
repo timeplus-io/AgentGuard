@@ -94,6 +94,14 @@ func validateInt(key string, v int) error {
 		if v < 0 {
 			return errors.New("must be zero or greater")
 		}
+	case "dlp.request_timeout_seconds":
+		if v < 5 || v > 55 {
+			return errors.New("must be between 5 and 55")
+		}
+	case "dlp.max_output_tokens":
+		if v < 16 || v > 4096 {
+			return errors.New("must be between 16 and 4096")
+		}
 	}
 	return nil
 }
@@ -180,6 +188,10 @@ func EffectiveValue(cfg *Config, key string) any {
 		return cfg.DLP.RiskModel
 	case "dlp.summary_model":
 		return cfg.DLP.SummaryModel
+	case "dlp.request_timeout_seconds":
+		return cfg.DLP.RequestTimeoutSeconds
+	case "dlp.max_output_tokens":
+		return cfg.DLP.MaxOutputTokens
 	case "setup.complete":
 		return cfg.SetupComplete
 	}
@@ -224,6 +236,10 @@ func ApplyChange(cfg *Config, key string, value any) error {
 		return setString(&cfg.DLP.RiskModel, value)
 	case "dlp.summary_model":
 		return setString(&cfg.DLP.SummaryModel, value)
+	case "dlp.request_timeout_seconds":
+		return setInt(&cfg.DLP.RequestTimeoutSeconds, value)
+	case "dlp.max_output_tokens":
+		return setInt(&cfg.DLP.MaxOutputTokens, value)
 	}
 	return fmt.Errorf("key %q cannot be applied", key)
 }

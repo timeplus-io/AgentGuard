@@ -116,6 +116,12 @@ func Registry() []KeyMeta {
 		{Key: "dlp.summary_model", Section: "dlp", Label: "Summary model",
 			Description: "Model used for query summarization. Baked into UDFs — change needs re-provision.",
 			Type:        TypeString, EnvVar: "DLP_SUMMARY_MODEL", Reprovision: true},
+		{Key: "dlp.request_timeout_seconds", Section: "dlp", Label: "Model request timeout (s)",
+			Description: "Per-call timeout for DLP model requests. 5–55 (must stay under the 60s query client). Baked into UDFs — change needs re-provision.",
+			Type:        TypeInt, EnvVar: "DLP_REQUEST_TIMEOUT_SECONDS", Reprovision: true},
+		{Key: "dlp.max_output_tokens", Section: "dlp", Label: "Max output tokens",
+			Description: "Token budget for risk/understand/rerank model calls (summary uses at least 800). Raise for reasoning models. Baked into UDFs — change needs re-provision.",
+			Type:        TypeInt, EnvVar: "DLP_MAX_OUTPUT_TOKENS", Reprovision: true},
 
 		// ── setup ──
 		{Key: "setup.complete", Section: "setup", Label: "Setup complete",

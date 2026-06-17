@@ -14,6 +14,164 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 )
 
+// stubModelServer mimics an OpenAI-compatible endpoint. thinking=true returns
+// an empty content with a reasoning field to exercise thinking-model detection.
+func stubModelServer(t *testing.T, dim int, thinking bool) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/models", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	})
+	mux.HandleFunc("/embeddings", func(w http.ResponseWriter, r *http.Request) {
+		emb := make([]float64, dim)
+		b, _ := json.Marshal(gin.H{"data": []gin.H{{"embedding": emb}}})
+		_, _ = w.Write(b)
+	})
+	mux.HandleFunc("/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		msg := gin.H{"content": "ok"}
+		if thinking {
+			msg = gin.H{"content": "", "reasoning": "thinking..."}
+		}
+		b, _ := json.Marshal(gin.H{"choices": []gin.H{{"message": msg}}})
+		_, _ = w.Write(b)
+	})
+	return httptest.NewServer(mux)
+}
+
+func postTestDLP(t *testing.T, cfg *config.Config, body string) map[string]any {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	TestDLPConfig(cfg)(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestDLPPreflightAllPass(t *testing.T) {
+	srv := stubModelServer(t, 1024, false)
+	defer srv.Close()
+	cfg := &config.Config{DLP: config.DLPConfig{
+		BaseURL: srv.URL, EmbeddingModel: "e", EmbeddingDim: 1024,
+		RiskModel: "r", MaxOutputTokens: 512,
+	}}
+	out := postTestDLP(t, cfg, `{"base_url":"`+srv.URL+`"}`)
+	if out["ok"] != true {
+		t.Fatalf("ok = %v, want true (out=%v)", out["ok"], out)
+	}
+}
+
+func TestDLPPreflightDimMismatch(t *testing.T) {
+	srv := stubModelServer(t, 384, false)
+	defer srv.Close()
+	cfg := &config.Config{DLP: config.DLPConfig{
+		BaseURL: srv.URL, EmbeddingModel: "e", EmbeddingDim: 1024,
+		RiskModel: "r", MaxOutputTokens: 512,
+	}}
+	out := postTestDLP(t, cfg, `{"base_url":"`+srv.URL+`"}`)
+	if out["ok"] == true {
+		t.Error("ok should be false on dim mismatch")
+	}
+	checks := out["checks"].(map[string]any)
+	emb := checks["embedding"].(map[string]any)
+	if emb["dim"].(float64) != 384 || emb["expected"].(float64) != 1024 {
+		t.Errorf("embedding check = %v, want dim 384 expected 1024", emb)
+	}
+}
+
+func TestDLPPreflightThinkingDetected(t *testing.T) {
+	srv := stubModelServer(t, 1024, true)
+	defer srv.Close()
+	cfg := &config.Config{DLP: config.DLPConfig{
+		BaseURL: srv.URL, EmbeddingModel: "e", EmbeddingDim: 1024,
+		RiskModel: "r", MaxOutputTokens: 512,
+	}}
+	out := postTestDLP(t, cfg, `{"base_url":"`+srv.URL+`"}`)
+	checks := out["checks"].(map[string]any)
+	chat := checks["chat"].(map[string]any)
+	if chat["thinking_detected"] != true {
+		t.Errorf("chat = %v, want thinking_detected true", chat)
+	}
+	if chat["ok"] != false {
+		t.Errorf("chat[ok] = %v, want false when thinking_detected", chat["ok"])
+	}
+}
+
+func TestDLPPreflightReasoningContentDetected(t *testing.T) {
+	// Inline stub: /models 200, /embeddings dim=1024, /chat returns reasoning_content with empty content.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/models", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	})
+	mux.HandleFunc("/embeddings", func(w http.ResponseWriter, r *http.Request) {
+		emb := make([]float64, 1024)
+		b, _ := json.Marshal(gin.H{"data": []gin.H{{"embedding": emb}}})
+		_, _ = w.Write(b)
+	})
+	mux.HandleFunc("/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		// reasoning_content populated, reasoning absent, content empty.
+		msg := gin.H{"content": "", "reasoning_content": "thinking..."}
+		b, _ := json.Marshal(gin.H{"choices": []gin.H{{"message": msg}}})
+		_, _ = w.Write(b)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := &config.Config{DLP: config.DLPConfig{
+		BaseURL: srv.URL, EmbeddingModel: "e", EmbeddingDim: 1024,
+		RiskModel: "r", MaxOutputTokens: 512,
+	}}
+	out := postTestDLP(t, cfg, `{"base_url":"`+srv.URL+`"}`)
+	checks := out["checks"].(map[string]any)
+	chat := checks["chat"].(map[string]any)
+	if chat["thinking_detected"] != true {
+		t.Errorf("chat = %v, want thinking_detected true for reasoning_content", chat)
+	}
+	if chat["ok"] != false {
+		t.Errorf("chat[ok] = %v, want false when thinking_detected via reasoning_content", chat["ok"])
+	}
+}
+
+func TestDLPPreflightReachableNon2xx(t *testing.T) {
+	// Stand up a server whose /models returns 401 (reachable but non-2xx).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	cfg := &config.Config{DLP: config.DLPConfig{
+		BaseURL: srv.URL, EmbeddingModel: "e", EmbeddingDim: 1024,
+		RiskModel: "r", MaxOutputTokens: 512,
+	}}
+	out := postTestDLP(t, cfg, `{"base_url":"`+srv.URL+`"}`)
+
+	// Top-level ok must be false.
+	if out["ok"] != false {
+		t.Errorf("ok = %v, want false for non-2xx /models", out["ok"])
+	}
+	// reachable check must report ok:false.
+	checks := out["checks"].(map[string]any)
+	reachable := checks["reachable"].(map[string]any)
+	if reachable["ok"] != false {
+		t.Errorf("reachable[ok] = %v, want false for 401 /models", reachable["ok"])
+	}
+	// embedding and chat checks are short-circuited when reachable fails.
+	if _, hasEmbedding := checks["embedding"]; hasEmbedding {
+		t.Error("embedding check should be absent when reachable fails")
+	}
+	if _, hasChat := checks["chat"]; hasChat {
+		t.Error("chat check should be absent when reachable fails")
+	}
+}
+
 func newConfigForTest(t *testing.T) *config.Config {
 	t.Helper()
 	dir := t.TempDir()
@@ -225,27 +383,20 @@ func TestUpdateConfigClearSecret(t *testing.T) {
 }
 
 func TestTestDLPConfig(t *testing.T) {
-	// Stub an OpenAI-compatible /models endpoint.
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/models" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		if r.Header.Get("Authorization") != "Bearer sk-test" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"data":[]}`))
-	}))
+	// Use stubModelServer (dim=1024, thinking=false) for a full-pass endpoint.
+	upstream := stubModelServer(t, 1024, false)
 	defer upstream.Close()
 
 	cfg := newConfigForTest(t)
+	cfg.DLP.EmbeddingModel = "e"
+	cfg.DLP.EmbeddingDim = 1024
+	cfg.DLP.RiskModel = "r"
+	cfg.DLP.MaxOutputTokens = 512
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.POST("/api/config/test-dlp", TestDLPConfig(cfg))
 
-	body := `{"base_url":"` + upstream.URL + `","api_key":"sk-test"}`
+	body := `{"base_url":"` + upstream.URL + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/config/test-dlp", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -262,20 +413,64 @@ func TestTestDLPConfig(t *testing.T) {
 		t.Errorf("expected ok=true, body = %s", w.Body.String())
 	}
 
-	// Wrong key → ok:false, still HTTP 200.
-	bad := `{"base_url":"` + upstream.URL + `","api_key":"wrong"}`
+	// Unreachable URL → ok:false, still HTTP 200.
+	bad := `{"base_url":"http://127.0.0.1:1"}`
 	req2 := httptest.NewRequest(http.MethodPost, "/api/config/test-dlp", strings.NewReader(bad))
 	req2.Header.Set("Content-Type", "application/json")
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusOK {
-		t.Errorf("unreachable/auth-fail should be 200 with ok:false, got %d", w2.Code)
+		t.Errorf("unreachable should be 200 with ok:false, got %d", w2.Code)
 	}
 	var resp2 struct {
 		OK bool `json:"ok"`
 	}
 	_ = json.Unmarshal(w2.Body.Bytes(), &resp2)
 	if resp2.OK {
-		t.Error("expected ok=false for wrong key")
+		t.Error("expected ok=false for unreachable URL")
+	}
+}
+
+// reprovisionRequired must flag drift for the timeout/token knobs too, not just
+// the model fields — both are baked into the UDF DDL at provision time.
+func TestReprovisionRequiredTracksTimeoutAndTokens(t *testing.T) {
+	base := &config.Config{}
+	base.DLP.Enabled = true
+	base.DLP.EmbeddingModel, base.DLP.EmbeddingDim = "e", 1024
+	base.DLP.RiskModel, base.DLP.SummaryModel = "r", "s"
+	base.DLP.RequestTimeoutSeconds, base.DLP.MaxOutputTokens = 50, 512
+	base.ProvisionedDLP = config.ProvisionedDLP{
+		Recorded:              true,
+		EmbeddingModel:        "e",
+		EmbeddingDim:          1024,
+		RiskModel:             "r",
+		SummaryModel:          "s",
+		RequestTimeoutSeconds: 50,
+		MaxOutputTokens:       512,
+	}
+
+	if reprovisionRequired(base) {
+		t.Fatal("no drift expected when every field matches the snapshot")
+	}
+
+	tokenDrift := *base
+	tokenDrift.DLP.MaxOutputTokens = 1024
+	if !reprovisionRequired(&tokenDrift) {
+		t.Error("expected reprovision required after max_output_tokens change")
+	}
+
+	timeoutDrift := *base
+	timeoutDrift.DLP.RequestTimeoutSeconds = 30
+	if !reprovisionRequired(&timeoutDrift) {
+		t.Error("expected reprovision required after request_timeout_seconds change")
+	}
+
+	// Legacy snapshot (recorded before these knobs existed) carries 0 for both
+	// new fields — must NOT spuriously flag a deployment whose models match.
+	legacy := *base
+	legacy.ProvisionedDLP.RequestTimeoutSeconds = 0
+	legacy.ProvisionedDLP.MaxOutputTokens = 0
+	if reprovisionRequired(&legacy) {
+		t.Error("legacy snapshot (0 timeout/tokens) must not flag reprovision when models match")
 	}
 }
