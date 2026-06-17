@@ -69,7 +69,7 @@ values are baked into the UDF DDL at provision time.
 
 | Key | Type | Default | Validation | Applies to |
 |---|---|---|---|---|
-| `dlp.request_timeout_seconds` | int | `60` | clamp to `[5, 55]` | the `timeout=` arg on every UDF `requests.post` (embed + 4 chat UDFs) |
+| `dlp.request_timeout_seconds` | int | `50` | clamp to `[5, 55]` | the `timeout=` arg on every UDF `requests.post` (embed + 4 chat UDFs) |
 | `dlp.max_output_tokens` | int | `512` | clamp to `[16, 4096]` | `max_tokens` for `dlp_risk`, `dlp_understand_query`, `dlp_rerank` |
 
 `dlp_summarize` computes its budget as `max(max_output_tokens, 800)` in the Go DDL

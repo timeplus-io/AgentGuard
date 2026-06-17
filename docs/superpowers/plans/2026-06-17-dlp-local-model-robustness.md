@@ -15,7 +15,7 @@
 - Build/test Go with `CGO_ENABLED=0` (macOS 26+ dyld abort otherwise).
 - All DLP UDFs remain **fail-open**: any exception falls back to existing defaults (`_fallback`, `_heuristic`, `0.5` rerank, `''` summary). Never raise.
 - `POST /api/config/test-dlp` always returns HTTP 200; check failures are reported in-band, never 5xx.
-- `dlp.request_timeout_seconds`: default `60`, clamped to **[5, 55]** (must stay under the 60s `protonHTTPClient` query ceiling in `internal/timeplus/client.go`).
+- `dlp.request_timeout_seconds`: default `50`, clamped to **[5, 55]** (must stay under the 60s `protonHTTPClient` query ceiling in `internal/timeplus/client.go`).
 - `dlp.max_output_tokens`: default `512`, clamped to **[16, 4096]**. `dlp_summarize` uses `max(value, 800)`.
 - Both new keys are `Reprovision: true` (baked into UDF DDL; applied by `POST /api/rules/sync` or the setup wizard).
 - Follow existing code patterns; the API key is interpolated into UDF DDL (accepted limitation, see `dlp.go`).
@@ -45,8 +45,8 @@ func TestDLPTimeoutTokenDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DLP.RequestTimeoutSeconds != 60 {
-		t.Errorf("RequestTimeoutSeconds = %d, want 60", cfg.DLP.RequestTimeoutSeconds)
+	if cfg.DLP.RequestTimeoutSeconds != 50 {
+		t.Errorf("RequestTimeoutSeconds = %d, want 50", cfg.DLP.RequestTimeoutSeconds)
 	}
 	if cfg.DLP.MaxOutputTokens != 512 {
 		t.Errorf("MaxOutputTokens = %d, want 512", cfg.DLP.MaxOutputTokens)
@@ -126,7 +126,7 @@ type DLPConfig struct {
 In `load()` defaults block (after `dlp.summary_model`):
 
 ```go
-	v.SetDefault("dlp.request_timeout_seconds", 60)
+	v.SetDefault("dlp.request_timeout_seconds", 50)
 	v.SetDefault("dlp.max_output_tokens", 512)
 ```
 
@@ -786,7 +786,7 @@ dlp:
   embedding_dim: 1024
   risk_model: qwen2.5-coder:7b
   summary_model: qwen2.5-coder:7b
-  request_timeout_seconds: 60                        # clamped to [5,55] in practice
+  request_timeout_seconds: 50                        # clamped to [5,55]
   max_output_tokens: 512                             # raise for verbose/reasoning models
 ```
 
