@@ -100,6 +100,41 @@ func TestDLPPreflightThinkingDetected(t *testing.T) {
 	if chat["thinking_detected"] != true {
 		t.Errorf("chat = %v, want thinking_detected true", chat)
 	}
+	if chat["ok"] != false {
+		t.Errorf("chat[ok] = %v, want false when thinking_detected", chat["ok"])
+	}
+}
+
+func TestDLPPreflightReachableNon2xx(t *testing.T) {
+	// Stand up a server whose /models returns 401 (reachable but non-2xx).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	cfg := &config.Config{DLP: config.DLPConfig{
+		BaseURL: srv.URL, EmbeddingModel: "e", EmbeddingDim: 1024,
+		RiskModel: "r", MaxOutputTokens: 512,
+	}}
+	out := postTestDLP(t, cfg, `{"base_url":"`+srv.URL+`"}`)
+
+	// Top-level ok must be false.
+	if out["ok"] != false {
+		t.Errorf("ok = %v, want false for non-2xx /models", out["ok"])
+	}
+	// reachable check must report ok:false.
+	checks := out["checks"].(map[string]any)
+	reachable := checks["reachable"].(map[string]any)
+	if reachable["ok"] != false {
+		t.Errorf("reachable[ok] = %v, want false for 401 /models", reachable["ok"])
+	}
+	// embedding and chat checks are short-circuited when reachable fails.
+	if _, hasEmbedding := checks["embedding"]; hasEmbedding {
+		t.Error("embedding check should be absent when reachable fails")
+	}
+	if _, hasChat := checks["chat"]; hasChat {
+		t.Error("chat check should be absent when reachable fails")
+	}
 }
 
 func newConfigForTest(t *testing.T) *config.Config {
