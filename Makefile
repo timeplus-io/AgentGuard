@@ -5,6 +5,7 @@
         docker-build docker-run docker-stop docker-push docker-release \
         compose-up compose-down compose-restart \
         scripts-sync package-plugins \
+        dlp-mock dlp-seed dlp-integration \
         docs-api
 
 BINARY      := backend/server
@@ -151,6 +152,20 @@ compose-down:
 compose-restart:
 	docker compose down -v --remove-orphans
 	docker compose up --build
+
+# ── Semantic DLP ─────────────────────────────────────────────────────────────
+
+## dlp-mock: run the deterministic mock OpenAI-compatible model server on :4000
+dlp-mock:
+	python3 backend/scripts/dlp_mock_model.py
+
+## dlp-seed: load Semantic DLP demo data into a provisioned, running Timeplus (for the /dlp page)
+dlp-seed:
+	bash backend/scripts/dlp_seed.sh
+
+## dlp-integration: end-to-end DLP test (mock + provision + enrich + query round-trip) against a live Timeplus
+dlp-integration:
+	bash backend/scripts/dlp_integration.sh
 
 # ── Docs ─────────────────────────────────────────────────────────────────────
 

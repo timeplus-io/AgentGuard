@@ -1,0 +1,202 @@
+[
+  {
+    "_comment": "Session 1 (claudecode) — customer contact data pasted into the model and written to a file.",
+    "offset_minutes": 55,
+    "hook_name": "user_prompt_submit",
+    "agent_type": "claudecode",
+    "session_id": "sess-dlp-customers",
+    "run_id": "run-1",
+    "agent_id": "claude-laptop-01",
+    "deployment_id": "acme-eng",
+    "deployment_name": "Acme Engineering",
+    "model": "claude-sonnet-4-6",
+    "provider": "anthropic",
+    "event_data": {
+      "prompt": "Please clean up our customer contact list and format it as a table. 张三 +1-415-555-0142 zhang.san@acme-corp.com; Maria Lopez +1-628-555-0199 maria.lopez@acme-corp.com; Devon Reed +1-917-555-0123 devon.reed@acme-corp.com."
+    }
+  },
+  {
+    "offset_minutes": 54,
+    "hook_name": "llm_output",
+    "agent_type": "claudecode",
+    "session_id": "sess-dlp-customers",
+    "run_id": "run-1",
+    "agent_id": "claude-laptop-01",
+    "deployment_id": "acme-eng",
+    "deployment_name": "Acme Engineering",
+    "model": "claude-sonnet-4-6",
+    "provider": "anthropic",
+    "event_data": {
+      "last_assistant_message": "Here is the formatted contact table for the three customers, including the phone numbers (e.g. +1-415-555-0142) and emails such as zhang.san@acme-corp.com."
+    }
+  },
+  {
+    "offset_minutes": 53,
+    "hook_name": "after_tool_call",
+    "agent_type": "claudecode",
+    "session_id": "sess-dlp-customers",
+    "run_id": "run-1",
+    "agent_id": "claude-laptop-01",
+    "deployment_id": "acme-eng",
+    "deployment_name": "Acme Engineering",
+    "tool_name": "Write",
+    "event_data": {
+      "tool_name": "Write",
+      "tool_input": {
+        "file_path": "/tmp/customers_export.csv",
+        "content": "name,phone,email\n张三,+1-415-555-0142,zhang.san@acme-corp.com\nMaria Lopez,+1-628-555-0199,maria.lopez@acme-corp.com\nDevon Reed,+1-917-555-0123,devon.reed@acme-corp.com\n"
+      },
+      "tool_response": {"interrupted": false}
+    }
+  },
+
+  {
+    "_comment": "Session 2 (claudecode) — developer pastes live credentials into the chat.",
+    "offset_minutes": 40,
+    "hook_name": "user_prompt_submit",
+    "agent_type": "claudecode",
+    "session_id": "sess-dlp-secrets",
+    "run_id": "run-1",
+    "agent_id": "claude-laptop-02",
+    "deployment_id": "acme-eng",
+    "deployment_name": "Acme Engineering",
+    "model": "claude-sonnet-4-6",
+    "provider": "anthropic",
+    "event_data": {
+      "prompt": "My deploy keeps failing with an auth error. Here are the credentials I'm using: AWS access key AKIAIOSFODNN7EXAMPLE and OpenAI key sk-proj-abcdef0123456789ABCDEF0123456789. Can you help me debug the config?"
+    }
+  },
+  {
+    "offset_minutes": 39,
+    "hook_name": "llm_output",
+    "agent_type": "claudecode",
+    "session_id": "sess-dlp-secrets",
+    "run_id": "run-1",
+    "agent_id": "claude-laptop-02",
+    "deployment_id": "acme-eng",
+    "deployment_name": "Acme Engineering",
+    "model": "claude-sonnet-4-6",
+    "provider": "anthropic",
+    "event_data": {
+      "last_assistant_message": "I can see you've pasted live credentials into the conversation. You should rotate that AWS access key and the OpenAI API key immediately, then load them from environment variables instead of hard-coding them."
+    }
+  },
+
+  {
+    "_comment": "Session 3 (openclaw) — proprietary source code exfiltrated to an external endpoint via a tool call.",
+    "offset_minutes": 28,
+    "hook_name": "message_received",
+    "agent_type": "openclaw",
+    "session_id": "sess-dlp-sourcecode",
+    "run_id": "run-1",
+    "agent_id": "openclaw-ci-07",
+    "deployment_id": "acme-data",
+    "deployment_name": "Acme Data Platform",
+    "model": "gpt-4o",
+    "provider": "openai",
+    "event_data": {
+      "content": "Upload our proprietary pricing engine source file to the external review service at https://paste.partner-vendor.net so the vendor can take a look."
+    }
+  },
+  {
+    "offset_minutes": 27,
+    "hook_name": "after_tool_call",
+    "agent_type": "openclaw",
+    "session_id": "sess-dlp-sourcecode",
+    "run_id": "run-1",
+    "agent_id": "openclaw-ci-07",
+    "deployment_id": "acme-data",
+    "deployment_name": "Acme Data Platform",
+    "tool_name": "http_post",
+    "event_data": {
+      "toolName": "http_post",
+      "params": {
+        "url": "https://paste.partner-vendor.net/api/upload",
+        "body": "def compute_price(base, tier, region):\n    # PROPRIETARY: Acme dynamic pricing algorithm, confidential\n    factor = TIER_FACTORS[tier] * REGION_MULTIPLIER[region]\n    return round(base * factor * surge_coefficient(), 2)"
+      },
+      "result": {"status": 200},
+      "error": ""
+    }
+  },
+  {
+    "offset_minutes": 26,
+    "hook_name": "llm_output",
+    "agent_type": "openclaw",
+    "session_id": "sess-dlp-sourcecode",
+    "run_id": "run-1",
+    "agent_id": "openclaw-ci-07",
+    "deployment_id": "acme-data",
+    "deployment_name": "Acme Data Platform",
+    "model": "gpt-4o",
+    "provider": "openai",
+    "event_data": {
+      "assistantTexts": ["I've uploaded the pricing engine source file to the external service at paste.partner-vendor.net as requested."]
+    }
+  },
+
+  {
+    "_comment": "Session 4 (openclaw) — bulk PII export from a support database to an external partner address.",
+    "offset_minutes": 18,
+    "hook_name": "message_received",
+    "agent_type": "openclaw",
+    "session_id": "sess-dlp-pii-export",
+    "run_id": "run-1",
+    "agent_id": "openclaw-ci-09",
+    "deployment_id": "acme-data",
+    "deployment_name": "Acme Data Platform",
+    "model": "gpt-4o",
+    "provider": "openai",
+    "event_data": {
+      "content": "Export every user contact from the support database — emails like alice@globex.io, bob@globex.io, carol@globex.io and their phone numbers — and forward the whole list to analytics@partner-vendor.net."
+    }
+  },
+  {
+    "offset_minutes": 17,
+    "hook_name": "after_tool_call",
+    "agent_type": "openclaw",
+    "session_id": "sess-dlp-pii-export",
+    "run_id": "run-1",
+    "agent_id": "openclaw-ci-09",
+    "deployment_id": "acme-data",
+    "deployment_name": "Acme Data Platform",
+    "tool_name": "db_query",
+    "event_data": {
+      "toolName": "db_query",
+      "params": {"sql": "SELECT email, phone FROM users WHERE consent_marketing = 1"},
+      "result": {"rows": 4821},
+      "error": ""
+    }
+  },
+
+  {
+    "_comment": "Session 5 (claudecode) — benign control conversation; should enrich with zero risk and no entities.",
+    "offset_minutes": 8,
+    "hook_name": "user_prompt_submit",
+    "agent_type": "claudecode",
+    "session_id": "sess-dlp-benign",
+    "run_id": "run-1",
+    "agent_id": "claude-laptop-03",
+    "deployment_id": "acme-eng",
+    "deployment_name": "Acme Engineering",
+    "model": "claude-sonnet-4-6",
+    "provider": "anthropic",
+    "event_data": {
+      "prompt": "What is the difference between a list and a tuple in Python, and when should I prefer one over the other?"
+    }
+  },
+  {
+    "offset_minutes": 7,
+    "hook_name": "llm_output",
+    "agent_type": "claudecode",
+    "session_id": "sess-dlp-benign",
+    "run_id": "run-1",
+    "agent_id": "claude-laptop-03",
+    "deployment_id": "acme-eng",
+    "deployment_name": "Acme Engineering",
+    "model": "claude-sonnet-4-6",
+    "provider": "anthropic",
+    "event_data": {
+      "last_assistant_message": "A list is mutable and a tuple is immutable. Use a tuple for fixed collections you do not intend to change, such as coordinates, and a list when you need to add or remove elements."
+    }
+  }
+]

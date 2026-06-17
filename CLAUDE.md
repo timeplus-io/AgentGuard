@@ -145,6 +145,11 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | PUT | `/api/config` | `UpdateConfig` | Atomic validate + merge-write changed keys to config.yaml; hot-applies non-restart keys to the live config |
 | POST | `/api/config/test-timeplus` | `TestTimeplusConfig` | Tests a candidate Timeplus host/port using session credentials |
 | POST | `/api/config/test-dlp` | `TestDLPConfig` | Tests DLP `base_url` reachability (GET `/models`); never 5xx on unreachable |
+| POST | `/api/dlp/query` | `DLPQuery` | Semantic DLP forensic funnel (understand → recall → rerank → summarize); streams NDJSON stage events. 503 if `dlp.enabled=false` or unprovisioned |
+| GET | `/api/dlp/messages` | `ListEnrichedMessages` | Browse `agentguard_dlp_enriched`; filters `risk_tag`, `entity_type`, `agent_id`, `session_id`, `role`, `since`/`until`, `min_score`; paginated (max 500) |
+| GET | `/api/dlp/messages/:id` | `GetEnrichedMessage` | Full enriched record by `message_id` |
+| GET | `/api/dlp/profiles` | `DLPProfilesHandler` | Top risk agents / sessions / tags over a `?days=` window |
+| GET | `/api/dlp/status` | `DLPStatusHandler` | DLP provisioning + enrichment health (stream/MV/UDF presence, row counts, embedding coverage) |
 
 ### Frontend (`frontend/src/`)
 
@@ -172,6 +177,7 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | `/rules` | `RulePacks` |
 | `/rules/:id` | `RuleDetail` |
 | `/investigate` | `Investigate` |
+| `/dlp` | `SemanticDLP` |
 | `/settings` | `Settings` |
 | `/onboarding` | `Onboarding` |
 
@@ -221,6 +227,7 @@ AgentGuard uses a **Common Information Model (CIM)** to normalize heterogeneous 
 | `agentguard_rules` | Rule mutation log; current state via `arg_max(…updated_at) GROUP BY` |
 | `agentguard_security_events` | Rule-triggered detections written by MVs |
 | `agentguard_cost_budgets` | Per-deployment monthly budget mutation log; current state via `arg_max(…updated_at) GROUP BY deployment_id HAVING NOT deleted` |
+| `agentguard_dlp_enriched` | One enriched row per conversation message (entities, risk tags/score, inline embedding); written by `mv_dlp_enrich`. See **Semantic DLP** below. |
 
 Materialized views normalize raw streams into `agentguard_cim_event` and `agentguard_cim_metrics`. Backend metric handlers (`GetLLMMetrics`, `GetToolMetrics`) query `agentguard_cim_metrics` directly.
 
@@ -229,6 +236,19 @@ Materialized views normalize raw streams into `agentguard_cim_event` and `agentg
 Each enabled rule has a corresponding materialized view named `mv_rule_<id>` (e.g. `mv_rule_rp_001`). The MV queries `hook_events` and writes matches to `agentguard_security_events`. Toggle/install/uninstall operations create, pause, resume, or drop these MVs atomically alongside the rule state mutation.
 
 `timeplus.Init()` is called by the setup wizard (`POST /api/setup/provision`) to create missing streams and sync MV state. The server starts independently of Timeplus availability — if Timeplus Enterprise is unreachable, provisioning will fail but the binary itself starts cleanly.
+
+### Semantic DLP
+
+A natural-language forensic layer over conversation logs (full doc: `docs/dlp.md`; design: `docs/superpowers/specs/2026-06-11-semantic-dlp-design.md`; parent issue #159). All ML inference runs as **Timeplus Python UDFs** that call a configurable OpenAI-compatible endpoint (`dlp.base_url`) — no sidecar, no model client in Go.
+
+- **Ingest enrichment** (`backend/internal/timeplus/dlp.go`): `mv_dlp_enrich` reads `agentguard_cim_event` (`user_input`/`llm_response`/`tool_complete`) and writes `agentguard_dlp_enriched`, calling three UDFs per message — `dlp_extract_entities` (regex/dictionary PII + masked secrets, no network), `dlp_embed` (batched embeddings; tool rows get `[]`), `dlp_risk` (gated risk classification → tags + score). All UDFs **fail open**: a model-endpoint outage yields empty/zero columns, never stalls ingest.
+- **Query funnel** (`backend/internal/handlers/dlp_query.go`): `dlp_understand_query` → two-channel recall (structured predicates + brute-force `cosine_distance` vector) → `dlp_rerank` → `dlp_summarize`, streamed as NDJSON stages.
+- **Config** — `dlp:` section in `config.yaml` (`enabled`, `base_url`, `api_key`, `embedding_model`, `embedding_dim`, `risk_model`, `summary_model`). `embedding_dim` is baked into the stream/index at provision time; changing it requires re-provisioning. Provisioning is wired into `timeplus.Init()` (skipped when `dlp.enabled: false`) and `POST /api/rules/sync`.
+- **Scripts & verification** (`backend/scripts/`):
+  - `dlp_mock_model.py` — deterministic mock OpenAI-compatible server (embeddings/completions/`/models`) for CI/local, no model weights. `make dlp-mock`.
+  - `dlp_sample_events.json` + `dlp_load_events.py` — demo hook events (customer-PII leak, secret paste, source-code exfil, benign) inserted into `agentguard_hook_events`.
+  - `dlp_seed.sh` — seed a provisioned/running stack for the `/dlp` page. `make dlp-seed`.
+  - `dlp_integration.sh` — end-to-end test (mock → provision → enrich → query round-trip) against a live Timeplus. `make dlp-integration`.
 
 ### Timeline handlers
 

@@ -27,6 +27,7 @@ The CIM consists of two layers:
    - 3.5 [Metrics Materialized Views](#35-metrics-materialized-views)
 4. [End-to-End Data Flow](#4-end-to-end-data-flow)
 5. [Querying CIM Data](#5-querying-cim-data)
+6. [Downstream: Semantic DLP](#6-downstream-semantic-dlp)
 
 ---
 
@@ -654,3 +655,32 @@ WHERE metric_name IN ('llm.input_tokens', 'llm.output_tokens')
 GROUP BY hour
 ORDER BY hour ASC
 ```
+
+---
+
+## 6. Downstream: Semantic DLP
+
+The **Semantic DLP** layer (natural-language forensic auditing of conversation
+logs) is built directly on the CIM event layer — it is the largest downstream
+consumer of `agentguard_cim_event` and a good illustration of why CIM exists:
+DLP enrichment is written once, against the normalized schema, and works
+identically across Claude Code, OpenClaw, and Hermes.
+
+The enrichment materialized view `mv_dlp_enrich` selects three CIM event types
+and maps each to a conversation message role:
+
+| CIM `event_type` | DLP `role` | content source | embedded? |
+|------------------|-----------|----------------|-----------|
+| `user_input`     | `user`      | `user_message`      | yes |
+| `llm_response`   | `assistant` | `assistant_message` | yes |
+| `tool_complete`  | `tool`      | `tool_input`        | no (entities + risk only) |
+
+Each message is enriched by Timeplus Python UDFs (entity extraction, embedding,
+risk classification) and written to `agentguard_dlp_enriched`. Because the
+mapping reads CIM columns (`user_message` / `assistant_message` / `tool_input`)
+rather than agent-specific hook payloads, no per-agent DLP code is needed.
+
+See `docs/superpowers/specs/2026-06-11-semantic-dlp-design.md` for the full
+design, `backend/internal/timeplus/dlp.go` for the stream/UDF/MV DDL, and the
+**Semantic DLP** section of `CLAUDE.md` for the API surface and verification
+scripts (`backend/scripts/dlp_*`).
