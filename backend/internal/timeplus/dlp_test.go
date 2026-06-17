@@ -9,13 +9,15 @@ import (
 
 func testDLPCfg() config.DLPConfig {
 	return config.DLPConfig{
-		Enabled:        true,
-		BaseURL:        "http://mock:9999/v1",
-		APIKey:         "sk-test-abc",
-		EmbeddingModel: "text-embedding-3-small",
-		EmbeddingDim:   1536,
-		RiskModel:      "gpt-4o-mini",
-		SummaryModel:   "gpt-4o",
+		Enabled:               true,
+		BaseURL:               "http://mock:9999/v1",
+		APIKey:                "sk-test-abc",
+		EmbeddingModel:        "text-embedding-3-small",
+		EmbeddingDim:          1536,
+		RiskModel:             "gpt-4o-mini",
+		SummaryModel:          "gpt-4o",
+		RequestTimeoutSeconds: 50,
+		MaxOutputTokens:       512,
 	}
 }
 

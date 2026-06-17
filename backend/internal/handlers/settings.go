@@ -350,8 +350,9 @@ func dlpCheckChat(c *gin.Context, client *http.Client, baseURL, key, model strin
 	var parsed struct {
 		Choices []struct {
 			Message struct {
-				Content   string `json:"content"`
-				Reasoning string `json:"reasoning"`
+				Content          string `json:"content"`
+				Reasoning        string `json:"reasoning"`
+				ReasoningContent string `json:"reasoning_content"`
 			} `json:"message"`
 		} `json:"choices"`
 	}
@@ -362,7 +363,8 @@ func dlpCheckChat(c *gin.Context, client *http.Client, baseURL, key, model strin
 	if content != "" {
 		return gin.H{"ok": true, "thinking_detected": false, "note": ""}
 	}
-	if strings.TrimSpace(parsed.Choices[0].Message.Reasoning) != "" {
+	msg := parsed.Choices[0].Message
+	if strings.TrimSpace(msg.Reasoning) != "" || strings.TrimSpace(msg.ReasoningContent) != "" {
 		return gin.H{"ok": false, "thinking_detected": true,
 			"note": "model returned empty content with reasoning — raise max_output_tokens or use a direct-response model"}
 	}

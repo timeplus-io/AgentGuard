@@ -105,6 +105,41 @@ func TestDLPPreflightThinkingDetected(t *testing.T) {
 	}
 }
 
+func TestDLPPreflightReasoningContentDetected(t *testing.T) {
+	// Inline stub: /models 200, /embeddings dim=1024, /chat returns reasoning_content with empty content.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/models", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	})
+	mux.HandleFunc("/embeddings", func(w http.ResponseWriter, r *http.Request) {
+		emb := make([]float64, 1024)
+		b, _ := json.Marshal(gin.H{"data": []gin.H{{"embedding": emb}}})
+		_, _ = w.Write(b)
+	})
+	mux.HandleFunc("/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		// reasoning_content populated, reasoning absent, content empty.
+		msg := gin.H{"content": "", "reasoning_content": "thinking..."}
+		b, _ := json.Marshal(gin.H{"choices": []gin.H{{"message": msg}}})
+		_, _ = w.Write(b)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := &config.Config{DLP: config.DLPConfig{
+		BaseURL: srv.URL, EmbeddingModel: "e", EmbeddingDim: 1024,
+		RiskModel: "r", MaxOutputTokens: 512,
+	}}
+	out := postTestDLP(t, cfg, `{"base_url":"`+srv.URL+`"}`)
+	checks := out["checks"].(map[string]any)
+	chat := checks["chat"].(map[string]any)
+	if chat["thinking_detected"] != true {
+		t.Errorf("chat = %v, want thinking_detected true for reasoning_content", chat)
+	}
+	if chat["ok"] != false {
+		t.Errorf("chat[ok] = %v, want false when thinking_detected via reasoning_content", chat["ok"])
+	}
+}
+
 func TestDLPPreflightReachableNon2xx(t *testing.T) {
 	// Stand up a server whose /models returns 401 (reachable but non-2xx).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
