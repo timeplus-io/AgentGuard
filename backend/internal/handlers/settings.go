@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -228,52 +230,141 @@ func TestTimeplusConfig(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// TestDLPConfig checks that the DLP LLM endpoint is reachable by GETting
-// base_url + "/models" with the bearer key. An absent api_key falls back to the
-// currently-configured one. Body: {"base_url":"...","api_key":"..."}.
-// Reachability failures return HTTP 200 with ok:false (never 5xx).
+// TestDLPConfig validates a candidate DLP model endpoint: reachability, a real
+// embedding call (dimension match), and a real chat call (non-empty content,
+// thinking-model detection). Always HTTP 200; failures are reported in-band.
 func TestDLPConfig(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
-			BaseURL string `json:"base_url" binding:"required"`
-			APIKey  string `json:"api_key"`
+			BaseURL        string `json:"base_url"`
+			APIKey         string `json:"api_key"`
+			EmbeddingModel string `json:"embedding_model"`
+			EmbeddingDim   int    `json:"embedding_dim"`
+			RiskModel      string `json:"risk_model"`
 		}
-		if err := c.ShouldBindJSON(&body); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
-			return
+		_ = c.ShouldBindJSON(&body)
+
+		config.Mu.RLock()
+		d := cfg.DLP
+		config.Mu.RUnlock()
+
+		baseURL := strings.TrimRight(orStr(body.BaseURL, d.BaseURL), "/")
+		key := orStr(body.APIKey, d.APIKey)
+		embModel := orStr(body.EmbeddingModel, d.EmbeddingModel)
+		expectedDim := body.EmbeddingDim
+		if expectedDim == 0 {
+			expectedDim = d.EmbeddingDim
 		}
-		key := body.APIKey
-		if key == "" {
-			config.Mu.RLock()
-			key = cfg.DLP.APIKey
-			config.Mu.RUnlock()
-		}
-		target := strings.TrimRight(body.BaseURL, "/") + "/models"
-		if _, err := url.ParseRequestURI(target); err != nil {
-			c.JSON(http.StatusOK, gin.H{"ok": false, "error": "invalid base_url"})
-			return
+		riskModel := orStr(body.RiskModel, d.RiskModel)
+		maxTokens := d.MaxOutputTokens
+		if maxTokens <= 0 {
+			maxTokens = 512
 		}
 
-		client := &http.Client{Timeout: 8 * time.Second}
-		req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, target, nil)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})
+		if _, err := url.ParseRequestURI(baseURL + "/models"); err != nil {
+			c.JSON(http.StatusOK, gin.H{"ok": false, "checks": gin.H{
+				"reachable": gin.H{"ok": false, "error": "invalid base_url"}}})
 			return
 		}
-		if key != "" {
-			req.Header.Set("Authorization", "Bearer "+key)
+		client := &http.Client{Timeout: 10 * time.Second}
+
+		reach := dlpCheckReachable(c, client, baseURL, key)
+		checks := gin.H{"reachable": reach}
+		ok := reach["ok"] == true
+		if ok {
+			emb := dlpCheckEmbedding(c, client, baseURL, key, embModel, expectedDim)
+			chat := dlpCheckChat(c, client, baseURL, key, riskModel, maxTokens)
+			checks["embedding"] = emb
+			checks["chat"] = chat
+			ok = emb["ok"] == true && chat["ok"] == true
 		}
-		resp, err := client.Do(req)
-		if err != nil {
-			c.JSON(http.StatusOK, gin.H{"ok": false, "error": err.Error()})
-			return
-		}
-		defer resp.Body.Close()
-		_, _ = io.Copy(io.Discard, resp.Body)
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			c.JSON(http.StatusOK, gin.H{"ok": true})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"ok": false, "error": "endpoint returned HTTP " + resp.Status})
+		c.JSON(http.StatusOK, gin.H{"ok": ok, "checks": checks})
 	}
+}
+
+func orStr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func dlpCheckReachable(c *gin.Context, client *http.Client, baseURL, key string) gin.H {
+	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, baseURL+"/models", nil)
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return gin.H{"ok": false, "error": err.Error()}
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return gin.H{"ok": false, "error": "HTTP " + resp.Status}
+	}
+	return gin.H{"ok": true}
+}
+
+func dlpCheckEmbedding(c *gin.Context, client *http.Client, baseURL, key, model string, expected int) gin.H {
+	payload, _ := json.Marshal(gin.H{"model": model, "input": []string{"ping"}})
+	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, baseURL+"/embeddings", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return gin.H{"ok": false, "error": err.Error()}
+	}
+	defer resp.Body.Close()
+	var parsed struct {
+		Data []struct {
+			Embedding []float64 `json:"embedding"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil || len(parsed.Data) == 0 {
+		return gin.H{"ok": false, "error": "no embedding returned"}
+	}
+	dim := len(parsed.Data[0].Embedding)
+	return gin.H{"ok": dim == expected, "dim": dim, "expected": expected}
+}
+
+func dlpCheckChat(c *gin.Context, client *http.Client, baseURL, key, model string, maxTokens int) gin.H {
+	payload, _ := json.Marshal(gin.H{
+		"model":       model,
+		"messages":    []gin.H{{"role": "user", "content": "Reply with the single word OK."}},
+		"temperature": 0,
+		"max_tokens":  maxTokens,
+	})
+	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return gin.H{"ok": false, "error": err.Error()}
+	}
+	defer resp.Body.Close()
+	var parsed struct {
+		Choices []struct {
+			Message struct {
+				Content   string `json:"content"`
+				Reasoning string `json:"reasoning"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil || len(parsed.Choices) == 0 {
+		return gin.H{"ok": false, "error": "no chat response"}
+	}
+	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
+	if content != "" {
+		return gin.H{"ok": true, "thinking_detected": false, "note": ""}
+	}
+	if strings.TrimSpace(parsed.Choices[0].Message.Reasoning) != "" {
+		return gin.H{"ok": false, "thinking_detected": true,
+			"note": "model returned empty content with reasoning — raise max_output_tokens or use a direct-response model"}
+	}
+	return gin.H{"ok": false, "thinking_detected": false, "note": "empty content"}
 }
