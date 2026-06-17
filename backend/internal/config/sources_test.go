@@ -106,6 +106,24 @@ func TestEffectiveAndApply(t *testing.T) {
 	}
 }
 
+func TestCoerceDLPTimeoutTokens(t *testing.T) {
+	if _, err := CoerceAndValidate("dlp.request_timeout_seconds", float64(3)); err == nil {
+		t.Error("expected error for timeout below 5")
+	}
+	if _, err := CoerceAndValidate("dlp.request_timeout_seconds", float64(99)); err == nil {
+		t.Error("expected error for timeout above 55")
+	}
+	if v, err := CoerceAndValidate("dlp.request_timeout_seconds", float64(30)); err != nil || v.(int) != 30 {
+		t.Errorf("got (%v,%v), want (30,nil)", v, err)
+	}
+	if _, err := CoerceAndValidate("dlp.max_output_tokens", float64(8)); err == nil {
+		t.Error("expected error for tokens below 16")
+	}
+	if v, err := CoerceAndValidate("dlp.max_output_tokens", float64(512)); err != nil || v.(int) != 512 {
+		t.Errorf("got (%v,%v), want (512,nil)", v, err)
+	}
+}
+
 func TestFileKeysAndSaveChanges(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

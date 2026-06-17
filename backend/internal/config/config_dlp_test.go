@@ -117,3 +117,31 @@ func TestDLPSaveRoundTrip(t *testing.T) {
 		t.Errorf("Holds.TimeoutSeconds = %d after round-trip, want 120 (Save must not drop holds section)", reloaded.Holds.TimeoutSeconds)
 	}
 }
+
+func TestDLPTimeoutTokenDefaults(t *testing.T) {
+	cfg, err := config.LoadFrom(filepath.Join(t.TempDir(), "none.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DLP.RequestTimeoutSeconds != 30 {
+		t.Errorf("RequestTimeoutSeconds = %d, want 30", cfg.DLP.RequestTimeoutSeconds)
+	}
+	if cfg.DLP.MaxOutputTokens != 512 {
+		t.Errorf("MaxOutputTokens = %d, want 512", cfg.DLP.MaxOutputTokens)
+	}
+}
+
+func TestDLPTimeoutClampOnLoad(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("dlp:\n  request_timeout_seconds: 999\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadFrom(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DLP.RequestTimeoutSeconds != 55 {
+		t.Errorf("RequestTimeoutSeconds = %d, want clamped to 55", cfg.DLP.RequestTimeoutSeconds)
+	}
+}

@@ -48,6 +48,13 @@ type DLPConfig struct {
 	EmbeddingDim   int    `mapstructure:"embedding_dim"`
 	RiskModel      string `mapstructure:"risk_model"`
 	SummaryModel   string `mapstructure:"summary_model"`
+	// RequestTimeoutSeconds is the per-call timeout (seconds) on every DLP UDF
+	// model request. Clamped to [5,55] so query-funnel UDFs return before the
+	// 60s protonHTTPClient ceiling.
+	RequestTimeoutSeconds int `mapstructure:"request_timeout_seconds"`
+	// MaxOutputTokens caps chat-UDF completions (risk/understand/rerank);
+	// dlp_summarize uses max(MaxOutputTokens, 800).
+	MaxOutputTokens int `mapstructure:"max_output_tokens"`
 }
 
 // ProvisionedDLP records the DLP model settings that were baked into UDFs and
@@ -125,6 +132,8 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("dlp.embedding_dim", 1536)
 	v.SetDefault("dlp.risk_model", "gpt-4o-mini")
 	v.SetDefault("dlp.summary_model", "gpt-4o")
+	v.SetDefault("dlp.request_timeout_seconds", 30)
+	v.SetDefault("dlp.max_output_tokens", 512)
 	v.SetDefault("provisioned.dlp.recorded", false)
 	v.SetDefault("provisioned.dlp.embedding_model", "")
 	v.SetDefault("provisioned.dlp.embedding_dim", 0)
@@ -184,6 +193,8 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.DLP.EmbeddingDim = v.GetInt("dlp.embedding_dim")
 	cfg.DLP.RiskModel = v.GetString("dlp.risk_model")
 	cfg.DLP.SummaryModel = v.GetString("dlp.summary_model")
+	cfg.DLP.RequestTimeoutSeconds = v.GetInt("dlp.request_timeout_seconds")
+	cfg.DLP.MaxOutputTokens = v.GetInt("dlp.max_output_tokens")
 	cfg.ProvisionedDLP.Recorded = v.GetBool("provisioned.dlp.recorded")
 	cfg.ProvisionedDLP.EmbeddingModel = v.GetString("provisioned.dlp.embedding_model")
 	cfg.ProvisionedDLP.EmbeddingDim = v.GetInt("provisioned.dlp.embedding_dim")
@@ -199,6 +210,17 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 		log.Printf("config: holds.timeout_seconds=%d exceeds ceiling %d; clamping",
 			cfg.Holds.TimeoutSeconds, holdTimeoutCeilingSec)
 		cfg.Holds.TimeoutSeconds = holdTimeoutCeilingSec
+	}
+	if cfg.DLP.RequestTimeoutSeconds < 5 {
+		cfg.DLP.RequestTimeoutSeconds = 5
+	} else if cfg.DLP.RequestTimeoutSeconds > 55 {
+		log.Printf("config: dlp.request_timeout_seconds=%d exceeds 55; clamping", cfg.DLP.RequestTimeoutSeconds)
+		cfg.DLP.RequestTimeoutSeconds = 55
+	}
+	if cfg.DLP.MaxOutputTokens < 16 {
+		cfg.DLP.MaxOutputTokens = 16
+	} else if cfg.DLP.MaxOutputTokens > 4096 {
+		cfg.DLP.MaxOutputTokens = 4096
 	}
 
 	return cfg, nil
@@ -225,6 +247,8 @@ func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("dlp.embedding_dim", "DLP_EMBEDDING_DIM")
 	_ = v.BindEnv("dlp.risk_model", "DLP_RISK_MODEL")
 	_ = v.BindEnv("dlp.summary_model", "DLP_SUMMARY_MODEL")
+	_ = v.BindEnv("dlp.request_timeout_seconds", "DLP_REQUEST_TIMEOUT_SECONDS")
+	_ = v.BindEnv("dlp.max_output_tokens", "DLP_MAX_OUTPUT_TOKENS")
 }
 
 // Save writes non-sensitive config fields to the specified path (typically "config.yaml").
@@ -249,6 +273,8 @@ func Save(cfg *Config, path string) error {
 	v.Set("dlp.embedding_dim", cfg.DLP.EmbeddingDim)
 	v.Set("dlp.risk_model", cfg.DLP.RiskModel)
 	v.Set("dlp.summary_model", cfg.DLP.SummaryModel)
+	v.Set("dlp.request_timeout_seconds", cfg.DLP.RequestTimeoutSeconds)
+	v.Set("dlp.max_output_tokens", cfg.DLP.MaxOutputTokens)
 	v.Set("provisioned.dlp.recorded", cfg.ProvisionedDLP.Recorded)
 	v.Set("provisioned.dlp.embedding_model", cfg.ProvisionedDLP.EmbeddingModel)
 	v.Set("provisioned.dlp.embedding_dim", cfg.ProvisionedDLP.EmbeddingDim)
