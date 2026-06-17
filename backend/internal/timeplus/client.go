@@ -13,11 +13,15 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 )
 
-var protonHTTPClient = &http.Client{Timeout: 15 * time.Second}
+// 60s aligns the HTTP query path with queryNativeTimeout and with the DLP
+// UDFs' own 60s model-call budget (dlp_summarize): a local-LLM summary over
+// the top-N evidence can legitimately take longer than 15s, and the client
+// must not abandon the query before the UDF's own timeout fires.
+var protonHTTPClient = &http.Client{Timeout: 60 * time.Second}
 
 // queryNativeTimeout caps a single native-binary query. 60s gives large
 // agentguard_hook_events scans (e.g. ListEvents over a busy session) room
-// to finish without inheriting the 15s HTTP cap.
+// to finish; it matches the HTTP client timeout above.
 const queryNativeTimeout = 60 * time.Second
 
 // Row is a single result row from a Proton query.
