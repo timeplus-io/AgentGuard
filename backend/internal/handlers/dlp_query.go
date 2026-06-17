@@ -24,6 +24,12 @@ const (
 	dlpEvidenceChars   = 500
 	dlpDefaultTopN     = 20
 	dlpMaxTopN         = 50
+	// dlpRerankCap bounds how many recall candidates are sent to the LLM
+	// reranker. Recall is already ordered (risk_score / vector distance), so we
+	// rerank the most promising prefix and leave the rest at the 0.0 default.
+	// A local model scores ~CHUNK items per call; this keeps the rerank query
+	// well under the 60s native timeout.
+	dlpRerankCap = 40
 )
 
 var dlpWordRe = regexp.MustCompile(`[A-Za-z0-9]{4,}`)
@@ -253,9 +259,17 @@ func DLPQuery(cfg *config.Config) gin.HandlerFunc {
 		// 3. Rerank inside Timeplus; on failure fall back to recall order.
 		scores := make(map[string]float64, len(candidates))
 		if len(candidates) > topN {
-			ids := make([]string, len(candidates))
-			for i, row := range candidates {
-				ids[i] = parseStr(row["message_id"])
+			// Rerank only the most promising prefix of recall candidates — a
+			// local LLM cannot score 150+ items within the query timeout.
+			// Un-reranked candidates keep the 0.0 default and stay in recall
+			// order behind the scored ones.
+			rerankN := len(candidates)
+			if rerankN > dlpRerankCap {
+				rerankN = dlpRerankCap
+			}
+			ids := make([]string, rerankN)
+			for i := 0; i < rerankN; i++ {
+				ids[i] = parseStr(candidates[i]["message_id"])
 			}
 			scoreRows, err := tp.QueryNative(&cfg.Timeplus, buildDLPRerankSQL(question, ids))
 			if err != nil {

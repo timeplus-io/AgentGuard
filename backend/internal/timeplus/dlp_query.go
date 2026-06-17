@@ -84,8 +84,10 @@ def dlp_understand_query(questions):
 $$`
 
 // dlpRerankUDFTemplate placeholders: {{BASE_URL}}, {{API_KEY}}, {{MODEL}}, {{TIMEOUT}}, {{MAX_TOKENS}}.
-// Scores each (question, content) pair 0..1. Chunks the batch into groups of
-// 20 per chat call; a failed chunk leaves its rows at the 0.5 default.
+// Scores each (question, content) pair 0..1. Chunks the batch into small groups
+// per chat call and asks for number-keyed scores so a local model can't misalign
+// a chunk's scores onto the wrong items; any item the model does not score
+// defaults to 0.0 so it sinks below scored-relevant rows.
 const dlpRerankUDFTemplate = `CREATE OR REPLACE FUNCTION dlp_rerank(question string, content string)
 RETURNS float64
 LANGUAGE PYTHON AS $$
@@ -95,7 +97,7 @@ import requests
 BASE_URL = "{{BASE_URL}}"
 API_KEY = "{{API_KEY}}"
 MODEL = "{{MODEL}}"
-CHUNK = 20
+CHUNK = 8
 
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
@@ -107,9 +109,9 @@ def _score_chunk(question, snippets):
     if API_KEY:
         headers['Authorization'] = 'Bearer ' + API_KEY
     numbered = '\n'.join(str(i + 1) + '. ' + s[:600] for i, s in enumerate(snippets))
-    prompt = ('TASK: RERANK. Score the relevance of each numbered ITEM to the QUESTION, '
-              '0.0 (irrelevant) to 1.0 (directly answers it). Respond with strict JSON only: '
-              '{"scores": [one float per item, in order]}. ITEMS: ' + str(len(snippets)) +
+    prompt = ('TASK: RERANK. Score how well each numbered ITEM answers the QUESTION, '
+              '0.0 (irrelevant) to 1.0 (directly answers it). Respond with strict JSON only, '
+              'mapping each item number to its score, e.g. {"1": 0.0, "2": 1.0}. ITEMS: ' + str(len(snippets)) +
               '\nQUESTION: ' + question[:1000] + '\n' + numbered)
     resp = requests.post(BASE_URL + '/chat/completions', headers=headers, json={
         'model': MODEL,
@@ -119,11 +121,25 @@ def _score_chunk(question, snippets):
     }, timeout={{TIMEOUT}})
     raw = _msg_content(resp)
     parsed = json.loads(raw[raw.find('{'):raw.rfind('}') + 1])
-    return [float(s) for s in parsed.get('scores', [])]
+    # Map by explicit item number so a mis-ordered or short array can't shift
+    # scores onto the wrong items. Tolerate a flat number-to-score map, a nested
+    # scores object, or a legacy ordered scores array. Unscored items stay None
+    # and the caller defaults them to 0.0.
+    sc = parsed.get('scores', parsed) if isinstance(parsed, dict) else parsed
+    out = [None] * len(snippets)
+    if isinstance(sc, dict):
+        for k in range(len(snippets)):
+            v = sc.get(str(k + 1))
+            if v is not None:
+                out[k] = float(v)
+    elif isinstance(sc, list):
+        for k in range(min(len(sc), len(snippets))):
+            out[k] = float(sc[k])
+    return out
 
 def dlp_rerank(questions, contents):
     n = len(contents)
-    out = [0.5] * n
+    out = [0.0] * n
     for start in range(0, n, CHUNK):
         idx = list(range(start, min(start + CHUNK, n)))
         try:
@@ -132,7 +148,7 @@ def dlp_rerank(questions, contents):
             # questions[idx[0]].
             scores = _score_chunk(questions[idx[0]] or '', [contents[i] or '' for i in idx])
             for j, i in enumerate(idx):
-                if j < len(scores):
+                if j < len(scores) and scores[j] is not None:
                     out[i] = max(0.0, min(1.0, scores[j]))
         except Exception:
             pass
