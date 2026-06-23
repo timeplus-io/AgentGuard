@@ -95,6 +95,8 @@ func respondRuleError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, rules.ErrAlreadyInstalled):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	case errors.Is(err, catalog.ErrUDFConflict): // UDF name collision — operator must rename or clone
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.As(err, &ve):
 		c.JSON(http.StatusBadRequest, gin.H{"error": ve.Error(), "fields": ve.Fields})
 	case errors.As(err, &ce):

@@ -153,15 +153,37 @@ func (f *fakeMV) FailedMVs() (map[string]timeplus.FailedMV, error) {
 }
 
 type fakeDefs struct {
-	defs   map[string]catalog.Definition
-	ownErr error
+	defs    map[string]catalog.Definition
+	ownErr  error
+	saveErr error    // when set, Save fails (publish failure)
+	saved   []string // ordered IDs passed to Save (publish + rollback republish)
 }
 
-func (d fakeDefs) Lookup(id string) (catalog.Definition, bool) {
+func (d *fakeDefs) Lookup(id string) (catalog.Definition, bool) {
 	def, ok := d.defs[id]
 	return def, ok
 }
-func (d fakeDefs) ValidateUDFOwnership(def catalog.Definition) error { return d.ownErr }
+func (d *fakeDefs) ValidateUDFOwnership(def catalog.Definition) error { return d.ownErr }
+
+// Save mirrors *catalog.Manager.Save faithfully enough for the rollback tests:
+// it structurally validates the definition and, on success, stores it in the
+// in-memory map (overwriting any previous revision under the same ID). saveErr
+// models a publish failure. The ordered saved log lets tests assert that a
+// failed update republishes the previous definition.
+func (d *fakeDefs) Save(def catalog.Definition) error {
+	if d.saveErr != nil {
+		return d.saveErr
+	}
+	if err := def.Validate(); err != nil {
+		return err
+	}
+	if d.defs == nil {
+		d.defs = map[string]catalog.Definition{}
+	}
+	d.defs[def.ID] = def
+	d.saved = append(d.saved, def.ID)
+	return nil
+}
 
 func seqIDGen() func() (string, error) {
 	var mu sync.Mutex
@@ -695,6 +717,208 @@ func TestPreflight_ValidationFailureWithCleanRestoreIsNotCritical(t *testing.T) 
 	var crit *CriticalError
 	if errors.As(err, &crit) {
 		t.Fatalf("clean restore must not be CriticalError: %v", err)
+	}
+}
+
+// ── UpdateDefinition (atomic publish + rollback) ─────────────────────────────────
+
+func customDef(id, version string, params ...catalog.Parameter) catalog.Definition {
+	d := testDef(id, version, params...)
+	d.Origin = catalog.OriginCustom
+	return d
+}
+
+// TestUpdateDefinition_RejectsBuiltin: editing a builtin/imported definition is
+// refused before anything is published or deployed — operators must clone first.
+func TestUpdateDefinition_RejectsBuiltin(t *testing.T) {
+	def := testDef("rp-003", "1.0.0") // testDef sets Origin = builtin
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-003": def}}
+	svc, _, _, rec := newTestService(defs)
+
+	_, err := svc.UpdateDefinition(def, "t", "r")
+	if err == nil || !strings.Contains(err.Error(), "custom") {
+		t.Fatalf("expected builtin-edit rejection mentioning custom, got %v", err)
+	}
+	if len(rec.snapshot()) != 0 {
+		t.Errorf("rejected edit must perform no Timeplus work, got %v", rec.snapshot())
+	}
+	if len(defs.saved) != 0 {
+		t.Errorf("rejected edit must not publish, got saves %v", defs.saved)
+	}
+}
+
+// TestUpdateDefinition_NotFound: editing an unknown definition is a 404-class
+// catalog.ErrNotFound, before any publish.
+func TestUpdateDefinition_NotFound(t *testing.T) {
+	defs := &fakeDefs{defs: map[string]catalog.Definition{}}
+	svc, _, _, _ := newTestService(defs)
+	if _, err := svc.UpdateDefinition(customDef("nope", "1.0.0"), "t", "r"); !errors.Is(err, catalog.ErrNotFound) {
+		t.Fatalf("want catalog.ErrNotFound, got %v", err)
+	}
+}
+
+// TestUpdateDefinition_NotInstalledSavesOnly: when no instance is installed the
+// publish IS the whole operation — no MV work, no snapshot, zero instance back.
+func TestUpdateDefinition_NotInstalledSavesOnly(t *testing.T) {
+	prev := customDef("rp-c", "1.0.0")
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-c": prev}}
+	svc, st, _, rec := newTestService(defs)
+
+	mutated := prev
+	mutated.Description = "edited desc"
+
+	inst, err := svc.UpdateDefinition(mutated, "alice", "edit")
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if inst.RuleID != "" {
+		t.Errorf("expected zero instance when not installed, got %+v", inst)
+	}
+	if defs.defs["rp-c"].Description != "edited desc" {
+		t.Errorf("definition not published")
+	}
+	if len(rec.snapshot()) != 0 {
+		t.Errorf("no MV/append work when not installed, got %v", rec.snapshot())
+	}
+	if len(st.appended) != 0 {
+		t.Errorf("no snapshot append when not installed, got %d", len(st.appended))
+	}
+}
+
+// TestUpdateDefinition_EnabledReplacesAndAppends: the happy path for an installed
+// enabled rule — publish, recompile against stored overrides, replace the MV, and
+// append a snapshot whose hash has moved to the edited definition.
+func TestUpdateDefinition_EnabledReplacesAndAppends(t *testing.T) {
+	prev := customDef("rp-c", "1.0.0", intParam("t", 15, f64(1), f64(100)))
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-c": prev}}
+	svc, st, mv, rec := newTestService(defs)
+	cur := installedInst(prev, true, 2, map[string]any{"t": json.Number("20")}, nil)
+	st.latest["rp-c"] = cur
+
+	mutated := prev
+	mutated.Description = "edited desc"
+
+	inst, err := svc.UpdateDefinition(mutated, "alice", "edit")
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	// publish → recompile/preflight (apply cand, validate; no restore: udfs nil) →
+	// replace (drop, apply, create) → append.
+	wantLog(t, rec.snapshot(), []string{"applyUDFs", "preflight", "drop", "applyUDFs", "create", "append"})
+	if inst.Revision != 3 {
+		t.Errorf("revision = %d, want 3", inst.Revision)
+	}
+	if inst.DefinitionHash != mutated.Hash() {
+		t.Errorf("snapshot hash not moved to edited definition")
+	}
+	if got, _ := inst.Overrides["t"].(int64); got != 20 {
+		t.Errorf("stored override not preserved: %#v", inst.Overrides["t"])
+	}
+	if defs.defs["rp-c"].Description != "edited desc" {
+		t.Errorf("definition not published")
+	}
+	if len(mv.creates) != 1 || mv.creates[0] != inst.RenderedSQL {
+		t.Errorf("MV not created with new rendered SQL: %v", mv.creates)
+	}
+}
+
+// TestUpdateDefinition_RedeployFailRestoresDefinitionAndMV is the load-bearing
+// atomicity test: when the candidate MV create fails after publish, the previous
+// definition must be republished AND the previous MV recreated AND no snapshot
+// appended. The MV recreation is the existing replaceAndPersist→rollback path;
+// the definition restoration is UpdateDefinition's added compensation.
+func TestUpdateDefinition_RedeployFailRestoresDefinitionAndMV(t *testing.T) {
+	prev := customDef("rp-c", "1.0.0", intParam("t", 15, f64(1), f64(100)))
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-c": prev}}
+	svc, st, mv, _ := newTestService(defs)
+	cur := installedInst(prev, true, 2, map[string]any{"t": json.Number("15")}, []string{"udf-old"})
+	st.latest["rp-c"] = cur
+
+	mutated := prev
+	mutated.Description = "edited desc" // different hash, same schema
+
+	// Fail only the candidate (first) create; the rollback recreate must succeed.
+	mv.errOn = func(op string, n int) error {
+		if op == "create" && n == 1 {
+			return errors.New("create boom")
+		}
+		return nil
+	}
+
+	_, err := svc.UpdateDefinition(mutated, "t", "r")
+	if err == nil {
+		t.Fatal("expected redeploy failure")
+	}
+	var crit *CriticalError
+	if errors.As(err, &crit) {
+		t.Fatalf("MV rollback and definition restore both succeeded, must not be CriticalError: %v", err)
+	}
+	// Definition rolled back to prev (hash unchanged from the pre-edit definition).
+	if got := defs.defs["rp-c"].Hash(); got != prev.Hash() {
+		t.Fatalf("definition not rolled back: hash=%s want=%s", got, prev.Hash())
+	}
+	// Previous definition was republished (publish then rollback-republish).
+	if len(defs.saved) != 2 || defs.saved[1] != "rp-c" {
+		t.Errorf("expected publish then rollback-republish, got saves %v", defs.saved)
+	}
+	// Previous MV recreated from the instance's last-known-good rendered SQL.
+	if len(mv.creates) < 2 || mv.creates[len(mv.creates)-1] != cur.RenderedSQL {
+		t.Fatalf("previous MV not restored from last-known-good rendered_sql: %v", mv.creates)
+	}
+	// Candidate snapshot must not persist.
+	if len(st.appended) != 0 {
+		t.Fatalf("candidate snapshot must not persist on redeploy failure, got %d", len(st.appended))
+	}
+}
+
+// TestUpdateDefinition_PublishFailureDeploysNothing: if the catalog publish fails
+// (e.g. a defective edited definition), nothing is recompiled or deployed and the
+// publish error is returned verbatim.
+func TestUpdateDefinition_PublishFailureDeploysNothing(t *testing.T) {
+	prev := customDef("rp-c", "1.0.0")
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-c": prev}, saveErr: errors.New("publish boom")}
+	svc, st, _, rec := newTestService(defs)
+	st.latest["rp-c"] = installedInst(prev, true, 2, nil, nil)
+
+	_, err := svc.UpdateDefinition(prev, "t", "r")
+	if err == nil || !strings.Contains(err.Error(), "publish boom") {
+		t.Fatalf("want publish error, got %v", err)
+	}
+	if len(rec.snapshot()) != 0 {
+		t.Errorf("failed publish must deploy nothing, got %v", rec.snapshot())
+	}
+}
+
+// TestUpdateDefinition_RedeployFailWithBrokenRestoreIsCritical: when both the
+// candidate create AND its MV rollback fail, replaceAndPersist already surfaces a
+// CriticalError; UpdateDefinition must propagate it (still restoring the
+// definition for catalog↔snapshot consistency).
+func TestUpdateDefinition_RedeployFailWithBrokenRestoreIsCritical(t *testing.T) {
+	prev := customDef("rp-c", "1.0.0", intParam("t", 15, f64(1), f64(100)))
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-c": prev}}
+	svc, _, mv, _ := newTestService(defs)
+	st := svc.store.(*fakeStore)
+	st.latest["rp-c"] = installedInst(prev, true, 2, map[string]any{"t": json.Number("15")}, nil)
+
+	mutated := prev
+	mutated.Description = "edited desc"
+	// Every create fails: candidate create AND rollback recreate both fail.
+	mv.errOn = func(op string, n int) error {
+		if op == "create" {
+			return errors.New("create always fails")
+		}
+		return nil
+	}
+
+	_, err := svc.UpdateDefinition(mutated, "t", "r")
+	var crit *CriticalError
+	if !errors.As(err, &crit) {
+		t.Fatalf("want *CriticalError when MV rollback also fails, got %v", err)
+	}
+	// Even in the critical case the definition is restored so the catalog matches
+	// the still-current (un-appended) snapshot.
+	if got := defs.defs["rp-c"].Hash(); got != prev.Hash() {
+		t.Errorf("definition not restored in critical case: hash=%s want=%s", got, prev.Hash())
 	}
 }
 

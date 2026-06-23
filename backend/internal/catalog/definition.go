@@ -19,6 +19,10 @@ var (
 	ErrExists = errors.New("rule definition already exists")
 	// ErrInvalid is returned when a definition fails structural or semantic validation.
 	ErrInvalid = errors.New("invalid rule definition")
+	// ErrUDFConflict is returned when a definition declares a UDF function name
+	// that is already owned by another rule in the catalog or the deployed ledger.
+	// This is an operator-correctable conflict (rename the function or clone first).
+	ErrUDFConflict = errors.New("UDF function name conflict")
 )
 
 // Origin values for a Definition. The catalog loader enforces them:
@@ -434,7 +438,7 @@ func (m *Manager) ValidateUDFOwnership(d Definition) error {
 		}
 		for _, n := range otherNames {
 			if mine[n] {
-				return fmt.Errorf("UDF function %q is already declared by rule %q", n, other.ID)
+				return fmt.Errorf("%w: UDF function %q is already declared by rule %q", ErrUDFConflict, n, other.ID)
 			}
 		}
 	}

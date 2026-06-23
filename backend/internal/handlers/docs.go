@@ -712,6 +712,120 @@ const openAPISpec = `{
             ]
           }}}}
         }
+      },
+      "post": {
+        "tags": ["Catalog"],
+        "summary": "Create a custom rule definition",
+        "description": "Creates a new custom catalog definition (\u0060origin\u0060 forced to \u0060custom\u0060) and publishes it to the local catalog. This validates and saves the definition only — it does NOT install the rule. Install separately via \u0060POST /rules/{id}/install\u0060.\n\nUnlike the thin \u0060POST /rules\u0060 path, the body is a full \u0060Definition\u0060 (parameter schema in \u0060config[]\u0060, \u0060{{ .Config.<key> }}\u0060 placeholders in \u0060sql_template\u0060). Use \u0060POST /rules/catalog/compile\u0060 to preview the rendered SQL before saving.",
+        "operationId": "createCatalogRule",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object" },
+            "example": {
+              "id": "custom-secret-scan", "name": "Secret Scanner", "version": "1.0.0",
+              "description": "Flags tool calls whose input matches a secret pattern.",
+              "severity": "critical", "category": "dlp", "hook_sources": "before_tool_call",
+              "sql_template": "SELECT event_time AS detected_at, 'custom-secret-scan' AS rule_id FROM agentguard_hook_events WHERE match(event_data, {{ .Config.pattern }})",
+              "config": [ { "key": "pattern", "label": "Secret pattern", "type": "regex", "default": "AKIA[0-9A-Z]{16}" } ]
+            }
+          }}
+        },
+        "responses": {
+          "201": { "description": "Custom definition created.", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "409": { "description": "A definition with this ID already exists." },
+          "400": { "description": "Invalid definition (bad template, defaulting, or schema)." }
+        }
+      }
+    },
+
+    "/rules/catalog/compile": {
+      "post": {
+        "tags": ["Catalog"],
+        "summary": "Compile a definition (preview, no persistence)",
+        "description": "Pure validate-and-compile preview: structurally validates the submitted definition, compiles it against the supplied overrides, and returns the rendered SQL, definition hash, effective values, and canonical overrides. It writes NOTHING — no catalog file, no materialized view, no Timeplus query. Use it to power a live authoring preview.\n\nAuthoring errors map to 400: a malformed or inconsistent \u0060sql_template\u0060 is a \u0060DefinitionError\u0060 (\u0060kind\u0060: \u0060bad_template\u0060/\u0060bad_default\u0060); an out-of-range or unknown override is a \u0060ValidationError\u0060 (per-parameter \u0060fields\u0060).",
+        "operationId": "compileCatalogRule",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": {
+              "definition": { "type": "object", "description": "Candidate Definition to validate and compile." },
+              "overrides": { "type": "object", "description": "Optional parameter overrides keyed by config key." }
+            }
+          },
+            "example": {
+              "definition": { "id": "demo", "name": "Demo", "version": "1.0.0", "sql_template": "SELECT 1 WHERE score > {{ .Config.threshold }}", "config": [ { "key": "threshold", "label": "Threshold", "type": "integer", "default": 15, "min": 1, "max": 100 } ] },
+              "overrides": { "threshold": 40 }
+            }
+          }}
+        },
+        "responses": {
+          "200": { "description": "Compiled preview.", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": {
+              "rendered_sql":    { "type": "string" },
+              "definition_hash": { "type": "string" },
+              "effective":       { "type": "object" },
+              "overrides":       { "type": "object" }
+            }
+          }, "example": { "rendered_sql": "SELECT 1 WHERE score > 40", "definition_hash": "ab12…", "effective": { "threshold": 40 }, "overrides": { "threshold": 40 } } }}},
+          "400": { "description": "Bad template (DefinitionError) or bad override (ValidationError)." }
+        }
+      }
+    },
+
+    "/rules/catalog/{id}": {
+      "get": {
+        "tags": ["Catalog"],
+        "summary": "Get one catalog definition",
+        "description": "Returns the full catalog \u0060Definition\u0060 for an ID — including the \u0060config[]\u0060 parameter schema (each entry's \u0060key\u0060, \u0060type\u0060, \u0060default\u0060, bounds, \u0060aliases\u0060) and the \u0060sql_template\u0060 — from the merged catalog (local overrides win over embedded seed). Use this to populate an authoring/edit form.",
+        "operationId": "getCatalogRule",
+        "parameters": [ { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "example": "rp-003" } ],
+        "responses": {
+          "200": { "description": "Full catalog definition.", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "404": { "description": "No definition with this ID in the catalog." }
+        }
+      },
+      "put": {
+        "tags": ["Catalog"],
+        "summary": "Edit a custom rule definition (atomic publish)",
+        "description": "Edits an existing CUSTOM definition (the path \u0060id\u0060 wins over any body id; \u0060origin\u0060 is forced to \u0060custom\u0060). Builtin/imported definitions are rejected with 409 — clone them first via \u0060POST /rules/catalog/{id}/clone\u0060.\n\nWhen an instance is installed, the edit is an atomic publish-and-redeploy: the definition is republished, recompiled against the instance's stored overrides, and its materialized view replaced — rolling BOTH the definition and the MV back on any failure. When no instance is installed, the publish is the whole operation. A failure whose compensating rollback also fails returns 500 with a manual-recourse message (\u0060/api/rules/sync\u0060).",
+        "operationId": "updateCatalogRule",
+        "parameters": [ { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "example": "custom-secret-scan" } ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": {
+          "200": { "description": "Definition published (and instance redeployed when installed).", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": { "definition": { "type": "object" }, "instance": { "$ref": "#/components/schemas/RuleInstance" } }
+          } } } },
+          "404": { "description": "No definition with this ID in the catalog." },
+          "409": { "description": "Definition is builtin/imported (clone first) or conflicts with the installed instance." },
+          "400": { "description": "Invalid edited definition." },
+          "500": { "description": "Redeploy failed and rollback also failed; run /api/rules/sync." }
+        }
+      }
+    },
+
+    "/rules/catalog/{id}/clone": {
+      "post": {
+        "tags": ["Catalog"],
+        "summary": "Clone a catalog definition to a new custom rule",
+        "description": "Copies the source catalog definition (\u0060id\u0060 path param) to a new custom definition with the supplied new ID and name, rescoping its UDF function names so they do not collide with the source rule's UDFs in the Timeplus function registry. The clone is saved as \u0060origin: custom\u0060 and is NOT installed.",
+        "operationId": "cloneCatalogRule",
+        "parameters": [ { "name": "id", "in": "path", "required": true, "description": "Source definition ID to clone.", "schema": { "type": "string" }, "example": "rp-003" } ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object", "required": ["id", "name"],
+            "properties": { "id": { "type": "string", "description": "New custom rule ID." }, "name": { "type": "string", "description": "New custom rule name." } }
+          }, "example": { "id": "rp-003-tuned", "name": "Score Rule (tuned)" } }}
+        },
+        "responses": {
+          "201": { "description": "Custom clone created.", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "404": { "description": "Source definition not found." },
+          "409": { "description": "Target ID already exists." },
+          "400": { "description": "Missing/invalid id or name." }
+        }
       }
     },
 

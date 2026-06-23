@@ -118,6 +118,11 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | POST | `/api/cost/budget` | `UpsertCostBudget` | Appends a row to agentguard_cost_budgets; `updated_by` is the session user. Send `deleted: true` to retire a budget. |
 | GET | `/api/rules` | `ListRules` | Installed instances (current state via `arg_max(col, revision)`) + upgradeable flag |
 | GET | `/api/rules/catalog` | `ListCatalog` | Builtin catalog with installed status |
+| POST | `/api/rules/catalog` | `CreateCatalogRule` | Create a custom `Definition` (origin forced `custom`); validates + publishes, does NOT install |
+| POST | `/api/rules/catalog/compile` | `CompileCatalogRule` | Pure validate+compile preview → `{rendered_sql, definition_hash, effective, overrides}`; no catalog write, no MV, no Timeplus |
+| GET | `/api/rules/catalog/:id` | `GetCatalogRule` | Full catalog `Definition` (incl. `config[]` schema) or 404 |
+| PUT | `/api/rules/catalog/:id` | `UpdateCatalogRule` | Edit a custom definition; atomic publish+redeploy of the installed MV, rolls back both definition and MV on failure (builtin/imported → 409, clone first) |
+| POST | `/api/rules/catalog/:id/clone` | `CloneCatalogRule` | Clone a definition to a new custom rule with rescoped UDFs (not installed) |
 | POST | `/api/rules/catalog/import` | `ImportCatalog` | Import rules from JSON |
 | GET | `/api/rules/catalog/export` | `ExportCatalog` | Export catalog as JSON |
 | GET | `/api/rules/mv-status` | `MVStatus` | MV health: `system.tables` + `system.v_failed_mat_views`, cross-referenced with enabled |

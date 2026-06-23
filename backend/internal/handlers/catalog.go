@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/catalog"
+	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/rules"
 )
 
@@ -38,6 +41,8 @@ func respondCatalogError(c *gin.Context, err error) {
 	case errors.Is(err, catalog.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, catalog.ErrExists):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	case errors.Is(err, catalog.ErrUDFConflict): // UDF name collision — operator must rename or clone
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.As(err, &cerr): // upgrade/edit compatibility conflict
 		c.JSON(http.StatusConflict, gin.H{"error": cerr.Error()})
@@ -84,6 +89,132 @@ func CloneCatalogRule(mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusCreated, cloned)
+	}
+}
+
+// decodeDefinitionBody decodes a catalog.Definition request body with
+// json.Decoder.UseNumber() so large integer parameter defaults survive without
+// float64 rounding before they reach the compiler (mirrors decodeMutationBody).
+func decodeDefinitionBody(c *gin.Context) (catalog.Definition, error) {
+	var def catalog.Definition
+	dec := json.NewDecoder(c.Request.Body)
+	dec.UseNumber()
+	if err := dec.Decode(&def); err != nil && !errors.Is(err, io.EOF) {
+		return catalog.Definition{}, err
+	}
+	return def, nil
+}
+
+// GetCatalogRule handles GET /api/rules/catalog/:id.
+// Returns the full catalog Definition (including config[] parameter schema) or
+// 404 when the ID is not in the merged catalog.
+func GetCatalogRule(mgr *catalog.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		d, ok := mgr.Lookup(c.Param("id"))
+		if !ok {
+			c.JSON(http.StatusNotFound, gin.H{"error": "rule definition not found"})
+			return
+		}
+		c.JSON(http.StatusOK, d)
+	}
+}
+
+// compileRequest is the body for POST /api/rules/catalog/compile.
+type compileRequest struct {
+	Definition catalog.Definition `json:"definition"`
+	Overrides  map[string]any     `json:"overrides"`
+}
+
+// CompileCatalogRule handles POST /api/rules/catalog/compile.
+// It is a PURE validate-and-compile preview: it structurally validates the
+// submitted definition, compiles it against the supplied overrides, and returns
+// the rendered SQL, definition hash, effective values, and canonical overrides.
+// It NEVER touches the catalog, the snapshot store, or Timeplus. Authoring
+// errors (bad template / bad override) map to 400 via respondCatalogError.
+func CompileCatalogRule() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body compileRequest
+		dec := json.NewDecoder(c.Request.Body)
+		dec.UseNumber()
+		if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+			return
+		}
+		if err := body.Definition.Validate(); err != nil {
+			respondCatalogError(c, err)
+			return
+		}
+		compiled, err := rules.Compile(body.Definition, body.Overrides)
+		if err != nil {
+			respondCatalogError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"rendered_sql":    compiled.SQL,
+			"definition_hash": compiled.DefinitionHash,
+			"effective":       compiled.Effective,
+			"overrides":       compiled.Overrides,
+		})
+	}
+}
+
+// CreateCatalogRule handles POST /api/rules/catalog.
+// It creates a custom Definition (forcing Origin=custom) and publishes it to the
+// local catalog via Manager.Save. It does NOT install the rule — installation is
+// a separate lifecycle action. Returns 201 with the saved Definition.
+func CreateCatalogRule(mgr *catalog.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		def, err := decodeDefinitionBody(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+			return
+		}
+		def.Origin = catalog.OriginCustom
+		if err := mgr.Save(def); err != nil {
+			respondCatalogError(c, err)
+			return
+		}
+		c.JSON(http.StatusCreated, def)
+	}
+}
+
+// UpdateCatalogRule handles PUT /api/rules/catalog/:id.
+// It edits an existing custom Definition and, when an instance is installed,
+// atomically republishes the definition and redeploys its MV through the
+// lifecycle service (rolling both back on failure). The path :id wins over any
+// body id; Origin is forced to custom. Returns 200 with the published definition
+// (and the new instance when one is installed). Errors — including the
+// reject-builtin conflict, definition defects, and a critical rollback failure —
+// map via respondCatalogError.
+func UpdateCatalogRule(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		reqCfg := auth.RequestCfg(c, cfg)
+		id := c.Param("id")
+		def, err := decodeDefinitionBody(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+			return
+		}
+		def.ID = id
+		def.Origin = catalog.OriginCustom
+
+		inst, err := lc.For(&reqCfg.Timeplus).UpdateDefinition(def, sessionUser(c), "edit definition")
+		if err != nil {
+			log.Printf("rules: UpdateCatalogRule %s: %v", id, err)
+			respondCatalogError(c, err)
+			return
+		}
+		// Re-read the published definition so the response reflects exactly what is
+		// persisted; include the instance only when one is installed (UpdateDefinition
+		// returns a zero instance for a definition-only edit).
+		out := gin.H{"definition": def}
+		if published, ok := mgr.Lookup(id); ok {
+			out["definition"] = published
+		}
+		if inst.RuleID != "" {
+			out["instance"] = inst
+		}
+		c.JSON(http.StatusOK, out)
 	}
 }
 

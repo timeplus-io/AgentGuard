@@ -152,6 +152,15 @@ export const api = {
   exportCatalogUrl: () => `${BASE}/rules/catalog/export`,
   // Clone a catalog definition as a new custom definition with rescoped UDFs.
   cloneCatalogRule: (srcId, body) => post(`/rules/catalog/${encodeURIComponent(srcId)}/clone`, body),
+  // Read one catalog definition (full schema, including config[] parameters).
+  getCatalogRule: (id) => get(`/rules/catalog/${encodeURIComponent(id)}`),
+  // Pure validate+compile preview: returns { rendered_sql, definition_hash,
+  // effective, overrides }. No catalog write, no MV, no Timeplus.
+  compileCatalogRule: (definition, overrides) => post('/rules/catalog/compile', { definition, overrides }),
+  // Create a custom definition (origin forced to custom). Does not install.
+  createCatalogRule: (definition) => post('/rules/catalog', definition),
+  // Edit a custom definition; atomically republishes + redeploys an installed MV.
+  updateCatalogRule: (id, definition) => put(`/rules/catalog/${encodeURIComponent(id)}`, definition),
   getRule: (id) => get(`/rules/${id}`),
   toggleRule: (id) => post(`/rules/${id}/toggle`, {}),
   // Upgrade is bodyless and catalog-only; on 409 the thrown error's .body carries

@@ -87,9 +87,15 @@ type snapshotStore interface {
 
 // defStore is the catalog surface the service needs. *catalog.Manager satisfies
 // it; tests fake it so install/configure/upgrade run without a filesystem.
+//
+// Save validates and publishes a definition (the create-custom and
+// edit-definition paths). UpdateDefinition relies on Save being atomic enough
+// that a failed publish leaves nothing deployed, and that re-Saving the previous
+// definition restores it byte-for-byte for rollback.
 type defStore interface {
 	Lookup(id string) (catalog.Definition, bool)
 	ValidateUDFOwnership(d catalog.Definition) error
+	Save(d catalog.Definition) error
 }
 
 // mvOps is the Timeplus materialized-view surface the service drives. The
@@ -299,7 +305,7 @@ func (s *Service) checkUDFOwnership(def catalog.Definition) error {
 		}
 		for _, n := range names {
 			if owned[n] {
-				return fmt.Errorf("UDF function %q is already deployed by installed rule %q", n, inst.RuleID)
+				return fmt.Errorf("%w: UDF function %q is already deployed by installed rule %q", catalog.ErrUDFConflict, n, inst.RuleID)
 			}
 		}
 	}
@@ -507,6 +513,103 @@ func (s *Service) Configure(ruleID string, overrides map[string]any, actor, reas
 	}
 
 	return s.replaceAndPersist("configure", cur, next, candUDFs)
+}
+
+// UpdateDefinition edits a custom catalog definition and, when an instance is
+// installed, atomically republishes the definition and redeploys the rule's MV
+// against the instance's stored overrides — rolling BOTH back on any failure.
+//
+// Ordering (all under the per-rule lock):
+//
+//	a. Lookup the current definition; reject a missing one (catalog.ErrNotFound)
+//	   or a non-custom one (a *ConflictError — builtin/imported must be cloned
+//	   first). Capture it as the rollback target.
+//	b. catalog.Save(def) — validates and publishes. A failure here deployed
+//	   nothing, so the error is returned verbatim.
+//	c. Read the current installed snapshot. If none is installed, the publish was
+//	   the whole operation: return a zero instance.
+//	d. Otherwise recompile against the instance's CURRENT overrides, check UDF
+//	   ownership, preflight, and (via replaceAndPersist) replace the MV for an
+//	   enabled rule and append the new snapshot — exactly as Configure does.
+//
+// On ANY failure in step d the previous definition is republished
+// (restoreDefinition); the previous MV is already restored by the same seams
+// Configure relies on (preflight never drops the live MV; replaceAndPersist's own
+// rollback recreates the previous MV from the instance's last-known-good
+// artifacts), so this method adds no parallel MV-rollback mechanism. If the
+// republish itself fails — or replaceAndPersist already returned a CriticalError
+// because its MV rollback failed — the result is a *CriticalError.
+func (s *Service) UpdateDefinition(def catalog.Definition, actor, reason string) (RuleInstance, error) {
+	const op = "update-definition"
+	unlock := s.locks.lock(def.ID)
+	defer unlock()
+
+	// a. The definition must already exist and be custom-owned.
+	cur, found := s.catalog.Lookup(def.ID)
+	if !found {
+		return RuleInstance{}, catalog.ErrNotFound
+	}
+	if cur.Origin != catalog.OriginCustom {
+		return RuleInstance{}, &ConflictError{Message: fmt.Sprintf(
+			"rule %q is a %s definition and cannot be edited in place; clone it to a custom rule first", def.ID, cur.Origin)}
+	}
+	prevDef := cur // rollback target
+
+	// b. Publish. Nothing is deployed yet, so a failure needs no compensation.
+	if err := s.catalog.Save(def); err != nil {
+		return RuleInstance{}, err
+	}
+
+	// c. Is there an installed instance to redeploy?
+	inst, installed, err := s.currentForMutation(def.ID)
+	if err != nil {
+		return s.restoreDefinition(op, prevDef, err)
+	}
+	if !installed || inst.Deleted {
+		return RuleInstance{}, nil // publish was the whole operation
+	}
+
+	// d. Recompile against the instance's stored overrides and redeploy, mirroring
+	// Configure. Any failure here restores the previous definition; the MV is
+	// restored by preflight/replaceAndPersist themselves.
+	compiled, err := Compile(def, inst.Overrides)
+	if err != nil {
+		return s.restoreDefinition(op, prevDef, err)
+	}
+	if err := s.checkUDFOwnership(def); err != nil {
+		return s.restoreDefinition(op, prevDef, err)
+	}
+	candUDFs := def.UDFs
+
+	if err := s.preflight(def.ID, compiled.SQL, candUDFs, inst.DeployedUDFs); err != nil {
+		return s.restoreDefinition(op, prevDef, err)
+	}
+
+	next, err := s.buildSnapshot(def, compiled, candUDFs, inst.Enabled, inst.BlockPolicy, false, inst.Revision+1, actor, reason)
+	if err != nil {
+		return s.restoreDefinition(op, prevDef, err)
+	}
+
+	out, err := s.replaceAndPersist(op, inst, next, candUDFs)
+	if err != nil {
+		return s.restoreDefinition(op, prevDef, err)
+	}
+	return out, nil
+}
+
+// restoreDefinition compensates a failed installed-definition update by
+// republishing the previous definition (step b's publish is the only state this
+// method itself created). The live MV is already restored to the instance's
+// last-known-good by the failing seam, so there is no MV work here. If
+// republishing fails, the catalog no longer matches the persisted snapshot — a
+// *CriticalError. When the cause is already a *CriticalError (replaceAndPersist's
+// own MV rollback failed) it is propagated unchanged after a successful
+// republish, preserving its richer recovery message.
+func (s *Service) restoreDefinition(op string, prevDef catalog.Definition, cause error) (RuleInstance, error) {
+	if rbErr := s.catalog.Save(prevDef); rbErr != nil {
+		return RuleInstance{}, &CriticalError{Op: op, RuleID: prevDef.ID, Err: cause, RollbackErr: rbErr}
+	}
+	return RuleInstance{}, cause
 }
 
 // Toggle flips a rule's enabled flag. Enabling deploys the MV from the last-
