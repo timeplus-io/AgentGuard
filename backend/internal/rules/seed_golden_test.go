@@ -145,3 +145,115 @@ func TestNoParameterRuleRendersByteIdentical(t *testing.T) {
 		t.Errorf("zero-parameter rule must have no overrides, got %#v", compiled.Overrides)
 	}
 }
+
+// ── Phase B: duration and regex fixture golden tests ─────────────────────────
+//
+// Approach: dedicated test-fixture definitions (not seed rules) are used for
+// the golden assertions. The duration fixture uses a plain INTERVAL N SECOND in
+// a WHERE clause (safe — not a streaming MAXSPAN/TIMEOUT argument). The regex
+// fixture uses match() with an operator-supplied pattern. No existing seed rules
+// are modified for these tests, avoiding cascading golden-test updates.
+
+// TestDurationFixture_DefaultsGolden proves duration defaults render as bare
+// decimal integers and substitute in-place (no other change to the SQL).
+func TestDurationFixture_DefaultsGolden(t *testing.T) {
+	d := catalog.Definition{
+		ID:          "rp-test-dur",
+		Name:        "Duration Window Test",
+		Version:     "1.0.0",
+		SQLTemplate: "SELECT * FROM agentguard_cim_metrics WHERE event_time > now() - INTERVAL {{ .Config.window_seconds }} SECOND",
+		Parameters: []catalog.Parameter{{
+			Key:  "window_seconds",
+			Type: "duration",
+			Unit: "seconds",
+			// 300 s = 5 minutes; matches a common pre-parameterisation hard-coded value.
+			Default: 300,
+			Min:     fptr(60),
+			Max:     fptr(3600),
+		}},
+	}
+	assertDefaultsRenderInPlace(t, d, map[string]string{
+		"window_seconds": "300",
+	})
+	compiled, err := Compile(d, nil)
+	if err != nil {
+		t.Fatalf("Compile defaults: %v", err)
+	}
+	if !strings.Contains(compiled.SQL, "INTERVAL 300 SECOND") {
+		t.Errorf("duration default not rendered in place: %q", compiled.SQL)
+	}
+}
+
+// TestDurationFixture_OverrideChangesSQL proves the duration parameter drives
+// the rendered SQL and that canonical overrides are persisted.
+func TestDurationFixture_OverrideChangesSQL(t *testing.T) {
+	d := catalog.Definition{
+		ID:          "rp-test-dur",
+		Name:        "Duration Window Test",
+		Version:     "1.0.0",
+		SQLTemplate: "SELECT * FROM agentguard_cim_metrics WHERE event_time > now() - INTERVAL {{ .Config.window_seconds }} SECOND",
+		Parameters: []catalog.Parameter{{
+			Key: "window_seconds", Type: "duration", Unit: "seconds",
+			Default: 300, Min: fptr(60), Max: fptr(3600),
+		}},
+	}
+	compiled, err := Compile(d, map[string]any{"window_seconds": 600})
+	if err != nil {
+		t.Fatalf("Compile overrides: %v", err)
+	}
+	if !strings.Contains(compiled.SQL, "INTERVAL 600 SECOND") {
+		t.Errorf("duration override not rendered: %q", compiled.SQL)
+	}
+	if got, _ := compiled.Overrides["window_seconds"].(int64); got != 600 {
+		t.Errorf("canonical override = %#v, want int64(600)", compiled.Overrides["window_seconds"])
+	}
+}
+
+// TestRegexFixture_DefaultsGolden proves regex defaults render as single-quoted
+// SQL literals (escaping single quotes) and substitute in-place.
+func TestRegexFixture_DefaultsGolden(t *testing.T) {
+	d := catalog.Definition{
+		ID:          "rp-test-re",
+		Name:        "Regex Pattern Test",
+		Version:     "1.0.0",
+		SQLTemplate: "SELECT * FROM agentguard_cim_event WHERE match(lower(tool_name), {{ .Config.pattern }})",
+		Parameters: []catalog.Parameter{{
+			Key:     "pattern",
+			Type:    "regex",
+			Default: "rm|dd|mkfs",
+		}},
+	}
+	assertDefaultsRenderInPlace(t, d, map[string]string{
+		"pattern": "'rm|dd|mkfs'",
+	})
+	compiled, err := Compile(d, nil)
+	if err != nil {
+		t.Fatalf("Compile defaults: %v", err)
+	}
+	if !strings.Contains(compiled.SQL, "'rm|dd|mkfs'") {
+		t.Errorf("regex default not rendered in place: %q", compiled.SQL)
+	}
+}
+
+// TestRegexFixture_QuoteEscapedInSQL proves that a regex containing a single
+// quote is correctly escaped so the rendered SQL is a valid single-quoted literal.
+func TestRegexFixture_QuoteEscapedInSQL(t *testing.T) {
+	d := catalog.Definition{
+		ID:          "rp-test-re2",
+		Name:        "Regex Escape Test",
+		Version:     "1.0.0",
+		SQLTemplate: "SELECT match(name, {{ .Config.pat }})",
+		Parameters: []catalog.Parameter{{
+			Key:     "pat",
+			Type:    "regex",
+			Default: "it's",
+		}},
+	}
+	compiled, err := Compile(d, nil)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(compiled.SQL, "''s'") {
+		t.Errorf("single quote not escaped in regex literal: %q", compiled.SQL)
+	}
+}

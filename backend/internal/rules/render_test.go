@@ -358,3 +358,44 @@ func FuzzRenderStringLiteral(f *testing.F) {
 		}
 	})
 }
+
+func TestRender_Regex(t *testing.T) {
+	p := catalog.Parameter{Key: "pat", Type: "regex", Default: "a'b"}
+	out, err := renderValue(p, "a'b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "'a''b'" {
+		t.Fatalf("got %q, want %q", out, "'a''b'")
+	}
+}
+
+func TestRender_Duration(t *testing.T) {
+	p := catalog.Parameter{Key: "w", Type: "duration", Unit: "seconds", Default: 60}
+	out, err := renderValue(p, int64(90))
+	if err != nil || out != "90" {
+		t.Fatalf("got %q %v", out, err)
+	}
+}
+
+func TestCompileRendersRegexAndDuration(t *testing.T) {
+	def := catalog.Definition{
+		ID: "rp_phase_b", Name: "Phase B Types", Version: "1.0.0",
+		SQLTemplate: "SELECT * WHERE match(tool_name, {{ .Config.pat }}) AND event_time > now() - INTERVAL {{ .Config.window_seconds }} SECOND",
+		Parameters: []catalog.Parameter{
+			{Key: "pat", Type: "regex", Default: "rm|dd"},
+			{Key: "window_seconds", Type: "duration", Unit: "seconds", Default: 300, Min: fptr(60), Max: fptr(3600)},
+		},
+	}
+	c, err := Compile(def, map[string]any{
+		"pat":            "curl|wget",
+		"window_seconds": 600,
+	})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	want := "SELECT * WHERE match(tool_name, 'curl|wget') AND event_time > now() - INTERVAL 600 SECOND"
+	if c.SQL != want {
+		t.Fatalf("SQL:\n got %q\nwant %q", c.SQL, want)
+	}
+}

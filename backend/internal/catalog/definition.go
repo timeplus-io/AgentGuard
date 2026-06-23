@@ -66,7 +66,8 @@ type Parameter struct {
 	Secret      bool     `yaml:"secret,omitempty"      json:"secret,omitempty"`
 }
 
-// parameterTypes is the set of parameter types supported in Phase A.
+// parameterTypes is the set of supported parameter types (Phase A: integer,
+// number, boolean, string, enum, string_list; Phase B adds: regex, duration).
 var parameterTypes = map[string]bool{
 	"integer":     true,
 	"number":      true,
@@ -74,6 +75,8 @@ var parameterTypes = map[string]bool{
 	"string":      true,
 	"enum":        true,
 	"string_list": true,
+	"regex":       true, // Phase B: RE2-validated string rendered as a single-quoted SQL literal
+	"duration":    true, // Phase B: int64 count of a fixed unit rendered as a bare decimal integer
 }
 
 // ParameterIDPattern is the exact syntax for parameter keys (and aliases,
@@ -293,6 +296,9 @@ func (d Definition) Validate() error {
 		}
 		if p.Type == "enum" && len(p.Options) == 0 {
 			return fmt.Errorf("config[%d] (%s): enum requires non-empty options", i, p.Key)
+		}
+		if p.Type == "duration" && p.Unit == "" {
+			return fmt.Errorf("config[%d] (%s): duration requires a unit", i, p.Key)
 		}
 	}
 

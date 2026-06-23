@@ -164,9 +164,19 @@ func renderValue(p catalog.Parameter, v any) (string, error) {
 		}
 		return "(" + strings.Join(parts, ", ") + ")", nil
 
-	// Phase B types land here:
-	// case "regex":
-	// case "duration":
+	case "regex":
+		s, ok := v.(string)
+		if !ok {
+			return "", fmt.Errorf("parameter %q: internal: expected string, got %T", p.Key, v)
+		}
+		return renderStringLiteral(s), nil
+
+	case "duration":
+		i, ok := v.(int64)
+		if !ok {
+			return "", fmt.Errorf("parameter %q: internal: expected int64, got %T", p.Key, v)
+		}
+		return strconv.FormatInt(i, 10), nil
 
 	default:
 		return "", fmt.Errorf("parameter %q: unsupported parameter type %q", p.Key, p.Type)

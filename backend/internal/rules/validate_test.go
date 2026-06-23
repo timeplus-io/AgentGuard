@@ -399,8 +399,8 @@ func TestNormalizeOverridesUnknownKey(t *testing.T) {
 }
 
 func TestNormalizeOverridesUnsupportedType(t *testing.T) {
-	// regex/duration are Phase B; until then they must fail loudly.
-	for _, typ := range []string{"regex", "duration", "frobnicate"} {
+	// Only truly unknown types must fail loudly; regex and duration are now Phase B supported.
+	for _, typ := range []string{"frobnicate"} {
 		def := defWith(catalog.Parameter{Key: "p", Type: typ, Default: "x"})
 		_, err := NormalizeOverrides(def, map[string]any{"p": "y"})
 		fe := fieldErr(t, err, "p")
@@ -545,4 +545,37 @@ func TestErrorTaxonomy(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestNormalize_Regex(t *testing.T) {
+	p := catalog.Parameter{Key: "pat", Type: "regex", Default: "a.*b"}
+	if _, err := normalizeValue(p, "foo[0-9]+"); err != nil {
+		t.Fatalf("valid regex rejected: %v", err)
+	}
+	if _, err := normalizeValue(p, "foo[0-9"); err == nil {
+		t.Fatal("invalid RE2 must be rejected")
+	}
+}
+
+func TestNormalize_RegexNULRejected(t *testing.T) {
+	p := catalog.Parameter{Key: "pat", Type: "regex", Default: "a.*b"}
+	if _, err := normalizeValue(p, "foo\x00bar"); err == nil {
+		t.Fatal("NUL in regex must be rejected")
+	}
+}
+
+func TestNormalize_Duration(t *testing.T) {
+	min := 1.0
+	max := 3600.0
+	p := catalog.Parameter{Key: "w", Type: "duration", Unit: "seconds", Default: 60, Min: &min, Max: &max}
+	v, err := normalizeValue(p, 90)
+	if err != nil || v.(int64) != 90 {
+		t.Fatalf("got %v %v", v, err)
+	}
+	if _, err := normalizeValue(p, 5000); err == nil {
+		t.Fatal("over-max must reject")
+	}
+	if _, err := normalizeValue(p, 1.5); err == nil {
+		t.Fatal("fractional must reject")
+	}
 }

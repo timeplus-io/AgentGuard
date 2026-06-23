@@ -121,6 +121,38 @@ function TypedControl({ param, value, onChange }) {
     case 'string_list':
       return <StringListControl param={param} value={Array.isArray(value) ? value : []} onChange={onChange} />
 
+    case 'regex':
+      return (
+        <input
+          type="text"
+          className={inputCls + ' font-mono'}
+          value={value ?? ''}
+          placeholder="RE2 regular expression"
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
+
+    case 'duration':
+      return (
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            step="1"
+            min={param.min ?? undefined}
+            max={param.max ?? undefined}
+            className={inputCls}
+            value={value ?? ''}
+            onChange={(e) => {
+              const r = e.target.value
+              if (r === '') return onChange('')
+              const n = Number(r)
+              onChange(Number.isNaN(n) ? r : n)
+            }}
+          />
+          <span className="text-xs text-gray-400">{param.unit || 'units'}</span>
+        </div>
+      )
+
     case 'string':
     default:
       return (

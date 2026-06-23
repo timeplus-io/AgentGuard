@@ -468,6 +468,37 @@ func TestSave_DefaultsOriginToCustom(t *testing.T) {
 	}
 }
 
+// TestDefinitionValidate_PhaseB pins Phase B type acceptance.
+func TestDefinitionValidate_PhaseB(t *testing.T) {
+	// regex with no extra constraints — must be accepted.
+	d := validDef()
+	d.SQLTemplate = "SELECT {{ .Config.pat }}"
+	d.Parameters = []Parameter{{Key: "pat", Type: "regex", Default: "a.*b"}}
+	if err := d.Validate(); err != nil {
+		t.Fatalf("regex parameter must be accepted by Validate: %v", err)
+	}
+
+	// duration with unit — must be accepted.
+	d2 := validDef()
+	d2.SQLTemplate = "SELECT {{ .Config.w }}"
+	d2.Parameters = []Parameter{{Key: "w", Type: "duration", Unit: "seconds", Default: 60}}
+	if err := d2.Validate(); err != nil {
+		t.Fatalf("duration parameter with unit must be accepted by Validate: %v", err)
+	}
+}
+
+// TestValidate_DurationRequiresUnit rejects a duration parameter with an empty unit.
+func TestValidate_DurationRequiresUnit(t *testing.T) {
+	d := Definition{
+		ID: "r", Name: "n", Version: "1",
+		SQLTemplate: "x {{ .Config.w }}",
+		Parameters:  []Parameter{{Key: "w", Type: "duration", Default: 60}},
+	}
+	if err := d.Validate(); err == nil {
+		t.Fatal("duration without unit must be rejected")
+	}
+}
+
 // Origin loader rules: seed definitions are always builtin (overriding any
 // stored origin); local-dir definitions keep their stored origin, defaulting
 // to custom when absent.

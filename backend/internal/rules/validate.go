@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -295,12 +296,43 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 		}
 		return items, nil
 
-	// Phase B types land here:
-	// case "regex":
-	// case "duration":
+	case "regex":
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("expected string, got %s", typeName(v))
+		}
+		if err := checkNoNUL(s); err != nil {
+			return nil, err
+		}
+		if err := checkStringLength(p, s); err != nil {
+			return nil, err
+		}
+		if _, err := regexp.Compile(s); err != nil {
+			return nil, fmt.Errorf("must be a valid RE2 regular expression: %v", err)
+		}
+		return s, nil
+
+	case "duration":
+		i, err := coerceInt64(v)
+		if err != nil {
+			return nil, err
+		}
+		if p.Min != nil || p.Max != nil {
+			// Bounds are float64; integers beyond ±2^53 are not exactly
+			// representable as float64, so the comparison would silently
+			// round. Strictness over silent rounding: reject instead.
+			const maxBoundCheckable = int64(1) << 53
+			if i > maxBoundCheckable || i < -maxBoundCheckable {
+				return nil, fmt.Errorf("value %d exceeds bound-checkable range (|value| > 2^53) and cannot be compared precisely against min/max", i)
+			}
+			if err := checkNumericBounds(p, float64(i)); err != nil {
+				return nil, err
+			}
+		}
+		return i, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported parameter type %q (supported: integer, number, boolean, string, enum, string_list)", p.Type)
+		return nil, fmt.Errorf("unsupported parameter type %q (supported: integer, number, boolean, string, enum, string_list, regex, duration)", p.Type)
 	}
 }
 

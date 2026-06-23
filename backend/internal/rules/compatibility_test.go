@@ -334,3 +334,98 @@ func TestPlanUpgradeAccountingAcrossMixedOutcomes(t *testing.T) {
 	}
 	checkAccounting(t, in, res)
 }
+
+// ── Phase B: regex and duration compatibility ─────────────────────────────
+
+func TestPlanUpgrade_RegexPreservesCompatibleOverride(t *testing.T) {
+	cur := defV("1.0.0", catalog.Parameter{Key: "pat", Type: "regex", Default: "a.*b"})
+	next := defV("2.0.0", catalog.Parameter{Key: "pat", Type: "regex", Default: "x.*y"})
+	in := map[string]any{"pat": "foo[0-9]+"}
+
+	res, err := PlanUpgrade(cur, next, in)
+	if err != nil {
+		t.Fatalf("PlanUpgrade: %v", err)
+	}
+	if !res.OK() {
+		t.Fatalf("expected OK, got conflicts %v", res.Conflicts)
+	}
+	if res.Overrides["pat"] != "foo[0-9]+" {
+		t.Fatalf("Overrides = %#v, want pat=foo[0-9]+", res.Overrides)
+	}
+	checkAccounting(t, in, res)
+}
+
+func TestPlanUpgrade_RegexToStringTypeChangeConflicts(t *testing.T) {
+	cur := defV("1.0.0", catalog.Parameter{Key: "pat", Type: "regex", Default: "a.*b"})
+	next := defV("2.0.0", catalog.Parameter{Key: "pat", Type: "string", Default: "a.*b"})
+	in := map[string]any{"pat": "foo[0-9]+"}
+
+	res, err := PlanUpgrade(cur, next, in)
+	if err != nil {
+		t.Fatalf("PlanUpgrade: %v", err)
+	}
+	if res.OK() {
+		t.Fatal("regex→string type change must conflict")
+	}
+	if len(res.Conflicts) != 1 || !strings.Contains(res.Conflicts[0].Message, `type changed from "regex" to "string"`) {
+		t.Fatalf("Conflicts = %v", res.Conflicts)
+	}
+	checkAccounting(t, in, res)
+}
+
+func TestPlanUpgrade_DurationPreservesCompatibleOverride(t *testing.T) {
+	max := 3600.0
+	cur := defV("1.0.0", catalog.Parameter{Key: "w", Type: "duration", Unit: "seconds", Default: 60, Max: &max})
+	next := defV("2.0.0", catalog.Parameter{Key: "w", Type: "duration", Unit: "seconds", Default: 300, Max: &max})
+	in := map[string]any{"w": int64(600)}
+
+	res, err := PlanUpgrade(cur, next, in)
+	if err != nil {
+		t.Fatalf("PlanUpgrade: %v", err)
+	}
+	if !res.OK() {
+		t.Fatalf("expected OK, got conflicts %v", res.Conflicts)
+	}
+	if got, _ := res.Overrides["w"].(int64); got != 600 {
+		t.Fatalf("Overrides[w] = %#v, want int64(600)", res.Overrides["w"])
+	}
+	checkAccounting(t, in, res)
+}
+
+func TestPlanUpgrade_DurationToIntegerTypeChangeConflicts(t *testing.T) {
+	cur := defV("1.0.0", catalog.Parameter{Key: "w", Type: "duration", Unit: "seconds", Default: 60})
+	next := defV("2.0.0", catalog.Parameter{Key: "w", Type: "integer", Default: 60})
+	in := map[string]any{"w": int64(300)}
+
+	res, err := PlanUpgrade(cur, next, in)
+	if err != nil {
+		t.Fatalf("PlanUpgrade: %v", err)
+	}
+	if res.OK() {
+		t.Fatal("duration→integer type change must conflict")
+	}
+	if len(res.Conflicts) != 1 || !strings.Contains(res.Conflicts[0].Message, `type changed from "duration" to "integer"`) {
+		t.Fatalf("Conflicts = %v", res.Conflicts)
+	}
+	checkAccounting(t, in, res)
+}
+
+func TestPlanUpgrade_DurationTightenedMaxConflicts(t *testing.T) {
+	max1 := 3600.0
+	max2 := 120.0
+	cur := defV("1.0.0", catalog.Parameter{Key: "w", Type: "duration", Unit: "seconds", Default: 60, Max: &max1})
+	next := defV("2.0.0", catalog.Parameter{Key: "w", Type: "duration", Unit: "seconds", Default: 60, Max: &max2})
+	in := map[string]any{"w": int64(300)}
+
+	res, err := PlanUpgrade(cur, next, in)
+	if err != nil {
+		t.Fatalf("PlanUpgrade: %v", err)
+	}
+	if res.OK() {
+		t.Fatal("duration override violating tightened max must conflict")
+	}
+	if len(res.Conflicts) != 1 || !strings.Contains(res.Conflicts[0].Message, "no longer valid") {
+		t.Fatalf("Conflicts = %v", res.Conflicts)
+	}
+	checkAccounting(t, in, res)
+}
