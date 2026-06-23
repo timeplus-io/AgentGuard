@@ -398,9 +398,16 @@ export default function RuleDetail() {
                 </button>
               )}
 
-              {/* Show Clone button for builtin/imported rules so operators can
-                  create an editable custom copy without modifying the seed. */}
-              {rule.definition && rule.definition.origin !== 'custom' && (
+              {/* Custom definitions are directly editable; builtin/imported are
+                  immutable seeds, so operators clone to an editable custom copy. */}
+              {rule.definition && rule.definition.origin === 'custom' ? (
+                <Link
+                  to={`/rules/${id}/edit`}
+                  className="px-4 py-2 text-xs font-semibold rounded-sm border border-[#ffb0cf]/30 text-[#ffb0cf] hover:bg-[#ffb0cf]/10 transition-colors"
+                >
+                  Edit definition
+                </Link>
+              ) : rule.definition ? (
                 <button
                   onClick={openCloneModal}
                   disabled={actionLoading}
@@ -408,7 +415,7 @@ export default function RuleDetail() {
                 >
                   Clone as custom
                 </button>
-              )}
+              ) : null}
 
               {!uninstallConfirm ? (
                 <button onClick={() => setUninstallConfirm(true)} disabled={actionLoading} className="px-4 py-2 text-xs font-semibold rounded-sm border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
