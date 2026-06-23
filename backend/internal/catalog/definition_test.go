@@ -147,6 +147,18 @@ func TestDefinitionValidate_UDFs(t *testing.T) {
 	}
 }
 
+func TestExtractUDFNames(t *testing.T) {
+	names, err := ExtractUDFNames([]string{
+		"CREATE OR REPLACE FUNCTION ag_r_score(x string) RETURNS float LANGUAGE PYTHON AS $$...$$;",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 1 || names[0] != "ag_r_score" {
+		t.Fatalf("got %v", names)
+	}
+}
+
 func TestUDFNames(t *testing.T) {
 	d := validDef()
 	d.UDFs = []string{

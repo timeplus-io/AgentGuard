@@ -262,6 +262,50 @@ func genSnapshotID() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
+// ── UDF ownership ────────────────────────────────────────────────────────────────
+
+// checkUDFOwnership rejects def if any of its UDF function names is already
+// deployed by a different, non-deleted installed instance. Global CREATE OR
+// REPLACE FUNCTION would otherwise overwrite a UDF a live MV depends on.
+// This consults the real ownership ledger (installed snapshots' DeployedUDFs),
+// not just catalog definitions. The catalog-level check is still run first to
+// catch in-catalog conflicts before the more expensive store read.
+func (s *Service) checkUDFOwnership(def catalog.Definition) error {
+	if err := s.catalog.ValidateUDFOwnership(def); err != nil {
+		return err
+	}
+	mine, err := catalog.ExtractUDFNames(def.UDFs)
+	if err != nil {
+		return err
+	}
+	if len(mine) == 0 {
+		return nil
+	}
+	owned := make(map[string]bool, len(mine))
+	for _, n := range mine {
+		owned[n] = true
+	}
+	current, err := s.store.ListCurrent()
+	if err != nil {
+		return err
+	}
+	for _, inst := range current {
+		if inst.RuleID == def.ID || inst.Deleted {
+			continue
+		}
+		names, err := catalog.ExtractUDFNames(inst.DeployedUDFs)
+		if err != nil {
+			continue // an unparseable deployed UDF cannot assert ownership
+		}
+		for _, n := range names {
+			if owned[n] {
+				return fmt.Errorf("UDF function %q is already deployed by installed rule %q", n, inst.RuleID)
+			}
+		}
+	}
+	return nil
+}
+
 // ── Read path ────────────────────────────────────────────────────────────────────
 
 // MVHealth is the deployed-MV diagnostic for one rule. A disabled rule is
@@ -371,7 +415,7 @@ func (s *Service) Install(ruleID string, overrides map[string]any, actor, reason
 	// New installs and custom definitions must not claim a UDF name already owned
 	// by another installed definition, since CREATE OR REPLACE FUNCTION mutates
 	// global state. This runs before any preflight or deployment.
-	if err := s.catalog.ValidateUDFOwnership(def); err != nil {
+	if err := s.checkUDFOwnership(def); err != nil {
 		return RuleInstance{}, err
 	}
 
@@ -579,7 +623,7 @@ func (s *Service) Upgrade(ruleID, actor, reason string) (RuleInstance, error) {
 		return cur, nil // already at the catalog version
 	}
 
-	if err := s.catalog.ValidateUDFOwnership(def); err != nil {
+	if err := s.checkUDFOwnership(def); err != nil {
 		return RuleInstance{}, err
 	}
 

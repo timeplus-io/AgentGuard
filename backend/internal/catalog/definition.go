@@ -127,14 +127,18 @@ func stripSQLComments(q string) string {
 	return b.String()
 }
 
-// UDFNames extracts the declared function name from each UDF DDL string,
+// ExtractUDFNames extracts the declared function name from each UDF DDL string
 // in declaration order. Line comments are stripped before matching so a
 // changelog comment mentioning CREATE FUNCTION cannot shadow the real
 // declaration. It returns an error if any DDL does not parse well enough
 // to yield a plausible function name.
-func (d Definition) UDFNames() ([]string, error) {
-	names := make([]string, 0, len(d.UDFs))
-	for i, ddl := range d.UDFs {
+//
+// This is a package-level function so that internal/rules can call it to
+// inspect deployed UDFs stored in installed snapshots (the real ownership
+// ledger) without needing access to a Definition.
+func ExtractUDFNames(ddls []string) ([]string, error) {
+	names := make([]string, 0, len(ddls))
+	for i, ddl := range ddls {
 		m := udfNameRe.FindStringSubmatch(stripSQLComments(ddl))
 		if m == nil {
 			return nil, fmt.Errorf("udfs[%d]: cannot extract function name (expected CREATE [OR REPLACE] [AGGREGATE] FUNCTION [IF NOT EXISTS] <name>)", i)
@@ -149,6 +153,12 @@ func (d Definition) UDFNames() ([]string, error) {
 		names = append(names, name)
 	}
 	return names, nil
+}
+
+// UDFNames extracts the declared function name from each UDF DDL string
+// declared in this definition. It delegates to ExtractUDFNames.
+func (d Definition) UDFNames() ([]string, error) {
+	return ExtractUDFNames(d.UDFs)
 }
 
 // hashPayload fixes the canonical field order for Hash. json.Marshal of a
@@ -304,14 +314,12 @@ func (d Definition) Validate() error {
 // already declared by a different definition currently in the catalog.
 // Re-saving the same definition (same ID) is always allowed.
 //
-// LIMITATION (Phase B): ownership is checked against catalog definitions only
-// (m.All()), not against the UDFs actually deployed by installed rules
-// (recorded per snapshot in agentguard_rules.deployed_udfs_json). If an
-// installed rule's definition is absent from or changed in the catalog, a new
-// or imported rule can claim/replace a UDF that a live MV still depends on,
-// since global CREATE OR REPLACE FUNCTION would overwrite it. The robust fix is
-// to consult the installed snapshots' deployed UDFs (the real ownership ledger),
-// which requires a store read this catalog-only method does not have.
+// NOTE: this catalog-only check is not the complete ownership gate. The
+// lifecycle Service (internal/rules) additionally consults installed snapshots'
+// deployed_udfs_json (the real ownership ledger) via
+// rules.Service.checkUDFOwnership, which wraps this call. A definition present
+// in the catalog cannot alone assert ownership of a UDF deployed by a live MV
+// whose definition has since been removed or changed.
 func (m *Manager) ValidateUDFOwnership(d Definition) error {
 	names, err := d.UDFNames()
 	if err != nil {

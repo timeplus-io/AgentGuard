@@ -344,6 +344,38 @@ func TestInstall_UDFOwnershipCheckedBeforeAnyWork(t *testing.T) {
 	}
 }
 
+// TestInstall_RejectsUDFOwnedByInstalledSnapshot verifies that Install rejects
+// a new rule whose UDF name is already deployed by a DIFFERENT installed
+// instance's DeployedUDFs, even when the catalog-level ownership check passes
+// (because the prior rule's definition is absent from or changed in the catalog).
+// This exercises the snapshot-ledger path added in Phase B (checkUDFOwnership).
+func TestInstall_RejectsUDFOwnedByInstalledSnapshot(t *testing.T) {
+	const udfDDL = "CREATE OR REPLACE FUNCTION ag_shared_fn(x string) RETURNS string LANGUAGE PYTHON AS $$...$$;"
+	defs := &fakeDefs{defs: map[string]catalog.Definition{
+		"rp-b": {
+			ID: "rp-b", Name: "B", Version: "1",
+			SQLTemplate: "SELECT rule_id FROM agentguard_hook_events WHERE true",
+			UDFs:        []string{udfDDL},
+		},
+	}}
+	svc, st, _, _ := newTestService(defs)
+	// Seed rp-a as an installed, enabled instance that deployed ag_shared_fn.
+	// The catalog has no entry for rp-a — simulating a rule whose definition was
+	// removed/changed but whose live MV still depends on the UDF.
+	st.latest["rp-a"] = RuleInstance{
+		RuleID:       "rp-a",
+		SnapshotID:   "s0",
+		Revision:     1,
+		Enabled:      true,
+		DeployedUDFs: []string{udfDDL},
+	}
+
+	_, err := svc.Install("rp-b", nil, "tester", "t")
+	if err == nil || !strings.Contains(err.Error(), "ag_shared_fn") {
+		t.Fatalf("expected UDF-ownership rejection mentioning ag_shared_fn, got %v", err)
+	}
+}
+
 func TestInstall_NotInCatalog(t *testing.T) {
 	svc, _, _, _ := newTestService(&fakeDefs{defs: map[string]catalog.Definition{}})
 	if _, err := svc.Install("nope", nil, "a", "r"); !errors.Is(err, ErrNotFound) {
@@ -518,6 +550,75 @@ func TestConfigure_CriticalErrorWhenRollbackFails(t *testing.T) {
 	}
 	if crit.Op != "configure" || crit.RuleID != "rp-001" {
 		t.Errorf("critical error mislabeled: %+v", crit)
+	}
+}
+
+// ── ApplyUDFs / preflight non-destructive guarantee ──────────────────────────────
+
+// TestConfigure_ApplyFailLeavesLiveMVAndSnapshotIntact locks the guarantee that
+// if ApplyUDFs(candidate) fails during preflight, the live MV is never dropped
+// and the persisted snapshot remains unchanged. Phase A's Configure preflights
+// before replaceAndPersist, so this is a characterization/guard test that passes
+// immediately (no RED phase per Task 8 decision 3).
+func TestConfigure_ApplyFailLeavesLiveMVAndSnapshotIntact(t *testing.T) {
+	def := testDef("rp-x", "1.0.0", intParam("threshold", 5, f64(1), f64(100)))
+	svc, st, mv, _ := newTestService(&fakeDefs{defs: map[string]catalog.Definition{"rp-x": def}})
+	cur := installedInst(def, true, 1, nil, nil)
+	st.latest["rp-x"] = cur
+	mv.exists["rp-x"] = true
+
+	// Fail the first ApplyUDFs call (candidate apply in preflight).
+	mv.errOn = func(op string, n int) error {
+		if op == "applyUDFs" && n == 1 {
+			return errors.New("udf apply boom")
+		}
+		return nil
+	}
+
+	appendsBefore := len(st.appended)
+	_, err := svc.Configure("rp-x", map[string]any{"threshold": 9}, "t", "r")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if mv.counts["drop"] != 0 {
+		t.Fatalf("live MV was dropped before validation (%d drops); preflight must run before any destructive op", mv.counts["drop"])
+	}
+	if len(st.appended) != appendsBefore {
+		t.Fatal("snapshot must be unchanged when preflight fails")
+	}
+}
+
+// TestConfigure_CreateFailRestoresPreviousMV locks the rollback guarantee: if
+// CreateMVStrict fails after the live MV has been dropped, rollback must
+// recreate the previous MV from cur.RenderedSQL and leave the snapshot
+// unchanged. This covers the replaceAndPersist→rollback→recreateMV path.
+func TestConfigure_CreateFailRestoresPreviousMV(t *testing.T) {
+	def := testDef("rp-x", "1.0.0", intParam("threshold", 5, f64(1), f64(100)))
+	svc, st, mv, _ := newTestService(&fakeDefs{defs: map[string]catalog.Definition{"rp-x": def}})
+	cur := installedInst(def, true, 1, nil, nil)
+	prevRenderedSQL := cur.RenderedSQL
+	st.latest["rp-x"] = cur
+	mv.exists["rp-x"] = true
+
+	// Fail only the first CreateMVStrict call (the candidate); the rollback
+	// recreate (second create) must succeed with the previous rendered SQL.
+	mv.errOn = func(op string, n int) error {
+		if op == "create" && n == 1 {
+			return errors.New("create boom")
+		}
+		return nil
+	}
+
+	_, err := svc.Configure("rp-x", map[string]any{"threshold": 9}, "t", "r")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if len(st.appended) != 0 {
+		t.Fatalf("candidate snapshot must not be persisted on create failure; got %d appends", len(st.appended))
+	}
+	// rollback→recreateMV must create the previous MV from last-known-good SQL.
+	if len(mv.creates) < 2 || mv.creates[len(mv.creates)-1] != prevRenderedSQL {
+		t.Fatalf("previous MV not restored from last-known-good rendered_sql:\n creates=%v\n want last=%q", mv.creates, prevRenderedSQL)
 	}
 }
 
