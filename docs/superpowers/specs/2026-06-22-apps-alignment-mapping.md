@@ -1,0 +1,91 @@
+# AgentGuard / Timeplus Apps Alignment Mapping
+
+## Overview
+
+This document codifies the alignment between AgentGuard's external rule authoring surface and the [Timeplus Apps](https://apps.timeplus.com/) manifest specification. AgentGuard adopts the `/apps` manifest surface (YAML/JSON field names and placeholder spelling) while retaining its internal strict, injection-safe compiler engine and richer type vocabulary.
+
+## Surface Alignment Decision
+
+The external authoring contract adopts the `/apps` manifest surface; the internal strict engine and AG's type vocabulary are retained. Concretely:
+
+| Concern | Phase A (before) | Phase B (after, `/apps`-aligned) |
+|---|---|---|
+| Parameter list YAML/JSON key | `parameters:` | `config:` |
+| Parameter identifier field | `id` | `key` |
+| Placeholder spelling | `{{params.<id>}}` (no whitespace) | `{{ .Config.<key> }}` (optional surrounding whitespace) |
+| New parameter fields | — | `required` (bool, default true), `secret` (bool; `true` is rejected) |
+| Template engine | strict scanner (kept) | strict scanner (kept — NOT Go text/template) |
+| Type tokens | `integer/number/boolean/string/enum/string_list` | same + `regex`/`duration` (kept; `/apps` `float/bool/choice/list/multi_choice` documented as a mapping only) |
+| DB templating (`{{ .DB }}`) | n/a | not supported (single fixed deployment; document the divergence) |
+
+## Type-Name Mapping
+
+The following table documents the mapping between AgentGuard's internal parameter type tokens (canonical) and the Timeplus Apps manifest equivalents (documentation only for interoperability). **AgentGuard tokens are the authoritative types used in all internal processing.**
+
+| AG token | `/apps` token |
+|---|---|
+| `integer` | `integer` |
+| `number` | `float` |
+| `boolean` | `bool` |
+| `string` | `string` |
+| `enum` | `choice` |
+| `string_list` | `multi_choice` / `list` |
+| `regex` | (none in `/apps`) |
+| `duration` | (none in `/apps`) |
+
+## Strict Engine Rationale
+
+AgentGuard retains its **strict, injection-safe parameter compiler** and does NOT adopt Go `text/template` execution, Sprig functions, conditionals, or any templating features beyond exact placeholder substitution.
+
+**Rationale:**
+- The renderer escapes quotes and backslashes only and substitutes exact placeholders (`{{ .Config.<key> }}`).
+- No parameter type may inject identifiers, operators, SQL clauses, functions, or arbitrary SQL — all values are rendered as literals (strings as quoted strings, numbers as decimal literals, enums/regex as literals, etc.).
+- This design prevents accidental or malicious SQL injection through rule parameters, a critical security property for a real-time security platform that executes parameterized rules against live data.
+
+## Secret Parameters
+
+A `secret: true` field on a parameter configuration is **rejected at validation time** with an error message.
+
+**Rationale:** Parameters are rendered into the rule's SQL template and are never suitable for storing secrets. If a configuration field requires sensitive data (API keys, credentials, etc.), it should be managed outside the rules system entirely (e.g., environment variables, vaults, or external authentication services). Parameters should only hold non-sensitive configuration values.
+
+## Database Templating Divergence
+
+AgentGuard does **NOT** support `{{ .DB }}` templating (dynamic database/stream selection). This is a deliberate divergence from the `/apps` manifest specification.
+
+**Rationale:** AgentGuard operates in a single, fixed deployment context — all rules query the same Timeplus Proton instance and the same `agentguard_cim_event` stream. There is no multi-tenant or multi-database scenario. Allowing `{{ .DB }}` would introduce deployment-time schema variance that complicates provisioning, testing, and rule portability. The strict design instead favors clarity: rules are authored against a known, fixed data model.
+
+## Internal Go Identifiers
+
+The Phase B refactoring renames the `catalog.Parameter` struct field from `ID` to `Key` to align with the `/apps` manifest field name.
+
+**Mapping:**
+- Go struct field: `catalog.Parameter.ID` → `catalog.Parameter.Key`
+- YAML/JSON struct tag: `id` → `key`
+- Go field name equivalence note: In AgentGuard's internal code, `id` (a rule scoped identifier) and `key` (the parameter name) are interchangeable; both refer to the same semantic entity, the unique identifier for a configuration parameter within a rule's scope.
+
+**Helper functions preserved (unchanged semantics):**
+- `ValidParameterID()` — validates parameter identifier syntax (regex: `^[a-z][a-z0-9_]{0,63}$`)
+- `ParameterIDPattern` — the regex pattern constant
+- `paramIDRe` — the compiled regex for identifier validation
+
+These helpers still validate the parameter identifier/key syntax; only the struct field name changes.
+
+## Notes for Implementers
+
+1. **YAML/JSON Round-Trip:** When exporting rules to YAML or JSON for import/export operations, use the Phase B field names (`config:`, `key:`, `{{ .Config.<key> }}`). Existing deployments must clean-reprovision the `agentguard_rules` stream schema.
+
+2. **Migration:** The `/apps` rename intentionally rotates the `Definition.Hash()` value for any parameterized definitions (the serialization field name changes from `id` to `key`). This is acceptable because the `agentguard_rules` snapshot stream is clean-reprovisioned at this baseline; no snapshot-migration logic is needed.
+
+3. **Type Extensions:** `regex` and `duration` parameter types are new in Phase B and are NOT represented in the `/apps` manifest specification. They may be documented as AG-specific extensions when rules are exported or imported.
+
+4. **Strict Rendering:** Parameter overrides are always rendered as literals. For example:
+   - `integer` → bare decimal: `5`
+   - `string` → single-quoted with escaped quotes: `'it''s'`
+   - `regex` → single-quoted: `'[a-z0-9]+'`
+   - `duration` → bare integer (unit is metadata only): `60`
+
+5. **Placeholder Validation:** The template scanner accepts whitespace around the placeholder:
+   - Valid: `{{ .Config.threshold }}`, `{{.Config.threshold}}`, `{{ .Config.threshold}}`
+   - Invalid: `{{params.threshold}}` (legacy spelling, now rejected), `{{ threshold }}` (missing `.Config.` prefix)
+
+6. **Catalog vs. Instance:** The `Definition` (in the catalog) owns the parameter schema and template. Installed `RuleInstance`s (snapshots in `agentguard_rules`) store the effective parameter values (overrides) and the compiled output (rendered SQL + deployed UDFs). Parameter edits are always made at the Definition level; instances inherit the new schema on upgrade or redeploy.
