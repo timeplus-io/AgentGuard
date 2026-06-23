@@ -6,7 +6,7 @@ import { useState } from 'react'
 // number, boolean, string, enum, string_list; regex/duration are Phase B).
 //
 // Props:
-//   param        – schema entry { id, label, description, type, default, min,
+//   param        – schema entry { key, label, description, type, default, min,
 //                  max, min_length, max_length, options, min_items, max_items, unit }
 //   value        – current edited value (canonical JS form: number | string |
 //                  boolean | string[])
@@ -26,8 +26,8 @@ export default function ParamField({ param, value, defaultValue, overridden, err
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={labelCls}>{param.label || param.id}</span>
-            <code className="text-[10px] text-gray-500 font-mono">{param.id}</code>
+            <span className={labelCls}>{param.label || param.key}</span>
+            <code className="text-[10px] text-gray-500 font-mono">{param.key}</code>
             {overridden && (
               <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#ffb0cf]/10 text-[#ffb0cf] border border-[#ffb0cf]/20">
                 overridden

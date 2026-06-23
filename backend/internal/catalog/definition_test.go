@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"gopkg.in/yaml.v3"
 )
 
 func f64(v float64) *float64 { return &v }
@@ -52,7 +54,7 @@ func TestDefinitionValidate_RequiredFields(t *testing.T) {
 
 func TestDefinitionValidate_Parameters(t *testing.T) {
 	param := func(mutate func(*Parameter)) Parameter {
-		p := Parameter{ID: "threshold", Label: "Threshold", Type: "integer", Default: 5}
+		p := Parameter{Key: "threshold", Label: "Threshold", Type: "integer", Default: 5}
 		mutate(&p)
 		return p
 	}
@@ -63,35 +65,35 @@ func TestDefinitionValidate_Parameters(t *testing.T) {
 	}{
 		{"valid integer", []Parameter{param(func(p *Parameter) {})}, ""},
 		{"valid all types", []Parameter{
-			{ID: "a_int", Type: "integer", Default: 1},
-			{ID: "a_num", Type: "number", Default: 1.5, Min: f64(0), Max: f64(10)},
-			{ID: "a_bool", Type: "boolean", Default: true},
-			{ID: "a_str", Type: "string", Default: "x"},
-			{ID: "a_enum", Type: "enum", Default: "low", Options: []string{"low", "high"}},
-			{ID: "a_list", Type: "string_list", Default: []any{"x"}},
+			{Key: "a_int", Type: "integer", Default: 1},
+			{Key: "a_num", Type: "number", Default: 1.5, Min: f64(0), Max: f64(10)},
+			{Key: "a_bool", Type: "boolean", Default: true},
+			{Key: "a_str", Type: "string", Default: "x"},
+			{Key: "a_enum", Type: "enum", Default: "low", Options: []string{"low", "high"}},
+			{Key: "a_list", Type: "string_list", Default: []any{"x"}},
 		}, ""},
-		{"empty id", []Parameter{param(func(p *Parameter) { p.ID = "" })}, "must match"},
-		{"uppercase id", []Parameter{param(func(p *Parameter) { p.ID = "Threshold" })}, "must match"},
-		{"leading digit", []Parameter{param(func(p *Parameter) { p.ID = "1x" })}, "must match"},
-		{"hyphen id", []Parameter{param(func(p *Parameter) { p.ID = "max-tools" })}, "must match"},
-		{"id too long (65)", []Parameter{param(func(p *Parameter) { p.ID = "a" + strings.Repeat("b", 64) })}, "must match"},
-		{"id max length (64) ok", []Parameter{param(func(p *Parameter) { p.ID = "a" + strings.Repeat("b", 63) })}, ""},
-		{"duplicate ids", []Parameter{
+		{"empty key", []Parameter{param(func(p *Parameter) { p.Key = "" })}, "must match"},
+		{"uppercase key", []Parameter{param(func(p *Parameter) { p.Key = "Threshold" })}, "must match"},
+		{"leading digit", []Parameter{param(func(p *Parameter) { p.Key = "1x" })}, "must match"},
+		{"hyphen key", []Parameter{param(func(p *Parameter) { p.Key = "max-tools" })}, "must match"},
+		{"key too long (65)", []Parameter{param(func(p *Parameter) { p.Key = "a" + strings.Repeat("b", 64) })}, "must match"},
+		{"key max length (64) ok", []Parameter{param(func(p *Parameter) { p.Key = "a" + strings.Repeat("b", 63) })}, ""},
+		{"duplicate keys", []Parameter{
 			param(func(p *Parameter) {}),
-			param(func(p *Parameter) { p.ID = "threshold" }),
+			param(func(p *Parameter) { p.Key = "threshold" }),
 		}, "duplicates"},
-		{"id collides with alias", []Parameter{
+		{"key collides with alias", []Parameter{
 			param(func(p *Parameter) { p.Aliases = []string{"limit"} }),
-			param(func(p *Parameter) { p.ID = "limit" }),
+			param(func(p *Parameter) { p.Key = "limit" }),
 		}, "duplicates"},
 		{"alias collides with alias", []Parameter{
 			param(func(p *Parameter) { p.Aliases = []string{"limit"} }),
-			param(func(p *Parameter) { p.ID = "other"; p.Aliases = []string{"limit"} }),
+			param(func(p *Parameter) { p.Key = "other"; p.Aliases = []string{"limit"} }),
 		}, "duplicates"},
 		{"bad alias", []Parameter{param(func(p *Parameter) { p.Aliases = []string{"Bad-Alias"} })}, "must match"},
 		{"unknown type", []Parameter{param(func(p *Parameter) { p.Type = "float" })}, "unknown type"},
 		{"nil default", []Parameter{param(func(p *Parameter) { p.Default = nil })}, "default is required"},
-		{"enum without options", []Parameter{{ID: "mode", Type: "enum", Default: "x"}}, "non-empty options"},
+		{"enum without options", []Parameter{{Key: "mode", Type: "enum", Default: "x"}}, "non-empty options"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -253,7 +255,7 @@ func TestDefinitionHash(t *testing.T) {
 		func(d *Definition) { d.Tags = []string{"x"} },
 		func(d *Definition) { d.UDFs = []string{"CREATE FUNCTION f(v string) AS $$ $$"} },
 		func(d *Definition) {
-			d.Parameters = []Parameter{{ID: "p", Type: "integer", Default: 1}}
+			d.Parameters = []Parameter{{Key: "p", Type: "integer", Default: 1}}
 		},
 	}
 	for i, mutate := range mutations {
@@ -267,8 +269,8 @@ func TestDefinitionHash(t *testing.T) {
 	// Parameter order is part of the canonical content.
 	a := validDef()
 	a.Parameters = []Parameter{
-		{ID: "p1", Type: "integer", Default: 1},
-		{ID: "p2", Type: "integer", Default: 2},
+		{Key: "p1", Type: "integer", Default: 1},
+		{Key: "p2", Type: "integer", Default: 2},
 	}
 	b := validDef()
 	b.Parameters = []Parameter{a.Parameters[1], a.Parameters[0]}
@@ -299,9 +301,9 @@ func TestDefinitionHash_NilAndEmptySlicesEqual(t *testing.T) {
 	}
 
 	c := validDef()
-	c.Parameters = []Parameter{{ID: "p", Type: "enum", Default: "x", Options: []string{"x"}, Aliases: nil}}
+	c.Parameters = []Parameter{{Key: "p", Type: "enum", Default: "x", Options: []string{"x"}, Aliases: nil}}
 	d := validDef()
-	d.Parameters = []Parameter{{ID: "p", Type: "enum", Default: "x", Options: []string{"x"}, Aliases: []string{}}}
+	d.Parameters = []Parameter{{Key: "p", Type: "enum", Default: "x", Options: []string{"x"}, Aliases: []string{}}}
 	if c.Hash() != d.Hash() {
 		t.Error("nil and empty parameter Aliases must hash identically")
 	}
@@ -313,6 +315,12 @@ func TestDefinitionHash_NilAndEmptySlicesEqual(t *testing.T) {
 // silently invalidates stored hashes. If this test fails, you have changed
 // the hash function — that requires a deliberate migration story, not just
 // updating the constant.
+//
+// Hash rotation log:
+//   - Phase A baseline: "edaa7b3808890082a8cd0176cce2414d6f7f935552b3aa7831d0a27e3581b72b"
+//     (Parameter serialized with json:"id")
+//   - Phase B /apps rename (#33): deliberately rotated by Parameter.ID→Key rename
+//     (json tag "id"→"key" changes canonical serialization; clean reprovision required)
 func TestDefinitionHash_Golden(t *testing.T) {
 	d := Definition{
 		ID:                "rp-golden",
@@ -329,14 +337,33 @@ func TestDefinitionHash_Golden(t *testing.T) {
 		UDFs:              []string{"CREATE FUNCTION ag_golden(v string) RETURNS bool AS $$ x $$"},
 		SQLTemplate:       "SELECT 1 WHERE x > {{threshold}}",
 		Parameters: []Parameter{{
-			ID: "threshold", Label: "Threshold", Description: "limit",
+			Key: "threshold", Label: "Threshold", Description: "limit",
 			Type: "integer", Default: 5, Min: f64(1), Max: f64(10), Unit: "calls",
 		}},
 		Origin: OriginBuiltin, // excluded from the hash
 	}
-	const want = "edaa7b3808890082a8cd0176cce2414d6f7f935552b3aa7831d0a27e3581b72b"
+	const want = "f195216132275a6dd02caf840bb87c687d35964e414015624de949c8dd1550f9"
 	if got := d.Hash(); got != want {
 		t.Errorf("golden hash mismatch:\n got  %s\n want %s", got, want)
+	}
+}
+
+// TestParameter_KeyAndSecret verifies the /apps authoring surface:
+// - the YAML "config:" block deserializes into d.Parameters with Key populated;
+// - secret:true is rejected by Validate (parameters render into SQL).
+func TestParameter_KeyAndSecret(t *testing.T) {
+	y := []byte("id: r\nname: n\nversion: \"1\"\nsql_template: \"x {{ .Config.k }}\"\nconfig:\n  - key: k\n    type: integer\n    default: 1\n")
+	var d Definition
+	if err := yaml.Unmarshal(y, &d); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Parameters) != 1 || d.Parameters[0].Key != "k" {
+		t.Fatalf("expected config[0].key=k, got %+v", d.Parameters)
+	}
+	// secret:true must be rejected by Validate
+	d.Parameters[0].Secret = true
+	if err := d.Validate(); err == nil {
+		t.Fatal("expected secret:true to be rejected")
 	}
 }
 

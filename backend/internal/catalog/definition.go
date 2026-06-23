@@ -37,14 +37,18 @@ type Definition struct {
 	Tags              []string    `yaml:"tags"               json:"tags"`
 	UDFs              []string    `yaml:"udfs"               json:"udfs"`
 	SQLTemplate       string      `yaml:"sql_template"       json:"sql_template"`
-	Parameters        []Parameter `yaml:"parameters"         json:"parameters,omitempty"`
+	Parameters        []Parameter `yaml:"config"             json:"config,omitempty"`
 	Origin            string      `yaml:"origin"             json:"origin,omitempty"`
 }
 
 // Parameter describes one user-editable knob of a rule definition.
 // Supported Type values are listed in parameterTypes.
+//
+// Key is the canonical identifier used in placeholders: {{ .Config.<key> }}.
+// Helper names ValidParameterID / ParameterIDPattern / paramIDRe validate the
+// same identifier syntax for both keys and aliases (id == key historically).
 type Parameter struct {
-	ID          string   `yaml:"id"                    json:"id"`
+	Key         string   `yaml:"key"                   json:"key"`
 	Label       string   `yaml:"label"                 json:"label"`
 	Description string   `yaml:"description"           json:"description"`
 	Type        string   `yaml:"type"                  json:"type"`
@@ -58,6 +62,8 @@ type Parameter struct {
 	MaxItems    *int     `yaml:"max_items,omitempty"   json:"max_items,omitempty"`
 	Aliases     []string `yaml:"aliases,omitempty"     json:"aliases,omitempty"`
 	Unit        string   `yaml:"unit,omitempty"        json:"unit,omitempty"`
+	Required    bool     `yaml:"required,omitempty"    json:"required,omitempty"`
+	Secret      bool     `yaml:"secret,omitempty"      json:"secret,omitempty"`
 }
 
 // parameterTypes is the set of parameter types supported in Phase A.
@@ -70,8 +76,8 @@ var parameterTypes = map[string]bool{
 	"string_list": true,
 }
 
-// ParameterIDPattern is the exact syntax for parameter IDs (and aliases,
-// which are former IDs). internal/rules validates {{params.<id>}} template
+// ParameterIDPattern is the exact syntax for parameter keys (and aliases,
+// which are former keys). internal/rules validates {{ .Config.<key> }} template
 // placeholders against the same rule via ValidParameterID, so the two
 // definitions cannot drift.
 const ParameterIDPattern = `^[a-z][a-z0-9_]{0,63}$`
@@ -243,7 +249,7 @@ func (d Definition) Validate() error {
 		return fmt.Errorf("sql_template is required")
 	}
 
-	seen := make(map[string]string, len(d.Parameters)) // name → "id"/"alias" owner param
+	seen := make(map[string]string, len(d.Parameters)) // name → "key"/"alias" owner param
 	claim := func(name, kind, owner string) error {
 		if prev, dup := seen[name]; dup {
 			return fmt.Errorf("parameter %s %q duplicates %s", kind, name, prev)
@@ -252,28 +258,31 @@ func (d Definition) Validate() error {
 		return nil
 	}
 	for i, p := range d.Parameters {
-		if !paramIDRe.MatchString(p.ID) {
-			return fmt.Errorf("parameters[%d]: id %q must match %s", i, p.ID, paramIDRe.String())
+		if !paramIDRe.MatchString(p.Key) {
+			return fmt.Errorf("config[%d]: key %q must match %s", i, p.Key, paramIDRe.String())
 		}
-		if err := claim(p.ID, "id", p.ID); err != nil {
-			return fmt.Errorf("parameters[%d]: %w", i, err)
+		if err := claim(p.Key, "key", p.Key); err != nil {
+			return fmt.Errorf("config[%d]: %w", i, err)
 		}
 		for _, a := range p.Aliases {
 			if !paramIDRe.MatchString(a) {
-				return fmt.Errorf("parameters[%d] (%s): alias %q must match %s", i, p.ID, a, paramIDRe.String())
+				return fmt.Errorf("config[%d] (%s): alias %q must match %s", i, p.Key, a, paramIDRe.String())
 			}
-			if err := claim(a, "alias", p.ID); err != nil {
-				return fmt.Errorf("parameters[%d] (%s): %w", i, p.ID, err)
+			if err := claim(a, "alias", p.Key); err != nil {
+				return fmt.Errorf("config[%d] (%s): %w", i, p.Key, err)
 			}
 		}
 		if !parameterTypes[p.Type] {
-			return fmt.Errorf("parameters[%d] (%s): unknown type %q", i, p.ID, p.Type)
+			return fmt.Errorf("config[%d] (%s): unknown type %q", i, p.Key, p.Type)
+		}
+		if p.Secret {
+			return fmt.Errorf("config[%d] (%s): secret parameters are not supported — parameters are rendered into SQL and must never store secrets", i, p.Key)
 		}
 		if p.Default == nil {
-			return fmt.Errorf("parameters[%d] (%s): default is required", i, p.ID)
+			return fmt.Errorf("config[%d] (%s): default is required", i, p.Key)
 		}
 		if p.Type == "enum" && len(p.Options) == 0 {
-			return fmt.Errorf("parameters[%d] (%s): enum requires non-empty options", i, p.ID)
+			return fmt.Errorf("config[%d] (%s): enum requires non-empty options", i, p.Key)
 		}
 	}
 

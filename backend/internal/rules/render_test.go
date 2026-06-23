@@ -12,16 +12,16 @@ import (
 func TestCompileRendersEveryType(t *testing.T) {
 	def := catalog.Definition{
 		ID: "rp_all", Name: "All Types", Version: "1.0.0",
-		SQLTemplate: "SELECT * WHERE n > {{params.threshold}} AND r < {{params.ratio}} " +
-			"AND strict = {{params.strict}} AND name = {{params.name}} " +
-			"AND mode = {{params.mode}} AND cmd IN {{params.cmds}}",
+		SQLTemplate: "SELECT * WHERE n > {{ .Config.threshold }} AND r < {{ .Config.ratio }} " +
+			"AND strict = {{ .Config.strict }} AND name = {{ .Config.name }} " +
+			"AND mode = {{ .Config.mode }} AND cmd IN {{ .Config.cmds }}",
 		Parameters: []catalog.Parameter{
-			{ID: "threshold", Type: "integer", Default: 10},
-			{ID: "ratio", Type: "number", Default: 0.5},
-			{ID: "strict", Type: "boolean", Default: false},
-			{ID: "name", Type: "string", Default: "bash"},
-			{ID: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block"}},
-			{ID: "cmds", Type: "string_list", Default: []any{"rm", "dd"}},
+			{Key: "threshold", Type: "integer", Default: 10},
+			{Key: "ratio", Type: "number", Default: 0.5},
+			{Key: "strict", Type: "boolean", Default: false},
+			{Key: "name", Type: "string", Default: "bash"},
+			{Key: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block"}},
+			{Key: "cmds", Type: "string_list", Default: []any{"rm", "dd"}},
 		},
 	}
 	c, err := Compile(def, map[string]any{
@@ -64,8 +64,8 @@ func TestCompileRendersEveryType(t *testing.T) {
 func TestCompileNumberRenderingIsCanonicalDecimal(t *testing.T) {
 	def := catalog.Definition{
 		ID: "rp_num", Name: "Num", Version: "1.0.0",
-		SQLTemplate: "SELECT {{params.v}}",
-		Parameters:  []catalog.Parameter{{ID: "v", Type: "number", Default: 0.0}},
+		SQLTemplate: "SELECT {{ .Config.v }}",
+		Parameters:  []catalog.Parameter{{Key: "v", Type: "number", Default: 0.0}},
 	}
 	cases := []struct {
 		value any
@@ -92,7 +92,7 @@ func TestCompileNumberRenderingIsCanonicalDecimal(t *testing.T) {
 // directly: normalizeValue already rejects NaN/Inf, but renderValue must
 // re-reject them for symmetry with its other type assertions.
 func TestRenderValueRejectsNonFiniteNumber(t *testing.T) {
-	p := catalog.Parameter{ID: "ratio", Type: "number", Default: 0.5}
+	p := catalog.Parameter{Key: "ratio", Type: "number", Default: 0.5}
 	for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
 		if _, err := renderValue(p, v); err == nil || !strings.Contains(err.Error(), "non-finite") {
 			t.Fatalf("renderValue(%v) error = %v, want non-finite rejection", v, err)
@@ -106,8 +106,8 @@ func TestRenderValueRejectsNonFiniteNumber(t *testing.T) {
 func TestStringEscaping(t *testing.T) {
 	def := catalog.Definition{
 		ID: "rp_esc", Name: "Esc", Version: "1.0.0",
-		SQLTemplate: "SELECT {{params.s}}",
-		Parameters:  []catalog.Parameter{{ID: "s", Type: "string", Default: "x"}},
+		SQLTemplate: "SELECT {{ .Config.s }}",
+		Parameters:  []catalog.Parameter{{Key: "s", Type: "string", Default: "x"}},
 	}
 	cases := []struct {
 		name  string
@@ -138,8 +138,8 @@ func TestStringEscaping(t *testing.T) {
 func TestStringListEscaping(t *testing.T) {
 	def := catalog.Definition{
 		ID: "rp_lst", Name: "List", Version: "1.0.0",
-		SQLTemplate: "SELECT cmd IN {{params.cmds}}",
-		Parameters:  []catalog.Parameter{{ID: "cmds", Type: "string_list", Default: []any{"x"}}},
+		SQLTemplate: "SELECT cmd IN {{ .Config.cmds }}",
+		Parameters:  []catalog.Parameter{{Key: "cmds", Type: "string_list", Default: []any{"x"}}},
 	}
 	c, err := Compile(def, map[string]any{"cmds": []any{`rm -rf '/'`, `pa\th`, "ok"}})
 	if err != nil {
@@ -154,8 +154,8 @@ func TestStringListEscaping(t *testing.T) {
 func TestPlaceholderRepeatedOK(t *testing.T) {
 	def := catalog.Definition{
 		ID: "rp_rep", Name: "Rep", Version: "1.0.0",
-		SQLTemplate: "SELECT {{params.n}} + {{params.n}} + {{params.n}}",
-		Parameters:  []catalog.Parameter{{ID: "n", Type: "integer", Default: 2}},
+		SQLTemplate: "SELECT {{ .Config.n }} + {{ .Config.n }} + {{ .Config.n }}",
+		Parameters:  []catalog.Parameter{{Key: "n", Type: "integer", Default: 2}},
 	}
 	c, err := Compile(def, nil)
 	if err != nil {
@@ -186,24 +186,24 @@ func TestZeroParameterTemplateIsByteIdentical(t *testing.T) {
 }
 
 func TestTemplateErrors(t *testing.T) {
-	param := catalog.Parameter{ID: "x", Type: "integer", Default: 1}
+	param := catalog.Parameter{Key: "x", Type: "integer", Default: 1}
 	cases := []struct {
 		name    string
 		tmpl    string
 		params  []catalog.Parameter
 		wantErr string
 	}{
-		{"unknown placeholder", "SELECT {{params.x}} {{params.unknown}}", []catalog.Parameter{param}, "does not match any declared parameter"},
+		{"unknown placeholder", "SELECT {{ .Config.x }} {{ .Config.unknown }}", []catalog.Parameter{param}, "does not match any declared parameter"},
 		{"template action", "SELECT {{if x}}1{{end}}", nil, "invalid placeholder"},
-		{"spaces inside", "SELECT {{ params.x }}", []catalog.Parameter{param}, "invalid placeholder"},
-		{"trailing space in id", "SELECT {{params.x }} {{params.x}}", []catalog.Parameter{param}, "invalid placeholder"},
-		{"unterminated", "SELECT {{params.x", []catalog.Parameter{param}, "unclosed '{{'"},
-		{"unterminated after valid", "SELECT {{params.x}} AND {{params.x", []catalog.Parameter{param}, "unclosed '{{'"},
+		{"legacy params namespace", "SELECT {{params.x}}", []catalog.Parameter{param}, "invalid placeholder"},
+		{"trailing space in key", "SELECT {{params.x }} {{params.x}}", []catalog.Parameter{param}, "invalid placeholder"},
+		{"unterminated", "SELECT {{ .Config.x", []catalog.Parameter{param}, "unclosed '{{'"},
+		{"unterminated after valid", "SELECT {{ .Config.x }} AND {{ .Config.x", []catalog.Parameter{param}, "unclosed '{{'"},
 		{"declared param never used", "SELECT 1", []catalog.Parameter{param}, `parameter "x" is never used`},
-		{"empty id", "SELECT {{params.}}", []catalog.Parameter{param}, "invalid placeholder"},
+		{"empty key", "SELECT {{.Config.}}", []catalog.Parameter{param}, "invalid placeholder"},
 		{"wrong namespace", "SELECT {{values.x}}", []catalog.Parameter{param}, "invalid placeholder"},
-		{"uppercase id", "SELECT {{params.X}} {{params.x}}", []catalog.Parameter{param}, "invalid placeholder"},
-		{"nested open", "SELECT {{params.a{{params.x}}", []catalog.Parameter{param}, "invalid placeholder"},
+		{"uppercase key", "SELECT {{.Config.X}} {{.Config.x}}", []catalog.Parameter{param}, "invalid placeholder"},
+		{"nested open", "SELECT {{.Config.a{{.Config.x}}", []catalog.Parameter{param}, "invalid placeholder"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -223,10 +223,10 @@ func TestTemplateErrors(t *testing.T) {
 func TestCompileDropsDefaultEqualOverrides(t *testing.T) {
 	def := catalog.Definition{
 		ID: "rp_canon", Name: "Canon", Version: "1.0.0",
-		SQLTemplate: "SELECT {{params.n}}, {{params.cmds}}",
+		SQLTemplate: "SELECT {{ .Config.n }}, {{ .Config.cmds }}",
 		Parameters: []catalog.Parameter{
-			{ID: "n", Type: "integer", Default: 10},
-			{ID: "cmds", Type: "string_list", Default: []any{"rm", "dd"}},
+			{Key: "n", Type: "integer", Default: 10},
+			{Key: "cmds", Type: "string_list", Default: []any{"rm", "dd"}},
 		},
 	}
 	// Both overrides equal the defaults after normalization → dropped.
@@ -250,8 +250,8 @@ func TestCompileDropsDefaultEqualOverrides(t *testing.T) {
 func TestCompileRejectsInvalidDefaults(t *testing.T) {
 	def := catalog.Definition{
 		ID: "rp_baddef", Name: "Bad", Version: "1.0.0",
-		SQLTemplate: "SELECT {{params.n}}",
-		Parameters:  []catalog.Parameter{{ID: "n", Type: "integer", Default: "ten"}},
+		SQLTemplate: "SELECT {{ .Config.n }}",
+		Parameters:  []catalog.Parameter{{Key: "n", Type: "integer", Default: "ten"}},
 	}
 	if _, err := Compile(def, nil); err == nil {
 		t.Fatal("Compile must reject a definition whose default does not normalize")
@@ -266,23 +266,23 @@ func FuzzScanPlaceholders(f *testing.F) {
 	seeds := []string{
 		"",
 		"SELECT 1",
-		"SELECT {{params.alpha}}",
-		"SELECT {{params.alpha}} AND {{params.beta}}",
-		"SELECT {{params.alpha}} AND {{params.alpha}}",
-		"SELECT {{params.unknown}}",
-		"SELECT {{ params.alpha }}",
-		"SELECT {{params.alpha",
+		"SELECT {{ .Config.alpha }}",
+		"SELECT {{ .Config.alpha }} AND {{ .Config.beta }}",
+		"SELECT {{ .Config.alpha }} AND {{ .Config.alpha }}",
+		"SELECT {{ .Config.unknown }}",
+		"SELECT {{.Config.alpha}}",
+		"SELECT {{ .Config.alpha",
 		"{{",
 		"}}",
 		"{{}}",
-		"{{params.}}",
+		"{{.Config.}}",
 		"{{if x}}{{end}}",
-		"{{params.alpha}}{{params.beta}}",
-		"{{{params.alpha}}}",
-		"{{params.alpha{{params.beta}}",
-		"héllo 世界 {{params.alpha}} 🚀",
-		"SELECT '{{params.alpha}}' || '\\'",
-		strings.Repeat("{", 7) + "params.alpha" + strings.Repeat("}", 7),
+		"{{ .Config.alpha }}{{ .Config.beta }}",
+		"{{{ .Config.alpha }}}",
+		"{{ .Config.alpha {{ .Config.beta }}",
+		"héllo 世界 {{ .Config.alpha }} 🚀",
+		"SELECT '{{ .Config.alpha }}' || '\\'",
+		strings.Repeat("{", 7) + ".Config.alpha" + strings.Repeat("}", 7),
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -297,16 +297,19 @@ func FuzzScanPlaceholders(f *testing.F) {
 			if ph.Start < 0 || ph.End > len(tmpl) || ph.Start >= ph.End {
 				t.Fatalf("placeholder offsets out of range: %+v in %q", ph, tmpl)
 			}
-			if got := tmpl[ph.Start:ph.End]; got != "{{params."+ph.ID+"}}" {
-				t.Fatalf("offsets do not reconstruct token: %q vs id %q", got, ph.ID)
+			// The token bytes are {{ + (optional whitespace) + .Config.<key> + (optional whitespace) + }}.
+			got := tmpl[ph.Start:ph.End]
+			inner := strings.TrimSpace(got[2 : len(got)-2])
+			if inner != ".Config."+ph.ID {
+				t.Fatalf("offsets do not reconstruct token: inner=%q vs key %q", inner, ph.ID)
 			}
 		}
 		def := catalog.Definition{
 			ID: "rp_fuzz", Name: "Fuzz", Version: "1.0.0",
 			SQLTemplate: tmpl,
 			Parameters: []catalog.Parameter{
-				{ID: "alpha", Type: "integer", Default: 1},
-				{ID: "beta", Type: "string", Default: "x"},
+				{Key: "alpha", Type: "integer", Default: 1},
+				{Key: "beta", Type: "string", Default: "x"},
 			},
 		}
 		if verr := ValidateTemplate(def); verr == nil {

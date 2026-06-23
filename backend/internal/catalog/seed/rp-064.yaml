@@ -29,8 +29,8 @@ tags:
   - owasp-llm04
   - arxiv-2601.17566
   - metrics
-parameters:
-  - id: tool_call_rate_threshold
+config:
+  - key: tool_call_rate_threshold
     label: "Tool-call rate threshold"
     description: "Maximum tool.call events per session in the 5-minute window before the metrics branch flags reasoning inflation."
     type: integer
@@ -149,4 +149,4 @@ sql_template: |
   WHERE metric_name = 'tool.call'
     AND event_time > now() - INTERVAL 5 MINUTE
   GROUP BY session_id, agent_id, deployment_id
-  HAVING count() > {{params.tool_call_rate_threshold}}
+  HAVING count() > {{ .Config.tool_call_rate_threshold }}

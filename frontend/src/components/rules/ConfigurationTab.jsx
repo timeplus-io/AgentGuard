@@ -10,8 +10,8 @@ import { api } from '../../api/client'
 // Props:
 //   ruleId    – rule id
 //   schema    – ordered array of parameter definitions
-//   defaults  – { id: normalizedDefault }
-//   effective – { id: effectiveValue } (defaults overlaid with current overrides)
+//   defaults  – { key: normalizedDefault }
+//   effective – { key: effectiveValue } (defaults overlaid with current overrides)
 //   onSaved(updatedInstance) – called after a successful configuration save
 export default function ConfigurationTab({ ruleId, schema, defaults, effective, onSaved }) {
   // baseline is the last-saved effective config; edits diff against it.
@@ -59,7 +59,7 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
   const resetOne = (id) => setOne(id, defaults[id])
   const resetAll = () => {
     const next = {}
-    for (const p of schema) next[p.id] = defaults[p.id]
+    for (const p of schema) next[p.key] = defaults[p.key]
     setValues(next)
     setFieldErrorsFromServer({})
   }
@@ -107,14 +107,14 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
       <div className="space-y-3">
         {schema.map((p) => (
           <ParamField
-            key={p.id}
+            key={p.key}
             param={p}
-            value={values[p.id]}
-            defaultValue={defaults[p.id]}
-            overridden={!deepEqual(values[p.id], defaults[p.id])}
-            error={errors[p.id]}
-            onChange={(v) => setOne(p.id, v)}
-            onReset={() => resetOne(p.id)}
+            value={values[p.key]}
+            defaultValue={defaults[p.key]}
+            overridden={!deepEqual(values[p.key], defaults[p.key])}
+            error={errors[p.key]}
+            onChange={(v) => setOne(p.key, v)}
+            onReset={() => resetOne(p.key)}
           />
         ))}
       </div>
@@ -155,14 +155,14 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
 function buildInitial(schema, effective, defaults) {
   const out = {}
   for (const p of schema || []) {
-    const v = effective?.[p.id] ?? defaults?.[p.id]
-    out[p.id] = Array.isArray(v) ? [...v] : v
+    const v = effective?.[p.key] ?? defaults?.[p.key]
+    out[p.key] = Array.isArray(v) ? [...v] : v
   }
   return out
 }
 
 function someOverridden(values, defaults) {
-  return Object.keys(values).some((id) => !deepEqual(values[id], defaults[id]))
+  return Object.keys(values).some((key) => !deepEqual(values[key], defaults[key]))
 }
 
 // validateAll mirrors the backend's per-type constraints for immediate feedback.
@@ -170,8 +170,8 @@ function someOverridden(values, defaults) {
 function validateAll(schema, values) {
   const errs = {}
   for (const p of schema || []) {
-    const e = validateOne(p, values[p.id])
-    if (e) errs[p.id] = e
+    const e = validateOne(p, values[p.key])
+    if (e) errs[p.key] = e
   }
   return errs
 }

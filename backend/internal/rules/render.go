@@ -10,16 +10,19 @@ import (
 )
 
 // placeholderPrefix is the only namespace allowed inside {{...}}.
-const placeholderPrefix = "params."
+// The /apps authoring surface uses {{ .Config.<key> }} — whitespace around
+// the inner expression is tolerated by the scanner (trimmed before prefix check).
+const placeholderPrefix = ".Config."
 
-// The strict syntax for the <id> part of a placeholder is
+// The strict syntax for the <key> part of a placeholder is
 // catalog.ValidParameterID — the same rule catalog enforces on declared
-// parameter IDs — so the scanner rejects anything (whitespace, uppercase,
-// punctuation) that could never be a declared ID, even against a hand-built
+// parameter keys — so the scanner rejects anything (whitespace, uppercase,
+// punctuation) that could never be a declared key, even against a hand-built
 // definition that skipped catalog validation, and the two rules cannot drift.
 
-// placeholder is one {{params.<id>}} occurrence in a template.
+// placeholder is one {{ .Config.<key> }} occurrence in a template.
 // Start/End are byte offsets of the full token including braces.
+// ID holds the captured <key> value (field name kept as ID for internal use).
 type placeholder struct {
 	Start int
 	End   int
@@ -27,11 +30,11 @@ type placeholder struct {
 }
 
 // scanPlaceholders finds every `{{` occurrence in the template and parses it
-// as a strict placeholder. The syntax is exactly `{{params.<id>}}` — no
-// whitespace tolerance, no other namespaces, no template actions. Any `{{`
-// that is not followed by a well-formed placeholder is an error, including a
-// `{{` with no closing `}}`. Whether <id> is declared by the definition is
-// the caller's concern.
+// as a strict placeholder. The syntax is `{{ .Config.<key> }}` — surrounding
+// whitespace inside the braces is tolerated (trimmed), but no other namespaces
+// or template actions are accepted. Any `{{` that is not followed by a
+// well-formed placeholder is an error, including a `{{` with no closing `}}`.
+// Whether <key> is declared by the definition is the caller's concern.
 func scanPlaceholders(template string) ([]placeholder, error) {
 	var out []placeholder
 	for i := 0; ; {
@@ -45,10 +48,10 @@ func scanPlaceholders(template string) ([]placeholder, error) {
 		if k < 0 {
 			return nil, fmt.Errorf("sql_template: unclosed '{{' at byte offset %d", start)
 		}
-		inner := rest[:k]
+		inner := strings.TrimSpace(rest[:k])
 		id, ok := strings.CutPrefix(inner, placeholderPrefix)
 		if !ok || !catalog.ValidParameterID(id) {
-			return nil, fmt.Errorf("sql_template: invalid placeholder %q at byte offset %d (expected {{params.<id>}})", "{{"+inner+"}}", start)
+			return nil, fmt.Errorf("sql_template: invalid placeholder %q at byte offset %d (expected {{ .Config.<key> }})", "{{"+rest[:k]+"}}", start)
 		}
 		out = append(out, placeholder{Start: start, End: start + 2 + k + 2, ID: id})
 		i = start + 2 + k + 2
@@ -78,13 +81,13 @@ func validateTemplate(def catalog.Definition) error {
 	used := make(map[string]bool, len(params))
 	for _, ph := range phs {
 		if _, ok := params[ph.ID]; !ok {
-			return fmt.Errorf("sql_template: placeholder {{params.%s}} does not match any declared parameter", ph.ID)
+			return fmt.Errorf("sql_template: placeholder {{ .Config.%s }} does not match any declared parameter", ph.ID)
 		}
 		used[ph.ID] = true
 	}
 	for _, p := range def.Parameters {
-		if !used[p.ID] {
-			return fmt.Errorf("sql_template: declared parameter %q is never used", p.ID)
+		if !used[p.Key] {
+			return fmt.Errorf("sql_template: declared parameter %q is never used", p.Key)
 		}
 	}
 	return nil
@@ -112,20 +115,20 @@ func renderValue(p catalog.Parameter, v any) (string, error) {
 	case "integer":
 		i, ok := v.(int64)
 		if !ok {
-			return "", fmt.Errorf("parameter %q: internal: expected int64, got %T", p.ID, v)
+			return "", fmt.Errorf("parameter %q: internal: expected int64, got %T", p.Key, v)
 		}
 		return strconv.FormatInt(i, 10), nil
 
 	case "number":
 		f, ok := v.(float64)
 		if !ok {
-			return "", fmt.Errorf("parameter %q: internal: expected float64, got %T", p.ID, v)
+			return "", fmt.Errorf("parameter %q: internal: expected float64, got %T", p.Key, v)
 		}
 		// normalizeValue already rejects non-finite numbers; re-check here for
 		// symmetry with the other type assertions, since NaN/Inf have no SQL
 		// literal form.
 		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return "", fmt.Errorf("parameter %q: internal: non-finite number cannot be rendered", p.ID)
+			return "", fmt.Errorf("parameter %q: internal: non-finite number cannot be rendered", p.Key)
 		}
 		// 'f' format: canonical decimal, never exponent notation in SQL.
 		return strconv.FormatFloat(f, 'f', -1, 64), nil
@@ -133,7 +136,7 @@ func renderValue(p catalog.Parameter, v any) (string, error) {
 	case "boolean":
 		b, ok := v.(bool)
 		if !ok {
-			return "", fmt.Errorf("parameter %q: internal: expected bool, got %T", p.ID, v)
+			return "", fmt.Errorf("parameter %q: internal: expected bool, got %T", p.Key, v)
 		}
 		if b {
 			return "true", nil
@@ -143,17 +146,17 @@ func renderValue(p catalog.Parameter, v any) (string, error) {
 	case "string", "enum":
 		s, ok := v.(string)
 		if !ok {
-			return "", fmt.Errorf("parameter %q: internal: expected string, got %T", p.ID, v)
+			return "", fmt.Errorf("parameter %q: internal: expected string, got %T", p.Key, v)
 		}
 		return renderStringLiteral(s), nil
 
 	case "string_list":
 		items, ok := v.([]string)
 		if !ok {
-			return "", fmt.Errorf("parameter %q: internal: expected []string, got %T", p.ID, v)
+			return "", fmt.Errorf("parameter %q: internal: expected []string, got %T", p.Key, v)
 		}
 		if len(items) == 0 {
-			return "", fmt.Errorf("parameter %q: internal: empty list cannot be rendered", p.ID)
+			return "", fmt.Errorf("parameter %q: internal: empty list cannot be rendered", p.Key)
 		}
 		parts := make([]string, len(items))
 		for i, item := range items {
@@ -166,7 +169,7 @@ func renderValue(p catalog.Parameter, v any) (string, error) {
 	// case "duration":
 
 	default:
-		return "", fmt.Errorf("parameter %q: unsupported parameter type %q", p.ID, p.Type)
+		return "", fmt.Errorf("parameter %q: unsupported parameter type %q", p.Key, p.Type)
 	}
 }
 
@@ -187,7 +190,7 @@ func renderTemplate(def catalog.Definition, values map[string]any) (string, erro
 	for _, ph := range phs {
 		p, ok := params[ph.ID]
 		if !ok {
-			return "", fmt.Errorf("sql_template: placeholder {{params.%s}} does not match any declared parameter", ph.ID)
+			return "", fmt.Errorf("sql_template: placeholder {{ .Config.%s }} does not match any declared parameter", ph.ID)
 		}
 		v, ok := values[ph.ID]
 		if !ok {

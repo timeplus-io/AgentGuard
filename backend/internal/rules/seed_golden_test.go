@@ -55,11 +55,14 @@ func TestSeedDefinitionsCompileWithDefaults(t *testing.T) {
 // performs a pure in-place substitution and the parameterization introduced no
 // other change to the SQL (behavior preservation), independent of brittle
 // whole-file golden strings.
+//
+// ph is the exact placeholder string as written in the seed YAML, e.g.
+// "{{ .Config.dangerous_tools }}" (with surrounding spaces).
 func assertDefaultsRenderInPlace(t *testing.T, d catalog.Definition, literals map[string]string) {
 	t.Helper()
 	expected := d.SQLTemplate
 	for id, lit := range literals {
-		ph := "{{params." + id + "}}"
+		ph := "{{ .Config." + id + " }}"
 		if !strings.Contains(expected, ph) {
 			t.Fatalf("%s: template is missing placeholder %s", d.ID, ph)
 		}

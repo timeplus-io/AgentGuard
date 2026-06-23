@@ -13,11 +13,11 @@ import (
 	"github.com/timeplus/agentguard/internal/catalog"
 )
 
-// paramIndex builds an ID → Parameter lookup for a definition.
+// paramIndex builds a Key → Parameter lookup for a definition.
 func paramIndex(def catalog.Definition) map[string]catalog.Parameter {
 	idx := make(map[string]catalog.Parameter, len(def.Parameters))
 	for _, p := range def.Parameters {
-		idx[p.ID] = p
+		idx[p.Key] = p
 	}
 	return idx
 }
@@ -314,10 +314,10 @@ func normalizedDefaults(def catalog.Definition) (map[string]any, error) {
 	for _, p := range def.Parameters {
 		nv, err := normalizeValue(p, p.Default)
 		if err != nil {
-			fields = append(fields, FieldError{Parameter: p.ID, Message: "default: " + err.Error()})
+			fields = append(fields, FieldError{Parameter: p.Key, Message: "default: " + err.Error()})
 			continue
 		}
-		out[p.ID] = nv
+		out[p.Key] = nv
 	}
 	if len(fields) > 0 {
 		return nil, &DefinitionError{Kind: DefinitionBadDefault, Fields: fields}

@@ -29,15 +29,15 @@ tags:
   - env-poisoning
   - compound-command
   - aishellack
-parameters:
-  - id: dangerous_tools
+config:
+  - key: dangerous_tools
     label: "Dangerous tools"
     description: "Tool names treated as inherently high-risk shell/exec surfaces."
     type: string_list
     default: [bash, shell, exec, run_terminal_cmd, computer]
     min_items: 1
     max_items: 64
-  - id: command_chain_threshold
+  - key: command_chain_threshold
     label: "Maximum chained commands"
     description: "Number of &&-separated subcommands that trips the CC-643 compound-command complexity-evasion branch."
     type: integer
@@ -83,7 +83,7 @@ sql_template: |
   WHERE event_type = 'tool_invoke'
     AND (
       -- Original: dangerous tool names
-         lower(tool_name) IN {{params.dangerous_tools}}
+         lower(tool_name) IN {{ .Config.dangerous_tools }}
       -- Original: dangerous command patterns
       OR lower(tool_input) LIKE '%sudo %'
       OR lower(tool_input) LIKE '%rm -rf%'
@@ -121,5 +121,5 @@ sql_template: |
       -- v1.2.0: CC-643 compound command complexity evasion (Claude Code deny-rule bypass)
       -- N+ occurrences of '&&' detected via string length diff (RE2 lacks {N,} open quantifier)
       -- (length - length_without_&&) / 2 = number of '&&' pairs present
-      OR ((length(tool_input) - length(replace_all(tool_input, '&&', ''))) / 2) >= {{params.command_chain_threshold}}
+      OR ((length(tool_input) - length(replace_all(tool_input, '&&', ''))) / 2) >= {{ .Config.command_chain_threshold }}
     )

@@ -20,7 +20,7 @@ func defWith(params ...catalog.Parameter) catalog.Definition {
 	var b strings.Builder
 	b.WriteString("SELECT 1")
 	for _, p := range params {
-		b.WriteString(" /* {{params." + p.ID + "}} */")
+		b.WriteString(" /* {{ .Config." + p.Key + " }} */")
 	}
 	return catalog.Definition{
 		ID:          "rp_test",
@@ -56,7 +56,7 @@ func fieldErr(t *testing.T, err error, param string) FieldError {
 // Save/Import: it must pass a clean definition and reject both a template that
 // ignores a declared parameter and a default that violates its own constraint.
 func TestValidateDefinition(t *testing.T) {
-	okParam := catalog.Parameter{ID: "t", Label: "t", Type: "integer", Default: int64(15), Min: fptr(1), Max: fptr(100)}
+	okParam := catalog.Parameter{Key: "t", Label: "t", Type: "integer", Default: int64(15), Min: fptr(1), Max: fptr(100)}
 
 	if err := ValidateDefinition(defWith(okParam)); err != nil {
 		t.Fatalf("clean definition should validate, got %v", err)
@@ -70,14 +70,14 @@ func TestValidateDefinition(t *testing.T) {
 	}
 
 	// Default 999 is outside the declared [1,100] range → defaults compile fails.
-	badDefault := catalog.Parameter{ID: "t", Label: "t", Type: "integer", Default: int64(999), Min: fptr(1), Max: fptr(100)}
+	badDefault := catalog.Parameter{Key: "t", Label: "t", Type: "integer", Default: int64(999), Min: fptr(1), Max: fptr(100)}
 	if err := ValidateDefinition(defWith(badDefault)); err == nil {
 		t.Errorf("default outside [min,max] must fail")
 	}
 }
 
 func TestNormalizeOverridesInteger(t *testing.T) {
-	p := catalog.Parameter{ID: "threshold", Type: "integer", Default: 10, Min: fptr(1), Max: fptr(100)}
+	p := catalog.Parameter{Key: "threshold", Type: "integer", Default: 10, Min: fptr(1), Max: fptr(100)}
 	def := defWith(p)
 
 	cases := []struct {
@@ -124,7 +124,7 @@ func TestNormalizeOverridesInteger(t *testing.T) {
 func TestNormalizeOverridesIntegerRangeOverflow(t *testing.T) {
 	// Without Min/Max, a float64 beyond int64 must be rejected as out of
 	// range rather than silently wrapped.
-	p := catalog.Parameter{ID: "n", Type: "integer", Default: 0}
+	p := catalog.Parameter{Key: "n", Type: "integer", Default: 0}
 	def := defWith(p)
 	for _, v := range []any{1e300, float64(math.MaxInt64)} { // 2^63 not representable as int64
 		_, err := NormalizeOverrides(def, map[string]any{"n": v})
@@ -149,7 +149,7 @@ func TestNormalizeOverridesIntegerBoundCheckableRange(t *testing.T) {
 
 	// With Min/Max declared, bound checks happen in float64 — values beyond
 	// ±2^53 would silently round, so they are rejected instead.
-	bounded := defWith(catalog.Parameter{ID: "n", Type: "integer", Default: 1, Max: fptr(1e18)})
+	bounded := defWith(catalog.Parameter{Key: "n", Type: "integer", Default: 1, Max: fptr(1e18)})
 	for _, v := range []any{huge, negHuge, int64(1) << 60} {
 		_, err := NormalizeOverrides(bounded, map[string]any{"n": v})
 		fe := fieldErr(t, err, "n")
@@ -169,7 +169,7 @@ func TestNormalizeOverridesIntegerBoundCheckableRange(t *testing.T) {
 
 	// Without bounds there is nothing to compare against; large exact
 	// integers are accepted unchanged.
-	unbounded := defWith(catalog.Parameter{ID: "n", Type: "integer", Default: 1})
+	unbounded := defWith(catalog.Parameter{Key: "n", Type: "integer", Default: 1})
 	got, err = NormalizeOverrides(unbounded, map[string]any{"n": huge})
 	if err != nil {
 		t.Fatalf("unbounded large integer should normalize: %v", err)
@@ -180,14 +180,14 @@ func TestNormalizeOverridesIntegerBoundCheckableRange(t *testing.T) {
 }
 
 func TestNormalizeOverridesRejectsNUL(t *testing.T) {
-	strDef := defWith(catalog.Parameter{ID: "pattern", Type: "string", Default: "abc"})
+	strDef := defWith(catalog.Parameter{Key: "pattern", Type: "string", Default: "abc"})
 	_, err := NormalizeOverrides(strDef, map[string]any{"pattern": "a\x00b"})
 	fe := fieldErr(t, err, "pattern")
 	if !strings.Contains(fe.Message, "NUL") {
 		t.Fatalf("string message %q should mention NUL", fe.Message)
 	}
 
-	listDef := defWith(catalog.Parameter{ID: "cmds", Type: "string_list", Default: []any{"rm"}})
+	listDef := defWith(catalog.Parameter{Key: "cmds", Type: "string_list", Default: []any{"rm"}})
 	_, err = NormalizeOverrides(listDef, map[string]any{"cmds": []any{"ok", "bad\x00"}})
 	fe = fieldErr(t, err, "cmds")
 	if !strings.Contains(fe.Message, "item 1") || !strings.Contains(fe.Message, "NUL") {
@@ -205,7 +205,7 @@ func TestNormalizeOverridesRejectsNUL(t *testing.T) {
 }
 
 func TestNormalizeOverridesNumber(t *testing.T) {
-	p := catalog.Parameter{ID: "ratio", Type: "number", Default: 0.5, Min: fptr(0), Max: fptr(1)}
+	p := catalog.Parameter{Key: "ratio", Type: "number", Default: 0.5, Min: fptr(0), Max: fptr(1)}
 	def := defWith(p)
 
 	cases := []struct {
@@ -246,7 +246,7 @@ func TestNormalizeOverridesNumber(t *testing.T) {
 }
 
 func TestNormalizeOverridesBoolean(t *testing.T) {
-	p := catalog.Parameter{ID: "strict", Type: "boolean", Default: false}
+	p := catalog.Parameter{Key: "strict", Type: "boolean", Default: false}
 	def := defWith(p)
 
 	got, err := NormalizeOverrides(def, map[string]any{"strict": true})
@@ -270,7 +270,7 @@ func TestNormalizeOverridesBoolean(t *testing.T) {
 }
 
 func TestNormalizeOverridesString(t *testing.T) {
-	p := catalog.Parameter{ID: "pattern", Type: "string", Default: "abc", MinLength: iptr(2), MaxLength: iptr(5)}
+	p := catalog.Parameter{Key: "pattern", Type: "string", Default: "abc", MinLength: iptr(2), MaxLength: iptr(5)}
 	def := defWith(p)
 
 	cases := []struct {
@@ -305,7 +305,7 @@ func TestNormalizeOverridesString(t *testing.T) {
 }
 
 func TestNormalizeOverridesEnum(t *testing.T) {
-	p := catalog.Parameter{ID: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block"}}
+	p := catalog.Parameter{Key: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block"}}
 	def := defWith(p)
 
 	got, err := NormalizeOverrides(def, map[string]any{"mode": "block"})
@@ -326,7 +326,7 @@ func TestNormalizeOverridesEnum(t *testing.T) {
 	fieldErr(t, err, "mode")
 
 	// Enum with no options is a definition bug, surfaced as a field error.
-	bad := defWith(catalog.Parameter{ID: "mode", Type: "enum", Default: "x"})
+	bad := defWith(catalog.Parameter{Key: "mode", Type: "enum", Default: "x"})
 	_, err = NormalizeOverrides(bad, map[string]any{"mode": "x"})
 	fe = fieldErr(t, err, "mode")
 	if !strings.Contains(fe.Message, "no options") {
@@ -336,7 +336,7 @@ func TestNormalizeOverridesEnum(t *testing.T) {
 
 func TestNormalizeOverridesStringList(t *testing.T) {
 	p := catalog.Parameter{
-		ID: "cmds", Type: "string_list", Default: []any{"rm"},
+		Key: "cmds", Type: "string_list", Default: []any{"rm"},
 		MinItems: iptr(1), MaxItems: iptr(3),
 		MinLength: iptr(2), MaxLength: iptr(10),
 	}
@@ -380,7 +380,7 @@ func TestNormalizeOverridesStringList(t *testing.T) {
 }
 
 func TestNormalizeOverridesEmptyListRejectedEvenWithoutMinItems(t *testing.T) {
-	p := catalog.Parameter{ID: "cmds", Type: "string_list", Default: []any{"rm"}}
+	p := catalog.Parameter{Key: "cmds", Type: "string_list", Default: []any{"rm"}}
 	def := defWith(p)
 	_, err := NormalizeOverrides(def, map[string]any{"cmds": []any{}})
 	fe := fieldErr(t, err, "cmds")
@@ -390,7 +390,7 @@ func TestNormalizeOverridesEmptyListRejectedEvenWithoutMinItems(t *testing.T) {
 }
 
 func TestNormalizeOverridesUnknownKey(t *testing.T) {
-	def := defWith(catalog.Parameter{ID: "a", Type: "integer", Default: 1})
+	def := defWith(catalog.Parameter{Key: "a", Type: "integer", Default: 1})
 	_, err := NormalizeOverrides(def, map[string]any{"nope": 1.0})
 	fe := fieldErr(t, err, "nope")
 	if fe.Message != "unknown parameter" {
@@ -401,7 +401,7 @@ func TestNormalizeOverridesUnknownKey(t *testing.T) {
 func TestNormalizeOverridesUnsupportedType(t *testing.T) {
 	// regex/duration are Phase B; until then they must fail loudly.
 	for _, typ := range []string{"regex", "duration", "frobnicate"} {
-		def := defWith(catalog.Parameter{ID: "p", Type: typ, Default: "x"})
+		def := defWith(catalog.Parameter{Key: "p", Type: typ, Default: "x"})
 		_, err := NormalizeOverrides(def, map[string]any{"p": "y"})
 		fe := fieldErr(t, err, "p")
 		if !strings.Contains(fe.Message, "unsupported parameter type") {
@@ -412,8 +412,8 @@ func TestNormalizeOverridesUnsupportedType(t *testing.T) {
 
 func TestNormalizeOverridesCollectsAllErrorsDeterministically(t *testing.T) {
 	def := defWith(
-		catalog.Parameter{ID: "a", Type: "integer", Default: 1},
-		catalog.Parameter{ID: "b", Type: "string", Default: "x"},
+		catalog.Parameter{Key: "a", Type: "integer", Default: 1},
+		catalog.Parameter{Key: "b", Type: "string", Default: "x"},
 	)
 	_, err := NormalizeOverrides(def, map[string]any{
 		"b": 1.0,
@@ -439,7 +439,7 @@ func TestNormalizeOverridesCollectsAllErrorsDeterministically(t *testing.T) {
 }
 
 func TestNormalizeOverridesEmptyAndNil(t *testing.T) {
-	def := defWith(catalog.Parameter{ID: "a", Type: "integer", Default: 1})
+	def := defWith(catalog.Parameter{Key: "a", Type: "integer", Default: 1})
 	for _, in := range []map[string]any{nil, {}} {
 		got, err := NormalizeOverrides(def, in)
 		if err != nil {
@@ -453,18 +453,18 @@ func TestNormalizeOverridesEmptyAndNil(t *testing.T) {
 
 func TestValidateDefaults(t *testing.T) {
 	ok := defWith(
-		catalog.Parameter{ID: "a", Type: "integer", Default: 5, Min: fptr(1)},
-		catalog.Parameter{ID: "b", Type: "string_list", Default: []any{"x", "y"}},
-		catalog.Parameter{ID: "c", Type: "enum", Default: "warn", Options: []string{"warn", "block"}},
+		catalog.Parameter{Key: "a", Type: "integer", Default: 5, Min: fptr(1)},
+		catalog.Parameter{Key: "b", Type: "string_list", Default: []any{"x", "y"}},
+		catalog.Parameter{Key: "c", Type: "enum", Default: "warn", Options: []string{"warn", "block"}},
 	)
 	if err := ValidateDefaults(ok); err != nil {
 		t.Fatalf("valid defaults rejected: %v", err)
 	}
 
 	bad := defWith(
-		catalog.Parameter{ID: "a", Type: "integer", Default: 0, Min: fptr(1)},          // below min
-		catalog.Parameter{ID: "b", Type: "enum", Default: "x", Options: []string{"y"}}, // not an option
-		catalog.Parameter{ID: "c", Type: "string_list", Default: []any{}},              // empty list
+		catalog.Parameter{Key: "a", Type: "integer", Default: 0, Min: fptr(1)},          // below min
+		catalog.Parameter{Key: "b", Type: "enum", Default: "x", Options: []string{"y"}}, // not an option
+		catalog.Parameter{Key: "c", Type: "string_list", Default: []any{}},              // empty list
 	)
 	err := ValidateDefaults(bad)
 	var de *DefinitionError
@@ -497,7 +497,7 @@ func TestErrorTaxonomy(t *testing.T) {
 	var de *DefinitionError
 
 	t.Run("bad override", func(t *testing.T) {
-		def := defWith(catalog.Parameter{ID: "n", Type: "integer", Default: 5, Min: fptr(1)})
+		def := defWith(catalog.Parameter{Key: "n", Type: "integer", Default: 5, Min: fptr(1)})
 		_, err := Compile(def, map[string]any{"n": float64(0)})
 		if !errors.As(err, &ve) {
 			t.Fatalf("expected *ValidationError, got %T: %v", err, err)
@@ -508,7 +508,7 @@ func TestErrorTaxonomy(t *testing.T) {
 	})
 
 	t.Run("bad default", func(t *testing.T) {
-		def := defWith(catalog.Parameter{ID: "n", Type: "integer", Default: "ten"})
+		def := defWith(catalog.Parameter{Key: "n", Type: "integer", Default: "ten"})
 		_, err := Compile(def, nil)
 		if !errors.As(err, &de) {
 			t.Fatalf("expected *DefinitionError, got %T: %v", err, err)
@@ -524,8 +524,8 @@ func TestErrorTaxonomy(t *testing.T) {
 	t.Run("bad template", func(t *testing.T) {
 		def := catalog.Definition{
 			ID: "rp_t", Name: "T", Version: "1.0.0",
-			SQLTemplate: "SELECT {{params.unknown}}",
-			Parameters:  []catalog.Parameter{{ID: "n", Type: "integer", Default: 5}},
+			SQLTemplate: "SELECT {{ .Config.unknown }}",
+			Parameters:  []catalog.Parameter{{Key: "n", Type: "integer", Default: 5}},
 		}
 		for name, err := range map[string]error{
 			"ValidateTemplate": ValidateTemplate(def),

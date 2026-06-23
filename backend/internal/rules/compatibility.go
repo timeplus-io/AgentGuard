@@ -50,10 +50,10 @@ func PlanUpgrade(current catalog.Definition, next catalog.Definition, overrides 
 	preservedFrom := make(map[string]string) // next ID → override key it came from
 
 	preserve := func(key string, np catalog.Parameter, v any) {
-		if from, taken := preservedFrom[np.ID]; taken {
+		if from, taken := preservedFrom[np.Key]; taken {
 			res.Conflicts = append(res.Conflicts, CompatibilityIssue{
 				Parameter: key,
-				Message:   fmt.Sprintf("override maps to parameter %q, which is already set by the override for %q", np.ID, from),
+				Message:   fmt.Sprintf("override maps to parameter %q, which is already set by the override for %q", np.Key, from),
 			})
 			return
 		}
@@ -61,12 +61,12 @@ func PlanUpgrade(current catalog.Definition, next catalog.Definition, overrides 
 		if err != nil {
 			res.Conflicts = append(res.Conflicts, CompatibilityIssue{
 				Parameter: key,
-				Message:   fmt.Sprintf("override value no longer valid for parameter %q: %s", np.ID, err.Error()),
+				Message:   fmt.Sprintf("override value no longer valid for parameter %q: %s", np.Key, err.Error()),
 			})
 			return
 		}
-		res.Overrides[np.ID] = nv
-		preservedFrom[np.ID] = key
+		res.Overrides[np.Key] = nv
+		preservedFrom[np.Key] = key
 	}
 
 	for _, k := range sortedKeys(overrides) {
@@ -104,7 +104,7 @@ func PlanUpgrade(current catalog.Definition, next catalog.Definition, overrides 
 			if np.Type != cur.Type {
 				res.Conflicts = append(res.Conflicts, CompatibilityIssue{
 					Parameter: k,
-					Message:   fmt.Sprintf("aliased to %q but type changed from %q to %q", np.ID, cur.Type, np.Type),
+					Message:   fmt.Sprintf("aliased to %q but type changed from %q to %q", np.Key, cur.Type, np.Type),
 				})
 				continue
 			}
@@ -112,7 +112,7 @@ func PlanUpgrade(current catalog.Definition, next catalog.Definition, overrides 
 		default:
 			ids := make([]string, len(targets))
 			for i, t := range targets {
-				ids[i] = t.ID
+				ids[i] = t.Key
 			}
 			res.Conflicts = append(res.Conflicts, CompatibilityIssue{
 				Parameter: k,
@@ -165,10 +165,10 @@ func PlanUpgradeOverrides(next catalog.Definition, overrides map[string]any) Com
 	preservedFrom := make(map[string]string) // next ID → override key it came from
 
 	preserve := func(key string, np catalog.Parameter, v any) {
-		if from, taken := preservedFrom[np.ID]; taken {
+		if from, taken := preservedFrom[np.Key]; taken {
 			res.Conflicts = append(res.Conflicts, CompatibilityIssue{
 				Parameter: key,
-				Message:   fmt.Sprintf("override maps to parameter %q, which is already set by the override for %q", np.ID, from),
+				Message:   fmt.Sprintf("override maps to parameter %q, which is already set by the override for %q", np.Key, from),
 			})
 			return
 		}
@@ -176,12 +176,12 @@ func PlanUpgradeOverrides(next catalog.Definition, overrides map[string]any) Com
 		if err != nil {
 			res.Conflicts = append(res.Conflicts, CompatibilityIssue{
 				Parameter: key,
-				Message:   fmt.Sprintf("override value no longer valid for parameter %q: %s", np.ID, err.Error()),
+				Message:   fmt.Sprintf("override value no longer valid for parameter %q: %s", np.Key, err.Error()),
 			})
 			return
 		}
-		res.Overrides[np.ID] = nv
-		preservedFrom[np.ID] = key
+		res.Overrides[np.Key] = nv
+		preservedFrom[np.Key] = key
 	}
 
 	for _, k := range sortedKeys(overrides) {
@@ -202,7 +202,7 @@ func PlanUpgradeOverrides(next catalog.Definition, overrides map[string]any) Com
 		default:
 			ids := make([]string, len(targets))
 			for i, t := range targets {
-				ids[i] = t.ID
+				ids[i] = t.Key
 			}
 			res.Conflicts = append(res.Conflicts, CompatibilityIssue{
 				Parameter: k,

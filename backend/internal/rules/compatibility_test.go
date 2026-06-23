@@ -26,8 +26,8 @@ func checkAccounting(t *testing.T, in map[string]any, res CompatibilityResult) {
 }
 
 func TestPlanUpgradePreservesCompatibleOverride(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10, Max: fptr(100)})
-	next := defV("2.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 20, Max: fptr(100)})
+	cur := defV("1.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10, Max: fptr(100)})
+	next := defV("2.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 20, Max: fptr(100)})
 	in := map[string]any{"n": int64(42)}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -49,8 +49,8 @@ func TestPlanUpgradePreservesCompatibleOverride(t *testing.T) {
 func TestPlanUpgradeAcceptsRawJSONOverrideValues(t *testing.T) {
 	// Persisted overrides may round-trip through JSON (int64 → float64);
 	// PlanUpgrade must normalize them, not require canonical Go types.
-	cur := defV("1.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10})
-	next := defV("2.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10})
+	cur := defV("1.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10})
+	next := defV("2.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10})
 	res, err := PlanUpgrade(cur, next, map[string]any{"n": float64(42)})
 	if err != nil {
 		t.Fatalf("PlanUpgrade: %v", err)
@@ -61,10 +61,10 @@ func TestPlanUpgradeAcceptsRawJSONOverrideValues(t *testing.T) {
 }
 
 func TestPlanUpgradeNewParameterTakesDefault(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10})
+	cur := defV("1.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10})
 	next := defV("2.0.0",
-		catalog.Parameter{ID: "n", Type: "integer", Default: 10},
-		catalog.Parameter{ID: "extra", Type: "string", Default: "x"},
+		catalog.Parameter{Key: "n", Type: "integer", Default: 10},
+		catalog.Parameter{Key: "extra", Type: "string", Default: "x"},
 	)
 	in := map[string]any{"n": int64(5)}
 	res, err := PlanUpgrade(cur, next, in)
@@ -79,10 +79,10 @@ func TestPlanUpgradeNewParameterTakesDefault(t *testing.T) {
 
 func TestPlanUpgradeRemovedWithoutAliasWarns(t *testing.T) {
 	cur := defV("1.0.0",
-		catalog.Parameter{ID: "n", Type: "integer", Default: 10},
-		catalog.Parameter{ID: "gone", Type: "string", Default: "x"},
+		catalog.Parameter{Key: "n", Type: "integer", Default: 10},
+		catalog.Parameter{Key: "gone", Type: "string", Default: "x"},
 	)
-	next := defV("2.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10})
+	next := defV("2.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10})
 	in := map[string]any{"gone": "custom", "n": int64(5)}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -105,8 +105,8 @@ func TestPlanUpgradeRemovedWithoutAliasWarns(t *testing.T) {
 }
 
 func TestPlanUpgradeAliasMigratesOverride(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "old_name", Type: "string", Default: "x"})
-	next := defV("2.0.0", catalog.Parameter{ID: "new_name", Type: "string", Default: "x", Aliases: []string{"old_name"}})
+	cur := defV("1.0.0", catalog.Parameter{Key: "old_name", Type: "string", Default: "x"})
+	next := defV("2.0.0", catalog.Parameter{Key: "new_name", Type: "string", Default: "x", Aliases: []string{"old_name"}})
 	in := map[string]any{"old_name": "custom"}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -126,8 +126,8 @@ func TestPlanUpgradeAliasMigratesOverride(t *testing.T) {
 }
 
 func TestPlanUpgradeAliasTypeMismatchConflicts(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "old_name", Type: "string", Default: "5"})
-	next := defV("2.0.0", catalog.Parameter{ID: "new_name", Type: "integer", Default: 5, Aliases: []string{"old_name"}})
+	cur := defV("1.0.0", catalog.Parameter{Key: "old_name", Type: "string", Default: "5"})
+	next := defV("2.0.0", catalog.Parameter{Key: "new_name", Type: "integer", Default: 5, Aliases: []string{"old_name"}})
 	in := map[string]any{"old_name": "7"}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -144,8 +144,8 @@ func TestPlanUpgradeAliasTypeMismatchConflicts(t *testing.T) {
 }
 
 func TestPlanUpgradeAliasConstraintViolationConflicts(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "old_name", Type: "integer", Default: 10})
-	next := defV("2.0.0", catalog.Parameter{ID: "new_name", Type: "integer", Default: 10, Max: fptr(50), Aliases: []string{"old_name"}})
+	cur := defV("1.0.0", catalog.Parameter{Key: "old_name", Type: "integer", Default: 10})
+	next := defV("2.0.0", catalog.Parameter{Key: "new_name", Type: "integer", Default: 10, Max: fptr(50), Aliases: []string{"old_name"}})
 	in := map[string]any{"old_name": int64(500)}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -159,12 +159,12 @@ func TestPlanUpgradeAliasConstraintViolationConflicts(t *testing.T) {
 }
 
 func TestPlanUpgradeAliasAmbiguityConflicts(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "old_name", Type: "string", Default: "x"})
+	cur := defV("1.0.0", catalog.Parameter{Key: "old_name", Type: "string", Default: "x"})
 	// Two next parameters both claim the alias — PlanUpgrade must not guess,
 	// even though catalog validation would normally reject this definition.
 	next := defV("2.0.0",
-		catalog.Parameter{ID: "a", Type: "string", Default: "x", Aliases: []string{"old_name"}},
-		catalog.Parameter{ID: "b", Type: "string", Default: "x", Aliases: []string{"old_name"}},
+		catalog.Parameter{Key: "a", Type: "string", Default: "x", Aliases: []string{"old_name"}},
+		catalog.Parameter{Key: "b", Type: "string", Default: "x", Aliases: []string{"old_name"}},
 	)
 	in := map[string]any{"old_name": "custom"}
 
@@ -182,8 +182,8 @@ func TestPlanUpgradeAliasAmbiguityConflicts(t *testing.T) {
 }
 
 func TestPlanUpgradeTypeChangeConflicts(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10})
-	next := defV("2.0.0", catalog.Parameter{ID: "n", Type: "string", Default: "10"})
+	cur := defV("1.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10})
+	next := defV("2.0.0", catalog.Parameter{Key: "n", Type: "string", Default: "10"})
 	in := map[string]any{"n": int64(42)}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -200,8 +200,8 @@ func TestPlanUpgradeTypeChangeConflicts(t *testing.T) {
 }
 
 func TestPlanUpgradeConstraintTighteningConflicts(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10, Max: fptr(1000)})
-	next := defV("2.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10, Max: fptr(50)})
+	cur := defV("1.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10, Max: fptr(1000)})
+	next := defV("2.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10, Max: fptr(50)})
 	in := map[string]any{"n": int64(500)}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -218,8 +218,8 @@ func TestPlanUpgradeConstraintTighteningConflicts(t *testing.T) {
 }
 
 func TestPlanUpgradeEnumOptionNarrowingConflicts(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block", "hold"}})
-	next := defV("2.0.0", catalog.Parameter{ID: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block"}})
+	cur := defV("1.0.0", catalog.Parameter{Key: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block", "hold"}})
+	next := defV("2.0.0", catalog.Parameter{Key: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block"}})
 	in := map[string]any{"mode": "hold"}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -233,8 +233,8 @@ func TestPlanUpgradeEnumOptionNarrowingConflicts(t *testing.T) {
 }
 
 func TestPlanUpgradeStaleOverrideWarns(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10})
-	next := defV("2.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10})
+	cur := defV("1.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10})
+	next := defV("2.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10})
 	in := map[string]any{"phantom": "x"}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -255,10 +255,10 @@ func TestPlanUpgradeDoubleMappingConflicts(t *testing.T) {
 	// for the removed "old_n" target the same next parameter; only one can
 	// win and the other must be a conflict, never a silent overwrite.
 	cur := defV("1.0.0",
-		catalog.Parameter{ID: "n", Type: "integer", Default: 10},
-		catalog.Parameter{ID: "old_n", Type: "integer", Default: 10},
+		catalog.Parameter{Key: "n", Type: "integer", Default: 10},
+		catalog.Parameter{Key: "old_n", Type: "integer", Default: 10},
 	)
-	next := defV("2.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10, Aliases: []string{"old_n"}})
+	next := defV("2.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10, Aliases: []string{"old_n"}})
 	in := map[string]any{"n": int64(1), "old_n": int64(2)}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -284,8 +284,8 @@ func TestPlanUpgradeIDMismatchIsError(t *testing.T) {
 }
 
 func TestPlanUpgradeEmptyOverrides(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 10})
-	next := defV("2.0.0", catalog.Parameter{ID: "n", Type: "integer", Default: 20})
+	cur := defV("1.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10})
+	next := defV("2.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 20})
 	for _, in := range []map[string]any{nil, {}} {
 		res, err := PlanUpgrade(cur, next, in)
 		if err != nil {
@@ -301,15 +301,15 @@ func TestPlanUpgradeAccountingAcrossMixedOutcomes(t *testing.T) {
 	// One of each outcome in a single plan: preserved, alias-migrated,
 	// warned (removed), warned (stale), conflicted (type change).
 	cur := defV("1.0.0",
-		catalog.Parameter{ID: "keep", Type: "integer", Default: 1},
-		catalog.Parameter{ID: "old", Type: "string", Default: "x"},
-		catalog.Parameter{ID: "dead", Type: "boolean", Default: false},
-		catalog.Parameter{ID: "morph", Type: "integer", Default: 1},
+		catalog.Parameter{Key: "keep", Type: "integer", Default: 1},
+		catalog.Parameter{Key: "old", Type: "string", Default: "x"},
+		catalog.Parameter{Key: "dead", Type: "boolean", Default: false},
+		catalog.Parameter{Key: "morph", Type: "integer", Default: 1},
 	)
 	next := defV("2.0.0",
-		catalog.Parameter{ID: "keep", Type: "integer", Default: 1},
-		catalog.Parameter{ID: "renamed", Type: "string", Default: "x", Aliases: []string{"old"}},
-		catalog.Parameter{ID: "morph", Type: "string", Default: "1"},
+		catalog.Parameter{Key: "keep", Type: "integer", Default: 1},
+		catalog.Parameter{Key: "renamed", Type: "string", Default: "x", Aliases: []string{"old"}},
+		catalog.Parameter{Key: "morph", Type: "string", Default: "1"},
 	)
 	in := map[string]any{
 		"keep":    int64(9),

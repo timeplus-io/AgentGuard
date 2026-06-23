@@ -196,7 +196,7 @@ func testDef(id, version string, params ...catalog.Parameter) catalog.Definition
 	var b strings.Builder
 	b.WriteString("SELECT rule_id FROM agentguard_hook_events WHERE true")
 	for _, p := range params {
-		b.WriteString(" AND v = {{params." + p.ID + "}}")
+		b.WriteString(" AND v = {{ .Config." + p.Key + " }}")
 	}
 	return catalog.Definition{
 		ID:                id,
@@ -215,7 +215,7 @@ func testDef(id, version string, params ...catalog.Parameter) catalog.Definition
 }
 
 func intParam(id string, def int64, min, max *float64) catalog.Parameter {
-	return catalog.Parameter{ID: id, Label: id, Type: "integer", Default: def, Min: min, Max: max}
+	return catalog.Parameter{Key: id, Label: id, Type: "integer", Default: def, Min: min, Max: max}
 }
 
 // installedInst fabricates a current snapshot as the store would return it
