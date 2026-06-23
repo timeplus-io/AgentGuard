@@ -376,6 +376,64 @@ func TestCatalogRoutes_RegisterWithoutPanic(t *testing.T) {
 	}
 }
 
+// TestCreateCatalogRule_DuplicateCustomID verifies that POST /rules/catalog returns
+// 409 when the submitted ID already exists as a custom definition, so the handler
+// never silently overwrites an existing entry.
+func TestCreateCatalogRule_DuplicateCustomID(t *testing.T) {
+	mgr := newCatalogManager(t)
+	r := gin.New()
+	r.POST("/rules/catalog", CreateCatalogRule(mgr))
+
+	def := map[string]any{
+		"id": "custom-dup", "name": "Dup Test", "version": "1.0.0",
+		"sql_template": "SELECT event_time AS detected_at, 'custom-dup' AS rule_id FROM agentguard_hook_events",
+	}
+
+	// First creation must succeed.
+	raw, _ := json.Marshal(def)
+	req := httptest.NewRequest(http.MethodPost, "/rules/catalog", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("first create: want 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Second create with the same ID must fail with 409.
+	raw2, _ := json.Marshal(def)
+	req2 := httptest.NewRequest(http.MethodPost, "/rules/catalog", bytes.NewReader(raw2))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusConflict {
+		t.Fatalf("duplicate custom ID: want 409, got %d: %s", w2.Code, w2.Body.String())
+	}
+}
+
+// TestCreateCatalogRule_BuiltinID verifies that POST /rules/catalog returns 409
+// when the submitted ID matches a builtin (seed) definition, preventing the custom
+// creation from shadowing the builtin — consistent with PUT which also returns 409
+// for in-place builtin edits.
+func TestCreateCatalogRule_BuiltinID(t *testing.T) {
+	mgr := newCatalogManager(t) // seeded with rp-003 as builtin
+	r := gin.New()
+	r.POST("/rules/catalog", CreateCatalogRule(mgr))
+
+	def := map[string]any{
+		"id": "rp-003", "name": "Shadow Attempt", "version": "1.0.0",
+		"sql_template": "SELECT event_time AS detected_at, 'rp-003' AS rule_id FROM agentguard_hook_events",
+	}
+	raw, _ := json.Marshal(def)
+	req := httptest.NewRequest(http.MethodPost, "/rules/catalog", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("builtin ID shadow: want 409, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 // TestCreateCatalogRule_UDFConflict verifies that POST /rules/catalog returns 409
 // when the submitted definition declares a UDF function name that is already owned
 // by an existing catalog rule. A UDF name collision is operator-correctable

@@ -146,6 +146,7 @@ export default function RuleCreate({ mode = 'create' }) {
   // Local schema validity: every param key must be present and well-formed.
   const keyErrors = (def.config || []).some((p) => validateKey(p.key) != null)
   const canSave =
+    (isEdit || def.id.trim() !== '') &&
     def.name.trim() !== '' &&
     def.description.trim() !== '' &&
     def.sql_template.trim() !== '' &&
@@ -237,14 +238,14 @@ export default function RuleCreate({ mode = 'create' }) {
 
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="rule-id" className={labelCls}>
-                    Rule ID {isEdit ? '' : <span className="normal-case text-gray-400">(optional)</span>}
+                    Rule ID{!isEdit && ' *'}
                   </label>
                   <input
                     id="rule-id"
                     type="text"
                     value={def.id}
                     onChange={(e) => setField('id', e.target.value)}
-                    placeholder={isEdit ? '' : 'auto-generated if blank'}
+                    placeholder={isEdit ? '' : 'required — lowercase id, e.g. my-rule'}
                     disabled={isEdit}
                     className={`${inputCls} font-mono disabled:opacity-60 disabled:cursor-not-allowed`}
                   />
@@ -414,10 +415,13 @@ export default function RuleCreate({ mode = 'create' }) {
                       <p className="text-xs">Click "Compile preview" to render the detection SQL.</p>
                     </div>
                   ) : renderedSql != null ? (
-                    <pre
-                      className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
-                      dangerouslySetInnerHTML={{ __html: highlight(renderedSql, languages.sql, 'sql') }}
-                    />
+                    <>
+                      {/* Safe: renderedSql is backend-rendered SQL; Prism highlight() HTML-encodes text content before emitting spans — safe only as long as highlight() remains the XSS boundary. */}
+                      <pre
+                        className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
+                        dangerouslySetInnerHTML={{ __html: highlight(renderedSql, languages.sql, 'sql') }}
+                      />
+                    </>
                   ) : null}
                 </div>
               </div>

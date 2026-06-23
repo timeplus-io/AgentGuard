@@ -162,6 +162,10 @@ func CompileCatalogRule() gin.HandlerFunc {
 // It creates a custom Definition (forcing Origin=custom) and publishes it to the
 // local catalog via Manager.Save. It does NOT install the rule — installation is
 // a separate lifecycle action. Returns 201 with the saved Definition.
+//
+// Returns 409 when the submitted ID already exists in the catalog (whether as a
+// custom or builtin entry), mirroring the Clone guard so PUT (which rejects
+// in-place builtin edits with 409) and POST stay consistent.
 func CreateCatalogRule(mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		def, err := decodeDefinitionBody(c)
@@ -170,6 +174,13 @@ func CreateCatalogRule(mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 		def.Origin = catalog.OriginCustom
+		// Guard: reject duplicate IDs (custom or builtin) before Save would
+		// silently overwrite the existing catalog entry. Mirrors Clone's Exists
+		// check so POST/PUT/Clone are consistent: existing ID → 409 ErrExists.
+		if mgr.Exists(def.ID) {
+			respondCatalogError(c, catalog.ErrExists)
+			return
+		}
 		if err := mgr.Save(def); err != nil {
 			respondCatalogError(c, err)
 			return
