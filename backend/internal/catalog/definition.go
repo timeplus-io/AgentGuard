@@ -4,9 +4,21 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+)
+
+// Sentinel errors for catalog operations. Callers can use errors.Is to
+// distinguish error classes without importing implementation details.
+var (
+	// ErrNotFound is returned when a requested definition is not in the catalog.
+	ErrNotFound = errors.New("rule definition not found")
+	// ErrExists is returned when a new definition ID conflicts with an existing one.
+	ErrExists = errors.New("rule definition already exists")
+	// ErrInvalid is returned when a definition fails structural or semantic validation.
+	ErrInvalid = errors.New("invalid rule definition")
 )
 
 // Origin values for a Definition. The catalog loader enforces them:
@@ -232,10 +244,10 @@ func (d Definition) Hash() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Validate performs structural validation of the definition. It owns schema
-// shape only — deep parameter value semantics (e.g. default-vs-min/max
-// consistency) are enforced by the rule compiler, not here.
-func (d Definition) Validate() error {
+// validate is the internal structural-validation implementation. It is
+// separated from the public Validate so the sentinel ErrInvalid can be wrapped
+// exactly once at the public boundary without double-wrapping.
+func (d Definition) validate() error {
 	if d.ID == "" {
 		return fmt.Errorf("id is required")
 	}
@@ -314,6 +326,80 @@ func (d Definition) Validate() error {
 		udfSeen[n] = true
 	}
 	return nil
+}
+
+// Validate performs structural validation of the definition and wraps any
+// error with ErrInvalid so callers can use errors.Is(err, ErrInvalid) to
+// detect schema defects without string matching. It owns schema shape only —
+// deep parameter value semantics (e.g. default-vs-min/max consistency) are
+// enforced by the rule compiler, not here.
+func (d Definition) Validate() error {
+	if err := d.validate(); err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+	return nil
+}
+
+// RescopeUDFs returns a copy of def with all UDF function names (and all
+// references to those names in UDF DDL bodies and SQLTemplate) renamed so they
+// are unique to newID. The naming convention is ag_<normalizedNewID>_<index>
+// where the index is the 0-based position of the UDF in the UDFs slice and
+// dashes in newID are stripped.
+//
+// This is called by Manager.Clone to ensure the clone's UDFs do not collide
+// with the source rule's UDFs in the Timeplus function registry.
+func RescopeUDFs(def Definition, newID string) (Definition, error) {
+	if len(def.UDFs) == 0 {
+		return def, nil
+	}
+
+	norm := strings.ReplaceAll(newID, "-", "")
+
+	oldNames, err := def.UDFNames()
+	if err != nil {
+		return Definition{}, fmt.Errorf("extract source UDF names: %w", err)
+	}
+
+	// Guard: no duplicate source names (Validate already bars this, but
+	// RescopeUDFs can be called independently so we check again).
+	seenOld := make(map[string]bool, len(oldNames))
+	for _, n := range oldNames {
+		if seenOld[n] {
+			return Definition{}, fmt.Errorf("duplicate UDF function name %q in source definition", n)
+		}
+		seenOld[n] = true
+	}
+
+	// Build old→new name map and compile per-name word-boundary regexps.
+	type replacement struct {
+		re      *regexp.Regexp
+		newName string
+	}
+	replacements := make([]replacement, len(oldNames))
+	for i, old := range oldNames {
+		newName := fmt.Sprintf("ag_%s_%d", norm, i)
+		replacements[i] = replacement{
+			re:      regexp.MustCompile(`\b` + regexp.QuoteMeta(old) + `\b`),
+			newName: newName,
+		}
+	}
+
+	rewrite := func(s string) string {
+		for _, r := range replacements {
+			s = r.re.ReplaceAllString(s, r.newName)
+		}
+		return s
+	}
+
+	newUDFs := make([]string, len(def.UDFs))
+	for i, udf := range def.UDFs {
+		newUDFs[i] = rewrite(udf)
+	}
+
+	out := def
+	out.UDFs = newUDFs
+	out.SQLTemplate = rewrite(def.SQLTemplate)
+	return out, nil
 }
 
 // ValidateUDFOwnership rejects a definition that declares a UDF function name

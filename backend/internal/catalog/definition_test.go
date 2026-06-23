@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -564,4 +565,113 @@ func TestSeedFS_AllDefinitionsValid(t *testing.T) {
 			udfOwner[n] = d.ID
 		}
 	}
+}
+
+// TestErrInvalid_IsWrapped verifies that Validate() wraps errors with ErrInvalid
+// so callers can use errors.Is(err, ErrInvalid) to distinguish schema defects.
+func TestErrInvalid_IsWrapped(t *testing.T) {
+	d := Definition{} // missing required fields
+	err := d.Validate()
+	if err == nil {
+		t.Fatal("expected error from empty Definition")
+	}
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("expected ErrInvalid to be wrapped, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "id is required") {
+		t.Fatalf("expected 'id is required' in error, got %q", err.Error())
+	}
+}
+
+// TestRescopeUDFs_RenamesAndRewritesSQLTemplate verifies that RescopeUDFs
+// renames UDF function names to avoid collisions with the source rule after
+// cloning, and that the SQLTemplate references are updated accordingly.
+func TestRescopeUDFs_RenamesAndRewritesSQLTemplate(t *testing.T) {
+	src := Definition{
+		ID:          "rp-003",
+		SQLTemplate: "SELECT ag_rp003_score(tool_input) AS s, ag_rp003_count(session_id) AS c",
+		UDFs: []string{
+			"CREATE OR REPLACE FUNCTION ag_rp003_score(x string) RETURNS float LANGUAGE JAVASCRIPT AS $$ return 1.0; $$;",
+			"CREATE OR REPLACE FUNCTION ag_rp003_count(x string) RETURNS uint64 LANGUAGE JAVASCRIPT AS $$ return 0; $$;",
+		},
+	}
+
+	out, err := RescopeUDFs(src, "my-clone")
+	if err != nil {
+		t.Fatalf("RescopeUDFs: %v", err)
+	}
+
+	names, err := out.UDFNames()
+	if err != nil {
+		t.Fatalf("UDFNames after rescopeing: %v", err)
+	}
+	if len(names) != 2 {
+		t.Fatalf("expected 2 UDF names, got %v", names)
+	}
+
+	// Old names must be gone, new names must be present.
+	for _, old := range []string{"ag_rp003_score", "ag_rp003_count"} {
+		if strings.Contains(out.SQLTemplate, old) {
+			t.Errorf("old name %q still present in SQLTemplate", old)
+		}
+	}
+	for _, newName := range names {
+		if !strings.Contains(out.SQLTemplate, newName) {
+			t.Errorf("new name %q not found in SQLTemplate", newName)
+		}
+	}
+
+	// New names should include the normalized new ID.
+	norm := "myclone" // "my-clone" with "-" stripped
+	for _, n := range names {
+		if !strings.Contains(n, norm) {
+			t.Errorf("new name %q does not contain normalized id %q", n, norm)
+		}
+	}
+}
+
+// TestRescopeUDFs_NoUDFs verifies that a definition without UDFs passes through
+// unchanged.
+func TestRescopeUDFs_NoUDFs(t *testing.T) {
+	src := validDef()
+	out, err := RescopeUDFs(src, "clone-id")
+	if err != nil {
+		t.Fatalf("RescopeUDFs with no UDFs: %v", err)
+	}
+	if out.SQLTemplate != src.SQLTemplate {
+		t.Errorf("SQLTemplate changed unexpectedly")
+	}
+}
+
+// TestRescopeUDFs_UDFBodyCrossReference verifies that when a UDF body references
+// another UDF by name (rare but valid), the cross-reference is also rewritten.
+func TestRescopeUDFs_UDFBodyCrossReference(t *testing.T) {
+	src := Definition{
+		ID:          "rp-010",
+		SQLTemplate: "SELECT ag_rp010_outer(tool_input) AS r",
+		UDFs: []string{
+			"CREATE OR REPLACE FUNCTION ag_rp010_inner(x string) RETURNS float LANGUAGE JAVASCRIPT AS $$ return 1.0; $$;",
+			// Second UDF references the first by name in its body.
+			"CREATE OR REPLACE FUNCTION ag_rp010_outer(x string) RETURNS float LANGUAGE JAVASCRIPT AS $$ return ag_rp010_inner(x) * 2.0; $$;",
+		},
+	}
+
+	out, err := RescopeUDFs(src, "rp-010-custom")
+	if err != nil {
+		t.Fatalf("RescopeUDFs: %v", err)
+	}
+
+	// The outer UDF's body must not contain the old inner name.
+	for _, udf := range out.UDFs {
+		if strings.Contains(udf, "ag_rp010_inner") || strings.Contains(udf, "ag_rp010_outer") {
+			t.Errorf("old UDF name still present after rescope: %s", udf[:min(len(udf), 80)])
+		}
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

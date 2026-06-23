@@ -1165,3 +1165,130 @@ func TestSeedFS_RP042WindowedBranches(t *testing.T) {
 		t.Error("rp-042 5a still groups by run_id; must group by session only so same-session refusals correlate")
 	}
 }
+
+// newTestManagerWithUDF creates a Manager seeded with a single definition that
+// has one UDF, for use in Clone and RescopeUDFs integration tests.
+func newTestManagerWithUDF(t *testing.T) *Manager {
+	t.Helper()
+	seed := fstest.MapFS{
+		"rp-003.yaml": {Data: []byte(
+			"id: rp-003\n" +
+				"name: Score Rule\n" +
+				"version: 1.0.0\n" +
+				"sql_template: \"SELECT ag_rp003_score(tool_input) AS s\"\n" +
+				"udfs:\n" +
+				"  - \"CREATE OR REPLACE FUNCTION ag_rp003_score(x string) RETURNS float LANGUAGE JAVASCRIPT AS $$ return 1.0; $$;\"\n",
+		)},
+	}
+	m, err := New(seed, t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return m
+}
+
+func TestManager_Clone_Basic(t *testing.T) {
+	m := newTestManagerWithUDF(t)
+
+	cloned, err := m.Clone("rp-003", "rp-003-custom", "RP-003 (custom)")
+	if err != nil {
+		t.Fatalf("Clone: %v", err)
+	}
+
+	if cloned.ID != "rp-003-custom" {
+		t.Errorf("cloned.ID = %q, want rp-003-custom", cloned.ID)
+	}
+	if cloned.Name != "RP-003 (custom)" {
+		t.Errorf("cloned.Name = %q, want RP-003 (custom)", cloned.Name)
+	}
+	if cloned.Origin != OriginCustom {
+		t.Errorf("cloned.Origin = %q, want custom", cloned.Origin)
+	}
+
+	// Clone must be persisted in the catalog.
+	if !m.Exists("rp-003-custom") {
+		t.Error("cloned definition not found in catalog")
+	}
+	if !m.IsCustom("rp-003-custom") {
+		t.Error("cloned definition must have custom origin")
+	}
+
+	// UDF names must be rescoped (no longer reference the source rule's ID).
+	names, err := cloned.UDFNames()
+	if err != nil {
+		t.Fatalf("UDFNames: %v", err)
+	}
+	if len(names) != 1 {
+		t.Fatalf("expected 1 UDF, got %v", names)
+	}
+	if names[0] == "ag_rp003_score" {
+		t.Error("UDF name was not rescoped from source rule's name")
+	}
+	if strings.Contains(cloned.SQLTemplate, "ag_rp003_score") {
+		t.Error("SQLTemplate still references old UDF name")
+	}
+	if !strings.Contains(cloned.SQLTemplate, names[0]) {
+		t.Errorf("SQLTemplate does not reference new UDF name %q", names[0])
+	}
+}
+
+func TestManager_Clone_DuplicateIDFails(t *testing.T) {
+	m := newTestManagerWithUDF(t)
+
+	if _, err := m.Clone("rp-003", "rp-003-c", "First clone"); err != nil {
+		t.Fatalf("first Clone: %v", err)
+	}
+
+	_, err := m.Clone("rp-003", "rp-003-c", "Duplicate")
+	if !errors.Is(err, ErrExists) {
+		t.Fatalf("expected ErrExists for duplicate id, got %v", err)
+	}
+}
+
+func TestManager_Clone_SourceMissingFails(t *testing.T) {
+	m := newTestManagerWithUDF(t)
+
+	_, err := m.Clone("does-not-exist", "new-id", "New")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing source, got %v", err)
+	}
+}
+
+func TestManager_Clone_InvalidNewIDFails(t *testing.T) {
+	m := newTestManagerWithUDF(t)
+
+	_, err := m.Clone("rp-003", "id with spaces!", "Clone")
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("expected ErrInvalid for bad id, got %v", err)
+	}
+}
+
+func TestManager_IsCustom(t *testing.T) {
+	seed := fstest.MapFS{
+		"rp-001.yaml": {Data: []byte("id: rp-001\nname: Builtin\nversion: 1.0.0\nsql_template: SELECT 1\n")},
+	}
+	m, err := New(seed, t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Builtin definition is not custom.
+	if m.IsCustom("rp-001") {
+		t.Error("builtin definition must not be reported as custom")
+	}
+
+	// Unknown id is not custom.
+	if m.IsCustom("rp-nope") {
+		t.Error("unknown definition must not be reported as custom")
+	}
+
+	// Saved definition defaults to custom.
+	d := validDef()
+	d.ID = "custom-x"
+	if err := m.Save(d); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if !m.IsCustom("custom-x") {
+		t.Error("saved definition must be reported as custom")
+	}
+}

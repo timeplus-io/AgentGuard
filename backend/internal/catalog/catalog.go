@@ -275,3 +275,49 @@ func isIDChar(c rune) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
 		(c >= '0' && c <= '9') || c == '-' || c == '_'
 }
+
+// IsCustom reports whether id is in the local (writable) catalog and has
+// OriginCustom. Builtin (seed) definitions and unknown IDs both return false.
+func (m *Manager) IsCustom(id string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	d, ok := m.local[id]
+	return ok && d.Origin == OriginCustom
+}
+
+// Clone creates a copy of the definition with srcID, assigns it the new ID and
+// name, rescopes its UDF function names so they do not collide with the source
+// rule in the Timeplus function registry, and saves it as a custom definition.
+//
+// Returns:
+//   - ErrNotFound if srcID is not in the catalog.
+//   - ErrExists  if newID is already in the catalog.
+//   - ErrInvalid if newID is syntactically invalid.
+func (m *Manager) Clone(srcID, newID, newName string) (Definition, error) {
+	src, ok := m.Lookup(srcID)
+	if !ok {
+		return Definition{}, ErrNotFound
+	}
+	if m.Exists(newID) {
+		return Definition{}, ErrExists
+	}
+	// ValidateID checks both syntax and existence; since we've just confirmed the
+	// ID does not exist, only the syntax branch can fail here.
+	if err := m.ValidateID(newID); err != nil {
+		return Definition{}, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+
+	// Rescope UDF function names to avoid collision with the source rule.
+	cloned, err := RescopeUDFs(src, newID)
+	if err != nil {
+		return Definition{}, fmt.Errorf("%w: rescope UDFs: %s", ErrInvalid, err)
+	}
+	cloned.ID = newID
+	cloned.Name = newName
+	cloned.Origin = OriginCustom
+
+	if err := m.Save(cloned); err != nil {
+		return Definition{}, err
+	}
+	return cloned, nil
+}

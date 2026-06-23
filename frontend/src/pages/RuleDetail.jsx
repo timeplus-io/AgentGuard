@@ -44,6 +44,12 @@ export default function RuleDetail() {
   const [upgradeConflicts, setUpgradeConflicts] = useState(null) // { conflicts, warnings } from a blocked upgrade
   const [actionLoading, setActionLoading] = useState(false)
   const [actionError, setActionError] = useState(null)
+  // Clone-as-custom modal state
+  const [cloneModal, setCloneModal] = useState(false)
+  const [cloneNewId, setCloneNewId] = useState('')
+  const [cloneNewName, setCloneNewName] = useState('')
+  const [cloneError, setCloneError] = useState(null)
+  const [cloneLoading, setCloneLoading] = useState(false)
   // Content tabs (left → right): configuration | description | sql | udfs | detections
   const [contentTab, setContentTab] = useState('configuration')
 
@@ -138,6 +144,31 @@ export default function RuleDetail() {
   const udfFuncName = udf => {
     const m = udf.match(/FUNCTION\s+(\w+)\s*\(/i)
     return m ? m[1] : `UDF`
+  }
+
+  const openCloneModal = () => {
+    setCloneNewId(`${id}-custom`)
+    setCloneNewName(inst.name ? `${inst.name} (custom)` : '')
+    setCloneError(null)
+    setCloneModal(true)
+  }
+
+  const handleClone = async () => {
+    if (!cloneNewId.trim() || !cloneNewName.trim()) {
+      setCloneError('ID and name are required')
+      return
+    }
+    setCloneLoading(true)
+    setCloneError(null)
+    try {
+      await api.cloneCatalogRule(id, { id: cloneNewId.trim(), name: cloneNewName.trim() })
+      setCloneModal(false)
+      navigate(`/rules`)
+    } catch (e) {
+      setCloneError(e?.message || 'Clone failed')
+    } finally {
+      setCloneLoading(false)
+    }
   }
 
   if (loading) {
@@ -260,6 +291,58 @@ export default function RuleDetail() {
         </div>
       )}
 
+      {/* Clone-as-custom modal */}
+      {cloneModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#1d1a25] border border-[#574149]/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-5">
+            <h3 className="text-base font-semibold text-white">Clone as custom rule</h3>
+            <p className="text-xs text-gray-400">
+              Creates an editable copy of <span className="text-[#ffb0cf]">{inst.name}</span> with rescoped UDF names.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-1">New rule ID</label>
+                <input
+                  type="text"
+                  value={cloneNewId}
+                  onChange={e => setCloneNewId(e.target.value)}
+                  placeholder="e.g. rp-003-custom"
+                  className="w-full bg-[#0f0c17] border border-zinc-700 rounded-sm px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#ffb0cf]/50"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Rule name</label>
+                <input
+                  type="text"
+                  value={cloneNewName}
+                  onChange={e => setCloneNewName(e.target.value)}
+                  placeholder="e.g. Score Rule (custom)"
+                  className="w-full bg-[#0f0c17] border border-zinc-700 rounded-sm px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#ffb0cf]/50"
+                />
+              </div>
+            </div>
+            {cloneError && (
+              <p className="text-xs text-[#ffb4ab] font-mono">{cloneError}</p>
+            )}
+            <div className="flex gap-3 justify-end pt-1">
+              <button
+                onClick={() => { setCloneModal(false); setCloneError(null) }}
+                className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClone}
+                disabled={cloneLoading}
+                className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors disabled:opacity-50"
+              >
+                {cloneLoading ? 'Cloning…' : 'Clone'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
 
@@ -312,6 +395,18 @@ export default function RuleDetail() {
                   {rule.upgrade?.conflicts?.length > 0 && (
                     <span className="ml-1.5 text-[9px] align-middle">⚠</span>
                   )}
+                </button>
+              )}
+
+              {/* Show Clone button for builtin/imported rules so operators can
+                  create an editable custom copy without modifying the seed. */}
+              {rule.definition && rule.definition.origin !== 'custom' && (
+                <button
+                  onClick={openCloneModal}
+                  disabled={actionLoading}
+                  className="px-4 py-2 text-xs font-semibold rounded-sm border border-zinc-600 text-gray-300 hover:bg-zinc-700 transition-colors disabled:opacity-50"
+                >
+                  Clone as custom
                 </button>
               )}
 

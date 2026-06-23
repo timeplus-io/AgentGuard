@@ -150,6 +150,8 @@ export const api = {
     })
   },
   exportCatalogUrl: () => `${BASE}/rules/catalog/export`,
+  // Clone a catalog definition as a new custom definition with rescoped UDFs.
+  cloneCatalogRule: (srcId, body) => post(`/rules/catalog/${encodeURIComponent(srcId)}/clone`, body),
   getRule: (id) => get(`/rules/${id}`),
   toggleRule: (id) => post(`/rules/${id}/toggle`, {}),
   // Upgrade is bodyless and catalog-only; on 409 the thrown error's .body carries
