@@ -1,6 +1,6 @@
 // Package rules implements the strict parameter compiler for catalog rule
 // definitions: typed override normalization and validation, deterministic SQL
-// rendering from strict {{params.<id>}} placeholders, and upgrade
+// rendering from strict {{ .Config.<key> }} placeholders, and upgrade
 // compatibility planning for installed overrides.
 //
 // The compiler core (validate.go, render.go, compatibility.go) is pure — no

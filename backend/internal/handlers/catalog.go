@@ -166,6 +166,14 @@ func CompileCatalogRule() gin.HandlerFunc {
 // Returns 409 when the submitted ID already exists in the catalog (whether as a
 // custom or builtin entry), mirroring the Clone guard so PUT (which rejects
 // in-place builtin edits with 409) and POST stay consistent.
+//
+// UDF ownership note: Save validates UDF names only against other CATALOG
+// definitions. Ownership against UDFs already DEPLOYED by installed instances
+// (the snapshot ledger) is enforced later, at install time, by the lifecycle
+// service's checkUDFOwnership. So a definition can be authored/saved here with a
+// UDF name that collides with a deployed one and will then be rejected (409) on
+// install rather than at write — no live MV is ever corrupted. The same applies
+// to CloneCatalogRule and ImportCatalog, which also write through Manager.
 func CreateCatalogRule(mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		def, err := decodeDefinitionBody(c)

@@ -190,6 +190,32 @@ func (m *Manager) Exists(id string) bool {
 	return ok
 }
 
+// mvResourceKey returns the key an ID collapses to in the Timeplus
+// materialized-view namespace. It MUST mirror internal/timeplus.MVName, which
+// names each rule's view mv_rule_<key> after stripping hyphens. Two distinct
+// catalog IDs that share a key would deploy to the same view and silently
+// clobber each other; Save rejects that. (Kept here rather than importing
+// internal/timeplus to avoid pulling the Proton client into the catalog layer;
+// TestMVResourceKey_StripsHyphens guards the mirror — see testdata/README.md.)
+func mvResourceKey(id string) string {
+	return strings.ReplaceAll(id, "-", "")
+}
+
+// mvKeyConflict reports an existing catalog ID, different from id, that maps to
+// the same MV resource key (e.g. "rp-042" vs "rp042"). The same id is never a
+// conflict with itself, so override/edit/rollback re-saves are unaffected.
+func (m *Manager) mvKeyConflict(id string) (string, bool) {
+	key := mvResourceKey(id)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for other := range m.mergedLocked() {
+		if other != id && mvResourceKey(other) == key {
+			return other, true
+		}
+	}
+	return "", false
+}
+
 // Save validates a definition, writes it to the local catalog directory, and
 // updates the in-memory map. This is the path for user-created rules and
 // overrides of seed definitions. Definitions saved without an origin default
@@ -218,6 +244,14 @@ func (m *Manager) Save(d Definition) error {
 	// creation is a low-frequency operator action.
 	if err := m.ValidateUDFOwnership(d); err != nil {
 		return fmt.Errorf("definition %s: %w", d.ID, err)
+	}
+	// Reject an ID that collapses onto a DIFFERENT existing rule's MV name. The
+	// Timeplus MV namespace strips hyphens (internal/timeplus.MVName), so "rp-042"
+	// and "rp042" would both deploy to mv_rule_rp042 and silently clobber each
+	// other on install/toggle/sync. Exact same-ID re-saves (override, edit
+	// republish, rollback) are unaffected — only a distinct colliding ID is blocked.
+	if other, ok := m.mvKeyConflict(d.ID); ok {
+		return fmt.Errorf("%w: id %q collides with rule %q in the materialized-view namespace (hyphens are not significant there); choose a distinct id", ErrExists, d.ID, other)
 	}
 	data, err := yaml.Marshal(d)
 	if err != nil {

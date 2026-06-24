@@ -922,6 +922,81 @@ func TestUpdateDefinition_RedeployFailWithBrokenRestoreIsCritical(t *testing.T) 
 	}
 }
 
+// TestUpdateDefinition_DropParamMigratesOverrides verifies that editing a custom
+// rule to REMOVE a parameter migrates the stored overrides (drops the override
+// for the removed parameter, preserves the rest) instead of failing on a now-
+// "unknown parameter" — the same compatibility handling Upgrade applies. Removing
+// a parameter is the core authoring use case, so it must not roll back the edit.
+func TestUpdateDefinition_DropParamMigratesOverrides(t *testing.T) {
+	prev := customDef("rp-c", "1.0.0",
+		intParam("a", 5, f64(1), f64(100)),
+		intParam("b", 10, f64(1), f64(100)))
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-c": prev}}
+	svc, _, mv, rec := newTestService(defs)
+	st := svc.store.(*fakeStore)
+	st.latest["rp-c"] = installedInst(prev, true, 2,
+		map[string]any{"a": json.Number("20"), "b": json.Number("30")}, nil)
+
+	// Edit: keep only "a" (customDef regenerates the template from its params, so
+	// the new SQL references only {{ .Config.a }} — a valid edit).
+	mutated := customDef("rp-c", "1.1.0", intParam("a", 5, f64(1), f64(100)))
+
+	inst, err := svc.UpdateDefinition(mutated, "alice", "drop param b")
+	if err != nil {
+		t.Fatalf("update dropping a parameter must succeed, got %v", err)
+	}
+	// Enabled replace path runs to completion (no rollback).
+	wantLog(t, rec.snapshot(), []string{"applyUDFs", "preflight", "drop", "applyUDFs", "create", "append"})
+	if got, _ := inst.Overrides["a"].(int64); got != 20 {
+		t.Errorf("kept override not preserved: %#v", inst.Overrides["a"])
+	}
+	if _, present := inst.Overrides["b"]; present {
+		t.Errorf("override for the dropped parameter must be removed, got %#v", inst.Overrides["b"])
+	}
+	if inst.DefinitionHash != mutated.Hash() {
+		t.Errorf("snapshot hash not moved to edited definition")
+	}
+	if len(mv.creates) != 1 || mv.creates[0] != inst.RenderedSQL {
+		t.Errorf("MV not created with new rendered SQL: %v", mv.creates)
+	}
+}
+
+// TestUpdateDefinition_IncompatibleOverrideConflicts verifies that an edit whose
+// stored override no longer fits the edited schema (here: a tightened max below
+// the stored value) blocks with a *ConflictError, performs no Timeplus work, and
+// rolls the definition back to the previous version — unlike a dropped parameter,
+// which migrates.
+func TestUpdateDefinition_IncompatibleOverrideConflicts(t *testing.T) {
+	prev := customDef("rp-c", "1.0.0", intParam("t", 15, f64(1), f64(1000)))
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-c": prev}}
+	svc, _, _, rec := newTestService(defs)
+	st := svc.store.(*fakeStore)
+	st.latest["rp-c"] = installedInst(prev, true, 2, map[string]any{"t": json.Number("800")}, nil)
+
+	mutated := customDef("rp-c", "1.1.0", intParam("t", 15, f64(1), f64(100))) // 800 > new max
+
+	_, err := svc.UpdateDefinition(mutated, "alice", "tighten max")
+	var ce *ConflictError
+	if !errors.As(err, &ce) {
+		t.Fatalf("incompatible override: want *ConflictError, got %v", err)
+	}
+	if len(ce.Conflicts) == 0 {
+		t.Errorf("conflict detail should be populated")
+	}
+	// Definition rolled back: the catalog still holds the previous version.
+	if got := defs.defs["rp-c"].Hash(); got != prev.Hash() {
+		t.Errorf("definition not rolled back: hash=%s want=%s", got, prev.Hash())
+	}
+	// A blocked edit deploys nothing and appends no snapshot. The only catalog
+	// writes are the publish + rollback-republish; no MV/preflight ops run.
+	if len(rec.snapshot()) != 0 {
+		t.Errorf("blocked edit must perform no Timeplus work, got %v", rec.snapshot())
+	}
+	if len(st.appended) != 0 {
+		t.Errorf("blocked edit must append no snapshot, got %d", len(st.appended))
+	}
+}
+
 // ── Toggle ───────────────────────────────────────────────────────────────────────
 
 func TestToggle_DisablePreservesRenderedSQLAndOverrides(t *testing.T) {

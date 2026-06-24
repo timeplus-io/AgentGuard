@@ -1292,3 +1292,77 @@ func TestManager_IsCustom(t *testing.T) {
 		t.Error("saved definition must be reported as custom")
 	}
 }
+
+// TestMVResourceKey_StripsHyphens pins the MV-namespace normalization that Save
+// uses to reject colliding IDs. It MUST mirror internal/timeplus.MVName, which
+// names each rule's view mv_rule_<id-with-hyphens-stripped> (see
+// testdata/README.md and definition.go). If MVName's normalization ever changes,
+// mvResourceKey — and this test — must change with it.
+func TestMVResourceKey_StripsHyphens(t *testing.T) {
+	cases := map[string]string{
+		"rp-042": "rp042",
+		"rp042":  "rp042",
+		"a-b-c":  "abc",
+		"abc":    "abc",
+		"x_1":    "x_1", // underscores are significant; only hyphens collapse
+	}
+	for in, want := range cases {
+		if got := mvResourceKey(in); got != want {
+			t.Errorf("mvResourceKey(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if mvResourceKey("rp-042") != mvResourceKey("rp042") {
+		t.Error("rp-042 and rp042 must share an MV resource key (hyphens stripped)")
+	}
+	if mvResourceKey("x-1") == mvResourceKey("x_1") {
+		t.Error("x-1 and x_1 must NOT share a key (only hyphens are stripped)")
+	}
+}
+
+// TestSave_RejectsMVNamespaceCollision verifies that Save rejects a NEW id that
+// collapses onto a different existing rule's MV name — "team-a" and "teama" both
+// deploy to mv_rule_teama and would silently clobber each other on
+// install/toggle/sync. Re-saving the SAME id (override/edit/rollback republish)
+// must NOT be blocked.
+func TestSave_RejectsMVNamespaceCollision(t *testing.T) {
+	tmp := t.TempDir()
+	seed := fstest.MapFS{"a.yaml": {Data: []byte("id: rp-001\nname: Builtin\n")}}
+	m, err := New(seed, tmp)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	a := validDef()
+	a.ID = "team-a"
+	if err := m.Save(a); err != nil {
+		t.Fatalf("save first rule: %v", err)
+	}
+
+	// A different id with the same MV key must be rejected as an existence
+	// conflict (→ 409), naming the rule it collides with.
+	b := validDef()
+	b.ID = "teama"
+	err = m.Save(b)
+	if !errors.Is(err, ErrExists) {
+		t.Fatalf("colliding id: want ErrExists, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "team-a") {
+		t.Errorf("collision error should name the existing rule, got %v", err)
+	}
+	if _, ok := m.Lookup("teama"); ok {
+		t.Error("the colliding id must not have been persisted")
+	}
+
+	// Re-saving the SAME id is an override/edit, not a collision: it must succeed.
+	a.Description = "edited"
+	if err := m.Save(a); err != nil {
+		t.Fatalf("re-saving the same id must not trip the collision guard: %v", err)
+	}
+
+	// A seed id collision is caught too: "rp001" collapses onto seed "rp-001".
+	c := validDef()
+	c.ID = "rp001"
+	if err := m.Save(c); !errors.Is(err, ErrExists) {
+		t.Fatalf("collision with a seed id: want ErrExists, got %v", err)
+	}
+}

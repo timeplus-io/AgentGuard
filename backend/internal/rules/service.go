@@ -528,9 +528,11 @@ func (s *Service) Configure(ruleID string, overrides map[string]any, actor, reas
 //	   nothing, so the error is returned verbatim.
 //	c. Read the current installed snapshot. If none is installed, the publish was
 //	   the whole operation: return a zero instance.
-//	d. Otherwise recompile against the instance's CURRENT overrides, check UDF
-//	   ownership, preflight, and (via replaceAndPersist) replace the MV for an
-//	   enabled rule and append the new snapshot — exactly as Configure does.
+//	d. Otherwise migrate the instance's CURRENT overrides onto the edited schema
+//	   (PlanUpgradeOverrides — drop/alias removed parameters, block genuine
+//	   incompatibilities with a *ConflictError), check UDF ownership, preflight,
+//	   and (via replaceAndPersist) replace the MV for an enabled rule and append
+//	   the new snapshot — the same compatibility handling Upgrade applies.
 //
 // On ANY failure in step d the previous definition is republished
 // (restoreDefinition); the previous MV is already restored by the same seams
@@ -569,10 +571,23 @@ func (s *Service) UpdateDefinition(def catalog.Definition, actor, reason string)
 		return RuleInstance{}, nil // publish was the whole operation
 	}
 
-	// d. Recompile against the instance's stored overrides and redeploy, mirroring
-	// Configure. Any failure here restores the previous definition; the MV is
-	// restored by preflight/replaceAndPersist themselves.
-	compiled, err := Compile(def, inst.Overrides)
+	// d. Migrate the instance's stored overrides onto the edited schema and
+	// redeploy, mirroring Upgrade's compatibility handling. An edit that drops or
+	// renames a parameter must drop/alias the affected override instead of failing
+	// on a now-"unknown parameter" — otherwise an installed custom rule could never
+	// have a parameter removed, which is the headline authoring use case. A
+	// genuinely incompatible override (e.g. a value outside a tightened range)
+	// still blocks with a *ConflictError. Any failure here restores the previous
+	// definition; the MV is restored by preflight/replaceAndPersist themselves.
+	plan := PlanUpgradeOverrides(def, inst.Overrides)
+	if !plan.OK() {
+		return s.restoreDefinition(op, prevDef, &ConflictError{
+			Message:   "edit blocked: existing overrides are incompatible with the edited definition",
+			Conflicts: plan.Conflicts,
+			Warnings:  plan.Warnings,
+		})
+	}
+	compiled, err := Compile(def, plan.Overrides)
 	if err != nil {
 		return s.restoreDefinition(op, prevDef, err)
 	}

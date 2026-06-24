@@ -368,7 +368,7 @@ func ValidateDefaults(def catalog.Definition) error {
 }
 
 // ValidateDefinition checks a catalog definition's parameter-compiler semantics:
-// that every {{params.<id>}} placeholder references a declared parameter, that
+// that every {{ .Config.<key> }} placeholder references a declared parameter, that
 // every declared parameter is used by the template, and that the definition
 // compiles from its own defaults. It complements catalog.Definition.Validate()
 // (which checks only structural shape), so authoring defects in a saved or
