@@ -211,14 +211,14 @@ function validateOne(p, v) {
       const s = v ?? ''
       if (typeof s !== 'string') return 'must be a string'
       if (s === '') return 'pattern is required'
-      if (p.max_length != null && [...s].length > p.max_length) return `must be ≤ ${p.max_length} characters`
-      // Best-effort client check; the backend compiles the pattern as RE2 (the
-      // authoritative validation), which differs from JS RegExp in some corners.
-      try {
-        new RegExp(s)
-      } catch {
-        return 'must be a valid regular expression'
-      }
+      const len = [...s].length
+      if (p.min_length != null && len < p.min_length) return `must be ≥ ${p.min_length} characters`
+      if (p.max_length != null && len > p.max_length) return `must be ≤ ${p.max_length} characters`
+      // Do NOT compile the pattern client-side: the backend validates it as RE2
+      // (authoritative), and JS RegExp syntax diverges from RE2 (e.g. inline flags
+      // like `(?m)`), so `new RegExp` would falsely block valid AgentGuard
+      // patterns — and clientErrors gates the Save button. Let the server return
+      // the authoritative field error on save.
       return null
     }
     case 'duration': {
