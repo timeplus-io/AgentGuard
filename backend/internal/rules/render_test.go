@@ -17,11 +17,11 @@ func TestCompileRendersEveryType(t *testing.T) {
 			"AND mode = {{ .Config.mode }} AND cmd IN {{ .Config.cmds }}",
 		Parameters: []catalog.Parameter{
 			{Key: "threshold", Type: "integer", Default: 10},
-			{Key: "ratio", Type: "number", Default: 0.5},
-			{Key: "strict", Type: "boolean", Default: false},
+			{Key: "ratio", Type: "float", Default: 0.5},
+			{Key: "strict", Type: "bool", Default: false},
 			{Key: "name", Type: "string", Default: "bash"},
-			{Key: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block"}},
-			{Key: "cmds", Type: "string_list", Default: []any{"rm", "dd"}},
+			{Key: "mode", Type: "choice", Default: "warn", Options: []string{"warn", "block"}},
+			{Key: "cmds", Type: "list", Default: []any{"rm", "dd"}},
 		},
 	}
 	c, err := Compile(def, map[string]any{
@@ -65,7 +65,7 @@ func TestCompileNumberRenderingIsCanonicalDecimal(t *testing.T) {
 	def := catalog.Definition{
 		ID: "rp_num", Name: "Num", Version: "1.0.0",
 		SQLTemplate: "SELECT {{ .Config.v }}",
-		Parameters:  []catalog.Parameter{{Key: "v", Type: "number", Default: 0.0}},
+		Parameters:  []catalog.Parameter{{Key: "v", Type: "float", Default: 0.0}},
 	}
 	cases := []struct {
 		value any
@@ -92,7 +92,7 @@ func TestCompileNumberRenderingIsCanonicalDecimal(t *testing.T) {
 // directly: normalizeValue already rejects NaN/Inf, but renderValue must
 // re-reject them for symmetry with its other type assertions.
 func TestRenderValueRejectsNonFiniteNumber(t *testing.T) {
-	p := catalog.Parameter{Key: "ratio", Type: "number", Default: 0.5}
+	p := catalog.Parameter{Key: "ratio", Type: "float", Default: 0.5}
 	for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
 		if _, err := renderValue(p, v); err == nil || !strings.Contains(err.Error(), "non-finite") {
 			t.Fatalf("renderValue(%v) error = %v, want non-finite rejection", v, err)
@@ -139,7 +139,7 @@ func TestStringListEscaping(t *testing.T) {
 	def := catalog.Definition{
 		ID: "rp_lst", Name: "List", Version: "1.0.0",
 		SQLTemplate: "SELECT cmd IN {{ .Config.cmds }}",
-		Parameters:  []catalog.Parameter{{Key: "cmds", Type: "string_list", Default: []any{"x"}}},
+		Parameters:  []catalog.Parameter{{Key: "cmds", Type: "list", Default: []any{"x"}}},
 	}
 	c, err := Compile(def, map[string]any{"cmds": []any{`rm -rf '/'`, `pa\th`, "ok"}})
 	if err != nil {
@@ -226,7 +226,7 @@ func TestCompileDropsDefaultEqualOverrides(t *testing.T) {
 		SQLTemplate: "SELECT {{ .Config.n }}, {{ .Config.cmds }}",
 		Parameters: []catalog.Parameter{
 			{Key: "n", Type: "integer", Default: 10},
-			{Key: "cmds", Type: "string_list", Default: []any{"rm", "dd"}},
+			{Key: "cmds", Type: "list", Default: []any{"rm", "dd"}},
 		},
 	}
 	// Both overrides equal the defaults after normalization → dropped.

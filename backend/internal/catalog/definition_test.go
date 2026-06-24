@@ -67,11 +67,11 @@ func TestDefinitionValidate_Parameters(t *testing.T) {
 		{"valid integer", []Parameter{param(func(p *Parameter) {})}, ""},
 		{"valid all types", []Parameter{
 			{Key: "a_int", Type: "integer", Default: 1},
-			{Key: "a_num", Type: "number", Default: 1.5, Min: f64(0), Max: f64(10)},
-			{Key: "a_bool", Type: "boolean", Default: true},
+			{Key: "a_num", Type: "float", Default: 1.5, Min: f64(0), Max: f64(10)},
+			{Key: "a_bool", Type: "bool", Default: true},
 			{Key: "a_str", Type: "string", Default: "x"},
-			{Key: "a_enum", Type: "enum", Default: "low", Options: []string{"low", "high"}},
-			{Key: "a_list", Type: "string_list", Default: []any{"x"}},
+			{Key: "a_enum", Type: "choice", Default: "low", Options: []string{"low", "high"}},
+			{Key: "a_list", Type: "list", Default: []any{"x"}},
 		}, ""},
 		{"empty key", []Parameter{param(func(p *Parameter) { p.Key = "" })}, "must match"},
 		{"uppercase key", []Parameter{param(func(p *Parameter) { p.Key = "Threshold" })}, "must match"},
@@ -92,9 +92,15 @@ func TestDefinitionValidate_Parameters(t *testing.T) {
 			param(func(p *Parameter) { p.Key = "other"; p.Aliases = []string{"limit"} }),
 		}, "duplicates"},
 		{"bad alias", []Parameter{param(func(p *Parameter) { p.Aliases = []string{"Bad-Alias"} })}, "must match"},
-		{"unknown type", []Parameter{param(func(p *Parameter) { p.Type = "float" })}, "unknown type"},
+		{"unknown type", []Parameter{param(func(p *Parameter) { p.Type = "frobnicate" })}, "unknown type"},
+		// The Phase A internal type names were renamed to the Apps vocabulary and
+		// are no longer accepted (rejected, not aliased).
+		{"legacy number rejected", []Parameter{param(func(p *Parameter) { p.Type = "number" })}, "unknown type"},
+		{"legacy boolean rejected", []Parameter{param(func(p *Parameter) { p.Type = "boolean" })}, "unknown type"},
+		{"legacy enum rejected", []Parameter{param(func(p *Parameter) { p.Type = "enum" })}, "unknown type"},
+		{"legacy string_list rejected", []Parameter{param(func(p *Parameter) { p.Type = "string_list" })}, "unknown type"},
 		{"nil default", []Parameter{param(func(p *Parameter) { p.Default = nil })}, "default is required"},
-		{"enum without options", []Parameter{{Key: "mode", Type: "enum", Default: "x"}}, "non-empty options"},
+		{"choice without options", []Parameter{{Key: "mode", Type: "choice", Default: "x"}}, "non-empty options"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -314,9 +320,9 @@ func TestDefinitionHash_NilAndEmptySlicesEqual(t *testing.T) {
 	}
 
 	c := validDef()
-	c.Parameters = []Parameter{{Key: "p", Type: "enum", Default: "x", Options: []string{"x"}, Aliases: nil}}
+	c.Parameters = []Parameter{{Key: "p", Type: "choice", Default: "x", Options: []string{"x"}, Aliases: nil}}
 	d := validDef()
-	d.Parameters = []Parameter{{Key: "p", Type: "enum", Default: "x", Options: []string{"x"}, Aliases: []string{}}}
+	d.Parameters = []Parameter{{Key: "p", Type: "choice", Default: "x", Options: []string{"x"}, Aliases: []string{}}}
 	if c.Hash() != d.Hash() {
 		t.Error("nil and empty parameter Aliases must hash identically")
 	}

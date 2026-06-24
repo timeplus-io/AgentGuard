@@ -141,11 +141,11 @@ func PlanUpgrade(current catalog.Definition, next catalog.Definition, overrides 
 // explicit "type changed" conflict, because the old type is unknown. Instead the
 // stored value (in its old canonical form) fails normalization against the new
 // parameter and surfaces as a value conflict, which still blocks the upgrade.
-// The one exception is an integer↔number change: the stored value (a json.Number
+// The one exception is an integer↔float change: the stored value (a json.Number
 // from the snapshot) normalizes against either numeric type, so such a change is
 // silently PRESERVED rather than blocked. This is a value preservation, not a
 // silent reset, so it still honors the "never silently reset an override" rule;
-// every other type change (to/from string, enum, boolean, or string_list) fails
+// every other type change (to/from string, choice, bool, or list) fails
 // normalization and conflicts as expected. Alias migration and ambiguity
 // detection are unaffected, since both derive only from the next definition's
 // declared aliases.

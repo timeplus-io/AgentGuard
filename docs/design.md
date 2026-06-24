@@ -910,7 +910,7 @@ config:
   - key: dangerous_tools         # must match ^[a-z][a-z0-9_]{0,63}$
     label: "Dangerous tools"
     description: "Tool names treated as high-risk shell/exec surfaces."
-    type: string_list
+    type: list
     default: [bash, shell, exec, run_terminal_cmd, computer]
     min_items: 1
     max_items: 64
@@ -924,11 +924,11 @@ config:
 | Type | Canonical value | SQL rendering | Constraints |
 |---|---|---|---|
 | `integer` | int64 | bare decimal | `min`, `max` |
-| `number` | finite float64 | canonical decimal (never NaN/Inf) | `min`, `max` |
-| `boolean` | bool | `true` / `false` | — |
+| `float` | finite float64 | canonical decimal (never NaN/Inf) | `min`, `max` |
+| `bool` | bool | `true` / `false` | — |
 | `string` | string | escaped single-quoted literal | `min_length`, `max_length` |
-| `enum` | string | escaped single-quoted literal | non-empty `options` |
-| `string_list` | unique ordered strings | `('a', 'b', …)` | `min_items`, `max_items`, item length |
+| `choice` | string | escaped single-quoted literal | non-empty `options` |
+| `list` | unique ordered strings | `('a', 'b', …)` | `min_items`, `max_items`, item length |
 | `regex` | string (valid RE2) | escaped single-quoted literal | RE2-compilable; length |
 | `duration` | int64 count of `unit` | bare decimal (e.g. `30`) | `min`, `max`; fixed `unit` |
 
@@ -942,7 +942,7 @@ Rules for authors:
 - Parameter IDs are compatibility contracts: a rename requires an `aliases:` entry
   on the replacement parameter so upgrades migrate the override.
 - **Security boundary:** the renderer escapes single quotes and backslashes only.
-  It does **not** escape SQL `LIKE`/`ilike` wildcards (`%`, `_`). A `string`/`enum`
+  It does **not** escape SQL `LIKE`/`ilike` wildcards (`%`, `_`). A `string`/`choice`
   parameter interpolated into a `LIKE` pattern is therefore an injection footgun —
   templates that need substring matching against operator-supplied text must use
   `position()` / `multi_search_any()` (or render the value into an `IN (…)` /

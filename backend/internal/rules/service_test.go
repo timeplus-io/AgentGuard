@@ -1011,7 +1011,7 @@ func TestUpdateDefinition_TypeChangeConflicts(t *testing.T) {
 
 	// Same key "t", but type integer → number: the value 20 normalizes against
 	// both, so only the two-definition planner catches this.
-	numParam := catalog.Parameter{Key: "t", Label: "t", Type: "number", Default: float64(5), Min: f64(1), Max: f64(100)}
+	numParam := catalog.Parameter{Key: "t", Label: "t", Type: "float", Default: float64(5), Min: f64(1), Max: f64(100)}
 	mutated := customDef("rp-c", "1.1.0", numParam)
 
 	_, err := svc.UpdateDefinition(mutated, "alice", "change type")

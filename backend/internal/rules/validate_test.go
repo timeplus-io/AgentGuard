@@ -187,7 +187,7 @@ func TestNormalizeOverridesRejectsNUL(t *testing.T) {
 		t.Fatalf("string message %q should mention NUL", fe.Message)
 	}
 
-	listDef := defWith(catalog.Parameter{Key: "cmds", Type: "string_list", Default: []any{"rm"}})
+	listDef := defWith(catalog.Parameter{Key: "cmds", Type: "list", Default: []any{"rm"}})
 	_, err = NormalizeOverrides(listDef, map[string]any{"cmds": []any{"ok", "bad\x00"}})
 	fe = fieldErr(t, err, "cmds")
 	if !strings.Contains(fe.Message, "item 1") || !strings.Contains(fe.Message, "NUL") {
@@ -205,7 +205,7 @@ func TestNormalizeOverridesRejectsNUL(t *testing.T) {
 }
 
 func TestNormalizeOverridesNumber(t *testing.T) {
-	p := catalog.Parameter{Key: "ratio", Type: "number", Default: 0.5, Min: fptr(0), Max: fptr(1)}
+	p := catalog.Parameter{Key: "ratio", Type: "float", Default: 0.5, Min: fptr(0), Max: fptr(1)}
 	def := defWith(p)
 
 	cases := []struct {
@@ -246,7 +246,7 @@ func TestNormalizeOverridesNumber(t *testing.T) {
 }
 
 func TestNormalizeOverridesBoolean(t *testing.T) {
-	p := catalog.Parameter{Key: "strict", Type: "boolean", Default: false}
+	p := catalog.Parameter{Key: "strict", Type: "bool", Default: false}
 	def := defWith(p)
 
 	got, err := NormalizeOverrides(def, map[string]any{"strict": true})
@@ -305,7 +305,7 @@ func TestNormalizeOverridesString(t *testing.T) {
 }
 
 func TestNormalizeOverridesEnum(t *testing.T) {
-	p := catalog.Parameter{Key: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block"}}
+	p := catalog.Parameter{Key: "mode", Type: "choice", Default: "warn", Options: []string{"warn", "block"}}
 	def := defWith(p)
 
 	got, err := NormalizeOverrides(def, map[string]any{"mode": "block"})
@@ -326,7 +326,7 @@ func TestNormalizeOverridesEnum(t *testing.T) {
 	fieldErr(t, err, "mode")
 
 	// Enum with no options is a definition bug, surfaced as a field error.
-	bad := defWith(catalog.Parameter{Key: "mode", Type: "enum", Default: "x"})
+	bad := defWith(catalog.Parameter{Key: "mode", Type: "choice", Default: "x"})
 	_, err = NormalizeOverrides(bad, map[string]any{"mode": "x"})
 	fe = fieldErr(t, err, "mode")
 	if !strings.Contains(fe.Message, "no options") {
@@ -336,7 +336,7 @@ func TestNormalizeOverridesEnum(t *testing.T) {
 
 func TestNormalizeOverridesStringList(t *testing.T) {
 	p := catalog.Parameter{
-		Key: "cmds", Type: "string_list", Default: []any{"rm"},
+		Key: "cmds", Type: "list", Default: []any{"rm"},
 		MinItems: iptr(1), MaxItems: iptr(3),
 		MinLength: iptr(2), MaxLength: iptr(10),
 	}
@@ -380,7 +380,7 @@ func TestNormalizeOverridesStringList(t *testing.T) {
 }
 
 func TestNormalizeOverridesEmptyListRejectedEvenWithoutMinItems(t *testing.T) {
-	p := catalog.Parameter{Key: "cmds", Type: "string_list", Default: []any{"rm"}}
+	p := catalog.Parameter{Key: "cmds", Type: "list", Default: []any{"rm"}}
 	def := defWith(p)
 	_, err := NormalizeOverrides(def, map[string]any{"cmds": []any{}})
 	fe := fieldErr(t, err, "cmds")
@@ -454,17 +454,17 @@ func TestNormalizeOverridesEmptyAndNil(t *testing.T) {
 func TestValidateDefaults(t *testing.T) {
 	ok := defWith(
 		catalog.Parameter{Key: "a", Type: "integer", Default: 5, Min: fptr(1)},
-		catalog.Parameter{Key: "b", Type: "string_list", Default: []any{"x", "y"}},
-		catalog.Parameter{Key: "c", Type: "enum", Default: "warn", Options: []string{"warn", "block"}},
+		catalog.Parameter{Key: "b", Type: "list", Default: []any{"x", "y"}},
+		catalog.Parameter{Key: "c", Type: "choice", Default: "warn", Options: []string{"warn", "block"}},
 	)
 	if err := ValidateDefaults(ok); err != nil {
 		t.Fatalf("valid defaults rejected: %v", err)
 	}
 
 	bad := defWith(
-		catalog.Parameter{Key: "a", Type: "integer", Default: 0, Min: fptr(1)},          // below min
-		catalog.Parameter{Key: "b", Type: "enum", Default: "x", Options: []string{"y"}}, // not an option
-		catalog.Parameter{Key: "c", Type: "string_list", Default: []any{}},              // empty list
+		catalog.Parameter{Key: "a", Type: "integer", Default: 0, Min: fptr(1)},            // below min
+		catalog.Parameter{Key: "b", Type: "choice", Default: "x", Options: []string{"y"}}, // not an option
+		catalog.Parameter{Key: "c", Type: "list", Default: []any{}},                       // empty list
 	)
 	err := ValidateDefaults(bad)
 	var de *DefinitionError

@@ -127,6 +127,47 @@ func TestRP064_DefaultsGolden(t *testing.T) {
 	}
 }
 
+// TestRP128_DefaultsGolden pins rp-128 — the seed that exercises both AG type
+// extensions: the duration parameter renders as a bare integer (10000) and the
+// regex parameter renders as a single-quoted SQL literal, both substituted in
+// place. This proves a shipped seed (not just a fixture) uses regex/duration.
+func TestRP128_DefaultsGolden(t *testing.T) {
+	d := seedDef(t, loadSeed(t), "rp-128")
+	assertDefaultsRenderInPlace(t, d, map[string]string{
+		"min_duration_ms":  "10000",
+		"output_signature": "'(AKIA|ASIA|ghp_|gho_|xox[baprs]|sk-|-----BEGIN)'",
+	})
+	compiled, _ := Compile(d, nil)
+	if !strings.Contains(compiled.SQL, "tool_duration_ms > 10000") {
+		t.Errorf("rp-128 duration default not rendered bare in place: %q", compiled.SQL)
+	}
+	if !strings.Contains(compiled.SQL, "match(coalesce(tool_result, ''), '(AKIA|ASIA|ghp_|gho_|xox[baprs]|sk-|-----BEGIN)')") {
+		t.Errorf("rp-128 regex default not rendered as a quoted literal in place: %q", compiled.SQL)
+	}
+}
+
+// TestRP128_OverridesChangeSQL proves the rp-128 regex/duration parameters drive
+// the SQL: distinct typed overrides produce the corresponding rendered literals.
+func TestRP128_OverridesChangeSQL(t *testing.T) {
+	d := seedDef(t, loadSeed(t), "rp-128")
+	compiled, err := Compile(d, map[string]any{
+		"min_duration_ms":  30000,
+		"output_signature": "BEGIN .* PRIVATE KEY",
+	})
+	if err != nil {
+		t.Fatalf("Compile overrides: %v", err)
+	}
+	if !strings.Contains(compiled.SQL, "tool_duration_ms > 30000") {
+		t.Errorf("duration override not rendered: %q", compiled.SQL)
+	}
+	if !strings.Contains(compiled.SQL, "'BEGIN .* PRIVATE KEY'") {
+		t.Errorf("regex override not rendered as a quoted literal: %q", compiled.SQL)
+	}
+	if got, _ := compiled.Overrides["min_duration_ms"].(int64); got != 30000 {
+		t.Errorf("canonical duration override = %#v, want int64(30000)", compiled.Overrides["min_duration_ms"])
+	}
+}
+
 // TestNoParameterRuleRendersByteIdentical proves the plan's "a definition with
 // no parameters renders unchanged" case against a real seed rule.
 func TestNoParameterRuleRendersByteIdentical(t *testing.T) {

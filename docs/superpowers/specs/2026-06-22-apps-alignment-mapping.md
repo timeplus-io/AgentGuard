@@ -2,36 +2,38 @@
 
 ## Overview
 
-This document codifies the alignment between AgentGuard's external rule authoring surface and the [Timeplus Apps](https://apps.timeplus.com/) manifest specification. AgentGuard adopts the `/apps` manifest surface (YAML/JSON field names and placeholder spelling) while retaining its internal strict, injection-safe compiler engine and richer type vocabulary.
+This document codifies the alignment between AgentGuard's external rule authoring surface and the [Timeplus Apps](https://apps.timeplus.com/) manifest specification, verified against the real `~/apps` repository. AgentGuard adopts the `/apps` manifest surface — YAML/JSON field names, placeholder spelling, **and the parameter type vocabulary** — while retaining its internal strict, injection-safe compiler engine and adding two AG-specific type extensions (`regex`, `duration`) that have no `/apps` equivalent.
 
 ## Surface Alignment Decision
 
-The external authoring contract adopts the `/apps` manifest surface; the internal strict engine and AG's type vocabulary are retained. Concretely:
+The external authoring contract adopts the `/apps` manifest surface, including its type tokens; the internal strict engine is retained. Concretely:
 
-| Concern | Phase A (before) | Phase B (after, `/apps`-aligned) |
+| Concern | Phase A (before) | Final (`/apps`-aligned) |
 |---|---|---|
 | Parameter list YAML/JSON key | `parameters:` | `config:` |
 | Parameter identifier field | `id` | `key` |
 | Placeholder spelling | `{{params.<id>}}` (no whitespace) | `{{ .Config.<key> }}` (optional surrounding whitespace) |
 | New parameter fields | — | `required` (bool, default true), `secret` (bool; `true` is rejected) |
 | Template engine | strict scanner (kept) | strict scanner (kept — NOT Go text/template) |
-| Type tokens | `integer/number/boolean/string/enum/string_list` | same + `regex`/`duration` (kept; `/apps` `float/bool/choice/list/multi_choice` documented as a mapping only) |
+| Type tokens | `integer/number/boolean/string/enum/string_list` (Phase A internal names) | **adopt the Apps tokens** `integer/float/bool/string/choice/list` + AG-only `regex`/`duration`; old names are rejected, not aliased |
 | DB templating (`{{ .DB }}`) | n/a | not supported (single fixed deployment; document the divergence) |
 
 ## Type-Name Mapping
 
-The following table documents the mapping between AgentGuard's internal parameter type tokens (canonical) and the Timeplus Apps manifest equivalents (documentation only for interoperability). **AgentGuard tokens are the authoritative types used in all internal processing.**
+AgentGuard's parameter type tokens **are** the Timeplus Apps tokens for every overlapping type — there is no separate internal vocabulary to translate. AgentGuard adds two extensions that `/apps` does not define. The Phase A internal names (`number`/`boolean`/`enum`/`string_list`) were renamed to the Apps tokens before release and are rejected if submitted.
 
-| AG token | `/apps` token |
-|---|---|
-| `integer` | `integer` |
-| `number` | `float` |
-| `boolean` | `bool` |
-| `string` | `string` |
-| `enum` | `choice` |
-| `string_list` | `multi_choice` / `list` |
-| `regex` | (none in `/apps`) |
-| `duration` | (none in `/apps`) |
+| AG token | `/apps` token | Status (Phase A name) |
+|---|---|---|
+| `integer` | `integer` | identical |
+| `float` | `float` | identical (was `number`) |
+| `bool` | `bool` | identical (was `boolean`) |
+| `string` | `string` | identical |
+| `choice` | `choice` | identical (was `enum`) |
+| `list` | `list` | identical (was `string_list`) |
+| `regex` | — | AG extension (no `/apps` type) |
+| `duration` | — | AG extension (no `/apps` type) |
+
+`/apps` also defines `multi_choice` (an **option-constrained** multi-select). AgentGuard's `list` is the free-form equivalent of `/apps` `list`; `multi_choice` is **reserved** for a future option-constrained list type and is not yet accepted.
 
 ## Strict Engine Rationale
 
@@ -39,7 +41,7 @@ AgentGuard retains its **strict, injection-safe parameter compiler** and does NO
 
 **Rationale:**
 - The renderer escapes quotes and backslashes only and substitutes exact placeholders (`{{ .Config.<key> }}`).
-- No parameter type may inject identifiers, operators, SQL clauses, functions, or arbitrary SQL — all values are rendered as literals (strings as quoted strings, numbers as decimal literals, enums/regex as literals, etc.).
+- No parameter type may inject identifiers, operators, SQL clauses, functions, or arbitrary SQL — all values are rendered as literals (strings as quoted strings, floats as decimal literals, choice/regex as quoted literals, etc.).
 - This design prevents accidental or malicious SQL injection through rule parameters, a critical security property for a real-time security platform that executes parameterized rules against live data.
 
 ## Secret Parameters

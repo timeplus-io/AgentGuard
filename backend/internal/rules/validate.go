@@ -218,7 +218,7 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 		}
 		return i, nil
 
-	case "number":
+	case "float":
 		f, err := coerceFloat64(v)
 		if err != nil {
 			return nil, err
@@ -231,10 +231,10 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 		}
 		return f, nil
 
-	case "boolean":
+	case "bool":
 		b, ok := v.(bool)
 		if !ok {
-			return nil, fmt.Errorf("expected boolean, got %s", typeName(v))
+			return nil, fmt.Errorf("expected bool, got %s", typeName(v))
 		}
 		return b, nil
 
@@ -251,13 +251,13 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 		}
 		return s, nil
 
-	case "enum":
+	case "choice":
 		s, ok := v.(string)
 		if !ok {
 			return nil, fmt.Errorf("expected string, got %s", typeName(v))
 		}
 		if len(p.Options) == 0 {
-			return nil, fmt.Errorf("enum parameter declares no options")
+			return nil, fmt.Errorf("choice parameter declares no options")
 		}
 		for _, opt := range p.Options {
 			if s == opt {
@@ -266,7 +266,7 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 		}
 		return nil, fmt.Errorf("must be one of: %s", strings.Join(p.Options, ", "))
 
-	case "string_list":
+	case "list":
 		items, err := coerceStringSlice(v)
 		if err != nil {
 			return nil, err
@@ -332,7 +332,7 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 		return i, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported parameter type %q (supported: integer, number, boolean, string, enum, string_list, regex, duration)", p.Type)
+		return nil, fmt.Errorf("unsupported parameter type %q (supported: integer, float, bool, string, choice, list, regex, duration)", p.Type)
 	}
 }
 

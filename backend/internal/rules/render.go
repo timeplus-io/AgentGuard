@@ -119,7 +119,7 @@ func renderValue(p catalog.Parameter, v any) (string, error) {
 		}
 		return strconv.FormatInt(i, 10), nil
 
-	case "number":
+	case "float":
 		f, ok := v.(float64)
 		if !ok {
 			return "", fmt.Errorf("parameter %q: internal: expected float64, got %T", p.Key, v)
@@ -133,7 +133,7 @@ func renderValue(p catalog.Parameter, v any) (string, error) {
 		// 'f' format: canonical decimal, never exponent notation in SQL.
 		return strconv.FormatFloat(f, 'f', -1, 64), nil
 
-	case "boolean":
+	case "bool":
 		b, ok := v.(bool)
 		if !ok {
 			return "", fmt.Errorf("parameter %q: internal: expected bool, got %T", p.Key, v)
@@ -143,14 +143,14 @@ func renderValue(p catalog.Parameter, v any) (string, error) {
 		}
 		return "false", nil
 
-	case "string", "enum":
+	case "string", "choice":
 		s, ok := v.(string)
 		if !ok {
 			return "", fmt.Errorf("parameter %q: internal: expected string, got %T", p.Key, v)
 		}
 		return renderStringLiteral(s), nil
 
-	case "string_list":
+	case "list":
 		items, ok := v.([]string)
 		if !ok {
 			return "", fmt.Errorf("parameter %q: internal: expected []string, got %T", p.Key, v)

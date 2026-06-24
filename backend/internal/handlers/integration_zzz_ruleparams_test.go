@@ -257,3 +257,39 @@ func TestIntegration_DurationParamRuleDetects(t *testing.T) {
 		t.Errorf("%s: got %d, want 0 (tool_duration_ms 1000 <= 5000)", neg, counts[neg])
 	}
 }
+
+// TestIntegration_RuleRP128Detection installs the shipped seed rule rp-128 (which
+// uses BOTH a duration and a regex parameter) and verifies its conjunction
+// semantics live: a tool_complete that is slow AND whose output matches the
+// default signature fires; one that is slow-but-clean, or matching-but-fast, does
+// not. This proves the regex/duration extensions work in a real shipped rule, not
+// only in machinery/fixtures.
+func TestIntegration_RuleRP128Detection(t *testing.T) {
+	r := newRuleE2E(t)
+	r.install("rp-128") // defaults: min_duration_ms=10000, output_signature matches AKIA…
+
+	pfx := randPfx(t)
+	hit := "rp128-hit-" + pfx        // slow + matching -> fires
+	slowClean := "rp128-slow-" + pfx // slow + no match -> suppressed
+	fastHit := "rp128-fast-" + pfx   // matching + fast -> suppressed
+	ts := time.Now().UTC().Format("2006-01-02 15:04:05.000")
+	cols := `(event_time, event_type, agent_id, deployment_id, session_id, run_id, tool_name, tool_result, tool_duration_ms)`
+
+	// HIT: 15000ms (> 10000) AND output contains an AWS key id (matches default regex).
+	r.tpExec(fmt.Sprintf(`INSERT INTO agentguard_cim_event %s VALUES ('%s','tool_complete','agent-e2e','dep-e2e','%s','r1','cat','dumped AKIAIOSFODNN7EXAMPLE from env',15000)`, cols, ts, hit))
+	// SLOW-CLEAN: slow but no signature match -> suppressed by the regex branch.
+	r.tpExec(fmt.Sprintf(`INSERT INTO agentguard_cim_event %s VALUES ('%s','tool_complete','agent-e2e','dep-e2e','%s','r1','find','large benign listing with no secrets',15000)`, cols, ts, slowClean))
+	// FAST-HIT: matches the signature but ran only 1000ms -> suppressed by the duration floor.
+	r.tpExec(fmt.Sprintf(`INSERT INTO agentguard_cim_event %s VALUES ('%s','tool_complete','agent-e2e','dep-e2e','%s','r1','cat','dumped AKIAIOSFODNN7EXAMPLE from env',1000)`, cols, ts, fastHit))
+
+	counts := r.detectionCounts("rp-128", []string{hit}, []string{hit, slowClean, fastHit})
+	if counts[hit] != 1 {
+		t.Errorf("%s: got %d, want 1 (slow AND matching signature)", hit, counts[hit])
+	}
+	if counts[slowClean] != 0 {
+		t.Errorf("%s: got %d, want 0 (slow but no signature match)", slowClean, counts[slowClean])
+	}
+	if counts[fastHit] != 0 {
+		t.Errorf("%s: got %d, want 0 (matches signature but below the duration floor)", fastHit, counts[fastHit])
+	}
+}

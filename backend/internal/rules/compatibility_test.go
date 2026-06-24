@@ -218,8 +218,8 @@ func TestPlanUpgradeConstraintTighteningConflicts(t *testing.T) {
 }
 
 func TestPlanUpgradeEnumOptionNarrowingConflicts(t *testing.T) {
-	cur := defV("1.0.0", catalog.Parameter{Key: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block", "hold"}})
-	next := defV("2.0.0", catalog.Parameter{Key: "mode", Type: "enum", Default: "warn", Options: []string{"warn", "block"}})
+	cur := defV("1.0.0", catalog.Parameter{Key: "mode", Type: "choice", Default: "warn", Options: []string{"warn", "block", "hold"}})
+	next := defV("2.0.0", catalog.Parameter{Key: "mode", Type: "choice", Default: "warn", Options: []string{"warn", "block"}})
 	in := map[string]any{"mode": "hold"}
 
 	res, err := PlanUpgrade(cur, next, in)
@@ -303,7 +303,7 @@ func TestPlanUpgradeAccountingAcrossMixedOutcomes(t *testing.T) {
 	cur := defV("1.0.0",
 		catalog.Parameter{Key: "keep", Type: "integer", Default: 1},
 		catalog.Parameter{Key: "old", Type: "string", Default: "x"},
-		catalog.Parameter{Key: "dead", Type: "boolean", Default: false},
+		catalog.Parameter{Key: "dead", Type: "bool", Default: false},
 		catalog.Parameter{Key: "morph", Type: "integer", Default: 1},
 	)
 	next := defV("2.0.0",

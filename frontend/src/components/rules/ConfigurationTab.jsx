@@ -179,7 +179,7 @@ function validateAll(schema, values) {
 function validateOne(p, v) {
   switch (p.type) {
     case 'integer':
-    case 'number': {
+    case 'float': {
       if (v === '' || v == null) return 'value is required'
       const n = Number(v)
       if (Number.isNaN(n) || !Number.isFinite(n)) return 'must be a finite number'
@@ -196,10 +196,10 @@ function validateOne(p, v) {
       if (p.max_length != null && len > p.max_length) return `must be ≤ ${p.max_length} characters`
       return null
     }
-    case 'enum':
+    case 'choice':
       if (!p.options?.includes(v)) return 'must be one of the allowed options'
       return null
-    case 'string_list': {
+    case 'list': {
       const list = Array.isArray(v) ? v : []
       if (list.length === 0) return 'must contain at least one item'
       if (new Set(list).size !== list.length) return 'items must be unique'
@@ -207,7 +207,7 @@ function validateOne(p, v) {
       if (p.max_items != null && list.length > p.max_items) return `must contain ≤ ${p.max_items} items`
       return null
     }
-    case 'boolean':
+    case 'bool':
     default:
       return null
   }

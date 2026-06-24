@@ -28,16 +28,17 @@ import (
 	"time"
 )
 
-// Canonical Go representations per parameter type (Phase A):
+// Canonical Go representations per parameter type (Timeplus Apps vocabulary +
+// AgentGuard extensions):
 //
-//	integer     → int64
-//	number      → float64 (always finite)
-//	boolean     → bool
-//	string      → string
-//	enum        → string (member of Options)
-//	string_list → []string (non-empty, unique, order-preserving)
-//	regex       → string (compiles as an RE2 pattern; rendered as a SQL string literal)
-//	duration    → int64 (count of the parameter's fixed unit; rendered bare)
+//	integer  → int64
+//	float    → float64 (always finite)
+//	bool     → bool
+//	string   → string
+//	choice   → string (member of Options)
+//	list     → []string (non-empty, unique, order-preserving)
+//	regex    → string (compiles as an RE2 pattern; rendered as a SQL string literal)
+//	duration → int64 (count of the parameter's fixed unit; rendered bare)
 
 // FieldError is a single per-parameter validation failure.
 type FieldError struct {

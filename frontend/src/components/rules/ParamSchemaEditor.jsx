@@ -36,11 +36,11 @@ export function stripInternal(config) {
 
 export const PARAM_TYPES = [
   'integer',
-  'number',
-  'boolean',
+  'float',
+  'bool',
   'string',
-  'enum',
-  'string_list',
+  'choice',
+  'list',
   'regex',
   'duration',
 ]
@@ -136,7 +136,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
       max_length: undefined,
       min_items: undefined,
       max_items: undefined,
-      options: type === 'enum' ? row.options || [] : undefined,
+      options: type === 'choice' ? row.options || [] : undefined,
       unit: type === 'duration' ? row.unit || '' : undefined,
     })
   }
@@ -269,12 +269,12 @@ function DefaultInput({ row, onUpdate }) {
   const set = (v) => onUpdate({ default: v })
   switch (row.type) {
     case 'integer':
-    case 'number':
+    case 'float':
     case 'duration':
       return (
         <input
           type="number"
-          step={row.type === 'number' ? 'any' : '1'}
+          step={row.type === 'float' ? 'any' : '1'}
           value={row.default ?? ''}
           onChange={(e) => {
             const raw = e.target.value
@@ -285,7 +285,7 @@ function DefaultInput({ row, onUpdate }) {
           className={inputCls}
         />
       )
-    case 'boolean':
+    case 'bool':
       return (
         <select
           value={row.default ? 'true' : 'false'}
@@ -296,7 +296,7 @@ function DefaultInput({ row, onUpdate }) {
           <option value="true">true</option>
         </select>
       )
-    case 'enum':
+    case 'choice':
       return (
         <select
           value={row.default ?? ''}
@@ -311,7 +311,7 @@ function DefaultInput({ row, onUpdate }) {
           ))}
         </select>
       )
-    case 'string_list':
+    case 'list':
       return (
         <input
           type="text"
@@ -369,7 +369,7 @@ function Constraints({ row, onUpdate }) {
 
   switch (row.type) {
     case 'integer':
-    case 'number':
+    case 'float':
       return (
         <div className="grid grid-cols-2 gap-3">
           {numField('min', 'Min')}
@@ -400,22 +400,22 @@ function Constraints({ row, onUpdate }) {
           {numField('max_length', 'Max length')}
         </div>
       )
-    case 'string_list':
+    case 'list':
       return (
         <div className="grid grid-cols-2 gap-3">
           {numField('min_items', 'Min items')}
           {numField('max_items', 'Max items')}
         </div>
       )
-    case 'enum':
+    case 'choice':
       return <OptionsEditor row={row} onUpdate={onUpdate} />
-    case 'boolean':
+    case 'bool':
     default:
       return null
   }
 }
 
-// OptionsEditor edits the allowed values of an enum parameter as removable chips.
+// OptionsEditor edits the allowed values of a choice parameter as removable chips.
 function OptionsEditor({ row, onUpdate }) {
   const [draft, setDraft] = useState('')
   const options = Array.isArray(row.options) ? row.options : []
@@ -488,14 +488,14 @@ function OptionsEditor({ row, onUpdate }) {
 function defaultForType(type) {
   switch (type) {
     case 'integer':
-    case 'number':
+    case 'float':
     case 'duration':
       return ''
-    case 'boolean':
+    case 'bool':
       return false
-    case 'string_list':
+    case 'list':
       return []
-    case 'enum':
+    case 'choice':
     case 'string':
     case 'regex':
     default:

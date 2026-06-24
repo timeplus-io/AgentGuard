@@ -33,7 +33,7 @@ config:
   - key: dangerous_tools
     label: "Dangerous tools"
     description: "Tool names treated as inherently high-risk shell/exec surfaces."
-    type: string_list
+    type: list
     default: [bash, shell, exec, run_terminal_cmd, computer]
     min_items: 1
     max_items: 64

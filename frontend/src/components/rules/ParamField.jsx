@@ -2,8 +2,8 @@ import { useState } from 'react'
 
 // ParamField renders ONE editable rule parameter control, selected by the
 // backend-declared parameter type. All parameter-type branching lives here so
-// RuleDetail / ConfigurationTab stay type-agnostic (types: integer, number,
-// boolean, string, enum, string_list, regex, duration).
+// RuleDetail / ConfigurationTab stay type-agnostic (types: integer, float,
+// bool, string, choice, list, regex, duration).
 //
 // Props:
 //   param        – schema entry { key, label, description, type, default, min,
@@ -66,7 +66,7 @@ export default function ParamField({ param, value, defaultValue, overridden, err
 function TypedControl({ param, value, onChange }) {
   switch (param.type) {
     case 'integer':
-    case 'number':
+    case 'float':
       return (
         <input
           type="number"
@@ -84,7 +84,7 @@ function TypedControl({ param, value, onChange }) {
         />
       )
 
-    case 'boolean':
+    case 'bool':
       return (
         <button
           type="button"
@@ -103,7 +103,7 @@ function TypedControl({ param, value, onChange }) {
         </button>
       )
 
-    case 'enum':
+    case 'choice':
       return (
         <select
           className={inputCls + ' appearance-none'}
@@ -118,7 +118,7 @@ function TypedControl({ param, value, onChange }) {
         </select>
       )
 
-    case 'string_list':
+    case 'list':
       return <StringListControl param={param} value={Array.isArray(value) ? value : []} onChange={onChange} />
 
     case 'regex':
