@@ -207,6 +207,28 @@ function validateOne(p, v) {
       if (p.max_items != null && list.length > p.max_items) return `must contain ≤ ${p.max_items} items`
       return null
     }
+    case 'regex': {
+      const s = v ?? ''
+      if (typeof s !== 'string') return 'must be a string'
+      if (s === '') return 'pattern is required'
+      if (p.max_length != null && [...s].length > p.max_length) return `must be ≤ ${p.max_length} characters`
+      // Best-effort client check; the backend compiles the pattern as RE2 (the
+      // authoritative validation), which differs from JS RegExp in some corners.
+      try {
+        new RegExp(s)
+      } catch {
+        return 'must be a valid regular expression'
+      }
+      return null
+    }
+    case 'duration': {
+      if (v === '' || v == null) return 'value is required'
+      const n = Number(v)
+      if (!Number.isInteger(n)) return 'must be a whole number'
+      if (p.min != null && n < p.min) return `must be ≥ ${p.min}`
+      if (p.max != null && n > p.max) return `must be ≤ ${p.max}`
+      return null
+    }
     case 'bool':
     default:
       return null

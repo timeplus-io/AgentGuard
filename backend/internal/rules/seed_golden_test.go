@@ -135,13 +135,13 @@ func TestRP128_DefaultsGolden(t *testing.T) {
 	d := seedDef(t, loadSeed(t), "rp-128")
 	assertDefaultsRenderInPlace(t, d, map[string]string{
 		"min_duration_ms":  "10000",
-		"output_signature": "'(AKIA|ASIA|ghp_|gho_|xox[baprs]|sk-|-----BEGIN)'",
+		"output_signature": "'(AKIA|ASIA)[0-9A-Z]{16}|gh[po]_[A-Za-z0-9]{36}|xox[baprs]-[0-9A-Za-z-]{10,}|sk-[A-Za-z0-9]{20,}|-----BEGIN'",
 	})
 	compiled, _ := Compile(d, nil)
 	if !strings.Contains(compiled.SQL, "tool_duration_ms > 10000") {
 		t.Errorf("rp-128 duration default not rendered bare in place: %q", compiled.SQL)
 	}
-	if !strings.Contains(compiled.SQL, "match(coalesce(tool_result, ''), '(AKIA|ASIA|ghp_|gho_|xox[baprs]|sk-|-----BEGIN)')") {
+	if !strings.Contains(compiled.SQL, "match(coalesce(tool_result, ''), '(AKIA|ASIA)[0-9A-Z]{16}|gh[po]_[A-Za-z0-9]{36}|xox[baprs]-[0-9A-Za-z-]{10,}|sk-[A-Za-z0-9]{20,}|-----BEGIN')") {
 		t.Errorf("rp-128 regex default not rendered as a quoted literal in place: %q", compiled.SQL)
 	}
 }

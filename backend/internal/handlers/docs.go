@@ -960,7 +960,7 @@ const openAPISpec = `{
         ],
         "requestBody": {
           "required": false,
-          "content": { "application/json": { "schema": { "type": "object", "properties": { "overrides": { "type": "object", "description": "Typed parameter overrides keyed by parameter ID; omitted keys use defaults." }, "reason": { "type": "string", "description": "Audit reason." } } }, "example": { "overrides": { "command_chain_threshold": 25 } } } }
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "overrides": { "type": "object", "description": "Typed parameter overrides keyed by parameter key; omitted keys use defaults." }, "reason": { "type": "string", "description": "Audit reason." } } }, "example": { "overrides": { "command_chain_threshold": 25 } } } }
         },
         "responses": {
           "200": { "description": "Installed instance snapshot.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleInstance" } } } },
@@ -985,7 +985,7 @@ const openAPISpec = `{
           "content": { "application/json": { "schema": {
             "type": "object",
             "properties": {
-              "overrides": { "type": "object", "description": "Full typed parameter override map keyed by parameter ID; omitted keys reset to defaults." },
+              "overrides": { "type": "object", "description": "Full typed parameter override map keyed by parameter key; omitted keys reset to defaults." },
               "reason": { "type": "string", "description": "Audit reason recorded on the snapshot." }
             }
           }, "example": { "overrides": { "dangerous_tools": ["bash", "shell", "exec"], "command_chain_threshold": 25 } } }}
@@ -1945,7 +1945,7 @@ const openAPISpec = `{
           "in_catalog":   { "type": "boolean", "description": "Whether a catalog definition currently backs this rule." },
           "definition":   { "type": "object", "description": "The current catalog definition (when in_catalog)." },
           "schema":       { "type": "array", "items": { "type": "object" }, "description": "Ordered parameter schema from the current definition." },
-          "defaults":     { "type": "object", "description": "Normalized default value per parameter ID." },
+          "defaults":     { "type": "object", "description": "Normalized default value per parameter key." },
           "overrides":    { "type": "object", "description": "The instance's persisted parameter overrides (deviations from default)." },
           "effective":    { "type": "object", "description": "Defaults overlaid with overrides, normalized." },
           "rendered_sql": { "type": "string", "description": "The deployed, read-only rendered SELECT." },

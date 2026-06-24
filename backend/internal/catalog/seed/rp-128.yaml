@@ -50,9 +50,9 @@ config:
     max: 3600000
   - key: output_signature
     label: "Sensitive-output signature (RE2)"
-    description: "RE2 pattern matched against tool_result. Default covers common credential/key prefixes (AWS, GitHub, Slack, OpenAI) and PEM private-key headers."
+    description: "RE2 pattern matched against tool_result. Default matches realistic credential/key SHAPES (length-anchored, not bare prefixes) — AWS access keys, GitHub PATs, Slack tokens, OpenAI keys — plus PEM private-key headers. Tune for your environment."
     type: regex
-    default: "(AKIA|ASIA|ghp_|gho_|xox[baprs]|sk-|-----BEGIN)"
+    default: "(AKIA|ASIA)[0-9A-Z]{16}|gh[po]_[A-Za-z0-9]{36}|xox[baprs]-[0-9A-Za-z-]{10,}|sk-[A-Za-z0-9]{20,}|-----BEGIN"
 sql_template: |
   -- Prolonged Tool Execution Emitting a Sensitive-Data Signature
   -- CWE-200: Exposure of Sensitive Information to an Unauthorized Actor
