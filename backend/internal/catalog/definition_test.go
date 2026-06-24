@@ -534,7 +534,9 @@ func TestOrigin_LoaderRules(t *testing.T) {
 
 // TestSeedFS_AllDefinitionsValid asserts every embedded seed definition passes
 // structural validation and that no two seed definitions collide on UDF
-// function names.
+// function names or on their hyphen-insensitive MV-namespace key (MVResourceKey)
+// — the latter is a real invariant the Save/load/install guards enforce, so the
+// shipped seeds must satisfy it too.
 func TestSeedFS_AllDefinitionsValid(t *testing.T) {
 	m, err := New(SeedFS, "")
 	if err != nil {
@@ -544,7 +546,8 @@ func TestSeedFS_AllDefinitionsValid(t *testing.T) {
 	if len(defs) == 0 {
 		t.Fatal("seed catalog loaded zero definitions")
 	}
-	udfOwner := map[string]string{} // function name → rule ID
+	udfOwner := map[string]string{}   // function name → rule ID
+	mvKeyOwner := map[string]string{} // MV resource key → rule ID
 	for _, d := range defs {
 		if err := d.Validate(); err != nil {
 			t.Errorf("seed definition %s fails Validate: %v", d.ID, err)
@@ -553,6 +556,10 @@ func TestSeedFS_AllDefinitionsValid(t *testing.T) {
 		if d.Origin != OriginBuiltin {
 			t.Errorf("seed definition %s has origin %q, want builtin", d.ID, d.Origin)
 		}
+		if owner, dup := mvKeyOwner[MVResourceKey(d.ID)]; dup {
+			t.Errorf("MV resource key %q claimed by both %s and %s (hyphen-insensitive collision)", MVResourceKey(d.ID), owner, d.ID)
+		}
+		mvKeyOwner[MVResourceKey(d.ID)] = d.ID
 		names, err := d.UDFNames()
 		if err != nil {
 			t.Errorf("seed definition %s: UDFNames: %v", d.ID, err)

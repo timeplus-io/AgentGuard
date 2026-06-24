@@ -247,13 +247,15 @@ func (m *Manager) Save(d Definition) error {
 			return fmt.Errorf("invalid definition %s: %w", d.ID, err)
 		}
 	}
-	// NOTE: this ownership check followed by the insert below is a
-	// check-then-act race across different rule IDs — two concurrent Saves
-	// claiming the same UDF name can both pass. Save is NOT serialized by the
-	// rules lifecycle service (CreateRule calls Save outside the per-rule lock,
-	// and the lock is keyed by rule_id while this race is cross-rule); a
-	// catalog-wide mutation lock is the real fix. Tolerated for now: custom-rule
-	// creation is a low-frequency operator action.
+	// NOTE: the cross-rule uniqueness checks below — UDF-name ownership and the
+	// MV-namespace key — are each a check-then-act race across different rule IDs:
+	// two concurrent Saves claiming the same UDF name, or two IDs that collapse to
+	// the same MV key, can both pass before either writes to m.local. Save is NOT
+	// serialized by the rules lifecycle service (CreateRule calls Save outside the
+	// per-rule lock, and the lock is keyed by rule_id while these races are
+	// cross-rule); a catalog-wide mutation lock around validate-then-commit is the
+	// real fix. Tolerated for now: custom-rule creation is a low-frequency
+	// operator action.
 	if err := m.ValidateUDFOwnership(d); err != nil {
 		return fmt.Errorf("definition %s: %w", d.ID, err)
 	}
