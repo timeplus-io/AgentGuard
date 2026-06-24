@@ -36,9 +36,8 @@ import (
 //	string      → string
 //	enum        → string (member of Options)
 //	string_list → []string (non-empty, unique, order-preserving)
-//
-// regex and duration are Phase B; the type switches in validate.go and
-// render.go are structured so adding them is a local change.
+//	regex       → string (compiles as an RE2 pattern; rendered as a SQL string literal)
+//	duration    → int64 (count of the parameter's fixed unit; rendered bare)
 
 // FieldError is a single per-parameter validation failure.
 type FieldError struct {

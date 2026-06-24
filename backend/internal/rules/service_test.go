@@ -997,6 +997,102 @@ func TestUpdateDefinition_IncompatibleOverrideConflicts(t *testing.T) {
 	}
 }
 
+// TestUpdateDefinition_TypeChangeConflicts verifies that editing a parameter's
+// TYPE is blocked with an explicit *ConflictError. Because UpdateDefinition still
+// holds prevDef, it uses the two-definition PlanUpgrade, which detects the change
+// directly — unlike the value-only planner, which would silently preserve an
+// integer→number change whose stored value normalizes against both types.
+func TestUpdateDefinition_TypeChangeConflicts(t *testing.T) {
+	prev := customDef("rp-c", "1.0.0", intParam("t", 15, f64(1), f64(100)))
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-c": prev}}
+	svc, _, _, rec := newTestService(defs)
+	st := svc.store.(*fakeStore)
+	st.latest["rp-c"] = installedInst(prev, true, 2, map[string]any{"t": json.Number("20")}, nil)
+
+	// Same key "t", but type integer → number: the value 20 normalizes against
+	// both, so only the two-definition planner catches this.
+	numParam := catalog.Parameter{Key: "t", Label: "t", Type: "number", Default: float64(5), Min: f64(1), Max: f64(100)}
+	mutated := customDef("rp-c", "1.1.0", numParam)
+
+	_, err := svc.UpdateDefinition(mutated, "alice", "change type")
+	var ce *ConflictError
+	if !errors.As(err, &ce) {
+		t.Fatalf("type change must block with *ConflictError, got %v", err)
+	}
+	if len(ce.Conflicts) == 0 || !strings.Contains(ce.Conflicts[0].Message, "type changed") {
+		t.Errorf("conflict should name the type change, got %+v", ce.Conflicts)
+	}
+	// Definition rolled back and no Timeplus work performed.
+	if got := defs.defs["rp-c"].Hash(); got != prev.Hash() {
+		t.Errorf("definition not rolled back: hash=%s want=%s", got, prev.Hash())
+	}
+	if len(rec.snapshot()) != 0 {
+		t.Errorf("blocked edit must perform no Timeplus work, got %v", rec.snapshot())
+	}
+	if len(st.appended) != 0 {
+		t.Errorf("blocked edit must append no snapshot, got %d", len(st.appended))
+	}
+}
+
+// TestUpdateDefinition_AliasRenamePreservesOverride verifies that renaming a
+// parameter and declaring the old key as an alias migrates the stored override
+// onto the new key (same type, value still valid) rather than dropping it.
+func TestUpdateDefinition_AliasRenamePreservesOverride(t *testing.T) {
+	prev := customDef("rp-c", "1.0.0", intParam("t", 15, f64(1), f64(100)))
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-c": prev}}
+	svc, _, mv, rec := newTestService(defs)
+	st := svc.store.(*fakeStore)
+	st.latest["rp-c"] = installedInst(prev, true, 2, map[string]any{"t": json.Number("20")}, nil)
+
+	renamed := catalog.Parameter{Key: "threshold", Label: "threshold", Type: "integer",
+		Default: int64(15), Min: f64(1), Max: f64(100), Aliases: []string{"t"}}
+	mutated := customDef("rp-c", "1.1.0", renamed)
+
+	inst, err := svc.UpdateDefinition(mutated, "alice", "rename t -> threshold")
+	if err != nil {
+		t.Fatalf("alias rename must succeed, got %v", err)
+	}
+	wantLog(t, rec.snapshot(), []string{"applyUDFs", "preflight", "drop", "applyUDFs", "create", "append"})
+	if got, _ := inst.Overrides["threshold"].(int64); got != 20 {
+		t.Errorf("override not migrated to the renamed key: %#v", inst.Overrides)
+	}
+	if _, present := inst.Overrides["t"]; present {
+		t.Errorf("override must not remain under the old key, got %#v", inst.Overrides["t"])
+	}
+	if len(mv.creates) != 1 || mv.creates[0] != inst.RenderedSQL {
+		t.Errorf("MV not created with new rendered SQL: %v", mv.creates)
+	}
+}
+
+// TestInstall_RejectsMVKeyCollisionWithInstalled verifies the install-time guard:
+// installing a rule whose ID collapses onto a DIFFERENT already-installed rule's
+// MV name (e.g. "rp042" vs installed "rp-042") is blocked with a *ConflictError
+// before any Timeplus work — closing the orphan/hand-added-snapshot gap the
+// catalog Save guard cannot see.
+func TestInstall_RejectsMVKeyCollisionWithInstalled(t *testing.T) {
+	target := testDef("rp042", "1.0.0") // the rule being installed
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp042": target}}
+	svc, st, _, rec := newTestService(defs)
+	// A different rule, "rp-042", is already installed — same MV key as "rp042".
+	other := testDef("rp-042", "1.0.0")
+	st.latest["rp-042"] = installedInst(other, true, 1, nil, nil)
+
+	_, err := svc.Install("rp042", nil, "alice", "install")
+	var ce *ConflictError
+	if !errors.As(err, &ce) {
+		t.Fatalf("MV-key collision on install must block with *ConflictError, got %v", err)
+	}
+	if !strings.Contains(ce.Message, "rp-042") {
+		t.Errorf("conflict should name the installed rule it collides with, got %q", ce.Message)
+	}
+	if len(rec.snapshot()) != 0 {
+		t.Errorf("blocked install must perform no Timeplus work, got %v", rec.snapshot())
+	}
+	if len(st.appended) != 0 {
+		t.Errorf("blocked install must append no snapshot, got %d", len(st.appended))
+	}
+}
+
 // ── Toggle ───────────────────────────────────────────────────────────────────────
 
 func TestToggle_DisablePreservesRenderedSQLAndOverrides(t *testing.T) {

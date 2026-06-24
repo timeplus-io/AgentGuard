@@ -564,9 +564,10 @@ func startupSyncMVs(ctx context.Context, conn proton.Conn, timeplusCfg config.Ti
 				continue
 			}
 			// Validate-first: prove the snapshot SQL builds against a disposable
-			// sink BEFORE the destructive drop, so a failed recreate can never
-			// turn a healthy MV into no MV. On failure, leave the existing MV
-			// untouched and move on.
+			// sink BEFORE the destructive drop, so a DETERMINISTIC recreate failure
+			// cannot turn a healthy MV into no MV. (A transient failure between the
+			// drop and create still can; the next startup or /api/rules/sync repairs
+			// it.) On preflight failure, leave the existing MV untouched and move on.
 			if err := PreflightCandidate(&timeplusCfg, r.ruleID, r.renderedSQL); err != nil {
 				log.Printf("timeplus: startup preflight %s failed, leaving existing MV intact: %v", r.ruleID, err)
 				continue

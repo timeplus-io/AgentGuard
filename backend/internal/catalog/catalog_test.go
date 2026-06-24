@@ -1297,7 +1297,7 @@ func TestManager_IsCustom(t *testing.T) {
 // uses to reject colliding IDs. It MUST mirror internal/timeplus.MVName, which
 // names each rule's view mv_rule_<id-with-hyphens-stripped> (see
 // testdata/README.md and definition.go). If MVName's normalization ever changes,
-// mvResourceKey — and this test — must change with it.
+// MVResourceKey — and this test — must change with it.
 func TestMVResourceKey_StripsHyphens(t *testing.T) {
 	cases := map[string]string{
 		"rp-042": "rp042",
@@ -1307,15 +1307,39 @@ func TestMVResourceKey_StripsHyphens(t *testing.T) {
 		"x_1":    "x_1", // underscores are significant; only hyphens collapse
 	}
 	for in, want := range cases {
-		if got := mvResourceKey(in); got != want {
-			t.Errorf("mvResourceKey(%q) = %q, want %q", in, got, want)
+		if got := MVResourceKey(in); got != want {
+			t.Errorf("MVResourceKey(%q) = %q, want %q", in, got, want)
 		}
 	}
-	if mvResourceKey("rp-042") != mvResourceKey("rp042") {
+	if MVResourceKey("rp-042") != MVResourceKey("rp042") {
 		t.Error("rp-042 and rp042 must share an MV resource key (hyphens stripped)")
 	}
-	if mvResourceKey("x-1") == mvResourceKey("x_1") {
+	if MVResourceKey("x-1") == MVResourceKey("x_1") {
 		t.Error("x-1 and x_1 must NOT share a key (only hyphens are stripped)")
+	}
+}
+
+// TestNew_SkipsMVNamespaceCollidingLocalDef proves that a hand-added local YAML
+// whose ID collapses onto a seed rule's MV name (here local "rp001" beside seed
+// "rp-001") is skipped at load — the same MV-namespace uniqueness the API Save
+// path enforces, applied to the on-disk catalog directory too.
+func TestNew_SkipsMVNamespaceCollidingLocalDef(t *testing.T) {
+	tmp := t.TempDir()
+	seed := fstest.MapFS{"a.yaml": {Data: []byte("id: rp-001\nname: Builtin\n")}}
+	// Local file collides with seed rp-001 in the MV namespace (rp001 -> rp001).
+	if err := os.WriteFile(filepath.Join(tmp, "rp001.yaml"),
+		[]byte("id: rp001\nname: Collider\nversion: 1.0.0\nsql_template: SELECT 1\n"), 0o644); err != nil {
+		t.Fatalf("write collider: %v", err)
+	}
+	m, err := New(seed, tmp)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, ok := m.Lookup("rp001"); ok {
+		t.Error("MV-namespace-colliding local definition must be skipped at load")
+	}
+	if _, ok := m.Lookup("rp-001"); !ok {
+		t.Error("the seed definition must remain")
 	}
 }
 

@@ -2,8 +2,8 @@ import { useState } from 'react'
 
 // ParamField renders ONE editable rule parameter control, selected by the
 // backend-declared parameter type. All parameter-type branching lives here so
-// RuleDetail / ConfigurationTab stay type-agnostic (Phase A types: integer,
-// number, boolean, string, enum, string_list; regex/duration are Phase B).
+// RuleDetail / ConfigurationTab stay type-agnostic (types: integer, number,
+// boolean, string, enum, string_list, regex, duration).
 //
 // Props:
 //   param        – schema entry { key, label, description, type, default, min,

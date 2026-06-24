@@ -892,8 +892,8 @@ type Definition struct {
     Author            string      `yaml:"author"`
     Tags              []string    `yaml:"tags"`
     UDFs              []string    `yaml:"udfs"`               // rule-scoped CREATE [OR REPLACE] FUNCTION DDL
-    SQLTemplate       string      `yaml:"sql_template"`       // strict {{params.<id>}} placeholders
-    Parameters        []Parameter `yaml:"parameters"`         // ordered, typed, with defaults
+    SQLTemplate       string      `yaml:"sql_template"`       // strict {{ .Config.<key> }} placeholders
+    Parameters        []Parameter `yaml:"config"`             // ordered, typed, with defaults
     Origin            string      `yaml:"origin"`             // builtin | imported | custom
 }
 ```
@@ -906,15 +906,15 @@ rendered from.
 #### 5.1.1 Parameter schema
 
 ```yaml
-parameters:
-  - id: dangerous_tools          # must match ^[a-z][a-z0-9_]{0,63}$
+config:
+  - key: dangerous_tools         # must match ^[a-z][a-z0-9_]{0,63}$
     label: "Dangerous tools"
     description: "Tool names treated as high-risk shell/exec surfaces."
     type: string_list
     default: [bash, shell, exec, run_terminal_cmd, computer]
     min_items: 1
     max_items: 64
-  - id: command_chain_threshold
+  - key: command_chain_threshold
     type: integer
     default: 15
     min: 1
@@ -929,14 +929,15 @@ parameters:
 | `string` | string | escaped single-quoted literal | `min_length`, `max_length` |
 | `enum` | string | escaped single-quoted literal | non-empty `options` |
 | `string_list` | unique ordered strings | `('a', 'b', …)` | `min_items`, `max_items`, item length |
-
-(`regex` and `duration` are reserved for Phase B and not yet accepted.)
+| `regex` | string (valid RE2) | escaped single-quoted literal | RE2-compilable; length |
+| `duration` | int64 count of `unit` | bare decimal (e.g. `30`) | `min`, `max`; fixed `unit` |
 
 Rules for authors:
-- Every declared parameter must appear in `sql_template`; every `{{params.<id>}}`
+- Every declared parameter must appear in `sql_template`; every `{{ .Config.<key> }}`
   placeholder must resolve to one declared parameter. Only the exact
-  `{{params.<id>}}` form is accepted — no template actions, conditionals, or other
-  namespaces. A placeholder may repeat.
+  `{{ .Config.<key> }}` form is accepted (surrounding whitespace optional) — no
+  template actions, conditionals, functions, or other namespaces. A placeholder
+  may repeat.
 - Every parameter needs a valid default so install-with-defaults always compiles.
 - Parameter IDs are compatibility contracts: a rename requires an `aliases:` entry
   on the replacement parameter so upgrades migrate the override.

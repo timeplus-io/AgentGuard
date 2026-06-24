@@ -137,6 +137,16 @@ func (m *Manager) loadDir(dir string, target map[string]Definition) error {
 				continue
 			}
 		}
+		// Reject a hand-added local file whose ID collapses onto a different
+		// already-loaded rule's MV name (seed or an earlier local). This mirrors
+		// the Save guard so the API and the on-disk load path enforce the same
+		// MV-namespace uniqueness — a local "rp001" beside seed "rp-001" would
+		// otherwise both deploy to mv_rule_rp001. mvKeyConflict reads m.seed plus
+		// whatever this pass has already written to target (== m.local during New).
+		if other, ok := m.mvKeyConflict(def.ID); ok {
+			log.Printf("catalog: skipping local definition %s: id %q collides with rule %q in the materialized-view namespace (hyphens are not significant)", path, def.ID, other)
+			continue
+		}
 		// Local definitions keep their stored origin; absent means custom.
 		if def.Origin == "" {
 			def.Origin = OriginCustom
@@ -190,14 +200,16 @@ func (m *Manager) Exists(id string) bool {
 	return ok
 }
 
-// mvResourceKey returns the key an ID collapses to in the Timeplus
+// MVResourceKey returns the key an ID collapses to in the Timeplus
 // materialized-view namespace. It MUST mirror internal/timeplus.MVName, which
 // names each rule's view mv_rule_<key> after stripping hyphens. Two distinct
-// catalog IDs that share a key would deploy to the same view and silently
-// clobber each other; Save rejects that. (Kept here rather than importing
-// internal/timeplus to avoid pulling the Proton client into the catalog layer;
-// TestMVResourceKey_StripsHyphens guards the mirror — see testdata/README.md.)
-func mvResourceKey(id string) string {
+// rule IDs that share a key would deploy to the same view and silently clobber
+// each other, so both the catalog Save guard (mvKeyConflict) and the lifecycle
+// service's install-time guard reject the collision. (Kept here rather than
+// importing internal/timeplus to avoid pulling the Proton client into the
+// catalog/rules layers; TestMVResourceKey_StripsHyphens guards the mirror — see
+// testdata/README.md.)
+func MVResourceKey(id string) string {
 	return strings.ReplaceAll(id, "-", "")
 }
 
@@ -205,11 +217,11 @@ func mvResourceKey(id string) string {
 // the same MV resource key (e.g. "rp-042" vs "rp042"). The same id is never a
 // conflict with itself, so override/edit/rollback re-saves are unaffected.
 func (m *Manager) mvKeyConflict(id string) (string, bool) {
-	key := mvResourceKey(id)
+	key := MVResourceKey(id)
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for other := range m.mergedLocked() {
-		if other != id && mvResourceKey(other) == key {
+		if other != id && MVResourceKey(other) == key {
 			return other, true
 		}
 	}

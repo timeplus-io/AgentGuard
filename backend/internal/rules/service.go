@@ -312,6 +312,34 @@ func (s *Service) checkUDFOwnership(def catalog.Definition) error {
 	return nil
 }
 
+// checkMVKeyOwnership rejects installing a rule whose Timeplus MV name would
+// collide with a DIFFERENT currently-installed rule's. Two rule IDs that differ
+// only in hyphenation map to the same mv_rule_<key> (catalog.MVResourceKey
+// mirrors timeplus.MVName), so installing one would silently drop/replace the
+// other's live MV. The catalog Save/load guards keep two colliding *definitions*
+// from coexisting, but an install can still claim an MV name owned by an orphan
+// or hand-added snapshot outside the catalog, so the invariant is enforced here
+// at the deploy boundary too — mirroring checkUDFOwnership against the same
+// installed-snapshot ledger. The collision is operator-correctable (rename), so
+// it surfaces as a *ConflictError (→ 409).
+func (s *Service) checkMVKeyOwnership(ruleID string) error {
+	key := catalog.MVResourceKey(ruleID)
+	current, err := s.store.ListCurrent()
+	if err != nil {
+		return err
+	}
+	for _, inst := range current {
+		if inst.RuleID == ruleID || inst.Deleted {
+			continue
+		}
+		if catalog.MVResourceKey(inst.RuleID) == key {
+			return &ConflictError{Message: fmt.Sprintf(
+				"rule %q maps to the same materialized view as installed rule %q (hyphens are not significant in MV names); choose a distinct id", ruleID, inst.RuleID)}
+		}
+	}
+	return nil
+}
+
 // ── Read path ────────────────────────────────────────────────────────────────────
 
 // MVHealth is the deployed-MV diagnostic for one rule. A disabled rule is
@@ -424,6 +452,12 @@ func (s *Service) Install(ruleID string, overrides map[string]any, actor, reason
 	if err := s.checkUDFOwnership(def); err != nil {
 		return RuleInstance{}, err
 	}
+	// Likewise, the rule must not claim an MV name already owned by a different
+	// installed rule (hyphen-insensitive collision), which would silently clobber
+	// its live MV on deploy.
+	if err := s.checkMVKeyOwnership(ruleID); err != nil {
+		return RuleInstance{}, err
+	}
 
 	compiled, err := Compile(def, overrides)
 	if err != nil {
@@ -529,10 +563,10 @@ func (s *Service) Configure(ruleID string, overrides map[string]any, actor, reas
 //	c. Read the current installed snapshot. If none is installed, the publish was
 //	   the whole operation: return a zero instance.
 //	d. Otherwise migrate the instance's CURRENT overrides onto the edited schema
-//	   (PlanUpgradeOverrides — drop/alias removed parameters, block genuine
-//	   incompatibilities with a *ConflictError), check UDF ownership, preflight,
-//	   and (via replaceAndPersist) replace the MV for an enabled rule and append
-//	   the new snapshot — the same compatibility handling Upgrade applies.
+//	   (PlanUpgrade with prevDef — drop/alias removed parameters, block genuine
+//	   incompatibilities including explicit type changes with a *ConflictError),
+//	   check UDF ownership, preflight, and (via replaceAndPersist) replace the MV
+//	   for an enabled rule and append the new snapshot.
 //
 // On ANY failure in step d the previous definition is republished
 // (restoreDefinition); the previous MV is already restored by the same seams
@@ -572,14 +606,23 @@ func (s *Service) UpdateDefinition(def catalog.Definition, actor, reason string)
 	}
 
 	// d. Migrate the instance's stored overrides onto the edited schema and
-	// redeploy, mirroring Upgrade's compatibility handling. An edit that drops or
-	// renames a parameter must drop/alias the affected override instead of failing
-	// on a now-"unknown parameter" — otherwise an installed custom rule could never
-	// have a parameter removed, which is the headline authoring use case. A
-	// genuinely incompatible override (e.g. a value outside a tightened range)
-	// still blocks with a *ConflictError. Any failure here restores the previous
-	// definition; the MV is restored by preflight/replaceAndPersist themselves.
-	plan := PlanUpgradeOverrides(def, inst.Overrides)
+	// redeploy. An edit that drops or renames a parameter must drop/alias the
+	// affected override instead of failing on a now-"unknown parameter" —
+	// otherwise an installed custom rule could never have a parameter removed,
+	// which is the headline authoring use case. Use the two-definition PlanUpgrade
+	// (not the value-only PlanUpgradeOverrides that Upgrade is forced to use): we
+	// still hold prevDef here, so a parameter's TYPE change is detected and blocked
+	// explicitly rather than slipping through on a value that happens to normalize
+	// against both types (the integer↔number fidelity loss). A genuinely
+	// incompatible override still blocks with a *ConflictError. Any failure here
+	// restores the previous definition; the MV is restored by
+	// preflight/replaceAndPersist themselves.
+	plan, err := PlanUpgrade(prevDef, def, inst.Overrides)
+	if err != nil {
+		// PlanUpgrade only errors on an ID mismatch (misuse); def.ID == prevDef.ID
+		// by construction, so this is defensive. Restore the previous definition.
+		return s.restoreDefinition(op, prevDef, err)
+	}
 	if !plan.OK() {
 		return s.restoreDefinition(op, prevDef, &ConflictError{
 			Message:   "edit blocked: existing overrides are incompatible with the edited definition",
@@ -872,9 +915,13 @@ func (s *Service) syncOne(inst RuleInstance) SyncResult {
 		// (the state a CriticalError leaves, and the one its recovery message
 		// tells operators to fix with /api/rules/sync). But validate FIRST: a
 		// candidate preflight against a disposable sink proves the snapshot SQL
-		// (and UDFs) build before the destructive drop, so a failed recreate can
-		// never turn a healthy MV into no MV. restoreUDFs is the running MV's UDF
-		// set when one exists (so preflight leaves it intact), nil otherwise.
+		// (and UDFs) build before the destructive drop, so a DETERMINISTIC create
+		// failure cannot turn a healthy MV into no MV. A transient create failure
+		// after a passing preflight (e.g. Proton restart mid-op) still can — it is
+		// reported as create_failed and repaired by the next sync (the recovery is
+		// re-running sync, not a rollback: the rollback target would be this same
+		// snapshot SQL). restoreUDFs is the running MV's UDF set when one exists (so
+		// preflight leaves it intact), nil otherwise.
 		var restoreUDFs []string
 		if exists {
 			restoreUDFs = inst.DeployedUDFs
