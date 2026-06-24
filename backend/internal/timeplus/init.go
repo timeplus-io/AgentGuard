@@ -1002,6 +1002,7 @@ SELECT
 FROM otel_traces
 ARRAY JOIN array_cast(1, 2) AS idx
 WHERE _tp_time > earliest_ts()
+  AND hook_name NOT LIKE 'span_%'
 `
 
 // ddlCIMMetricsHermesLlmMV extracts LLM token and latency metrics from
