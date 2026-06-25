@@ -128,7 +128,7 @@ func (s *Store) ListCurrent() ([]RuleInstance, error) {
 // the old deleted snapshot — a silent correctness bug.
 func (s *Store) LatestSnapshot(ruleID string) (inst RuleInstance, found bool, err error) {
 	sql := rulesCurrentProjection +
-		"\nWHERE rule_id = '" + escapeSQLString(ruleID) + "'" +
+		"\nWHERE rule_id = '" + EscapeSQLString(ruleID) + "'" +
 		"\nGROUP BY rule_id"
 	rows, err := s.q.Query(sql)
 	if err != nil {
@@ -170,26 +170,26 @@ func (s *Store) Append(inst RuleInstance) error {
 			`'%s','%s','%s','%s',`+
 			`%t,%t,'%s','%s','%s','%s',`+
 			`'%s','%s','%s','%s',now64(9))`,
-		escapeSQLString(inst.RuleID),
-		escapeSQLString(inst.SnapshotID),
+		EscapeSQLString(inst.RuleID),
+		EscapeSQLString(inst.SnapshotID),
 		strconv.FormatUint(inst.Revision, 10),
-		escapeSQLString(inst.Name),
-		escapeSQLString(inst.DefinitionVersion),
-		escapeSQLString(inst.DefinitionHash),
-		escapeSQLString(inst.Description),
-		escapeSQLString(inst.RenderedSQL),
-		escapeSQLString(udfsJSON),
-		escapeSQLString(overridesJSON),
+		EscapeSQLString(inst.Name),
+		EscapeSQLString(inst.DefinitionVersion),
+		EscapeSQLString(inst.DefinitionHash),
+		EscapeSQLString(inst.Description),
+		EscapeSQLString(inst.RenderedSQL),
+		EscapeSQLString(udfsJSON),
+		EscapeSQLString(overridesJSON),
 		inst.Enabled,
 		inst.Deleted,
-		escapeSQLString(inst.Severity),
-		escapeSQLString(inst.Category),
-		escapeSQLString(inst.RequiredTelemetry),
-		escapeSQLString(inst.FPRate),
-		escapeSQLString(inst.HookSources),
-		escapeSQLString(inst.BlockPolicy),
-		escapeSQLString(inst.UpdateReason),
-		escapeSQLString(inst.UpdatedBy),
+		EscapeSQLString(inst.Severity),
+		EscapeSQLString(inst.Category),
+		EscapeSQLString(inst.RequiredTelemetry),
+		EscapeSQLString(inst.FPRate),
+		EscapeSQLString(inst.HookSources),
+		EscapeSQLString(inst.BlockPolicy),
+		EscapeSQLString(inst.UpdateReason),
+		EscapeSQLString(inst.UpdatedBy),
 	)
 	if err := s.q.Exec(sql); err != nil {
 		return fmt.Errorf("rules store: append %q: %w", inst.RuleID, err)

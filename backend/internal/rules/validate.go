@@ -199,7 +199,8 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 		return nil, fmt.Errorf("value is required, got null")
 	}
 	switch p.Type {
-	case "integer":
+	// duration is integer + a unit annotation; its value normalizes identically.
+	case "integer", "duration":
 		i, err := coerceInt64(v)
 		if err != nil {
 			return nil, err
@@ -311,25 +312,6 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 			return nil, fmt.Errorf("must be a valid RE2 regular expression: %v", err)
 		}
 		return s, nil
-
-	case "duration":
-		i, err := coerceInt64(v)
-		if err != nil {
-			return nil, err
-		}
-		if p.Min != nil || p.Max != nil {
-			// Bounds are float64; integers beyond ±2^53 are not exactly
-			// representable as float64, so the comparison would silently
-			// round. Strictness over silent rounding: reject instead.
-			const maxBoundCheckable = int64(1) << 53
-			if i > maxBoundCheckable || i < -maxBoundCheckable {
-				return nil, fmt.Errorf("value %d exceeds bound-checkable range (|value| > 2^53) and cannot be compared precisely against min/max", i)
-			}
-			if err := checkNumericBounds(p, float64(i)); err != nil {
-				return nil, err
-			}
-		}
-		return i, nil
 
 	default:
 		return nil, fmt.Errorf("unsupported parameter type %q (supported: integer, float, bool, string, choice, list, regex, duration)", p.Type)

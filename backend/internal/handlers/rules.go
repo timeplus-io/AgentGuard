@@ -21,17 +21,16 @@ import (
 )
 
 // escapeSQLStr escapes a string for embedding in a Proton/ClickHouse single-quoted
-// string literal. Backslashes must be escaped first because Proton's
+// string literal (quotes and backslashes; backslashes first because Proton's
 // ValuesBlockInputFormat interprets \' as an escaped single-quote, which would
-// cause premature string termination if we only escaped the quote character.
+// cause premature string termination if we only escaped the quote character).
 //
-// It is a package-wide helper (holds, threats, cost_budgets, activity, ...);
-// rule-instance mutations themselves no longer hand-write INSERTs — those go
-// through rules.Service and the snapshot store's own escaping.
+// It is a package-wide helper (holds, threats, cost_budgets, activity, ...) and
+// delegates to rules.EscapeSQLString — the canonical full escaper — so the two
+// byte-identical copies can never drift. Distinct from escapeSQL (helpers.go),
+// which is deliberately quote-only for identifier-ish values.
 func escapeSQLStr(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, "'", "''")
-	return s
+	return rules.EscapeSQLString(s)
 }
 
 // ruleNameSentinel is the literal a submitted create-custom query uses to mark

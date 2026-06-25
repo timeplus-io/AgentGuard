@@ -93,11 +93,16 @@ func validateTemplate(def catalog.Definition) error {
 	return nil
 }
 
-// escapeSQLString escapes a string for embedding in a Proton/ClickHouse
+// EscapeSQLString escapes a string for embedding in a Proton/ClickHouse
 // single-quoted literal. Backslashes are escaped first because Proton
 // interprets \' as an escaped single quote, which would terminate the string
 // early if only the quote were doubled.
-func escapeSQLString(s string) string {
+//
+// This is the canonical full escaper (quotes + backslashes); the handlers
+// package's escapeSQLStr delegates here so the two never drift. It is distinct
+// from handlers.escapeSQL, which is deliberately quote-only for identifier-ish
+// values that never carry backslashes.
+func EscapeSQLString(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, "'", "''")
 	return s
@@ -105,14 +110,15 @@ func escapeSQLString(s string) string {
 
 // renderStringLiteral renders a single-quoted SQL string literal.
 func renderStringLiteral(s string) string {
-	return "'" + escapeSQLString(s) + "'"
+	return "'" + EscapeSQLString(s) + "'"
 }
 
 // renderValue renders a canonical (normalized) value as a SQL fragment for
 // the parameter's type.
 func renderValue(p catalog.Parameter, v any) (string, error) {
 	switch p.Type {
-	case "integer":
+	// duration renders identically to integer (the unit lives in the template).
+	case "integer", "duration":
 		i, ok := v.(int64)
 		if !ok {
 			return "", fmt.Errorf("parameter %q: internal: expected int64, got %T", p.Key, v)
@@ -170,13 +176,6 @@ func renderValue(p catalog.Parameter, v any) (string, error) {
 			return "", fmt.Errorf("parameter %q: internal: expected string, got %T", p.Key, v)
 		}
 		return renderStringLiteral(s), nil
-
-	case "duration":
-		i, ok := v.(int64)
-		if !ok {
-			return "", fmt.Errorf("parameter %q: internal: expected int64, got %T", p.Key, v)
-		}
-		return strconv.FormatInt(i, 10), nil
 
 	default:
 		return "", fmt.Errorf("parameter %q: unsupported parameter type %q", p.Key, p.Type)
