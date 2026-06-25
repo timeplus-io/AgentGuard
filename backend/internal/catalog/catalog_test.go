@@ -1434,3 +1434,44 @@ func TestSaveNumericDefaultRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// TestSaveDefaultsOmittedTypeToString verifies a parameter with no `type` is
+// accepted and persisted as "string" (Timeplus Apps: an omitted type means
+// string), rather than rejected as an unknown type — and that the concrete type
+// survives the YAML round-trip on reload.
+func TestSaveDefaultsOmittedTypeToString(t *testing.T) {
+	dir := t.TempDir()
+	m, err := New(fstest.MapFS{}, dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	def := Definition{
+		ID:          "rp-custom-notype",
+		Name:        "Omitted type rule",
+		Version:     "1.0.0",
+		SQLTemplate: "SELECT 1 WHERE tool = {{ .Config.tool }}",
+		Parameters: []Parameter{
+			{Key: "tool", Default: "bash"}, // Type omitted
+		},
+	}
+	if err := m.Save(def); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	// Caller's definition must not be mutated by the defaulting copy.
+	if def.Parameters[0].Type != "" {
+		t.Errorf("Save mutated caller's parameter type to %q", def.Parameters[0].Type)
+	}
+
+	// A fresh Manager on the same directory simulates a server restart.
+	m2, err := New(fstest.MapFS{}, dir)
+	if err != nil {
+		t.Fatalf("reopen New: %v", err)
+	}
+	got, ok := m2.Lookup("rp-custom-notype")
+	if !ok {
+		t.Fatal("definition was dropped after reload")
+	}
+	if got.Parameters[0].Type != "string" {
+		t.Errorf("reloaded type = %q, want %q", got.Parameters[0].Type, "string")
+	}
+}

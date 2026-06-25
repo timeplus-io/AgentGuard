@@ -16,8 +16,9 @@ The external authoring contract adopts the `/apps` naming surface and overlappin
 | Parameter identifier field | `id` | `key` |
 | Placeholder spelling | `{{params.<id>}}` (no whitespace) | `{{ .Config.<key> }}` (optional surrounding whitespace) |
 | Shared metadata fields | — | `description`, `options`, `secret` (parsed only to reject `true`) |
+| Omitted parameter type | rejected as unknown type | defaults to `string` (Apps semantics; canonicalized on `Save`) |
 | Unsupported `/apps` fields | — | `required` is not supported; every AG parameter must have a default |
-| AG-only schema fields | — | `label`, `min`, `max`, `min_items`, `max_items`, `unit`, `aliases` |
+| AG-only schema fields | — | `label`, `min`, `max`, `min_items`, `max_items`, `unit`, `aliases` (see Rule-Engine Constraints) |
 | Template engine | strict scanner (kept) | strict scanner (kept — NOT Go text/template) |
 | Type tokens | `integer/number/boolean/string/enum/string_list` (Phase A internal names) | **adopt the Apps tokens** `integer/float/bool/string/choice/list` + AG-only `regex`/`duration`; old names are rejected, not aliased |
 | Default encoding | typed native values | typed native values (deliberate divergence from `/apps`, which encodes defaults as strings) |
@@ -38,7 +39,16 @@ AgentGuard's parameter type tokens **are** the Timeplus Apps tokens for every ov
 | `regex` | — | AG extension (no `/apps` type) |
 | `duration` | — | AG extension (no `/apps` type) |
 
-`/apps` also defines `multi_choice` (an **option-constrained** multi-select) and uses it in real apps. AgentGuard does not accept `multi_choice`; its only multi-value type is free-form `list`.
+`/apps` also defines `multi_choice` (an **option-constrained** multi-select) and uses it in real apps. AgentGuard does not accept `multi_choice`; its only multi-value type is free-form `list`. Adding it would be a real feature (compiler rendering, UI, upgrade-compatibility), not a cleanup, so it is deferred rather than chased for shape parity.
+
+## Rule-Engine Constraints (kept deliberately)
+
+`/apps` config items carry no value-constraint fields at all. AgentGuard keeps a few — `min`/`max` (numeric bounds for `integer`/`float`/`duration`), `max_items` (caps `list` expansion), and `min_items` — **not** as shape-parity gaps to close, but because they protect generated SQL and operational correctness:
+
+- **`min`/`max`** bound a threshold so an operator cannot author a rule that is dead (never fires) or pathologically noisy.
+- **`max_items`** caps how large a rendered `IN (...)` list can grow; `min_items` is low-value because the empty list is already rejected globally.
+
+These are author-time guardrails that render to safe literals and cost nothing for an `/apps` reader to ignore. `string` length bounds (`min_length`/`max_length`) were removed because they protected neither SQL safety nor operational correctness — that asymmetry is intentional. The honest contract: AG adopts `/apps` naming and overlapping type tokens, and keeps rule-engine constraints exactly where they guard the SQL it compiles.
 
 ## Default Encoding Divergence
 

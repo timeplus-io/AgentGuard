@@ -266,6 +266,32 @@ func canonicalizeNumericDefault(p Parameter) any {
 	return p.Default
 }
 
+// defaultEmptyTypes returns params with any empty Type defaulted to "string",
+// mirroring the Timeplus Apps rule that an omitted parameter type means string.
+// It allocates a copy only when defaulting is needed, so it never mutates the
+// caller's slice (Save takes d by value, but d.Parameters shares its backing
+// array with the caller).
+func defaultEmptyTypes(params []Parameter) []Parameter {
+	needs := false
+	for _, p := range params {
+		if p.Type == "" {
+			needs = true
+			break
+		}
+	}
+	if !needs {
+		return params
+	}
+	out := make([]Parameter, len(params))
+	copy(out, params)
+	for i := range out {
+		if out[i].Type == "" {
+			out[i].Type = "string"
+		}
+	}
+	return out
+}
+
 func (m *Manager) Save(d Definition) error {
 	if m.dir == "" {
 		return fmt.Errorf("no catalog directory configured")
@@ -273,6 +299,10 @@ func (m *Manager) Save(d Definition) error {
 	if d.Origin == "" {
 		d.Origin = OriginCustom
 	}
+	// Default an omitted parameter type to "string" (Timeplus Apps semantics)
+	// before validation, so a typeless param is accepted and persisted with a
+	// concrete type rather than rejected downstream as an unknown type.
+	d.Parameters = defaultEmptyTypes(d.Parameters)
 	if err := d.Validate(); err != nil {
 		return fmt.Errorf("invalid definition %s: %w", d.ID, err)
 	}
