@@ -232,6 +232,48 @@ func TestPlanUpgradeEnumOptionNarrowingConflicts(t *testing.T) {
 	checkAccounting(t, in, res)
 }
 
+func TestPlanUpgradeMultiChoiceOptionNarrowingConflicts(t *testing.T) {
+	cur := defV("1.0.0", catalog.Parameter{
+		Key: "modes", Type: "multi_choice", Default: []any{"warn"},
+		Options: []string{"warn", "block", "hold"},
+	})
+	next := defV("2.0.0", catalog.Parameter{
+		Key: "modes", Type: "multi_choice", Default: []any{"warn"},
+		Options: []string{"warn", "block"},
+	})
+	in := map[string]any{"modes": []string{"warn", "hold"}}
+
+	res, err := PlanUpgrade(cur, next, in)
+	if err != nil {
+		t.Fatalf("PlanUpgrade: %v", err)
+	}
+	if res.OK() {
+		t.Fatal("removed multi_choice option must conflict")
+	}
+	checkAccounting(t, in, res)
+}
+
+func TestPlanUpgradeOverridesMultiChoicePreservesValidListShape(t *testing.T) {
+	next := defV("2.0.0", catalog.Parameter{
+		Key: "modes", Type: "multi_choice", Default: []any{"warn"},
+		Options: []string{"warn", "block", "hold"},
+	})
+	in := map[string]any{"modes": []string{"warn", "block"}}
+
+	res := PlanUpgradeOverrides(next, in)
+	if !res.OK() {
+		t.Fatalf("valid []string override should preserve against multi_choice, conflicts=%v", res.Conflicts)
+	}
+	if !reflect.DeepEqual(res.Overrides["modes"], []string{"warn", "block"}) {
+		t.Fatalf("Overrides = %#v", res.Overrides)
+	}
+
+	res = PlanUpgradeOverrides(next, map[string]any{"modes": []string{"warn", "audit"}})
+	if res.OK() {
+		t.Fatal("multi_choice override with invalid option must conflict")
+	}
+}
+
 func TestPlanUpgradeStaleOverrideWarns(t *testing.T) {
 	cur := defV("1.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10})
 	next := defV("2.0.0", catalog.Parameter{Key: "n", Type: "integer", Default: 10})

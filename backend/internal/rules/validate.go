@@ -177,6 +177,46 @@ func checkNoNUL(s string) error {
 	return nil
 }
 
+func checkOption(p catalog.Parameter, s string) error {
+	if len(p.Options) == 0 {
+		return fmt.Errorf("%s parameter declares no options", p.Type)
+	}
+	for _, opt := range p.Options {
+		if s == opt {
+			return nil
+		}
+	}
+	return fmt.Errorf("must be one of: %s", strings.Join(p.Options, ", "))
+}
+
+func normalizeStringList(p catalog.Parameter, v any) ([]string, error) {
+	items, err := coerceStringSlice(v)
+	if err != nil {
+		return nil, err
+	}
+	// Empty-list SQL semantics (e.g. IN ()) are rejected, not guessed.
+	if len(items) == 0 {
+		return nil, fmt.Errorf("must contain at least one item")
+	}
+	if p.MinItems != nil && len(items) < *p.MinItems {
+		return nil, fmt.Errorf("must contain at least %d items, got %d", *p.MinItems, len(items))
+	}
+	if p.MaxItems != nil && len(items) > *p.MaxItems {
+		return nil, fmt.Errorf("must contain at most %d items, got %d", *p.MaxItems, len(items))
+	}
+	seen := make(map[string]bool, len(items))
+	for i, item := range items {
+		if seen[item] {
+			return nil, fmt.Errorf("duplicate item %q at index %d", item, i)
+		}
+		seen[item] = true
+		if err := checkNoNUL(item); err != nil {
+			return nil, fmt.Errorf("item %d (%q): %s", i, item, err.Error())
+		}
+	}
+	return items, nil
+}
+
 // normalizeValue coerces a decoded JSON/YAML value into the canonical Go
 // representation for the parameter's type (see types.go) and enforces the
 // parameter's constraints. The returned error message is per-parameter and
@@ -241,39 +281,22 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("expected string, got %s", typeName(v))
 		}
-		if len(p.Options) == 0 {
-			return nil, fmt.Errorf("choice parameter declares no options")
+		if err := checkOption(p, s); err != nil {
+			return nil, err
 		}
-		for _, opt := range p.Options {
-			if s == opt {
-				return s, nil
-			}
-		}
-		return nil, fmt.Errorf("must be one of: %s", strings.Join(p.Options, ", "))
+		return s, nil
 
 	case "list":
-		items, err := coerceStringSlice(v)
+		return normalizeStringList(p, v)
+
+	case "multi_choice":
+		items, err := normalizeStringList(p, v)
 		if err != nil {
 			return nil, err
 		}
-		// Empty-list SQL semantics (e.g. IN ()) are rejected, not guessed.
-		if len(items) == 0 {
-			return nil, fmt.Errorf("must contain at least one item")
-		}
-		if p.MinItems != nil && len(items) < *p.MinItems {
-			return nil, fmt.Errorf("must contain at least %d items, got %d", *p.MinItems, len(items))
-		}
-		if p.MaxItems != nil && len(items) > *p.MaxItems {
-			return nil, fmt.Errorf("must contain at most %d items, got %d", *p.MaxItems, len(items))
-		}
-		seen := make(map[string]bool, len(items))
 		for i, item := range items {
-			if seen[item] {
-				return nil, fmt.Errorf("duplicate item %q at index %d", item, i)
-			}
-			seen[item] = true
-			if err := checkNoNUL(item); err != nil {
-				return nil, fmt.Errorf("item %d (%q): %s", i, item, err.Error())
+			if err := checkOption(p, item); err != nil {
+				return nil, fmt.Errorf("item %d: %s", i, err.Error())
 			}
 		}
 		return items, nil
@@ -292,7 +315,7 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 		return s, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported parameter type %q (supported: integer, float, bool, string, choice, list, regex, duration)", p.Type)
+		return nil, fmt.Errorf("unsupported parameter type %q (supported: integer, float, bool, string, choice, list, multi_choice, regex, duration)", p.Type)
 	}
 }
 

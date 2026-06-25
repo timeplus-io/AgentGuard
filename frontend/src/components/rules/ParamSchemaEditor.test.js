@@ -7,7 +7,7 @@ import { validateKey, PARAM_TYPES, stripInternal } from './ParamSchemaEditor.jsx
 // types, and the _uid-stripping guarantee all depend on them.
 
 describe('PARAM_TYPES', () => {
-  it('exposes exactly the eight supported parameter type tokens (Apps vocabulary + AG extensions)', () => {
+  it('exposes exactly the supported parameter type tokens (Apps vocabulary + AG extensions)', () => {
     expect(PARAM_TYPES).toEqual([
       'integer',
       'float',
@@ -15,6 +15,7 @@ describe('PARAM_TYPES', () => {
       'string',
       'choice',
       'list',
+      'multi_choice',
       'regex',
       'duration',
     ])

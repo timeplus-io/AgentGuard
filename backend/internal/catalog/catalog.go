@@ -86,6 +86,7 @@ func (m *Manager) loadFS(fsys fs.FS, target map[string]Definition) error {
 		if err := yaml.Unmarshal(data, &def); err != nil {
 			return fmt.Errorf("parse %s: %w", path, err)
 		}
+		def = NormalizeDefinition(def)
 		if def.ID != "" {
 			// Embedded seed definitions are always builtin, regardless of
 			// any origin stored in the YAML.
@@ -295,13 +296,13 @@ func defaultEmptyTypes(params []Parameter) []Parameter {
 	return out
 }
 
-// NormalizeDefinition returns a copy of d with Timeplus Apps-compatibility
-// normalization applied: a parameter with an omitted type defaults to "string".
+// NormalizeDefinition returns d with Timeplus Apps-compatibility normalization
+// applied: a parameter with an omitted type defaults to "string".
 // This is the single normalization step every ingestion path runs before
-// validation or compilation (Save, local-dir load, zip import, compile preview,
-// and the installed-edit redeploy), so the omitted-type rule holds catalog-wide
-// rather than only on the API Save path. Copy-returning: the caller's Definition
-// is never mutated.
+// validation or compilation (Save, seed/local-dir load, zip import, compile
+// preview, and the installed-edit redeploy), so the omitted-type rule holds
+// catalog-wide rather than only on the API Save path. It only allocates when
+// normalization is needed, and never mutates the caller's Definition.
 func NormalizeDefinition(d Definition) Definition {
 	d.Parameters = defaultEmptyTypes(d.Parameters)
 	return d

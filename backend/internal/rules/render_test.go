@@ -14,7 +14,8 @@ func TestCompileRendersEveryType(t *testing.T) {
 		ID: "rp_all", Name: "All Types", Version: "1.0.0",
 		SQLTemplate: "SELECT * WHERE n > {{ .Config.threshold }} AND r < {{ .Config.ratio }} " +
 			"AND strict = {{ .Config.strict }} AND name = {{ .Config.name }} " +
-			"AND mode = {{ .Config.mode }} AND cmd IN {{ .Config.cmds }}",
+			"AND mode = {{ .Config.mode }} AND cmd IN {{ .Config.cmds }} " +
+			"AND service IN {{ .Config.services }}",
 		Parameters: []catalog.Parameter{
 			{Key: "threshold", Type: "integer", Default: 10},
 			{Key: "ratio", Type: "float", Default: 0.5},
@@ -22,18 +23,20 @@ func TestCompileRendersEveryType(t *testing.T) {
 			{Key: "name", Type: "string", Default: "bash"},
 			{Key: "mode", Type: "choice", Default: "warn", Options: []string{"warn", "block"}},
 			{Key: "cmds", Type: "list", Default: []any{"rm", "dd"}},
+			{Key: "services", Type: "multi_choice", Default: []any{"github"}, Options: []string{"github", "slack", "jira"}},
 		},
 	}
 	c, err := Compile(def, map[string]any{
 		"threshold": float64(42),
 		"strict":    true,
 		"cmds":      []any{"curl", "wget"},
+		"services":  []any{"github", "slack"},
 	})
 	if err != nil {
 		t.Fatalf("Compile: %v", err)
 	}
 	want := "SELECT * WHERE n > 42 AND r < 0.5 AND strict = true AND name = 'bash' " +
-		"AND mode = 'warn' AND cmd IN ('curl', 'wget')"
+		"AND mode = 'warn' AND cmd IN ('curl', 'wget') AND service IN ('github', 'slack')"
 	if c.SQL != want {
 		t.Fatalf("SQL:\n got %q\nwant %q", c.SQL, want)
 	}
@@ -47,6 +50,7 @@ func TestCompileRendersEveryType(t *testing.T) {
 		"name":      "bash",
 		"mode":      "warn",
 		"cmds":      []string{"curl", "wget"},
+		"services":  []string{"github", "slack"},
 	}
 	if !reflect.DeepEqual(c.Effective, wantEffective) {
 		t.Fatalf("Effective = %#v, want %#v", c.Effective, wantEffective)
@@ -55,6 +59,7 @@ func TestCompileRendersEveryType(t *testing.T) {
 		"threshold": int64(42),
 		"strict":    true,
 		"cmds":      []string{"curl", "wget"},
+		"services":  []string{"github", "slack"},
 	}
 	if !reflect.DeepEqual(c.Overrides, wantOverrides) {
 		t.Fatalf("Overrides = %#v, want %#v", c.Overrides, wantOverrides)
@@ -146,6 +151,26 @@ func TestStringListEscaping(t *testing.T) {
 		t.Fatalf("Compile: %v", err)
 	}
 	want := `SELECT cmd IN ('rm -rf ''/''', 'pa\\th', 'ok')`
+	if c.SQL != want {
+		t.Fatalf("got %q, want %q", c.SQL, want)
+	}
+}
+
+func TestMultiChoiceEscaping(t *testing.T) {
+	def := catalog.Definition{
+		ID: "rp_multi", Name: "Multi", Version: "1.0.0",
+		SQLTemplate: "SELECT service IN {{ .Config.services }}",
+		Parameters: []catalog.Parameter{{
+			Key: "services", Type: "multi_choice",
+			Default: []any{"github"},
+			Options: []string{"github", `it'\\s`},
+		}},
+	}
+	c, err := Compile(def, map[string]any{"services": []any{"github", `it'\\s`}})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	want := `SELECT service IN ('github', 'it''\\\\s')`
 	if c.SQL != want {
 		t.Fatalf("got %q, want %q", c.SQL, want)
 	}

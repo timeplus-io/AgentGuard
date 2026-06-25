@@ -212,12 +212,18 @@ function validateOne(p, v) {
     case 'choice':
       if (!p.options?.includes(v)) return 'must be one of the allowed options'
       return null
-    case 'list': {
+    case 'list':
+    case 'multi_choice': {
       const list = Array.isArray(v) ? v : []
       if (list.length === 0) return 'must contain at least one item'
       if (new Set(list).size !== list.length) return 'items must be unique'
       if (p.min_items != null && list.length < p.min_items) return `must contain ≥ ${p.min_items} items`
       if (p.max_items != null && list.length > p.max_items) return `must contain ≤ ${p.max_items} items`
+      if (p.type === 'multi_choice') {
+        const options = Array.isArray(p.options) ? p.options : []
+        const invalid = list.find((item) => !options.includes(item))
+        if (invalid) return `${invalid} is not an allowed option`
+      }
       return null
     }
     case 'regex': {

@@ -407,6 +407,47 @@ func TestNormalizeOverridesStringList(t *testing.T) {
 	}
 }
 
+func TestNormalizeOverridesMultiChoice(t *testing.T) {
+	p := catalog.Parameter{
+		Key: "modes", Type: "multi_choice", Default: []any{"warn"},
+		Options: []string{"warn", "block", "hold"}, MinItems: iptr(1), MaxItems: iptr(2),
+	}
+	def := defWith(p)
+
+	cases := []struct {
+		name    string
+		value   any
+		want    []string
+		wantErr string
+	}{
+		{name: "json list", value: []any{"warn", "block"}, want: []string{"warn", "block"}},
+		{name: "go string slice", value: []string{"hold"}, want: []string{"hold"}},
+		{name: "empty list", value: []any{}, wantErr: "at least one item"},
+		{name: "duplicate", value: []any{"warn", "warn"}, wantErr: `duplicate item "warn"`},
+		{name: "not an option", value: []any{"warn", "audit"}, wantErr: "item 1: must be one of: warn, block, hold"},
+		{name: "too many", value: []any{"warn", "block", "hold"}, wantErr: "at most 2 items"},
+		{name: "not a list", value: "warn", wantErr: "expected list of strings, got string"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := NormalizeOverrides(def, map[string]any{"modes": tc.value})
+			if tc.wantErr != "" {
+				fe := fieldErr(t, err, "modes")
+				if !strings.Contains(fe.Message, tc.wantErr) {
+					t.Fatalf("message %q does not contain %q", fe.Message, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(got["modes"], tc.want) {
+				t.Fatalf("got %#v, want %#v", got["modes"], tc.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeOverridesEmptyListRejectedEvenWithoutMinItems(t *testing.T) {
 	p := catalog.Parameter{Key: "cmds", Type: "list", Default: []any{"rm"}}
 	def := defWith(p)

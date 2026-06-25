@@ -79,7 +79,7 @@ func assertDefaultsRenderInPlace(t *testing.T, d catalog.Definition, literals ma
 }
 
 // TestRP003_DefaultsGolden pins rp-003's defaults to the exact in-place
-// substitution: the string_list renders to the original tool list and the
+// substitution: the list renders to the original tool list and the
 // integer renders to 15. The /2 threshold form is behavior-equivalent to the
 // pre-parameterization `>= 30` (each removed '&&' is 2 chars, so the net length
 // is always even and `/2 >= 15` ⟺ `>= 30`).
@@ -104,7 +104,7 @@ func TestRP003_OverridesChangeSQL(t *testing.T) {
 		t.Fatalf("Compile overrides: %v", err)
 	}
 	if !strings.Contains(compiled.SQL, "lower(tool_name) IN ('bash', 'sh')") {
-		t.Errorf("string_list override not rendered: %q", compiled.SQL)
+		t.Errorf("list override not rendered: %q", compiled.SQL)
 	}
 	if !strings.Contains(compiled.SQL, ") / 2) >= 50") {
 		t.Errorf("integer override not rendered: %q", compiled.SQL)

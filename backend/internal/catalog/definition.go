@@ -80,19 +80,21 @@ type Parameter struct {
 }
 
 // parameterTypes is the set of supported parameter types. The vocabulary mirrors
-// the Timeplus Apps manifest (integer, float, bool, string, choice, list) plus two
-// AgentGuard-specific extensions (regex, duration) that have no Apps equivalent.
+// the Timeplus Apps manifest (integer, float, bool, string, choice, list,
+// multi_choice) plus two AgentGuard-specific extensions (regex, duration) that
+// have no Apps equivalent.
 // The Phase A internal names (number/boolean/enum/string_list) were renamed to the
 // Apps tokens before release and are no longer accepted.
 var parameterTypes = map[string]bool{
-	"integer":  true,
-	"float":    true, // numeric (Phase A: "number")
-	"bool":     true, // boolean (Phase A: "boolean")
-	"string":   true,
-	"choice":   true, // single-select from options (Phase A: "enum")
-	"list":     true, // free-form string list (Phase A: "string_list")
-	"regex":    true, // AG extension: RE2-validated string rendered as a single-quoted SQL literal
-	"duration": true, // AG extension: int64 count of a fixed unit rendered as a bare decimal integer
+	"integer":      true,
+	"float":        true, // numeric (Phase A: "number")
+	"bool":         true, // boolean (Phase A: "boolean")
+	"string":       true,
+	"choice":       true, // single-select from options (Phase A: "enum")
+	"list":         true, // free-form string list (Phase A: "string_list")
+	"multi_choice": true, // option-constrained string list (Apps vocabulary)
+	"regex":        true, // AG extension: RE2-validated string rendered as a single-quoted SQL literal
+	"duration":     true, // AG extension: int64 count of a fixed unit rendered as a bare decimal integer
 }
 
 // ParameterIDPattern is the exact syntax for parameter keys (and aliases,
@@ -310,8 +312,8 @@ func (d Definition) validate() error {
 		if p.Default == nil {
 			return fmt.Errorf("config[%d] (%s): default is required", i, p.Key)
 		}
-		if p.Type == "choice" && len(p.Options) == 0 {
-			return fmt.Errorf("config[%d] (%s): choice requires non-empty options", i, p.Key)
+		if (p.Type == "choice" || p.Type == "multi_choice") && len(p.Options) == 0 {
+			return fmt.Errorf("config[%d] (%s): %s requires non-empty options", i, p.Key, p.Type)
 		}
 		if p.Type == "duration" && p.Unit == "" {
 			return fmt.Errorf("config[%d] (%s): duration requires a unit", i, p.Key)

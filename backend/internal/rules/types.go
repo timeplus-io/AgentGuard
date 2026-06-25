@@ -37,6 +37,7 @@ import (
 //	string   → string
 //	choice   → string (member of Options)
 //	list     → []string (non-empty, unique, order-preserving)
+//	multi_choice → []string (non-empty, unique, order-preserving, all in Options)
 //	regex    → string (compiles as an RE2 pattern; rendered as a SQL string literal)
 //	duration → int64 (count of the parameter's fixed unit; rendered bare)
 

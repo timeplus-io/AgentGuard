@@ -156,7 +156,7 @@ func renderValue(p catalog.Parameter, v any) (string, error) {
 		}
 		return renderStringLiteral(s), nil
 
-	case "list":
+	case "list", "multi_choice":
 		items, ok := v.([]string)
 		if !ok {
 			return "", fmt.Errorf("parameter %q: internal: expected []string, got %T", p.Key, v)

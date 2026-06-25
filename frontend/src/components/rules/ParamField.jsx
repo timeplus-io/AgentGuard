@@ -3,7 +3,7 @@ import { useState } from 'react'
 // ParamField renders ONE editable rule parameter control, selected by the
 // backend-declared parameter type. All parameter-type branching lives here so
 // RuleDetail / ConfigurationTab stay type-agnostic (types: integer, float,
-// bool, string, choice, list, regex, duration).
+// bool, string, choice, list, multi_choice, regex, duration).
 //
 // Props:
 //   param        – schema entry { key, label, description, type, default, min,
@@ -121,6 +121,9 @@ function TypedControl({ param, value, onChange }) {
     case 'list':
       return <StringListControl param={param} value={Array.isArray(value) ? value : []} onChange={onChange} />
 
+    case 'multi_choice':
+      return <MultiChoiceControl param={param} value={Array.isArray(value) ? value : []} onChange={onChange} />
+
     case 'regex':
       return (
         <input
@@ -164,6 +167,41 @@ function TypedControl({ param, value, onChange }) {
         />
       )
   }
+}
+
+function MultiChoiceControl({ param, value, onChange }) {
+  const options = Array.isArray(param.options) ? param.options : []
+  const selected = new Set(value)
+  const toggle = (opt) => {
+    if (selected.has(opt)) {
+      onChange(value.filter((item) => item !== opt))
+      return
+    }
+    onChange([...value, opt])
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => {
+        const active = selected.has(opt)
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => toggle(opt)}
+            className={`text-[11px] rounded-full px-2.5 py-1 transition-colors ${
+              active
+                ? 'bg-[#ffb0cf] text-[#3d0023]'
+                : 'bg-[#0f0c17] text-gray-300 hover:bg-zinc-700'
+            }`}
+          >
+            <code className="font-mono">{opt}</code>
+          </button>
+        )
+      })}
+      {options.length === 0 && <span className="text-[11px] text-gray-500 italic">no options</span>}
+    </div>
+  )
 }
 
 // StringListControl edits a unique, ordered list of strings as removable chips

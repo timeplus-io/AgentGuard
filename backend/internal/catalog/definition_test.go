@@ -72,6 +72,7 @@ func TestDefinitionValidate_Parameters(t *testing.T) {
 			{Key: "a_str", Type: "string", Default: "x"},
 			{Key: "a_enum", Type: "choice", Default: "low", Options: []string{"low", "high"}},
 			{Key: "a_list", Type: "list", Default: []any{"x"}},
+			{Key: "a_multi", Type: "multi_choice", Default: []any{"low"}, Options: []string{"low", "high"}},
 		}, ""},
 		{"empty key", []Parameter{param(func(p *Parameter) { p.Key = "" })}, "must match"},
 		{"uppercase key", []Parameter{param(func(p *Parameter) { p.Key = "Threshold" })}, "must match"},
@@ -101,6 +102,7 @@ func TestDefinitionValidate_Parameters(t *testing.T) {
 		{"legacy string_list rejected", []Parameter{param(func(p *Parameter) { p.Type = "string_list" })}, "unknown type"},
 		{"nil default", []Parameter{param(func(p *Parameter) { p.Default = nil })}, "default is required"},
 		{"choice without options", []Parameter{{Key: "mode", Type: "choice", Default: "x"}}, "non-empty options"},
+		{"multi_choice without options", []Parameter{{Key: "modes", Type: "multi_choice", Default: []any{"x"}}}, "non-empty options"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -475,7 +477,7 @@ func TestSave_DefaultsOriginToCustom(t *testing.T) {
 	}
 }
 
-// TestDefinitionValidate_PhaseB pins Phase B type acceptance.
+// TestDefinitionValidate_PhaseB pins Phase B/Apps-alignment type acceptance.
 func TestDefinitionValidate_PhaseB(t *testing.T) {
 	// regex with no extra constraints — must be accepted.
 	d := validDef()
@@ -491,6 +493,14 @@ func TestDefinitionValidate_PhaseB(t *testing.T) {
 	d2.Parameters = []Parameter{{Key: "w", Type: "duration", Unit: "seconds", Default: 60}}
 	if err := d2.Validate(); err != nil {
 		t.Fatalf("duration parameter with unit must be accepted by Validate: %v", err)
+	}
+
+	// multi_choice with options — must be accepted.
+	d3 := validDef()
+	d3.SQLTemplate = "SELECT {{ .Config.modes }}"
+	d3.Parameters = []Parameter{{Key: "modes", Type: "multi_choice", Options: []string{"warn", "block"}, Default: []any{"warn"}}}
+	if err := d3.Validate(); err != nil {
+		t.Fatalf("multi_choice parameter must be accepted by Validate: %v", err)
 	}
 }
 

@@ -4,7 +4,7 @@
 
 This document codifies the alignment between AgentGuard's external rule authoring surface and the [Timeplus Apps](https://apps.timeplus.com/) manifest specification, verified against the real `~/apps` repository.
 
-AgentGuard intentionally aligns the parts authors see most often: `config:`, `key:`, `{{ .Config.<key> }}`, and the overlapping type tokens (`integer`, `float`, `bool`, `string`, `choice`, `list`). It is **not** wire-compatible with `/apps` manifests. AgentGuard keeps a strict SQL-literal compiler, uses typed native defaults instead of `/apps` string-encoded defaults, rejects secrets, and adds rule-engine-specific fields.
+AgentGuard intentionally aligns the parts authors see most often: `config:`, `key:`, `{{ .Config.<key> }}`, and the `/apps` config type tokens (`integer`, `float`, `bool`, `string`, `choice`, `list`, `multi_choice`). It is **not** wire-compatible with `/apps` manifests. AgentGuard keeps a strict SQL-literal compiler, uses typed native defaults instead of `/apps` string-encoded defaults, rejects secrets, and adds rule-engine-specific fields.
 
 ## Surface Alignment Decision
 
@@ -20,13 +20,13 @@ The external authoring contract adopts the `/apps` naming surface and overlappin
 | Unsupported `/apps` fields | — | `required` is not supported; every AG parameter must have a default |
 | AG-only schema fields | — | `label`, `min`, `max`, `min_items`, `max_items`, `unit`, `aliases` (see Rule-Engine Constraints) |
 | Template engine | strict scanner (kept) | strict scanner (kept — NOT Go text/template) |
-| Type tokens | `integer/number/boolean/string/enum/string_list` (Phase A internal names) | **adopt the Apps tokens** `integer/float/bool/string/choice/list` + AG-only `regex`/`duration`; old names are rejected, not aliased |
+| Type tokens | `integer/number/boolean/string/enum/string_list` (Phase A internal names) | **adopt the Apps tokens** `integer/float/bool/string/choice/list/multi_choice` + AG-only `regex`/`duration`; old names are rejected, not aliased |
 | Default encoding | typed native values | typed native values (deliberate divergence from `/apps`, which encodes defaults as strings) |
 | DB templating (`{{ .DB }}`) | n/a | not supported (single fixed deployment; document the divergence) |
 
 ## Type-Name Mapping
 
-AgentGuard's parameter type tokens **are** the Timeplus Apps tokens for every overlapping type — there is no separate internal vocabulary to translate. AgentGuard adds two extensions that `/apps` does not define. The Phase A internal names (`number`/`boolean`/`enum`/`string_list`) were renamed to the Apps tokens before release and are rejected if submitted.
+AgentGuard's parameter type tokens **are** the Timeplus Apps config type tokens, plus two AgentGuard extensions that `/apps` does not define. There is no separate internal vocabulary to translate. The Phase A internal names (`number`/`boolean`/`enum`/`string_list`) were renamed to the Apps tokens before release and are rejected if submitted.
 
 | AG token | `/apps` token | Status (Phase A name) |
 |---|---|---|
@@ -36,17 +36,16 @@ AgentGuard's parameter type tokens **are** the Timeplus Apps tokens for every ov
 | `string` | `string` | identical |
 | `choice` | `choice` | identical (was `enum`) |
 | `list` | `list` | identical (was `string_list`) |
+| `multi_choice` | `multi_choice` | identical; option-constrained multi-select |
 | `regex` | — | AG extension (no `/apps` type) |
 | `duration` | — | AG extension (no `/apps` type) |
 
-`/apps` also defines `multi_choice` (an **option-constrained** multi-select) and uses it in real apps. AgentGuard does not accept `multi_choice`; its only multi-value type is free-form `list`. Adding it would be a real feature (compiler rendering, UI, upgrade-compatibility), not a cleanup, so it is deferred rather than chased for shape parity.
-
 ## Rule-Engine Constraints (kept deliberately)
 
-`/apps` config items carry no value-constraint fields at all. AgentGuard keeps a few — `min`/`max` (numeric bounds for `integer`/`float`/`duration`), `max_items` (caps `list` expansion), and `min_items` — **not** as shape-parity gaps to close, but because they protect generated SQL and operational correctness:
+`/apps` config items carry no value-constraint fields at all. AgentGuard keeps a few — `min`/`max` (numeric bounds for `integer`/`float`/`duration`), `max_items` (caps `list`/`multi_choice` expansion), and `min_items` — **not** as shape-parity gaps to close, but because they protect generated SQL and operational correctness:
 
 - **`min`/`max`** bound a threshold so an operator cannot author a rule that is dead (never fires) or pathologically noisy.
-- **`max_items`** caps how large a rendered `IN (...)` list can grow; `min_items` is low-value because the empty list is already rejected globally.
+- **`max_items`** caps how large a rendered `IN (...)` list can grow; `min_items` is low-value because empty `list`/`multi_choice` values are already rejected globally.
 
 These are author-time guardrails that render to safe literals and cost nothing for an `/apps` reader to ignore. `string` length bounds (`min_length`/`max_length`) were removed because they protected neither SQL safety nor operational correctness — that asymmetry is intentional. The honest contract: AG adopts `/apps` naming and overlapping type tokens, and keeps rule-engine constraints exactly where they guard the SQL it compiles.
 
@@ -123,6 +122,7 @@ These helpers still validate the parameter identifier/key syntax; only the struc
    - `string` → single-quoted with escaped quotes: `'it''s'`
    - `regex` → single-quoted: `'[a-z0-9]+'`
    - `duration` → bare integer (unit is metadata only): `60`
+   - `list` / `multi_choice` → parenthesized string literals: `('github', 'slack')`
 
 5. **Placeholder Validation:** The template scanner accepts whitespace around the placeholder:
    - Valid: `{{ .Config.threshold }}`, `{{.Config.threshold}}`, `{{ .Config.threshold}}`

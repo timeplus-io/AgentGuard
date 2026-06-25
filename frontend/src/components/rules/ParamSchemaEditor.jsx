@@ -11,7 +11,7 @@ import { useState } from 'react'
 //   onChange(arr) – emits the full, updated array
 //
 // Each row exposes: key (validated ^[a-z][a-z0-9_]{0,63}$ with inline error),
-// label, description, a type <select> over all eight tokens, a default input
+// label, description, a type <select> over all nine tokens, a default input
 // appropriate to the type, and a type-switched constraints area. Rows can be
 // added, removed and reordered.
 //
@@ -41,6 +41,7 @@ export const PARAM_TYPES = [
   'string',
   'choice',
   'list',
+  'multi_choice',
   'regex',
   'duration',
 ]
@@ -134,7 +135,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
       max: undefined,
       min_items: undefined,
       max_items: undefined,
-      options: type === 'choice' ? row.options || [] : undefined,
+      options: type === 'choice' || type === 'multi_choice' ? row.options || [] : undefined,
       unit: type === 'duration' ? row.unit || '' : undefined,
     })
   }
@@ -326,6 +327,8 @@ function DefaultInput({ row, onUpdate }) {
           className={`${inputCls} font-mono`}
         />
       )
+    case 'multi_choice':
+      return <MultiChoiceDefaultEditor row={row} onUpdate={onUpdate} />
     case 'regex':
       return (
         <input
@@ -347,6 +350,42 @@ function DefaultInput({ row, onUpdate }) {
         />
       )
   }
+}
+
+function MultiChoiceDefaultEditor({ row, onUpdate }) {
+  const options = Array.isArray(row.options) ? row.options : []
+  const values = Array.isArray(row.default) ? row.default : []
+  const selected = new Set(values)
+  const toggle = (opt) => {
+    if (selected.has(opt)) {
+      onUpdate({ default: values.filter((item) => item !== opt) })
+      return
+    }
+    onUpdate({ default: [...values, opt] })
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => {
+        const active = selected.has(opt)
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => toggle(opt)}
+            className={`text-[11px] rounded-full px-2.5 py-1 transition-colors ${
+              active
+                ? 'bg-[#ffb0cf] text-[#3d0023]'
+                : 'bg-surface-container-lowest text-gray-300 hover:bg-surface-variant'
+            }`}
+          >
+            <code className="font-mono">{opt}</code>
+          </button>
+        )
+      })}
+      {options.length === 0 && <span className="text-[11px] text-gray-500 italic">add options first</span>}
+    </div>
+  )
 }
 
 // Constraints renders the type-switched constraint editors.
@@ -411,6 +450,16 @@ function Constraints({ row, onUpdate }) {
           {numField('max_items', 'Max items', { intOnly: true })}
         </div>
       )
+    case 'multi_choice':
+      return (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            {numField('min_items', 'Min items', { intOnly: true })}
+            {numField('max_items', 'Max items', { intOnly: true })}
+          </div>
+          <OptionsEditor row={row} onUpdate={onUpdate} />
+        </div>
+      )
     case 'choice':
       return <OptionsEditor row={row} onUpdate={onUpdate} />
     case 'bool':
@@ -419,7 +468,7 @@ function Constraints({ row, onUpdate }) {
   }
 }
 
-// OptionsEditor edits the allowed values of a choice parameter as removable chips.
+// OptionsEditor edits the allowed values of a choice/multi_choice parameter as removable chips.
 function OptionsEditor({ row, onUpdate }) {
   const [draft, setDraft] = useState('')
   const options = Array.isArray(row.options) ? row.options : []
@@ -437,7 +486,11 @@ function OptionsEditor({ row, onUpdate }) {
     const next = options.filter((_, idx) => idx !== i)
     // Clear the default if it pointed at the removed option.
     const patch = { options: next }
-    if (!next.includes(row.default)) patch.default = ''
+    if (Array.isArray(row.default)) {
+      patch.default = row.default.filter((item) => next.includes(item))
+    } else if (!next.includes(row.default)) {
+      patch.default = ''
+    }
     onUpdate(patch)
   }
 
@@ -498,6 +551,7 @@ function defaultForType(type) {
     case 'bool':
       return false
     case 'list':
+    case 'multi_choice':
       return []
     case 'choice':
     case 'string':
