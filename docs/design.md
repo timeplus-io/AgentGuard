@@ -926,10 +926,10 @@ config:
 | `integer` | int64 | bare decimal | `min`, `max` |
 | `float` | finite float64 | canonical decimal (never NaN/Inf) | `min`, `max` |
 | `bool` | bool | `true` / `false` | — |
-| `string` | string | escaped single-quoted literal | `min_length`, `max_length` |
+| `string` | string | escaped single-quoted literal | NUL rejected |
 | `choice` | string | escaped single-quoted literal | non-empty `options` |
-| `list` | unique ordered strings | `('a', 'b', …)` | `min_items`, `max_items`, item length |
-| `regex` | string (valid RE2) | escaped single-quoted literal | RE2-compilable; length |
+| `list` | unique ordered strings | `('a', 'b', …)` | `min_items`, `max_items`; NUL rejected per item |
+| `regex` | string (valid RE2) | escaped single-quoted literal | RE2-compilable; NUL rejected |
 | `duration` | int64 count of `unit` | bare decimal (e.g. `30`) | `min`, `max`; fixed `unit` |
 
 Rules for authors:

@@ -57,7 +57,7 @@ describe('stripInternal', () => {
   it('removes _uid from each config entry and preserves all real fields', () => {
     const config = [
       { key: 'threshold', label: 'Threshold', type: 'integer', default: 10, min: 1, max: 100, _uid: '_p1' },
-      { key: 'pattern', label: 'Pattern', type: 'regex', default: '.*', min_length: 0, _uid: '_p2' },
+      { key: 'pattern', label: 'Pattern', type: 'regex', default: '.*', _uid: '_p2' },
     ]
     const result = stripInternal(config)
     // _uid must be absent from every entry
@@ -65,7 +65,7 @@ describe('stripInternal', () => {
     expect(result[1]).not.toHaveProperty('_uid')
     // All real fields must be preserved
     expect(result[0]).toEqual({ key: 'threshold', label: 'Threshold', type: 'integer', default: 10, min: 1, max: 100 })
-    expect(result[1]).toEqual({ key: 'pattern', label: 'Pattern', type: 'regex', default: '.*', min_length: 0 })
+    expect(result[1]).toEqual({ key: 'pattern', label: 'Pattern', type: 'regex', default: '.*' })
   })
 
   it('is a no-op on entries that have no _uid', () => {

@@ -207,9 +207,6 @@ function validateOne(p, v) {
     case 'string': {
       const s = v ?? ''
       if (typeof s !== 'string') return 'must be a string'
-      const len = [...s].length
-      if (p.min_length != null && len < p.min_length) return `must be ≥ ${p.min_length} characters`
-      if (p.max_length != null && len > p.max_length) return `must be ≤ ${p.max_length} characters`
       return null
     }
     case 'choice':
@@ -227,9 +224,6 @@ function validateOne(p, v) {
       const s = v ?? ''
       if (typeof s !== 'string') return 'must be a string'
       if (s === '') return 'pattern is required'
-      const len = [...s].length
-      if (p.min_length != null && len < p.min_length) return `must be ≥ ${p.min_length} characters`
-      if (p.max_length != null && len > p.max_length) return `must be ≤ ${p.max_length} characters`
       // Do NOT compile the pattern client-side: the backend validates it as RE2
       // (authoritative), and JS RegExp syntax diverges from RE2 (e.g. inline flags
       // like `(?m)`), so `new RegExp` would falsely block valid AgentGuard

@@ -2,20 +2,25 @@
 
 ## Overview
 
-This document codifies the alignment between AgentGuard's external rule authoring surface and the [Timeplus Apps](https://apps.timeplus.com/) manifest specification, verified against the real `~/apps` repository. AgentGuard adopts the `/apps` manifest surface — YAML/JSON field names, placeholder spelling, **and the parameter type vocabulary** — while retaining its internal strict, injection-safe compiler engine and adding two AG-specific type extensions (`regex`, `duration`) that have no `/apps` equivalent.
+This document codifies the alignment between AgentGuard's external rule authoring surface and the [Timeplus Apps](https://apps.timeplus.com/) manifest specification, verified against the real `~/apps` repository.
+
+AgentGuard intentionally aligns the parts authors see most often: `config:`, `key:`, `{{ .Config.<key> }}`, and the overlapping type tokens (`integer`, `float`, `bool`, `string`, `choice`, `list`). It is **not** wire-compatible with `/apps` manifests. AgentGuard keeps a strict SQL-literal compiler, uses typed native defaults instead of `/apps` string-encoded defaults, rejects secrets, and adds rule-engine-specific fields.
 
 ## Surface Alignment Decision
 
-The external authoring contract adopts the `/apps` manifest surface, including its type tokens; the internal strict engine is retained. Concretely:
+The external authoring contract adopts the `/apps` naming surface and overlapping type tokens; the internal strict engine and value semantics are AgentGuard-specific. Concretely:
 
 | Concern | Phase A (before) | Final (`/apps`-aligned) |
 |---|---|---|
 | Parameter list YAML/JSON key | `parameters:` | `config:` |
 | Parameter identifier field | `id` | `key` |
 | Placeholder spelling | `{{params.<id>}}` (no whitespace) | `{{ .Config.<key> }}` (optional surrounding whitespace) |
-| New parameter fields | — | `required` (bool, default true), `secret` (bool; `true` is rejected) |
+| Shared metadata fields | — | `description`, `options`, `secret` (parsed only to reject `true`) |
+| Unsupported `/apps` fields | — | `required` is not supported; every AG parameter must have a default |
+| AG-only schema fields | — | `label`, `min`, `max`, `min_items`, `max_items`, `unit`, `aliases` |
 | Template engine | strict scanner (kept) | strict scanner (kept — NOT Go text/template) |
 | Type tokens | `integer/number/boolean/string/enum/string_list` (Phase A internal names) | **adopt the Apps tokens** `integer/float/bool/string/choice/list` + AG-only `regex`/`duration`; old names are rejected, not aliased |
+| Default encoding | typed native values | typed native values (deliberate divergence from `/apps`, which encodes defaults as strings) |
 | DB templating (`{{ .DB }}`) | n/a | not supported (single fixed deployment; document the divergence) |
 
 ## Type-Name Mapping
@@ -33,7 +38,20 @@ AgentGuard's parameter type tokens **are** the Timeplus Apps tokens for every ov
 | `regex` | — | AG extension (no `/apps` type) |
 | `duration` | — | AG extension (no `/apps` type) |
 
-`/apps` also defines `multi_choice` (an **option-constrained** multi-select). AgentGuard's `list` is the free-form equivalent of `/apps` `list`; `multi_choice` is **reserved** for a future option-constrained list type and is not yet accepted.
+`/apps` also defines `multi_choice` (an **option-constrained** multi-select) and uses it in real apps. AgentGuard does not accept `multi_choice`; its only multi-value type is free-form `list`.
+
+## Default Encoding Divergence
+
+Real `/apps` manifests encode `default` as a string regardless of type:
+
+| Type | `/apps` default encoding | AgentGuard default encoding |
+|---|---|---|
+| `integer` | `"30"` | `30` |
+| `float` | `"3.14"` | `3.14` |
+| `bool` | `"true"` | `true` |
+| `list` / `multi_choice` | JSON-array string, e.g. `'["ec2","s3"]'` | native YAML/JSON array, e.g. `[ec2, s3]` |
+
+This is deliberate. AgentGuard validates and renders rules at authoring/install time; typed defaults catch invalid definitions before a rule can deploy. A direct `/apps` config block with string-encoded numeric/bool/list defaults is therefore not accepted by AgentGuard without conversion.
 
 ## Strict Engine Rationale
 
@@ -46,9 +64,19 @@ AgentGuard retains its **strict, injection-safe parameter compiler** and does NO
 
 ## Secret Parameters
 
-A `secret: true` field on a parameter configuration is **rejected at validation time** with an error message.
+`/apps` supports `secret: true` for external connection credentials. AgentGuard parses the field only to reject `secret: true` at validation time with an error message.
 
 **Rationale:** Parameters are rendered into the rule's SQL template and are never suitable for storing secrets. If a configuration field requires sensitive data (API keys, credentials, etc.), it should be managed outside the rules system entirely (e.g., environment variables, vaults, or external authentication services). Parameters should only hold non-sensitive configuration values.
+
+## Required Fields
+
+`/apps` supports `required: true`, commonly with no default for secrets. AgentGuard does not support that model:
+
+- every parameter must declare a valid default;
+- every effective value is required when compiling;
+- missing values fail validation rather than being prompted for later.
+
+Accordingly, `required` is not part of the AgentGuard parameter schema.
 
 ## Database Templating Divergence
 
@@ -74,11 +102,11 @@ These helpers still validate the parameter identifier/key syntax; only the struc
 
 ## Notes for Implementers
 
-1. **YAML/JSON Round-Trip:** When exporting rules to YAML or JSON for import/export operations, use the Phase B field names (`config:`, `key:`, `{{ .Config.<key> }}`). Existing deployments must clean-reprovision the `agentguard_rules` stream schema.
+1. **YAML/JSON Round-Trip:** When exporting rules to YAML or JSON for import/export operations, use `config:`, `key:`, `{{ .Config.<key> }}`, and AgentGuard's typed default encoding.
 
 2. **Migration:** The `/apps` rename intentionally rotates the `Definition.Hash()` value for any parameterized definitions (the serialization field name changes from `id` to `key`). This is acceptable because the `agentguard_rules` snapshot stream is clean-reprovisioned at this baseline; no snapshot-migration logic is needed.
 
-3. **Type Extensions:** `regex` and `duration` parameter types are new in Phase B and are NOT represented in the `/apps` manifest specification. They may be documented as AG-specific extensions when rules are exported or imported.
+3. **Type Extensions:** `regex` and `duration` parameter types are new in Phase B and are NOT represented in the `/apps` manifest specification. They should be documented as AG-specific extensions when rules are exported or imported.
 
 4. **Strict Rendering:** Parameter overrides are always rendered as literals. For example:
    - `integer` → bare decimal: `5`

@@ -303,7 +303,7 @@ func TestNormalizeOverridesBoolean(t *testing.T) {
 }
 
 func TestNormalizeOverridesString(t *testing.T) {
-	p := catalog.Parameter{Key: "pattern", Type: "string", Default: "abc", MinLength: iptr(2), MaxLength: iptr(5)}
+	p := catalog.Parameter{Key: "pattern", Type: "string", Default: "abc"}
 	def := defWith(p)
 
 	cases := []struct {
@@ -312,9 +312,7 @@ func TestNormalizeOverridesString(t *testing.T) {
 		wantErr string
 	}{
 		{name: "ok", value: "hello"},
-		{name: "unicode counts runes not bytes", value: "héllo"}, // 5 runes, 6 bytes
-		{name: "too short", value: "x", wantErr: "at least 2"},
-		{name: "too long", value: "abcdef", wantErr: "at most 5"},
+		{name: "unicode", value: "héllo"},
 		{name: "wrong type", value: 5.0, wantErr: "expected string, got number"},
 	}
 	for _, tc := range cases {
@@ -371,7 +369,6 @@ func TestNormalizeOverridesStringList(t *testing.T) {
 	p := catalog.Parameter{
 		Key: "cmds", Type: "list", Default: []any{"rm"},
 		MinItems: iptr(1), MaxItems: iptr(3),
-		MinLength: iptr(2), MaxLength: iptr(10),
 	}
 	def := defWith(p)
 
@@ -388,8 +385,6 @@ func TestNormalizeOverridesStringList(t *testing.T) {
 		{name: "duplicate", value: []any{"rm", "rm"}, wantErr: `duplicate item "rm"`},
 		{name: "non-string item", value: []any{"rm", 5.0}, wantErr: "item 1: expected string, got number"},
 		{name: "too many items", value: []any{"aa", "bb", "cc", "dd"}, wantErr: "at most 3 items"},
-		{name: "item too short", value: []any{"x"}, wantErr: "at least 2 characters"},
-		{name: "item too long", value: []any{"abcdefghijk"}, wantErr: "at most 10 characters"},
 		{name: "not a list", value: "rm", wantErr: "expected list of strings, got string"},
 	}
 	for _, tc := range cases {

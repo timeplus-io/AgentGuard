@@ -71,14 +71,11 @@ type Parameter struct {
 	Default     any      `yaml:"default"               json:"default"`
 	Min         *float64 `yaml:"min,omitempty"         json:"min,omitempty"`
 	Max         *float64 `yaml:"max,omitempty"         json:"max,omitempty"`
-	MinLength   *int     `yaml:"min_length,omitempty"  json:"min_length,omitempty"`
-	MaxLength   *int     `yaml:"max_length,omitempty"  json:"max_length,omitempty"`
 	Options     []string `yaml:"options,omitempty"     json:"options,omitempty"`
 	MinItems    *int     `yaml:"min_items,omitempty"   json:"min_items,omitempty"`
 	MaxItems    *int     `yaml:"max_items,omitempty"   json:"max_items,omitempty"`
 	Aliases     []string `yaml:"aliases,omitempty"     json:"aliases,omitempty"`
 	Unit        string   `yaml:"unit,omitempty"        json:"unit,omitempty"`
-	Required    bool     `yaml:"required,omitempty"    json:"required,omitempty"`
 	Secret      bool     `yaml:"secret,omitempty"      json:"secret,omitempty"`
 }
 

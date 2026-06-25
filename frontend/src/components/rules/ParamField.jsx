@@ -7,7 +7,7 @@ import { useState } from 'react'
 //
 // Props:
 //   param        – schema entry { key, label, description, type, default, min,
-//                  max, min_length, max_length, options, min_items, max_items, unit }
+//                  max, options, min_items, max_items, unit }
 //   value        – current edited value (canonical JS form: number | string |
 //                  boolean | string[])
 //   overridden   – true when value deviates from the definition default

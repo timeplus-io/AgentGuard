@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/timeplus/agentguard/internal/catalog"
 )
@@ -178,18 +177,6 @@ func checkNoNUL(s string) error {
 	return nil
 }
 
-// checkStringLength enforces MinLength/MaxLength (in Unicode characters).
-func checkStringLength(p catalog.Parameter, s string) error {
-	n := utf8.RuneCountInString(s)
-	if p.MinLength != nil && n < *p.MinLength {
-		return fmt.Errorf("must be at least %d characters, got %d", *p.MinLength, n)
-	}
-	if p.MaxLength != nil && n > *p.MaxLength {
-		return fmt.Errorf("must be at most %d characters, got %d", *p.MaxLength, n)
-	}
-	return nil
-}
-
 // normalizeValue coerces a decoded JSON/YAML value into the canonical Go
 // representation for the parameter's type (see types.go) and enforces the
 // parameter's constraints. The returned error message is per-parameter and
@@ -247,9 +234,6 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 		if err := checkNoNUL(s); err != nil {
 			return nil, err
 		}
-		if err := checkStringLength(p, s); err != nil {
-			return nil, err
-		}
 		return s, nil
 
 	case "choice":
@@ -291,9 +275,6 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 			if err := checkNoNUL(item); err != nil {
 				return nil, fmt.Errorf("item %d (%q): %s", i, item, err.Error())
 			}
-			if err := checkStringLength(p, item); err != nil {
-				return nil, fmt.Errorf("item %d (%q): %s", i, item, err.Error())
-			}
 		}
 		return items, nil
 
@@ -303,9 +284,6 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 			return nil, fmt.Errorf("expected string, got %s", typeName(v))
 		}
 		if err := checkNoNUL(s); err != nil {
-			return nil, err
-		}
-		if err := checkStringLength(p, s); err != nil {
 			return nil, err
 		}
 		if _, err := regexp.Compile(s); err != nil {

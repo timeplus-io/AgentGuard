@@ -132,8 +132,6 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
       default: defaultForType(type),
       min: undefined,
       max: undefined,
-      min_length: undefined,
-      max_length: undefined,
       min_items: undefined,
       max_items: undefined,
       options: type === 'choice' ? row.options || [] : undefined,
@@ -353,8 +351,8 @@ function DefaultInput({ row, onUpdate }) {
 
 // Constraints renders the type-switched constraint editors.
 function Constraints({ row, onUpdate }) {
-  // intOnly fields back Go *int constraints (min_length/max_length/min_items/
-  // max_items); a fractional value there fails JSON decode with an opaque 400, so
+  // intOnly fields back Go *int constraints (min_items/max_items); a fractional
+  // value there fails JSON decode with an opaque 400, so
   // force whole numbers (step 1 + truncate on input). min/max back *float64 and
   // may be fractional, so they stay unconstrained.
   const numField = (key, label, { intOnly = false } = {}) => (
@@ -404,14 +402,6 @@ function Constraints({ row, onUpdate }) {
               className={inputCls}
             />
           </Field>
-        </div>
-      )
-    case 'string':
-    case 'regex':
-      return (
-        <div className="grid grid-cols-2 gap-3">
-          {numField('min_length', 'Min length', { intOnly: true })}
-          {numField('max_length', 'Max length', { intOnly: true })}
         </div>
       )
     case 'list':
