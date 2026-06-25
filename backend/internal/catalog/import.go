@@ -56,6 +56,9 @@ func (m *Manager) ImportZip(r io.ReaderAt, size int64, force bool) (ImportResult
 		// Anything arriving via import becomes origin "imported", regardless
 		// of what the zip entry claims.
 		entry.Origin = OriginImported
+		// Normalize before validation so an imported entry that omits a parameter
+		// type is accepted (Apps semantics) rather than reported as invalid.
+		entry = NormalizeDefinition(entry)
 		// Invalid entries are skipped with a reported error; the rest of the
 		// zip is still processed.
 		if err := entry.Validate(); err != nil {

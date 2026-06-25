@@ -234,6 +234,34 @@ func TestCompileCatalogRule_Valid(t *testing.T) {
 	}
 }
 
+// TestCompileCatalogRule_OmittedType: the compile preview accepts a parameter
+// with no type (Apps semantics: omitted type means string) and renders it as a
+// quoted string literal, rather than rejecting it as an unknown type.
+func TestCompileCatalogRule_OmittedType(t *testing.T) {
+	w := postCompile(t, map[string]any{
+		"definition": map[string]any{
+			"id": "demo", "name": "Demo", "version": "1.0.0",
+			"sql_template": "SELECT 1 WHERE tool = {{ .Config.tool }}",
+			"config": []map[string]any{
+				{"key": "tool", "label": "Tool", "default": "bash"}, // type omitted
+			},
+		},
+		"overrides": map[string]any{"tool": "git"},
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 for omitted type, got %d: %s", w.Code, w.Body.String())
+	}
+	var out struct {
+		RenderedSQL string `json:"rendered_sql"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !strings.Contains(out.RenderedSQL, "'git'") {
+		t.Errorf("omitted-type param not rendered as string literal: %q", out.RenderedSQL)
+	}
+}
+
 func TestCompileCatalogRule_BadTemplate(t *testing.T) {
 	w := postCompile(t, map[string]any{
 		"definition": map[string]any{

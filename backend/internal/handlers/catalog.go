@@ -140,6 +140,10 @@ func CompileCatalogRule() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
 			return
 		}
+		// Normalize before validate+compile so the preview accepts an omitted
+		// parameter type (Apps semantics) and the returned definition_hash matches
+		// what Save would persist.
+		body.Definition = catalog.NormalizeDefinition(body.Definition)
 		if err := body.Definition.Validate(); err != nil {
 			respondCatalogError(c, err)
 			return
@@ -192,6 +196,12 @@ func CreateCatalogRule(mgr *catalog.Manager) gin.HandlerFunc {
 		if err := mgr.Save(def); err != nil {
 			respondCatalogError(c, err)
 			return
+		}
+		// Return the persisted canonical definition (normalized types, native
+		// defaults), not the raw submitted body, so the client sees exactly what
+		// was stored.
+		if published, ok := mgr.Lookup(def.ID); ok {
+			def = published
 		}
 		c.JSON(http.StatusCreated, def)
 	}

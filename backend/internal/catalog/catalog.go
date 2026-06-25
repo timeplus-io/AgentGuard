@@ -125,6 +125,9 @@ func (m *Manager) loadDir(dir string, target map[string]Definition) error {
 			log.Printf("catalog: skipping local definition %s: missing id", path)
 			continue
 		}
+		// Normalize before validation so a hand-authored (or /apps-shaped) local
+		// file that omits a parameter type is accepted rather than skipped.
+		def = NormalizeDefinition(def)
 		if err := def.Validate(); err != nil {
 			log.Printf("catalog: skipping invalid local definition %s: %v", path, err)
 			continue
@@ -292,6 +295,18 @@ func defaultEmptyTypes(params []Parameter) []Parameter {
 	return out
 }
 
+// NormalizeDefinition returns a copy of d with Timeplus Apps-compatibility
+// normalization applied: a parameter with an omitted type defaults to "string".
+// This is the single normalization step every ingestion path runs before
+// validation or compilation (Save, local-dir load, zip import, compile preview,
+// and the installed-edit redeploy), so the omitted-type rule holds catalog-wide
+// rather than only on the API Save path. Copy-returning: the caller's Definition
+// is never mutated.
+func NormalizeDefinition(d Definition) Definition {
+	d.Parameters = defaultEmptyTypes(d.Parameters)
+	return d
+}
+
 func (m *Manager) Save(d Definition) error {
 	if m.dir == "" {
 		return fmt.Errorf("no catalog directory configured")
@@ -302,7 +317,7 @@ func (m *Manager) Save(d Definition) error {
 	// Default an omitted parameter type to "string" (Timeplus Apps semantics)
 	// before validation, so a typeless param is accepted and persisted with a
 	// concrete type rather than rejected downstream as an unknown type.
-	d.Parameters = defaultEmptyTypes(d.Parameters)
+	d = NormalizeDefinition(d)
 	if err := d.Validate(); err != nil {
 		return fmt.Errorf("invalid definition %s: %w", d.ID, err)
 	}

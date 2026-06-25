@@ -580,6 +580,12 @@ func (s *Service) UpdateDefinition(def catalog.Definition, actor, reason string)
 	unlock := s.locks.lock(def.ID)
 	defer unlock()
 
+	// Normalize up front so the SAME canonical definition flows through Save,
+	// PlanUpgrade, and Compile below — Save normalizes its own copy, but this
+	// function keeps using def for the redeploy, so a typeless param would
+	// otherwise reach PlanUpgrade/Compile uncanonicalized.
+	def = catalog.NormalizeDefinition(def)
+
 	// a. The definition must already exist and be custom-owned.
 	cur, found := s.catalog.Lookup(def.ID)
 	if !found {

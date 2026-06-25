@@ -785,6 +785,33 @@ func TestUpdateDefinition_NotInstalledSavesOnly(t *testing.T) {
 	}
 }
 
+// TestUpdateDefinition_OmittedTypeNormalized: editing an installed custom rule
+// with a parameter whose type is omitted must succeed. UpdateDefinition
+// normalizes up front, so Save, PlanUpgrade, and the redeploy Compile all see
+// the param as "string" — without it, PlanUpgrade would read a string→"" type
+// change (or Compile would reject the unknown type) and the edit would fail.
+func TestUpdateDefinition_OmittedTypeNormalized(t *testing.T) {
+	prev := customDef("rp-c", "1.0.0", catalog.Parameter{Key: "tool", Label: "tool", Type: "string", Default: "bash"})
+	defs := &fakeDefs{defs: map[string]catalog.Definition{"rp-c": prev}}
+	svc, st, _, _ := newTestService(defs)
+	st.latest["rp-c"] = installedInst(prev, true, 2, map[string]any{"tool": "git"}, nil)
+
+	mutated := prev
+	mutated.Description = "edited"
+	mutated.Parameters = []catalog.Parameter{{Key: "tool", Label: "tool", Default: "bash"}} // type omitted
+
+	inst, err := svc.UpdateDefinition(mutated, "alice", "edit")
+	if err != nil {
+		t.Fatalf("update with omitted type: %v", err)
+	}
+	if got := defs.defs["rp-c"].Parameters[0].Type; got != "string" {
+		t.Errorf("published param type = %q, want string", got)
+	}
+	if got, _ := inst.Overrides["tool"].(string); got != "git" {
+		t.Errorf("override not preserved across omitted-type edit: %#v", inst.Overrides["tool"])
+	}
+}
+
 // TestUpdateDefinition_EnabledReplacesAndAppends: the happy path for an installed
 // enabled rule — publish, recompile against stored overrides, replace the MV, and
 // append a snapshot whose hash has moved to the edited definition.

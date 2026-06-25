@@ -1,6 +1,8 @@
 package catalog
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -1473,5 +1475,92 @@ func TestSaveDefaultsOmittedTypeToString(t *testing.T) {
 	}
 	if got.Parameters[0].Type != "string" {
 		t.Errorf("reloaded type = %q, want %q", got.Parameters[0].Type, "string")
+	}
+}
+
+// TestNormalizeDefinition is the unit test for the shared normalization helper:
+// an omitted type defaults to "string", an explicit type is untouched, and the
+// caller's Definition is not mutated.
+func TestNormalizeDefinition(t *testing.T) {
+	in := Definition{
+		ID: "rp-x", Name: "x", Version: "1.0.0", SQLTemplate: "SELECT 1",
+		Parameters: []Parameter{
+			{Key: "a", Default: "v"},                       // type omitted
+			{Key: "b", Type: "integer", Default: int64(1)}, // explicit
+		},
+	}
+	out := NormalizeDefinition(in)
+	if out.Parameters[0].Type != "string" {
+		t.Errorf("omitted type = %q, want string", out.Parameters[0].Type)
+	}
+	if out.Parameters[1].Type != "integer" {
+		t.Errorf("explicit type changed to %q", out.Parameters[1].Type)
+	}
+	if in.Parameters[0].Type != "" {
+		t.Errorf("caller's parameter was mutated to %q", in.Parameters[0].Type)
+	}
+}
+
+// omittedTypeDoc is a structurally complete local definition whose single
+// parameter omits its type (Apps semantics: an absent type means string).
+const omittedTypeDoc = "id: rp-local\nname: Local\nversion: 1.0.0\n" +
+	"sql_template: \"SELECT 1 WHERE t = {{ .Config.tool }}\"\nconfig:\n  - key: tool\n    default: bash\n"
+
+// TestLoadDir_OmittedTypeAccepted: a hand-authored local file that omits a
+// parameter type loads (normalized to string) rather than being skipped as
+// structurally invalid.
+func TestLoadDir_OmittedTypeAccepted(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "rp-local.yaml"), []byte(omittedTypeDoc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(fstest.MapFS{}, dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	got, ok := m.Lookup("rp-local")
+	if !ok {
+		t.Fatal("local definition with omitted type was dropped on load")
+	}
+	if got.Parameters[0].Type != "string" {
+		t.Errorf("loaded type = %q, want string", got.Parameters[0].Type)
+	}
+}
+
+// TestImportZip_OmittedTypeAccepted: a zip entry that omits a parameter type
+// imports successfully (normalized to string) rather than reported invalid.
+func TestImportZip_OmittedTypeAccepted(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create("rp-imp.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := "id: rp-imp\nname: Imported\nversion: 1.0.0\n" +
+		"sql_template: \"SELECT 1 WHERE t = {{ .Config.tool }}\"\nconfig:\n  - key: tool\n    default: bash\n"
+	if _, err := w.Write([]byte(entry)); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := New(fstest.MapFS{}, t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	res, err := m.ImportZip(bytes.NewReader(buf.Bytes()), int64(buf.Len()), false)
+	if err != nil {
+		t.Fatalf("ImportZip: %v", err)
+	}
+	if len(res.Errors) != 0 {
+		t.Fatalf("import reported errors: %v", res.Errors)
+	}
+	got, ok := m.Lookup("rp-imp")
+	if !ok {
+		t.Fatal("imported definition with omitted type not found")
+	}
+	if got.Parameters[0].Type != "string" {
+		t.Errorf("imported type = %q, want string", got.Parameters[0].Type)
 	}
 }

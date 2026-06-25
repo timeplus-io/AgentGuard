@@ -16,7 +16,7 @@ The external authoring contract adopts the `/apps` naming surface and overlappin
 | Parameter identifier field | `id` | `key` |
 | Placeholder spelling | `{{params.<id>}}` (no whitespace) | `{{ .Config.<key> }}` (optional surrounding whitespace) |
 | Shared metadata fields | — | `description`, `options`, `secret` (parsed only to reject `true`) |
-| Omitted parameter type | rejected as unknown type | defaults to `string` (Apps semantics; canonicalized on `Save`) |
+| Omitted parameter type | rejected as unknown type | defaults to `string` (Apps semantics; applied catalog-wide via `NormalizeDefinition` on Save, local-dir load, zip import, compile preview, and installed-edit redeploy) |
 | Unsupported `/apps` fields | — | `required` is not supported; every AG parameter must have a default |
 | AG-only schema fields | — | `label`, `min`, `max`, `min_items`, `max_items`, `unit`, `aliases` (see Rule-Engine Constraints) |
 | Template engine | strict scanner (kept) | strict scanner (kept — NOT Go text/template) |
