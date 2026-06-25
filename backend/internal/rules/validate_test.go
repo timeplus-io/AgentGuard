@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/timeplus/agentguard/internal/catalog"
 )
@@ -50,6 +51,38 @@ func fieldErr(t *testing.T, err error, param string) FieldError {
 		t.Fatalf("expected exactly one field error for %q, got %d in %v", param, len(found), ve.Fields)
 	}
 	return found[0]
+}
+
+// TestNumericDefaultSurvivesRestart reproduces the "custom rule with a numeric
+// default disappears after a backend restart" bug end-to-end with the real
+// load-time validator. A definition created via the API carries json.Number
+// defaults (handlers decode the body with UseNumber()); after Save and a
+// fresh-Manager reload (== restart, which re-runs ValidateDefinition over every
+// local file and drops non-compiling ones), it must still be in the catalog.
+func TestNumericDefaultSurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	mk := func() *catalog.Manager {
+		m, err := catalog.New(fstest.MapFS{}, dir, catalog.WithSemanticValidator(ValidateDefinition))
+		if err != nil {
+			t.Fatalf("catalog.New: %v", err)
+		}
+		return m
+	}
+	def := catalog.Definition{
+		ID:          "rp-restart-num",
+		Name:        "Numeric default rule",
+		Version:     "1.0.0",
+		SQLTemplate: "SELECT 1 /* {{ .Config.threshold }} */",
+		Parameters: []catalog.Parameter{
+			{Key: "threshold", Label: "Threshold", Type: "integer", Default: json.Number("5")},
+		},
+	}
+	if err := mk().Save(def); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, ok := mk().Lookup("rp-restart-num"); !ok {
+		t.Fatal("definition with a numeric default was dropped on restart")
+	}
 }
 
 // ValidateDefinition is the compiler-semantic gate wired into the catalog at

@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -1388,5 +1389,48 @@ func TestSave_RejectsMVNamespaceCollision(t *testing.T) {
 	c.ID = "rp001"
 	if err := m.Save(c); !errors.Is(err, ErrExists) {
 		t.Fatalf("collision with a seed id: want ErrExists, got %v", err)
+	}
+}
+
+// TestSaveNumericDefaultRoundTrip guards against a regression where a numeric
+// parameter default decoded from a JSON request body (json.Number, a string
+// kind) was YAML-marshaled as a QUOTED string (default: "5"). On the next load
+// it read back as a Go string and failed numeric semantic validation, silently
+// dropping the whole definition. Save must canonicalize numeric defaults to a
+// native scalar so they survive the persistence round-trip.
+func TestSaveNumericDefaultRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	m, err := New(fstest.MapFS{}, dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	def := Definition{
+		ID:          "rp-custom-num",
+		Name:        "Numeric default rule",
+		Version:     "1.0.0",
+		SQLTemplate: "SELECT 1 WHERE x > {{ .Config.threshold }}",
+		Parameters: []Parameter{
+			{Key: "threshold", Type: "integer", Default: json.Number("5")},
+			{Key: "ratio", Type: "float", Default: json.Number("1.5")},
+			{Key: "window", Type: "duration", Unit: "seconds", Default: json.Number("600")},
+		},
+	}
+	if err := m.Save(def); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// A fresh Manager on the same directory simulates a server restart.
+	m2, err := New(fstest.MapFS{}, dir)
+	if err != nil {
+		t.Fatalf("reopen New: %v", err)
+	}
+	got, ok := m2.Lookup("rp-custom-num")
+	if !ok {
+		t.Fatal("definition was dropped after reload")
+	}
+	for _, p := range got.Parameters {
+		if s, isStr := p.Default.(string); isStr {
+			t.Errorf("param %q default reloaded as string %q — numeric default not canonicalized before persist", p.Key, s)
+		}
 	}
 }

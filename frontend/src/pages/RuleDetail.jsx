@@ -533,13 +533,39 @@ export default function RuleDetail() {
 
             <div className="p-8">
               {contentTab === 'configuration' && (
-                <ConfigurationTab
-                  ruleId={id}
-                  schema={rule.schema}
-                  defaults={rule.defaults}
-                  effective={rule.effective}
-                  onSaved={() => reload()}
-                />
+                // An available upgrade locks configuration: the backend rejects a
+                // configure while a rule is upgradeable (409), and the new version's
+                // parameters may differ. Route the operator to Upgrade first rather
+                // than letting them edit a stale schema and hit a raw 409 on save.
+                upgradeAvailable ? (
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-sm px-5 py-4 flex items-start gap-3">
+                    <span className="material-symbols-outlined text-amber-400 text-[20px] shrink-0 mt-0.5">upgrade</span>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-sm font-semibold text-amber-300">Upgrade before configuring</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          A newer version{targetVersion ? ` (${targetVersion})` : ''} of this rule is available, and its parameters may have changed — configuration is locked until you upgrade. Upgrading preserves your compatible overrides.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setUpgradeConflicts(null); setUpgradeModal(true) }}
+                        disabled={actionLoading}
+                        className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors disabled:opacity-50"
+                      >
+                        Upgrade{targetVersion ? ` to ${targetVersion}` : ''}…
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <ConfigurationTab
+                    ruleId={id}
+                    schema={rule.schema}
+                    defaults={rule.defaults}
+                    effective={rule.effective}
+                    onSaved={() => reload()}
+                  />
+                )
               )}
 
               {contentTab === 'description' && (

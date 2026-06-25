@@ -353,14 +353,28 @@ function DefaultInput({ row, onUpdate }) {
 
 // Constraints renders the type-switched constraint editors.
 function Constraints({ row, onUpdate }) {
-  const numField = (key, label) => (
+  // intOnly fields back Go *int constraints (min_length/max_length/min_items/
+  // max_items); a fractional value there fails JSON decode with an opaque 400, so
+  // force whole numbers (step 1 + truncate on input). min/max back *float64 and
+  // may be fractional, so they stay unconstrained.
+  const numField = (key, label, { intOnly = false } = {}) => (
     <Field label={label}>
       <input
         type="number"
+        step={intOnly ? '1' : 'any'}
         value={row[key] ?? ''}
         onChange={(e) => {
           const raw = e.target.value
-          onUpdate({ [key]: raw === '' ? undefined : Number(raw) })
+          if (raw === '') {
+            onUpdate({ [key]: undefined })
+            return
+          }
+          const n = Number(raw)
+          if (Number.isNaN(n)) {
+            onUpdate({ [key]: undefined })
+            return
+          }
+          onUpdate({ [key]: intOnly ? Math.trunc(n) : n })
         }}
         className={inputCls}
       />
@@ -396,15 +410,15 @@ function Constraints({ row, onUpdate }) {
     case 'regex':
       return (
         <div className="grid grid-cols-2 gap-3">
-          {numField('min_length', 'Min length')}
-          {numField('max_length', 'Max length')}
+          {numField('min_length', 'Min length', { intOnly: true })}
+          {numField('max_length', 'Max length', { intOnly: true })}
         </div>
       )
     case 'list':
       return (
         <div className="grid grid-cols-2 gap-3">
-          {numField('min_items', 'Min items')}
-          {numField('max_items', 'Max items')}
+          {numField('min_items', 'Min items', { intOnly: true })}
+          {numField('max_items', 'Max items', { intOnly: true })}
         </div>
       )
     case 'choice':

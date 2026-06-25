@@ -34,6 +34,36 @@ func escapeSQLStr(s string) string {
 	return s
 }
 
+// ruleNameSentinel is the literal a submitted create-custom query uses to mark
+// where the rule's (SQL-escaped) name should be baked in; ruleIDSentinel does
+// the same for its id.
+const (
+	ruleIDSentinel   = "'__rule_id__'"
+	ruleNameSentinel = "'__rule_name__'"
+)
+
+// bakeRuleIdentity substitutes the __rule_id__/__rule_name__ sentinels in a
+// submitted create-custom query so the stored template is already the final
+// rendered SQL (a zero-parameter custom rule has no runtime placeholders). The
+// name is SQL-escaped before interpolation.
+//
+// It rejects a name containing template delimiters ('{{' or '}}') ONLY when that
+// name is actually baked (the query uses the name sentinel): the placeholder
+// scanner (rules.scanPlaceholders) treats every '{{' as a placeholder start and
+// has no literal-brace escape, so a baked '{{' would otherwise be rejected far
+// downstream with a cryptic "unclosed '{{'" / "does not match any declared
+// parameter" error. When the name is not baked it never enters the SQL, so
+// delimiters in it are harmless and allowed.
+func bakeRuleIdentity(querySQL, ruleID, name string) (string, error) {
+	if strings.Contains(querySQL, ruleNameSentinel) &&
+		(strings.Contains(name, "{{") || strings.Contains(name, "}}")) {
+		return "", fmt.Errorf("rule name must not contain '{{' or '}}' when the query bakes it in via __rule_name__")
+	}
+	out := strings.ReplaceAll(querySQL, ruleIDSentinel, "'"+ruleID+"'")
+	out = strings.ReplaceAll(out, ruleNameSentinel, "'"+escapeSQLStr(name)+"'")
+	return out, nil
+}
+
 // sessionUser returns the authenticated Timeplus user for audit metadata
 // (updated_by), or "unknown" when the context carries none.
 func sessionUser(c *gin.Context) string {
@@ -432,11 +462,12 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) g
 
 		// Bake the rule identity into the SQL at create time so the stored template
 		// is already the final rendered SQL (zero parameters). This is a one-time
-		// create-time convenience, not a runtime parameter. The name is fully SQL-
-		// escaped (backslashes too) before interpolation.
-		escapedName := escapeSQLStr(body.Name)
-		finalSQL := strings.ReplaceAll(body.QuerySQL, "'__rule_id__'", "'"+ruleID+"'")
-		finalSQL = strings.ReplaceAll(finalSQL, "'__rule_name__'", "'"+escapedName+"'")
+		// create-time convenience, not a runtime parameter.
+		finalSQL, err := bakeRuleIdentity(body.QuerySQL, ruleID, body.Name)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 
 		def := catalog.Definition{
 			ID:          ruleID,

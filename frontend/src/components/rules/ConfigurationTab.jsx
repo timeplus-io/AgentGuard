@@ -63,6 +63,14 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
     setValues(next)
     setFieldErrorsFromServer({})
   }
+  // Discard reverts to the last-saved baseline (effective config with its saved
+  // overrides), NOT to defaults — discarding edits must not wipe saved overrides.
+  // After this, values === baseline so the form is clean (dirty becomes false).
+  const discard = () => {
+    setValues(baseline)
+    setFieldErrorsFromServer({})
+    setSaveError(null)
+  }
 
   const save = async () => {
     if (hasErrors || saving) return
@@ -82,7 +90,15 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
         for (const f of fields) m[f.parameter] = f.message
         setFieldErrorsFromServer(m)
       }
-      setSaveError(e?.message || 'Save failed')
+      // 409 means an upgrade became available since this tab opened (the page
+      // normally gates configuration behind Upgrade). The 409 body carries
+      // conflicts/warnings, not field errors — give a clear, actionable message
+      // rather than a raw banner.
+      if (e?.status === 409) {
+        setSaveError('This rule has a pending upgrade. Upgrade it first (Configuration is locked until then); reload the page to continue.')
+      } else {
+        setSaveError(e?.message || 'Save failed')
+      }
     } finally {
       setSaving(false)
     }
@@ -131,7 +147,7 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
         {dirty && <span className="text-[11px] text-amber-400 mr-auto">Unsaved changes</span>}
         <button
           type="button"
-          onClick={resetAll}
+          onClick={discard}
           disabled={!dirty}
           className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors disabled:opacity-40"
         >

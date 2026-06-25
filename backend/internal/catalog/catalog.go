@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -232,6 +233,39 @@ func (m *Manager) mvKeyConflict(id string) (string, bool) {
 // updates the in-memory map. This is the path for user-created rules and
 // overrides of seed definitions. Definitions saved without an origin default
 // to custom.
+// canonicalizeNumericDefault converts a json.Number default — which a JSON
+// request body decoded with UseNumber() produces — into a native scalar so it
+// round-trips through YAML persistence. yaml.Marshal writes a json.Number (a
+// string kind) as a QUOTED string (default: "5"); the next load reads that back
+// as a Go string, which then fails numeric semantic validation and the whole
+// definition is silently dropped. integer/duration coerce to int64, float to
+// float64. Non-json.Number defaults — and a json.Number on a non-numeric param,
+// which is a type error the semantic validator already rejects — are returned
+// unchanged.
+func canonicalizeNumericDefault(p Parameter) any {
+	num, ok := p.Default.(json.Number)
+	if !ok {
+		return p.Default
+	}
+	switch p.Type {
+	case "float":
+		if f, err := num.Float64(); err == nil {
+			return f
+		}
+	case "integer", "duration":
+		if i, err := num.Int64(); err == nil {
+			return i
+		}
+		// A whole-valued literal written with a decimal point ("5.0") still
+		// belongs as an integer to the validator; fall back to float so it at
+		// least persists unquoted and reloads as a number, not a string.
+		if f, err := num.Float64(); err == nil {
+			return f
+		}
+	}
+	return p.Default
+}
+
 func (m *Manager) Save(d Definition) error {
 	if m.dir == "" {
 		return fmt.Errorf("no catalog directory configured")
@@ -266,6 +300,19 @@ func (m *Manager) Save(d Definition) error {
 	// republish, rollback) are unaffected — only a distinct colliding ID is blocked.
 	if other, ok := m.mvKeyConflict(d.ID); ok {
 		return fmt.Errorf("%w: id %q collides with rule %q in the materialized-view namespace (hyphens are not significant there); choose a distinct id", ErrExists, d.ID, other)
+	}
+	// Canonicalize numeric defaults to native scalars before persisting so they
+	// survive the YAML round-trip (see canonicalizeNumericDefault). Copy the
+	// slice first: Save takes d by value but d.Parameters shares its backing
+	// array with the caller, so an in-place write would mutate the caller's
+	// Definition too.
+	if len(d.Parameters) > 0 {
+		params := make([]Parameter, len(d.Parameters))
+		copy(params, d.Parameters)
+		for i := range params {
+			params[i].Default = canonicalizeNumericDefault(params[i])
+		}
+		d.Parameters = params
 	}
 	data, err := yaml.Marshal(d)
 	if err != nil {
