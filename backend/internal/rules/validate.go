@@ -299,7 +299,24 @@ func normalizeValue(p catalog.Parameter, v any) (any, error) {
 				return nil, fmt.Errorf("item %d: %s", i, err.Error())
 			}
 		}
-		return items, nil
+		// Canonicalize to declaration (Options) order. multi_choice order is
+		// semantically the option order, not the order the values were entered;
+		// rebuilding by iterating Options makes every persistence/render/upgrade
+		// path see a stable value regardless of submission order. (list, by
+		// contrast, stays order-significant, so normalizeStringList itself does
+		// NOT reorder.) Dedup and option-membership are already guaranteed above,
+		// so this filter loses no values.
+		selected := make(map[string]bool, len(items))
+		for _, item := range items {
+			selected[item] = true
+		}
+		canonical := make([]string, 0, len(items))
+		for _, opt := range p.Options {
+			if selected[opt] {
+				canonical = append(canonical, opt)
+			}
+		}
+		return canonical, nil
 
 	case "regex":
 		s, ok := v.(string)

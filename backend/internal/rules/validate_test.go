@@ -422,6 +422,10 @@ func TestNormalizeOverridesMultiChoice(t *testing.T) {
 	}{
 		{name: "json list", value: []any{"warn", "block"}, want: []string{"warn", "block"}},
 		{name: "go string slice", value: []string{"hold"}, want: []string{"hold"}},
+		// multi_choice canonicalizes to Options (declaration) order regardless of
+		// submission order, so an out-of-order value reorders rather than persisting
+		// as entered (list, by contrast, preserves input order).
+		{name: "out-of-order canonicalized to options order", value: []any{"hold", "warn"}, want: []string{"warn", "hold"}},
 		{name: "empty list", value: []any{}, wantErr: "at least one item"},
 		{name: "duplicate", value: []any{"warn", "warn"}, wantErr: `duplicate item "warn"`},
 		{name: "not an option", value: []any{"warn", "audit"}, wantErr: "item 1: must be one of: warn, block, hold"},

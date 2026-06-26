@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toggleMultiChoiceValue } from './paramValues'
 
 // ParamSchemaEditor edits the parameter SCHEMA of a custom rule definition —
 // the typed declaration of each parameter (key / label / type / default /
@@ -356,13 +357,7 @@ function MultiChoiceDefaultEditor({ row, onUpdate }) {
   const options = Array.isArray(row.options) ? row.options : []
   const values = Array.isArray(row.default) ? row.default : []
   const selected = new Set(values)
-  const toggle = (opt) => {
-    if (selected.has(opt)) {
-      onUpdate({ default: values.filter((item) => item !== opt) })
-      return
-    }
-    onUpdate({ default: [...values, opt] })
-  }
+  const toggle = (opt) => onUpdate({ default: toggleMultiChoiceValue(options, values, opt) })
 
   return (
     <div className="flex flex-wrap gap-1.5">

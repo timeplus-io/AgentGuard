@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toggleMultiChoiceValue } from './paramValues'
 
 // ParamField renders ONE editable rule parameter control, selected by the
 // backend-declared parameter type. All parameter-type branching lives here so
@@ -172,13 +173,7 @@ function TypedControl({ param, value, onChange }) {
 function MultiChoiceControl({ param, value, onChange }) {
   const options = Array.isArray(param.options) ? param.options : []
   const selected = new Set(value)
-  const toggle = (opt) => {
-    if (selected.has(opt)) {
-      onChange(value.filter((item) => item !== opt))
-      return
-    }
-    onChange([...value, opt])
-  }
+  const toggle = (opt) => onChange(toggleMultiChoiceValue(options, value, opt))
 
   return (
     <div className="flex flex-wrap gap-1.5">
