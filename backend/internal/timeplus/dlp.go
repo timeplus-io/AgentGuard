@@ -198,6 +198,7 @@ def dlp_embed(contents, roles, shareds, configs):
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
     model = cfg.get('model') or ''
+    model = (cfg.get('models') or {}).get(model, model)
     try:
         timeout = float(cfg.get('timeout') or 50)
     except Exception:
@@ -298,6 +299,7 @@ def dlp_risk(contents, entity_types_list, shareds, configs):
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
     model = cfg.get('model') or ''
+    model = (cfg.get('models') or {}).get(model, model)
     try:
         max_tokens = int(cfg.get('max_tokens') or 512)
     except Exception:
@@ -394,34 +396,42 @@ func DLPConfigRows(cfg config.DLPConfig) map[string]string {
 	if summarizeTokens < 800 {
 		summarizeTokens = 800
 	}
-	// Per-UDF chat rows carry only what differs from the shared row.
-	chat := func(model string, maxTokens int) map[string]any {
-		return map[string]any{"model": model, "max_tokens": maxTokens}
+	// Per-UDF rows reference a model by NAME from the shared catalog
+	// (shared.models). A UDF resolves its `model` against that map at call time,
+	// falling back to treating it as a literal model id if it isn't a known name.
+	// So a model is defined once and pointed at by several UDFs.
+	chat := func(modelRef string, maxTokens int) map[string]any {
+		return map[string]any{"model": modelRef, "max_tokens": maxTokens}
 	}
-	riskRow := chat(cfg.RiskModel, cfg.MaxOutputTokens)
+	riskRow := chat("chat", cfg.MaxOutputTokens)
 	riskRow["keywords"] = dlpDefaultRiskKeywords
 	riskRow["tag_for"] = dlpTagForFromCatalog(catalog)
 
 	rows := map[string]any{
-		// Endpoint settings shared by every network UDF; rotate the key or swap
-		// the endpoint here once instead of per UDF.
+		// Settings shared by every network UDF: the endpoint (rotate the key /
+		// swap the URL here once) and the named-model catalog.
 		DLPCfgKeyShared: map[string]any{
 			"base_url": cfg.BaseURL,
 			"api_key":  cfg.APIKey,
 			"timeout":  cfg.RequestTimeoutSeconds,
+			"models": map[string]any{
+				"chat":      cfg.RiskModel,
+				"embedding": cfg.EmbeddingModel,
+				"summary":   cfg.SummaryModel,
+			},
 		},
 		DLPCfgKeyEntities: map[string]any{
 			"max_per_type": 20,
 			"entities":     catalog,
 		},
 		DLPCfgKeyEmbed: map[string]any{
-			"model":     cfg.EmbeddingModel,
+			"model":     "embedding",
 			"max_chars": 8000,
 		},
 		DLPCfgKeyRisk:       riskRow,
-		DLPCfgKeyUnderstand: chat(cfg.RiskModel, cfg.MaxOutputTokens),
-		DLPCfgKeyRerank:     chat(cfg.RiskModel, cfg.MaxOutputTokens),
-		DLPCfgKeySummarize:  chat(cfg.SummaryModel, summarizeTokens),
+		DLPCfgKeyUnderstand: chat("chat", cfg.MaxOutputTokens),
+		DLPCfgKeyRerank:     chat("chat", cfg.MaxOutputTokens),
+		DLPCfgKeySummarize:  chat("summary", summarizeTokens),
 	}
 	out := make(map[string]string, len(rows))
 	for k, v := range rows {

@@ -261,15 +261,32 @@ row`, its own row winning):
 
 | Key | Holds |
 |-----|-------|
-| `shared` | `base_url`, `api_key`, `timeout` — common to every network UDF; set the endpoint or rotate the key here **once** |
+| `shared` | `base_url`, `api_key`, `timeout`, and **`models`** — common to every network UDF; set the endpoint, rotate the key, or define models here **once** |
 | `dlp_extract_entities` | `entities` catalog + `max_per_type` (network-free; no `shared`) |
-| `dlp_embed` | `model`, `max_chars` |
-| `dlp_risk` | `model`, `max_tokens`, `keywords`, `tag_for` |
-| `dlp_understand_query` / `dlp_rerank` | `model`, `max_tokens` |
-| `dlp_summarize` | `model`, `max_tokens` |
+| `dlp_embed` | `model` (catalog name), `max_chars` |
+| `dlp_risk` | `model` (name), `max_tokens`, `keywords`, `tag_for` |
+| `dlp_understand_query` / `dlp_rerank` | `model` (name), `max_tokens` |
+| `dlp_summarize` | `model` (name), `max_tokens` |
 
-A per-UDF row may also override any shared field (e.g. point one UDF at a
-different `base_url`) since the per-UDF row wins the merge.
+**Named model catalog.** `shared.models` maps a name → an actual model id; each
+UDF's `model` is a **name** that resolves against it at call time. So a model is
+defined once and pointed at by several UDFs — e.g. `risk`, `understand`, and
+`rerank` all reference `"chat"`, so changing `shared.models.chat` updates all
+three. Defaults:
+
+```json
+shared:     {"base_url":"…","api_key":"…","timeout":50,
+             "models":{"chat":"gpt-4o-mini","embedding":"text-embedding-3-small","summary":"gpt-4o"}}
+dlp_embed:  {"model":"embedding","max_chars":8000}
+dlp_risk:   {"model":"chat","max_tokens":512,"keywords":[…],"tag_for":{…}}
+dlp_summarize: {"model":"summary","max_tokens":800}
+```
+
+Names are arbitrary — define `model1`/`model2`/… and point each UDF wherever you
+like. A `model` that isn't a catalog name is used as a **literal** model id
+(backward compatible). A per-UDF row may also override any shared field (e.g.
+point one UDF at a different `base_url` or its own `models`) since it wins the
+merge.
 
 Because the stream is read/write, **the config stream is authoritative at
 runtime**. The preferred way to change it is the API

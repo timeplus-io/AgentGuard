@@ -48,6 +48,7 @@ func TestDLPQueryUDFsParseConfig(t *testing.T) {
 		for _, want := range []string{
 			"_merged(shareds, configs)", "cfg.get('base_url')", "cfg.get('model')",
 			"cfg.get('timeout')", "_msg_content", "timeout=timeout",
+			"(cfg.get('models') or {}).get(model, model)", // resolve model name → id
 		} {
 			if !strings.Contains(ddl, want) {
 				t.Errorf("%s: missing %q", name, want)

@@ -85,6 +85,7 @@ def dlp_understand_query(questions, shareds, configs):
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
     model = cfg.get('model') or ''
+    model = (cfg.get('models') or {}).get(model, model)
     try:
         max_tokens = int(cfg.get('max_tokens') or 512)
     except Exception:
@@ -173,6 +174,7 @@ def dlp_rerank(questions, contents, shareds, configs):
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
     model = cfg.get('model') or ''
+    model = (cfg.get('models') or {}).get(model, model)
     try:
         max_tokens = int(cfg.get('max_tokens') or 512)
     except Exception:
@@ -250,6 +252,7 @@ def dlp_summarize(questions, evidences, shareds, configs):
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
     model = cfg.get('model') or ''
+    model = (cfg.get('models') or {}).get(model, model)
     try:
         max_tokens = int(cfg.get('max_tokens') or 800)
     except Exception:

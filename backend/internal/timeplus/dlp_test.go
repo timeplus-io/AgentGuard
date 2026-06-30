@@ -90,36 +90,42 @@ func TestDLPConfigRows(t *testing.T) {
 			t.Fatalf("config rows missing key %q", k)
 		}
 	}
-	// Endpoint/key/timeout live ONLY in the shared row.
+	// Endpoint/key/timeout + the named-model catalog live ONLY in the shared row.
 	if !strings.Contains(rows[DLPCfgKeyShared], `"api_key":"sk-test-abc"`) ||
 		!strings.Contains(rows[DLPCfgKeyShared], `"base_url":"http://mock:9999/v1"`) ||
 		!strings.Contains(rows[DLPCfgKeyShared], `"timeout":50`) {
 		t.Errorf("shared row missing endpoint/key/timeout: %s", rows[DLPCfgKeyShared])
 	}
-	// Per-UDF rows must NOT duplicate the shared endpoint/key.
-	for _, k := range []string{DLPCfgKeyEmbed, DLPCfgKeyRisk, DLPCfgKeyUnderstand, DLPCfgKeyRerank, DLPCfgKeySummarize} {
-		if strings.Contains(rows[k], "api_key") || strings.Contains(rows[k], "base_url") {
-			t.Errorf("%s row should not carry shared endpoint/key: %s", k, rows[k])
+	// Model catalog: names → actual model ids, defined once.
+	for _, want := range []string{`"models":{`, `"chat":"gpt-4o-mini"`, `"embedding":"text-embedding-3-small"`, `"summary":"gpt-4o"`} {
+		if !strings.Contains(rows[DLPCfgKeyShared], want) {
+			t.Errorf("shared row missing model catalog %q: %s", want, rows[DLPCfgKeyShared])
 		}
 	}
-	// Per-UDF model selection.
-	if !strings.Contains(rows[DLPCfgKeyEmbed], `"model":"text-embedding-3-small"`) {
-		t.Error("embed row: wrong model")
+	// Per-UDF rows must NOT duplicate the shared endpoint/key/catalog.
+	for _, k := range []string{DLPCfgKeyEmbed, DLPCfgKeyRisk, DLPCfgKeyUnderstand, DLPCfgKeyRerank, DLPCfgKeySummarize} {
+		if strings.Contains(rows[k], "api_key") || strings.Contains(rows[k], "base_url") || strings.Contains(rows[k], `"models"`) {
+			t.Errorf("%s row should not carry shared endpoint/catalog: %s", k, rows[k])
+		}
+	}
+	// Per-UDF model is a NAME referencing the shared catalog (resolved at call time).
+	if !strings.Contains(rows[DLPCfgKeyEmbed], `"model":"embedding"`) {
+		t.Error("embed row: model should reference catalog name 'embedding'")
 	}
 	if !strings.Contains(rows[DLPCfgKeyEmbed], `"max_chars":8000`) {
 		t.Error("embed row: missing max_chars")
 	}
-	if !strings.Contains(rows[DLPCfgKeyRisk], `"model":"gpt-4o-mini"`) {
-		t.Error("risk row: wrong model")
+	if !strings.Contains(rows[DLPCfgKeyRisk], `"model":"chat"`) {
+		t.Error("risk row: model should reference catalog name 'chat'")
 	}
 	if !strings.Contains(rows[DLPCfgKeyRisk], `"keywords":[`) || !strings.Contains(rows[DLPCfgKeyRisk], `"tag_for":{`) {
 		t.Error("risk row: missing keywords/tag_for")
 	}
-	if !strings.Contains(rows[DLPCfgKeyUnderstand], `"model":"gpt-4o-mini"`) {
-		t.Error("understand row: should use risk model")
+	if !strings.Contains(rows[DLPCfgKeyUnderstand], `"model":"chat"`) {
+		t.Error("understand row: should reference catalog name 'chat'")
 	}
-	if !strings.Contains(rows[DLPCfgKeySummarize], `"model":"gpt-4o"`) {
-		t.Error("summarize row: should use summary model")
+	if !strings.Contains(rows[DLPCfgKeySummarize], `"model":"summary"`) {
+		t.Error("summarize row: should reference catalog name 'summary'")
 	}
 	// Token budgets: risk uses the configured 512; summarize floors at 800.
 	if !strings.Contains(rows[DLPCfgKeyRisk], `"max_tokens":512`) {
