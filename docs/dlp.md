@@ -259,9 +259,12 @@ Keys: `dlp_extract_entities` (entity catalog + `max_per_type`), `dlp_embed`,
 rows carry `max_tokens`).
 
 Because the stream is read/write, **the config stream is authoritative at
-runtime**. To change a model, endpoint, timeout, keyword set, or the entity
-catalog, upsert the row (re-`INSERT` the same `key`) — the ingest MV (next event)
-and the funnel (next query) use it immediately, no rebuild and no re-provision:
+runtime**. The preferred way to change it is the API
+(`GET /api/dlp/config`, `PUT /api/dlp/config/:key` — which validates the JSON,
+structurally checks the entity catalog, and preserves the stored `api_key` when
+omitted). You can also upsert directly via SQL — re-`INSERT` the same `key` — and
+the ingest MV (next event) and funnel (next query) use it immediately, no rebuild
+and no re-provision:
 
 ```sql
 -- add a credit-card pattern to the entity catalog, live:
@@ -323,6 +326,8 @@ All endpoints are behind the auth middleware (`/api/dlp/*`).
 | GET | `/api/dlp/messages` | `ListEnrichedMessages` | Browse enriched rows. Filters: `risk_tag`, `entity_type`, `agent_id`, `session_id`, `role`, `since`/`until` (RFC3339), `min_score`; paginated (`page`/`limit`, max 500). |
 | GET | `/api/dlp/messages/:id` | `GetEnrichedMessage` | Full enriched record by `message_id`. |
 | GET | `/api/dlp/profiles` | `DLPProfilesHandler` | Top risk agents / sessions / tags over a `?days=` window (default 30). |
+| GET | `/api/dlp/config` | `GetDLPConfig` | Current `agentguard_dlp_config` rows (one per UDF). `api_key` redacted; `api_key_set` reports whether one is stored. |
+| PUT | `/api/dlp/config/:key` | `UpsertDLPConfig` | Upsert one config row (`{"value": <json>}`). Validates JSON (+ entity-catalog structure); preserves the stored `api_key` when the body omits/blanks it. Takes effect live, no re-provision. |
 | GET | `/api/dlp/status` | `DLPStatusHandler` | Provisioning + enrichment health. |
 | POST | `/api/config/test-dlp` | `TestDLPConfig` | Tests `base_url` reachability (`GET /models`); never 5xx on an unreachable endpoint. |
 

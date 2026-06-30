@@ -150,6 +150,8 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | GET | `/api/dlp/messages/:id` | `GetEnrichedMessage` | Full enriched record by `message_id` |
 | GET | `/api/dlp/profiles` | `DLPProfilesHandler` | Top risk agents / sessions / tags over a `?days=` window |
 | GET | `/api/dlp/status` | `DLPStatusHandler` | DLP provisioning + enrichment health (stream/MV/UDF presence, row counts, embedding coverage) |
+| GET | `/api/dlp/config` | `GetDLPConfig` | Current per-UDF config rows from `agentguard_dlp_config` (api_key redacted) |
+| PUT | `/api/dlp/config/:key` | `UpsertDLPConfig` | Upsert one UDF's config (`{value}`); validates JSON/entity catalog, preserves stored api_key; live, no re-provision |
 
 ### Frontend (`frontend/src/`)
 
