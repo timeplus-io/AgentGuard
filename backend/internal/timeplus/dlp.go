@@ -64,9 +64,14 @@ CREATE MUTABLE STREAM IF NOT EXISTS agentguard_dlp_config
 )
 PRIMARY KEY (key)`
 
-// Config keys — one row per UDF. These double as the literal JOIN keys the
-// ingest MV uses and the WHERE key='…' filter the funnel sub-queries use.
+// Config keys. DLPCfgKeyShared holds the endpoint settings (base_url, api_key,
+// timeout) common to every network UDF; the per-UDF rows override/add only what
+// differs (model, max_tokens, catalog, …). Each network UDF reads BOTH its
+// shared row and its own row and merges them (own wins). These strings double as
+// the literal JOIN keys the ingest MV uses and the WHERE key='…' filter the
+// funnel sub-queries use.
 const (
+	DLPCfgKeyShared     = "shared"
 	DLPCfgKeyEntities   = "dlp_extract_entities"
 	DLPCfgKeyEmbed      = "dlp_embed"
 	DLPCfgKeyRisk       = "dlp_risk"
@@ -163,27 +168,33 @@ def dlp_extract_entities(contents, configs):
     return out
 $$`
 
-// dlp_embed: batched embeddings via the OpenAI-compatible endpoint in `config`.
-// Only user/assistant rows with content are embedded (tool rows get []).
-const ddlDLPEmbedUDF = `CREATE OR REPLACE FUNCTION dlp_embed(content string, role string, config string)
+// dlp_embed: batched embeddings via the OpenAI-compatible endpoint. Config is
+// the merge of the shared row (base_url/api_key/timeout) and this UDF's row
+// (model/max_chars). Only user/assistant rows with content are embedded (tool
+// rows get []).
+const ddlDLPEmbedUDF = `CREATE OR REPLACE FUNCTION dlp_embed(content string, role string, shared string, config string)
 RETURNS array(float32)
 LANGUAGE PYTHON AS $$
 import json
 import requests
 
-def _cfg(configs):
-    for s in configs:
-        if s:
-            try:
-                return json.loads(s)
-            except Exception:
-                return {}
-    return {}
+def _merged(shareds, configs):
+    def first(xs):
+        for s in xs:
+            if s:
+                try:
+                    return json.loads(s)
+                except Exception:
+                    return {}
+        return {}
+    m = first(shareds)
+    m.update(first(configs))
+    return m
 
-def dlp_embed(contents, roles, configs):
+def dlp_embed(contents, roles, shareds, configs):
     n = len(contents)
     out = [[] for _ in range(n)]
-    cfg = _cfg(configs)
+    cfg = _merged(shareds, configs)
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
     model = cfg.get('model') or ''
@@ -222,7 +233,7 @@ $$`
 // dlp_risk: gated risk classification. Keywords + tag_for + the model endpoint
 // all come from `config`. Falls back to a deterministic heuristic when the
 // endpoint is unset or errors.
-const ddlDLPRiskUDF = `CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string), config string)
+const ddlDLPRiskUDF = `CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string), shared string, config string)
 RETURNS string
 LANGUAGE PYTHON AS $$
 import json
@@ -234,14 +245,18 @@ DEFAULT_KEYWORDS = ('password', 'secret', 'api key', 'apikey', 'token', 'credent
 DEFAULT_TAG_FOR = {'phone': 'PHONE', 'email': 'EMAIL', 'ip': 'IP', 'domain': 'DOMAIN',
            'person': 'PERSON', 'company': 'COMPANY', 'secret': 'CREDENTIAL'}
 
-def _cfg(configs):
-    for s in configs:
-        if s:
-            try:
-                return json.loads(s)
-            except Exception:
-                return {}
-    return {}
+def _merged(shareds, configs):
+    def first(xs):
+        for s in xs:
+            if s:
+                try:
+                    return json.loads(s)
+                except Exception:
+                    return {}
+        return {}
+    m = first(shareds)
+    m.update(first(configs))
+    return m
 
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
@@ -278,8 +293,8 @@ def _classify(text, ets, base, api_key, model, max_tokens, timeout):
     return json.dumps({'score': float(parsed.get('score', 0)),
                        'tags': [str(x) for x in parsed.get('tags', [])]})
 
-def dlp_risk(contents, entity_types_list, configs):
-    cfg = _cfg(configs)
+def dlp_risk(contents, entity_types_list, shareds, configs):
+    cfg = _merged(shareds, configs)
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
     model = cfg.get('model') or ''
@@ -379,29 +394,28 @@ func DLPConfigRows(cfg config.DLPConfig) map[string]string {
 	if summarizeTokens < 800 {
 		summarizeTokens = 800
 	}
+	// Per-UDF chat rows carry only what differs from the shared row.
 	chat := func(model string, maxTokens int) map[string]any {
-		return map[string]any{
-			"base_url":   cfg.BaseURL,
-			"api_key":    cfg.APIKey,
-			"model":      model,
-			"timeout":    cfg.RequestTimeoutSeconds,
-			"max_tokens": maxTokens,
-		}
+		return map[string]any{"model": model, "max_tokens": maxTokens}
 	}
 	riskRow := chat(cfg.RiskModel, cfg.MaxOutputTokens)
 	riskRow["keywords"] = dlpDefaultRiskKeywords
 	riskRow["tag_for"] = dlpTagForFromCatalog(catalog)
 
 	rows := map[string]any{
+		// Endpoint settings shared by every network UDF; rotate the key or swap
+		// the endpoint here once instead of per UDF.
+		DLPCfgKeyShared: map[string]any{
+			"base_url": cfg.BaseURL,
+			"api_key":  cfg.APIKey,
+			"timeout":  cfg.RequestTimeoutSeconds,
+		},
 		DLPCfgKeyEntities: map[string]any{
 			"max_per_type": 20,
 			"entities":     catalog,
 		},
 		DLPCfgKeyEmbed: map[string]any{
-			"base_url":  cfg.BaseURL,
-			"api_key":   cfg.APIKey,
 			"model":     cfg.EmbeddingModel,
-			"timeout":   cfg.RequestTimeoutSeconds,
 			"max_chars": 8000,
 		},
 		DLPCfgKeyRisk:       riskRow,
@@ -493,12 +507,12 @@ SELECT
   entities,
   array_map(x -> replace_all(x, '"', ''), json_extract_array_raw(risk_json, 'tags')) AS risk_tags,
   json_extract_float(risk_json, 'score') AS risk_score,
-  dlp_embed(content, role, cfg_embed) AS embedding
+  dlp_embed(content, role, cfg_shared, cfg_embed) AS embedding
 FROM (
   SELECT
     *,
     dlp_extract_entities(content, cfg_entities) AS entities,
-    dlp_risk(content, map_keys(entities), cfg_risk) AS risk_json
+    dlp_risk(content, map_keys(entities), cfg_shared, cfg_risk) AS risk_json
   FROM (
     SELECT
       base.event_time AS event_time,
@@ -512,6 +526,7 @@ FROM (
       base.model AS model,
       base.tool_name AS tool_name,
       base.content AS content,
+      coalesce(cs.value, '') AS cfg_shared,
       coalesce(ce.value, '') AS cfg_entities,
       coalesce(cr.value, '') AS cfg_risk,
       coalesce(cm.value, '') AS cfg_embed
@@ -527,12 +542,14 @@ FROM (
         multi_if(event_type = 'user_input', user_message,
                  event_type = 'llm_response', assistant_message,
                  tool_input) AS content,
+        'shared' AS k_shared,
         'dlp_extract_entities' AS k_ent,
         'dlp_risk' AS k_risk,
         'dlp_embed' AS k_emb
       FROM agentguard_cim_event
       WHERE event_type IN ('user_input', 'llm_response', 'tool_complete')
     ) AS base
+    LEFT JOIN agentguard_dlp_config AS cs ON base.k_shared = cs.key
     LEFT JOIN agentguard_dlp_config AS ce ON base.k_ent = ce.key
     LEFT JOIN agentguard_dlp_config AS cr ON base.k_risk = cr.key
     LEFT JOIN agentguard_dlp_config AS cm ON base.k_emb = cm.key

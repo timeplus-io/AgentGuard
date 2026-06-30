@@ -19,7 +19,7 @@ type DLPConfigRow struct {
 // DLPConfigKeys returns the recognised config keys (one per UDF).
 func DLPConfigKeys() []string {
 	return []string{
-		DLPCfgKeyEntities, DLPCfgKeyEmbed, DLPCfgKeyRisk,
+		DLPCfgKeyShared, DLPCfgKeyEntities, DLPCfgKeyEmbed, DLPCfgKeyRisk,
 		DLPCfgKeyUnderstand, DLPCfgKeyRerank, DLPCfgKeySummarize,
 	}
 }

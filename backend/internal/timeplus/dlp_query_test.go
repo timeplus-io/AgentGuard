@@ -15,15 +15,15 @@ func TestDLPQueryUDFSignatures(t *testing.T) {
 		want []string
 	}{
 		{"understand", ddlDLPUnderstandUDF, []string{
-			"CREATE OR REPLACE FUNCTION dlp_understand_query(question string, config string)",
+			"CREATE OR REPLACE FUNCTION dlp_understand_query(question string, shared string, config string)",
 			"RETURNS string", "LANGUAGE PYTHON", "TASK: QUERY_UNDERSTANDING",
 		}},
 		{"rerank", ddlDLPRerankUDF, []string{
-			"CREATE OR REPLACE FUNCTION dlp_rerank(question string, content string, config string)",
+			"CREATE OR REPLACE FUNCTION dlp_rerank(question string, content string, shared string, config string)",
 			"RETURNS float64", "TASK: RERANK",
 		}},
 		{"summarize", ddlDLPSummarizeUDF, []string{
-			"CREATE OR REPLACE FUNCTION dlp_summarize(question string, evidence string, config string)",
+			"CREATE OR REPLACE FUNCTION dlp_summarize(question string, evidence string, shared string, config string)",
 			"RETURNS string", "TASK: AUDIT_SUMMARY",
 		}},
 	}
@@ -46,7 +46,7 @@ func TestDLPQueryUDFsParseConfig(t *testing.T) {
 		"summarize":  ddlDLPSummarizeUDF,
 	} {
 		for _, want := range []string{
-			"_cfg(configs)", "cfg.get('base_url')", "cfg.get('model')",
+			"_merged(shareds, configs)", "cfg.get('base_url')", "cfg.get('model')",
 			"cfg.get('timeout')", "_msg_content", "timeout=timeout",
 		} {
 			if !strings.Contains(ddl, want) {

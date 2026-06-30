@@ -19,7 +19,7 @@ package timeplus
 
 // dlp_understand_query(question, config): parse an audit question into retrieval
 // intent. Falls back to keyword extraction when the endpoint is unset or errors.
-const ddlDLPUnderstandUDF = `CREATE OR REPLACE FUNCTION dlp_understand_query(question string, config string)
+const ddlDLPUnderstandUDF = `CREATE OR REPLACE FUNCTION dlp_understand_query(question string, shared string, config string)
 RETURNS string
 LANGUAGE PYTHON AS $$
 import json
@@ -30,14 +30,18 @@ ENTITY_TYPES = ('phone', 'email', 'ip', 'domain', 'person', 'company', 'secret')
 RISK_TAGS = ('PII', 'PHONE', 'EMAIL', 'CREDENTIAL', 'SOURCE_CODE',
              'CUSTOMER_DATA', 'FINANCIAL', 'EXFILTRATION')
 
-def _cfg(configs):
-    for s in configs:
-        if s:
-            try:
-                return json.loads(s)
-            except Exception:
-                return {}
-    return {}
+def _merged(shareds, configs):
+    def first(xs):
+        for s in xs:
+            if s:
+                try:
+                    return json.loads(s)
+                except Exception:
+                    return {}
+        return {}
+    m = first(shareds)
+    m.update(first(configs))
+    return m
 
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
@@ -76,8 +80,8 @@ def _understand(question, base, api_key, model, max_tokens, timeout):
         'time_range_days': int(parsed.get('time_range_days') or 30),
     })
 
-def dlp_understand_query(questions, configs):
-    cfg = _cfg(configs)
+def dlp_understand_query(questions, shareds, configs):
+    cfg = _merged(shareds, configs)
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
     model = cfg.get('model') or ''
@@ -105,7 +109,7 @@ $$`
 // 0..1. Chunks the batch into small groups per chat call and asks for
 // number-keyed scores so a local model can't misalign a chunk's scores onto the
 // wrong items; any item the model does not score defaults to 0.0.
-const ddlDLPRerankUDF = `CREATE OR REPLACE FUNCTION dlp_rerank(question string, content string, config string)
+const ddlDLPRerankUDF = `CREATE OR REPLACE FUNCTION dlp_rerank(question string, content string, shared string, config string)
 RETURNS float64
 LANGUAGE PYTHON AS $$
 import json
@@ -113,14 +117,18 @@ import requests
 
 CHUNK = 8
 
-def _cfg(configs):
-    for s in configs:
-        if s:
-            try:
-                return json.loads(s)
-            except Exception:
-                return {}
-    return {}
+def _merged(shareds, configs):
+    def first(xs):
+        for s in xs:
+            if s:
+                try:
+                    return json.loads(s)
+                except Exception:
+                    return {}
+        return {}
+    m = first(shareds)
+    m.update(first(configs))
+    return m
 
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
@@ -160,8 +168,8 @@ def _score_chunk(question, snippets, base, api_key, model, max_tokens, timeout):
             out[k] = float(sc[k])
     return out
 
-def dlp_rerank(questions, contents, configs):
-    cfg = _cfg(configs)
+def dlp_rerank(questions, contents, shareds, configs):
+    cfg = _merged(shareds, configs)
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
     model = cfg.get('model') or ''
@@ -196,20 +204,24 @@ $$`
 // dlp_summarize(question, evidence, config): produce the final audit report over
 // the top-N evidence JSON. Returns ” on failure; the Go handler substitutes a
 // deterministic fallback line.
-const ddlDLPSummarizeUDF = `CREATE OR REPLACE FUNCTION dlp_summarize(question string, evidence string, config string)
+const ddlDLPSummarizeUDF = `CREATE OR REPLACE FUNCTION dlp_summarize(question string, evidence string, shared string, config string)
 RETURNS string
 LANGUAGE PYTHON AS $$
 import json
 import requests
 
-def _cfg(configs):
-    for s in configs:
-        if s:
-            try:
-                return json.loads(s)
-            except Exception:
-                return {}
-    return {}
+def _merged(shareds, configs):
+    def first(xs):
+        for s in xs:
+            if s:
+                try:
+                    return json.loads(s)
+                except Exception:
+                    return {}
+        return {}
+    m = first(shareds)
+    m.update(first(configs))
+    return m
 
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
@@ -233,8 +245,8 @@ def _summarize(question, evidence, base, api_key, model, max_tokens, timeout):
     }, timeout=timeout)
     return _msg_content(resp)
 
-def dlp_summarize(questions, evidences, configs):
-    cfg = _cfg(configs)
+def dlp_summarize(questions, evidences, shareds, configs):
+    cfg = _merged(shareds, configs)
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
     model = cfg.get('model') or ''

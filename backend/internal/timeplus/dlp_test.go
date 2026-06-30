@@ -56,13 +56,13 @@ func TestDLPUDFsAreStaticAndKeyless(t *testing.T) {
 			t.Errorf("%s: UDF body bakes endpoint/key; must read from config param", name)
 		}
 		if name == "entities" {
-			continue // network-free; no config-parse helper needed beyond _compile
+			continue // network-free; takes only (content, config), no shared/merge
 		}
-		if !strings.Contains(ddl, "config string") {
-			t.Errorf("%s: UDF signature missing trailing 'config string' param", name)
+		if !strings.Contains(ddl, "shared string, config string") {
+			t.Errorf("%s: UDF signature missing trailing 'shared string, config string' params", name)
 		}
-		if !strings.Contains(ddl, "_cfg(configs)") {
-			t.Errorf("%s: UDF missing per-batch config parse", name)
+		if !strings.Contains(ddl, "_merged(shareds, configs)") {
+			t.Errorf("%s: UDF missing shared⊕config merge", name)
 		}
 	}
 }
@@ -83,18 +83,23 @@ func TestDLPConfigStreamDDL(t *testing.T) {
 func TestDLPConfigRows(t *testing.T) {
 	rows := DLPConfigRows(testDLPCfg())
 	for _, k := range []string{
-		DLPCfgKeyEntities, DLPCfgKeyEmbed, DLPCfgKeyRisk,
+		DLPCfgKeyShared, DLPCfgKeyEntities, DLPCfgKeyEmbed, DLPCfgKeyRisk,
 		DLPCfgKeyUnderstand, DLPCfgKeyRerank, DLPCfgKeySummarize,
 	} {
 		if rows[k] == "" {
 			t.Fatalf("config rows missing key %q", k)
 		}
 	}
-	// Endpoint/key seeded verbatim into every network UDF row.
-	for _, k := range []string{DLPCfgKeyEmbed, DLPCfgKeyRisk, DLPCfgKeySummarize} {
-		if !strings.Contains(rows[k], `"api_key":"sk-test-abc"`) ||
-			!strings.Contains(rows[k], `"base_url":"http://mock:9999/v1"`) {
-			t.Errorf("%s row missing endpoint/key: %s", k, rows[k])
+	// Endpoint/key/timeout live ONLY in the shared row.
+	if !strings.Contains(rows[DLPCfgKeyShared], `"api_key":"sk-test-abc"`) ||
+		!strings.Contains(rows[DLPCfgKeyShared], `"base_url":"http://mock:9999/v1"`) ||
+		!strings.Contains(rows[DLPCfgKeyShared], `"timeout":50`) {
+		t.Errorf("shared row missing endpoint/key/timeout: %s", rows[DLPCfgKeyShared])
+	}
+	// Per-UDF rows must NOT duplicate the shared endpoint/key.
+	for _, k := range []string{DLPCfgKeyEmbed, DLPCfgKeyRisk, DLPCfgKeyUnderstand, DLPCfgKeyRerank, DLPCfgKeySummarize} {
+		if strings.Contains(rows[k], "api_key") || strings.Contains(rows[k], "base_url") {
+			t.Errorf("%s row should not carry shared endpoint/key: %s", k, rows[k])
 		}
 	}
 	// Per-UDF model selection.
@@ -167,7 +172,7 @@ func TestDLPEntitiesUDFSignature(t *testing.T) {
 
 func TestDLPEmbedUDFSignature(t *testing.T) {
 	for _, want := range []string{
-		"CREATE OR REPLACE FUNCTION dlp_embed(content string, role string, config string)",
+		"CREATE OR REPLACE FUNCTION dlp_embed(content string, role string, shared string, config string)",
 		"RETURNS array(float32)", "LANGUAGE PYTHON", "/embeddings",
 	} {
 		if !strings.Contains(ddlDLPEmbedUDF, want) {
@@ -178,7 +183,7 @@ func TestDLPEmbedUDFSignature(t *testing.T) {
 
 func TestDLPRiskUDFSignature(t *testing.T) {
 	for _, want := range []string{
-		"CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string), config string)",
+		"CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string), shared string, config string)",
 		"RETURNS string", "/chat/completions",
 	} {
 		if !strings.Contains(ddlDLPRiskUDF, want) {
@@ -207,11 +212,13 @@ func TestDLPMVReferencesConfigJoins(t *testing.T) {
 		"CREATE MATERIALIZED VIEW IF NOT EXISTS mv_dlp_enrich",
 		"INTO agentguard_dlp_enriched",
 		"dlp_extract_entities(content, cfg_entities)",
-		"dlp_risk(content, map_keys(entities), cfg_risk)",
-		"dlp_embed(content, role, cfg_embed)",
+		"dlp_risk(content, map_keys(entities), cfg_shared, cfg_risk)",
+		"dlp_embed(content, role, cfg_shared, cfg_embed)",
+		"LEFT JOIN agentguard_dlp_config AS cs ON base.k_shared = cs.key",
 		"LEFT JOIN agentguard_dlp_config AS ce ON base.k_ent = ce.key",
 		"LEFT JOIN agentguard_dlp_config AS cr ON base.k_risk = cr.key",
 		"LEFT JOIN agentguard_dlp_config AS cm ON base.k_emb = cm.key",
+		"coalesce(cs.value, '') AS cfg_shared",
 		"coalesce(ce.value, '') AS cfg_entities",
 		"'user_input'", "'llm_response'", "'tool_complete'",
 	} {
