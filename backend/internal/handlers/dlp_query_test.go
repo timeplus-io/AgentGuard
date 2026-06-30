@@ -59,6 +59,8 @@ func TestBuildDLPRecallSQL(t *testing.T) {
 		"length(embedding) > 0",
 		"cosine_distance(embedding, dlp_embed(",
 		`o''brien`, // question escaped inside dlp_embed(...)
+		// embed config sourced live from the config stream
+		"coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='dlp_embed'), '')",
 		"LIMIT 100",
 	} {
 		if !strings.Contains(vector, want) {
@@ -89,7 +91,7 @@ func TestMergeDLPCandidates(t *testing.T) {
 func TestBuildDLPRerankSQL(t *testing.T) {
 	sql := buildDLPRerankSQL("what's up?", []string{"m1", "m'2"})
 	for _, want := range []string{
-		"dlp_rerank('what''s up?', content)",
+		"dlp_rerank('what''s up?', content, coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='dlp_rerank'), ''))",
 		`message_id IN ('m1', 'm''2')`,
 		"table(agentguard_dlp_enriched)",
 	} {

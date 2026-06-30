@@ -21,78 +21,169 @@ func testDLPCfg() config.DLPConfig {
 	}
 }
 
-// assertCleanDDL fails on leftover fmt verbs, failed interpolation markers,
-// or unreplaced {{...}} template placeholders.
+// assertCleanDDL fails on leftover fmt verbs or unreplaced {{...}} template
+// placeholders. The UDF bodies are now static constants, so neither should ever
+// appear.
 func assertCleanDDL(t *testing.T, name, ddl string) {
 	t.Helper()
 	if strings.Contains(ddl, "%!") {
 		t.Errorf("%s: fmt interpolation error: %s", name, ddl)
-	}
-	if strings.Contains(ddl, "%s") || strings.Contains(ddl, "%d") {
-		t.Errorf("%s: leftover fmt verb in DDL", name)
 	}
 	if strings.Contains(ddl, "{{") || strings.Contains(ddl, "}}") {
 		t.Errorf("%s: unreplaced template placeholder in DDL", name)
 	}
 }
 
-func TestDLPUDFDDLPercentSafe(t *testing.T) {
-	cfg := testDLPCfg()
-	cfg.APIKey = "sk-100%weird%2Fkey"
-	for name, ddl := range map[string]string{
-		"embed":      DLPEmbedUDFDDL(cfg),
-		"risk":       DLPRiskUDFDDL(cfg),
-		"understand": DLPUnderstandUDFDDL(cfg),
-		"rerank":     DLPRerankUDFDDL(cfg),
-		"summarize":  DLPSummarizeUDFDDL(cfg),
-	} {
+// allDLPUDFs lists every UDF body constant for shared invariants.
+func allDLPUDFs() map[string]string {
+	return map[string]string{
+		"entities":   ddlDLPEntitiesUDF,
+		"embed":      ddlDLPEmbedUDF,
+		"risk":       ddlDLPRiskUDF,
+		"understand": ddlDLPUnderstandUDF,
+		"rerank":     ddlDLPRerankUDF,
+		"summarize":  ddlDLPSummarizeUDF,
+	}
+}
+
+// UDF bodies must be fully static: no interpolation markers, and crucially no
+// baked API key or base URL (those now arrive via the config parameter, so they
+// no longer leak through SHOW FUNCTIONS).
+func TestDLPUDFsAreStaticAndKeyless(t *testing.T) {
+	for name, ddl := range allDLPUDFs() {
 		assertCleanDDL(t, name, ddl)
-		if !strings.Contains(ddl, `API_KEY = "sk-100%weird%2Fkey"`) {
-			t.Errorf("%s: percent-bearing API key not interpolated verbatim", name)
+		if strings.Contains(ddl, "API_KEY =") || strings.Contains(ddl, "BASE_URL =") {
+			t.Errorf("%s: UDF body bakes endpoint/key; must read from config param", name)
+		}
+		if name == "entities" {
+			continue // network-free; no config-parse helper needed beyond _compile
+		}
+		if !strings.Contains(ddl, "config string") {
+			t.Errorf("%s: UDF signature missing trailing 'config string' param", name)
+		}
+		if !strings.Contains(ddl, "_cfg(configs)") {
+			t.Errorf("%s: UDF missing per-batch config parse", name)
 		}
 	}
 }
 
-func TestDLPEmbedUDFDDL(t *testing.T) {
-	ddl := DLPEmbedUDFDDL(testDLPCfg())
-	assertCleanDDL(t, "embed", ddl)
+func TestDLPConfigStreamDDL(t *testing.T) {
 	for _, want := range []string{
-		"CREATE OR REPLACE FUNCTION dlp_embed",
-		"RETURNS array(float32)",
-		"LANGUAGE PYTHON",
-		`BASE_URL = "http://mock:9999/v1"`,
-		`API_KEY = "sk-test-abc"`,
-		`MODEL = "text-embedding-3-small"`,
-		"/embeddings",
+		"CREATE MUTABLE STREAM IF NOT EXISTS agentguard_dlp_config",
+		"key        string",
+		"value      string",
+		"PRIMARY KEY (key)",
 	} {
-		if !strings.Contains(ddl, want) {
-			t.Errorf("embed DDL missing %q", want)
+		if !strings.Contains(ddlDLPConfigStream, want) {
+			t.Errorf("config stream DDL missing %q", want)
 		}
 	}
 }
 
-func TestDLPRiskUDFDDL(t *testing.T) {
-	ddl := DLPRiskUDFDDL(testDLPCfg())
-	assertCleanDDL(t, "risk", ddl)
+func TestDLPConfigRows(t *testing.T) {
+	rows := DLPConfigRows(testDLPCfg())
+	for _, k := range []string{
+		DLPCfgKeyEntities, DLPCfgKeyEmbed, DLPCfgKeyRisk,
+		DLPCfgKeyUnderstand, DLPCfgKeyRerank, DLPCfgKeySummarize,
+	} {
+		if rows[k] == "" {
+			t.Fatalf("config rows missing key %q", k)
+		}
+	}
+	// Endpoint/key seeded verbatim into every network UDF row.
+	for _, k := range []string{DLPCfgKeyEmbed, DLPCfgKeyRisk, DLPCfgKeySummarize} {
+		if !strings.Contains(rows[k], `"api_key":"sk-test-abc"`) ||
+			!strings.Contains(rows[k], `"base_url":"http://mock:9999/v1"`) {
+			t.Errorf("%s row missing endpoint/key: %s", k, rows[k])
+		}
+	}
+	// Per-UDF model selection.
+	if !strings.Contains(rows[DLPCfgKeyEmbed], `"model":"text-embedding-3-small"`) {
+		t.Error("embed row: wrong model")
+	}
+	if !strings.Contains(rows[DLPCfgKeyEmbed], `"max_chars":8000`) {
+		t.Error("embed row: missing max_chars")
+	}
+	if !strings.Contains(rows[DLPCfgKeyRisk], `"model":"gpt-4o-mini"`) {
+		t.Error("risk row: wrong model")
+	}
+	if !strings.Contains(rows[DLPCfgKeyRisk], `"keywords":[`) || !strings.Contains(rows[DLPCfgKeyRisk], `"tag_for":{`) {
+		t.Error("risk row: missing keywords/tag_for")
+	}
+	if !strings.Contains(rows[DLPCfgKeyUnderstand], `"model":"gpt-4o-mini"`) {
+		t.Error("understand row: should use risk model")
+	}
+	if !strings.Contains(rows[DLPCfgKeySummarize], `"model":"gpt-4o"`) {
+		t.Error("summarize row: should use summary model")
+	}
+	// Token budgets: risk uses the configured 512; summarize floors at 800.
+	if !strings.Contains(rows[DLPCfgKeyRisk], `"max_tokens":512`) {
+		t.Error("risk row: want max_tokens 512")
+	}
+	if !strings.Contains(rows[DLPCfgKeySummarize], `"max_tokens":800`) {
+		t.Error("summarize row: want max_tokens floored to 800")
+	}
+	// Entity catalog preserves today's 5 types incl. masked secret.
+	ent := rows[DLPCfgKeyEntities]
 	for _, want := range []string{
-		"CREATE OR REPLACE FUNCTION dlp_risk",
-		"entity_types array(string)",
-		"RETURNS string",
-		`MODEL = "gpt-4o-mini"`,
-		"/chat/completions",
+		`"max_per_type":20`, `"type":"phone"`, `"type":"email"`, `"type":"ip"`,
+		`"type":"domain"`, `"type":"secret"`, `"store":"masked"`, `AKIA[0-9A-Z]{16}`,
 	} {
-		if !strings.Contains(ddl, want) {
-			t.Errorf("risk DDL missing %q", want)
+		if !strings.Contains(ent, want) {
+			t.Errorf("entities row missing %q", want)
 		}
 	}
 }
 
-func TestDLPEntitiesUDFDDLIsStatic(t *testing.T) {
-	if !strings.Contains(ddlDLPEntitiesUDF, "CREATE OR REPLACE FUNCTION dlp_extract_entities") {
-		t.Error("entities UDF DDL malformed")
+func TestDLPSummarizeTokenFloorHonorsLargerValue(t *testing.T) {
+	cfg := testDLPCfg()
+	cfg.MaxOutputTokens = 1000
+	rows := DLPConfigRows(cfg)
+	if !strings.Contains(rows[DLPCfgKeySummarize], `"max_tokens":1000`) {
+		t.Error("summarize: want max_tokens 1000 when configured above 800")
+	}
+}
+
+func TestDLPTagForFromCatalog(t *testing.T) {
+	tagFor := dlpTagForFromCatalog(defaultDLPEntities())
+	for k, v := range map[string]string{
+		"phone": "PHONE", "email": "EMAIL", "secret": "CREDENTIAL",
+		"person": "PERSON", "company": "COMPANY",
+	} {
+		if tagFor[k] != v {
+			t.Errorf("tag_for[%q] = %q, want %q", k, tagFor[k], v)
+		}
+	}
+}
+
+func TestDLPEntitiesUDFSignature(t *testing.T) {
+	if !strings.Contains(ddlDLPEntitiesUDF, "CREATE OR REPLACE FUNCTION dlp_extract_entities(content string, config string)") {
+		t.Error("entities UDF signature must be (content string, config string)")
 	}
 	if !strings.Contains(ddlDLPEntitiesUDF, "map(string, array(string))") {
 		t.Error("entities UDF must return map(string, array(string))")
+	}
+}
+
+func TestDLPEmbedUDFSignature(t *testing.T) {
+	for _, want := range []string{
+		"CREATE OR REPLACE FUNCTION dlp_embed(content string, role string, config string)",
+		"RETURNS array(float32)", "LANGUAGE PYTHON", "/embeddings",
+	} {
+		if !strings.Contains(ddlDLPEmbedUDF, want) {
+			t.Errorf("embed UDF missing %q", want)
+		}
+	}
+}
+
+func TestDLPRiskUDFSignature(t *testing.T) {
+	for _, want := range []string{
+		"CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string), config string)",
+		"RETURNS string", "/chat/completions",
+	} {
+		if !strings.Contains(ddlDLPRiskUDF, want) {
+			t.Errorf("risk UDF missing %q", want)
+		}
 	}
 }
 
@@ -109,13 +200,19 @@ func TestDLPIndexDDLCandidates(t *testing.T) {
 	}
 }
 
-func TestDLPMVReferencesAllUDFs(t *testing.T) {
+// The MV must call each UDF with its config column and LEFT JOIN the config
+// stream so runtime upserts take effect live without dropping events.
+func TestDLPMVReferencesConfigJoins(t *testing.T) {
 	for _, want := range []string{
 		"CREATE MATERIALIZED VIEW IF NOT EXISTS mv_dlp_enrich",
 		"INTO agentguard_dlp_enriched",
-		"dlp_extract_entities(content)",
-		"dlp_risk(content, map_keys(entities))",
-		"dlp_embed(content, role)",
+		"dlp_extract_entities(content, cfg_entities)",
+		"dlp_risk(content, map_keys(entities), cfg_risk)",
+		"dlp_embed(content, role, cfg_embed)",
+		"LEFT JOIN agentguard_dlp_config AS ce ON base.k_ent = ce.key",
+		"LEFT JOIN agentguard_dlp_config AS cr ON base.k_risk = cr.key",
+		"LEFT JOIN agentguard_dlp_config AS cm ON base.k_emb = cm.key",
+		"coalesce(ce.value, '') AS cfg_entities",
 		"'user_input'", "'llm_response'", "'tool_complete'",
 	} {
 		if !strings.Contains(ddlDLPEnrichMV, want) {

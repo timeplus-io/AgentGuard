@@ -431,9 +431,10 @@ func TestTestDLPConfig(t *testing.T) {
 	}
 }
 
-// reprovisionRequired must flag drift for the timeout/token knobs too, not just
-// the model fields — both are baked into the UDF DDL at provision time.
-func TestReprovisionRequiredTracksTimeoutAndTokens(t *testing.T) {
+// After issue #189, only embedding_dim is baked at provision time; models,
+// timeout, tokens, and the entity catalog are hot via the config mutable stream,
+// so they must NOT flag a re-provision.
+func TestReprovisionRequiredOnlyTracksEmbeddingDim(t *testing.T) {
 	base := &config.Config{}
 	base.DLP.Enabled = true
 	base.DLP.EmbeddingModel, base.DLP.EmbeddingDim = "e", 1024
@@ -450,27 +451,28 @@ func TestReprovisionRequiredTracksTimeoutAndTokens(t *testing.T) {
 	}
 
 	if reprovisionRequired(base) {
-		t.Fatal("no drift expected when every field matches the snapshot")
+		t.Fatal("no drift expected when embedding_dim matches the snapshot")
 	}
 
-	tokenDrift := *base
-	tokenDrift.DLP.MaxOutputTokens = 1024
-	if !reprovisionRequired(&tokenDrift) {
-		t.Error("expected reprovision required after max_output_tokens change")
+	// Hot-config changes must NOT require a re-provision.
+	for name, mutate := range map[string]func(*config.Config){
+		"max_output_tokens":       func(c *config.Config) { c.DLP.MaxOutputTokens = 1024 },
+		"request_timeout_seconds": func(c *config.Config) { c.DLP.RequestTimeoutSeconds = 30 },
+		"risk_model":              func(c *config.Config) { c.DLP.RiskModel = "r2" },
+		"summary_model":           func(c *config.Config) { c.DLP.SummaryModel = "s2" },
+		"embedding_model":         func(c *config.Config) { c.DLP.EmbeddingModel = "e2" },
+	} {
+		hot := *base
+		mutate(&hot)
+		if reprovisionRequired(&hot) {
+			t.Errorf("%s change must NOT require re-provision (it is hot via config stream)", name)
+		}
 	}
 
-	timeoutDrift := *base
-	timeoutDrift.DLP.RequestTimeoutSeconds = 30
-	if !reprovisionRequired(&timeoutDrift) {
-		t.Error("expected reprovision required after request_timeout_seconds change")
-	}
-
-	// Legacy snapshot (recorded before these knobs existed) carries 0 for both
-	// new fields — must NOT spuriously flag a deployment whose models match.
-	legacy := *base
-	legacy.ProvisionedDLP.RequestTimeoutSeconds = 0
-	legacy.ProvisionedDLP.MaxOutputTokens = 0
-	if reprovisionRequired(&legacy) {
-		t.Error("legacy snapshot (0 timeout/tokens) must not flag reprovision when models match")
+	// embedding_dim is baked into the stream schema + vector index → re-provision.
+	dimDrift := *base
+	dimDrift.DLP.EmbeddingDim = 1536
+	if !reprovisionRequired(&dimDrift) {
+		t.Error("expected reprovision required after embedding_dim change")
 	}
 }
