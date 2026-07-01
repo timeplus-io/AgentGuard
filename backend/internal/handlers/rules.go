@@ -566,7 +566,44 @@ func MVStatus(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 }
 
 // SyncMVs reconciles Proton MVs with current rule states without a server restart.
+// recordDLPProvisioned persists the DLP model snapshot to the live config and
+// config.yaml after a successful (re)provision, so GET /api/config stops flagging
+// "re-provision required" for values that were just applied (notably
+// embedding_dim). No-op when DLP is disabled or nothing changed. Mirrors the
+// snapshot the setup wizard writes (setup.go).
+func recordDLPProvisioned(cfg *config.Config, dlp config.DLPConfig) {
+	if !dlp.Enabled {
+		return
+	}
+	next := config.ProvisionedDLP{
+		Recorded:              true,
+		EmbeddingModel:        dlp.EmbeddingModel,
+		EmbeddingDim:          dlp.EmbeddingDim,
+		RiskModel:             dlp.RiskModel,
+		SummaryModel:          dlp.SummaryModel,
+		RequestTimeoutSeconds: dlp.RequestTimeoutSeconds,
+		MaxOutputTokens:       dlp.MaxOutputTokens,
+	}
+	config.Mu.Lock()
+	if cfg.ProvisionedDLP == next {
+		config.Mu.Unlock()
+		return
+	}
+	cfg.ProvisionedDLP = next
+	snapshot := *cfg
+	path := cfg.ConfigPath
+	config.Mu.Unlock()
+
+	if path == "" {
+		return
+	}
+	if err := config.Save(&snapshot, path); err != nil {
+		log.Printf("rules: SyncMVs persist provisioned DLP snapshot: %v", err)
+	}
+}
+
 func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
+	shared := cfg // process-wide config, for persisting the DLP provision snapshot
 	return func(c *gin.Context) {
 		cfg := auth.RequestCfg(c, cfg)
 		packs, err := queryCurrentRulePacks(&cfg.Timeplus, mgr)
@@ -638,6 +675,11 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		// without the setup wizard. Failure must not fail rule-MV sync.
 		if err := tp.SyncDLP(cfg.Timeplus, cfg.DLP); err != nil {
 			log.Printf("rules: SyncMVs DLP sync: %v", err)
+		} else {
+			// Record what we just provisioned so GET /api/config stops reporting
+			// "re-provision required" for values (e.g. embedding_dim) that this
+			// sync just applied. Mirrors the setup wizard.
+			recordDLPProvisioned(shared, cfg.DLP)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"results": results})
