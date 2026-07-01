@@ -431,48 +431,28 @@ func TestTestDLPConfig(t *testing.T) {
 	}
 }
 
-// After issue #189, only embedding_dim is baked at provision time; models,
-// timeout, tokens, and the entity catalog are hot via the config mutable stream,
-// so they must NOT flag a re-provision.
-func TestReprovisionRequiredOnlyTracksEmbeddingDim(t *testing.T) {
+// embedding_dim is now auto-detected from the model at provision, and every other
+// DLP setting is hot via the config mutable stream, so nothing flags a config
+// re-provision anymore — reprovisionRequired is always false.
+func TestReprovisionRequiredAlwaysFalse(t *testing.T) {
 	base := &config.Config{}
 	base.DLP.Enabled = true
 	base.DLP.EmbeddingModel, base.DLP.EmbeddingDim = "e", 1024
-	base.DLP.RiskModel, base.DLP.SummaryModel = "r", "s"
-	base.DLP.RequestTimeoutSeconds, base.DLP.MaxOutputTokens = 50, 512
-	base.ProvisionedDLP = config.ProvisionedDLP{
-		Recorded:              true,
-		EmbeddingModel:        "e",
-		EmbeddingDim:          1024,
-		RiskModel:             "r",
-		SummaryModel:          "s",
-		RequestTimeoutSeconds: 50,
-		MaxOutputTokens:       512,
-	}
+	base.ProvisionedDLP = config.ProvisionedDLP{Recorded: true, EmbeddingModel: "e", EmbeddingDim: 1024}
 
 	if reprovisionRequired(base) {
-		t.Fatal("no drift expected when embedding_dim matches the snapshot")
+		t.Fatal("no re-provision flag expected at baseline")
 	}
-
-	// Hot-config changes must NOT require a re-provision.
 	for name, mutate := range map[string]func(*config.Config){
-		"max_output_tokens":       func(c *config.Config) { c.DLP.MaxOutputTokens = 1024 },
-		"request_timeout_seconds": func(c *config.Config) { c.DLP.RequestTimeoutSeconds = 30 },
-		"risk_model":              func(c *config.Config) { c.DLP.RiskModel = "r2" },
-		"summary_model":           func(c *config.Config) { c.DLP.SummaryModel = "s2" },
-		"embedding_model":         func(c *config.Config) { c.DLP.EmbeddingModel = "e2" },
+		"embedding_dim":   func(c *config.Config) { c.DLP.EmbeddingDim = 1536 },
+		"embedding_model": func(c *config.Config) { c.DLP.EmbeddingModel = "e2" },
+		"risk_model":      func(c *config.Config) { c.DLP.RiskModel = "r2" },
+		"max_tokens":      func(c *config.Config) { c.DLP.MaxOutputTokens = 4096 },
 	} {
-		hot := *base
-		mutate(&hot)
-		if reprovisionRequired(&hot) {
-			t.Errorf("%s change must NOT require re-provision (it is hot via config stream)", name)
+		d := *base
+		mutate(&d)
+		if reprovisionRequired(&d) {
+			t.Errorf("%s change must NOT flag re-provision (dim auto-detected; others hot)", name)
 		}
-	}
-
-	// embedding_dim is baked into the stream schema + vector index → re-provision.
-	dimDrift := *base
-	dimDrift.DLP.EmbeddingDim = 1536
-	if !reprovisionRequired(&dimDrift) {
-		t.Error("expected reprovision required after embedding_dim change")
 	}
 }

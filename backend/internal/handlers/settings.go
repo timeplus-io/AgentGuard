@@ -101,18 +101,14 @@ func restartRequired(cfg *config.Config, fileKeys, changedFlags map[string]bool)
 	return false
 }
 
-// reprovisionRequired is true when DLP is enabled, a provision snapshot exists,
-// and embedding_dim differs from that snapshot. embedding_dim is the only DLP
-// setting still baked at provision time — it sizes the enriched stream's
-// embedding column and the HNSW vector index, so changing it needs a
-// re-provision. Every other DLP setting (models, endpoint, timeout, tokens,
-// entity catalog) is read live from the agentguard_dlp_config mutable stream and
-// changes via an upsert with no re-provision (issue #189).
+// reprovisionRequired is retained for API compatibility but is always false:
+// no DLP setting is a hand-entered, provision-baked value anymore. embedding_dim
+// is auto-detected from the model at provision (probed via dlp_embed); everything
+// else (models, endpoint, timeout, tokens, entity catalog) is read live from the
+// agentguard_dlp_config mutable stream. Operators re-provision on demand (e.g.
+// after switching the embedding model) via the Settings action, not a drift flag.
 func reprovisionRequired(cfg *config.Config) bool {
-	if !cfg.DLP.Enabled || !cfg.ProvisionedDLP.Recorded {
-		return false
-	}
-	return cfg.DLP.EmbeddingDim != cfg.ProvisionedDLP.EmbeddingDim
+	return false
 }
 
 // GetConfig returns the full effective configuration with per-key sources.

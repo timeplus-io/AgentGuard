@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	proton "github.com/timeplus-io/proton-go-driver/v2"
@@ -598,6 +599,56 @@ FROM (
   )
 )`
 
+// ---------- Embedding-dimension probe ----------
+
+// dlpProbeDimSQL measures the live embedding dimension by embedding a tiny input
+// through the dlp_embed UDF with the current config (shared + dlp_embed rows). It
+// runs the exact endpoint/UDF/network path the ingest pipeline uses, so the
+// result always matches what gets stored. Returns 0 when the endpoint is
+// unreachable or the model is missing (dlp_embed fails open to []).
+const dlpProbeDimSQL = `SELECT length(dlp_embed('dimension probe', 'user',
+  coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='shared'), ''),
+  coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='dlp_embed'), ''))) AS d`
+
+// probeEmbeddingDim runs the probe over a native connection (used inside
+// provisioning). ok is false when the dimension can't be determined.
+func probeEmbeddingDim(ctx context.Context, conn proton.Conn) (dim int, ok bool) {
+	var d uint64
+	if err := conn.QueryRow(ctx, dlpProbeDimSQL).Scan(&d); err != nil {
+		log.Printf("dlp: embedding dim probe failed: %v", err)
+		return 0, false
+	}
+	return int(d), d > 0
+}
+
+// ProbeEmbeddingDim runs the probe over the HTTP interface (for handlers that
+// hold a TimeplusConfig). Returns 0 if the dimension can't be determined.
+func ProbeEmbeddingDim(tpCfg *config.TimeplusConfig) (int, error) {
+	rows, err := Query(tpCfg, dlpProbeDimSQL)
+	if err != nil {
+		return 0, err
+	}
+	if len(rows) == 0 {
+		return 0, nil
+	}
+	switch v := rows[0]["d"].(type) {
+	case json.Number: // Query decodes with UseNumber(), so this is the usual case
+		n, _ := v.Int64()
+		return int(n), nil
+	case float64:
+		return int(v), nil
+	case int64:
+		return int(v), nil
+	case uint64:
+		return int(v), nil
+	case string:
+		n, _ := strconv.Atoi(v)
+		return n, nil
+	default:
+		return 0, nil
+	}
+}
+
 // ---------- Provisioning ----------
 
 // InitDLP provisions the Semantic DLP ingest layer: enriched stream, vector
@@ -632,23 +683,6 @@ func InitDLP(ctx context.Context, conn proton.Conn, dlpCfg config.DLPConfig, emi
 		return fmt.Errorf("dlp: dropping enrichment MV: %w", err)
 	}
 
-	// Vector index: best-effort. Brute-force cosine_distance still works
-	// without it, so failure is logged, not fatal.
-	indexed := false
-	for _, ddl := range dlpIndexDDLCandidates(dlpCfg.EmbeddingDim) {
-		if err := conn.Exec(ctx, ddl); err == nil {
-			indexed = true
-			break
-		} else {
-			log.Printf("dlp: vector index attempt failed (continuing): %v", err)
-		}
-	}
-	if indexed {
-		emit("ok", "  ✓ HNSW vector index on embedding")
-	} else {
-		emit("ok", "  - vector index unavailable; using brute-force cosine_distance")
-	}
-
 	emit("running", "$ Creating DLP config stream…")
 	if err := conn.Exec(ctx, ddlDLPConfigStream); err != nil {
 		emit("error", "  ✗ "+err.Error())
@@ -675,6 +709,38 @@ func InitDLP(ctx context.Context, conn proton.Conn, dlpCfg config.DLPConfig, emi
 			return fmt.Errorf("dlp: creating UDF %s: %w", u.name, err)
 		}
 		emit("ok", "  ✓ "+u.name)
+	}
+
+	// Infer the embedding dimension by probing the configured model through the
+	// dlp_embed UDF (same endpoint/network the pipeline uses) — operators don't
+	// hand-configure it. Requires the config + UDF above, hence the ordering. If
+	// the endpoint is unreachable the probe returns 0 and we fall back to the
+	// configured/last-known dim (skipping the index if that's 0 too).
+	dim, ok := probeEmbeddingDim(ctx, conn)
+	if ok {
+		emit("ok", fmt.Sprintf("  ✓ embedding dimension detected: %d", dim))
+	} else {
+		dim = dlpCfg.EmbeddingDim
+		emit("ok", fmt.Sprintf("  - embedding endpoint unreachable; using fallback dim %d", dim))
+	}
+
+	// Vector index: best-effort, sized to the detected dim. Brute-force
+	// cosine_distance still works without it, so failure is logged, not fatal.
+	if dim > 0 {
+		indexed := false
+		for _, ddl := range dlpIndexDDLCandidates(dim) {
+			if err := conn.Exec(ctx, ddl); err == nil {
+				indexed = true
+				break
+			} else {
+				log.Printf("dlp: vector index attempt failed (continuing): %v", err)
+			}
+		}
+		if indexed {
+			emit("ok", "  ✓ HNSW vector index on embedding")
+		} else {
+			emit("ok", "  - vector index unavailable; using brute-force cosine_distance")
+		}
 	}
 
 	emit("running", "$ Creating DLP enrichment materialized view…")

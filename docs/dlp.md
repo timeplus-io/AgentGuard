@@ -239,7 +239,7 @@ dlp:
 |-----|-------|
 | `enabled` | When `false`, provisioning skips DLP and the API endpoints return 503. |
 | `base_url` | The URL the **UDFs** call. When Timeplus runs in Docker and the endpoint is on the host, this is `http://host.docker.internal:<port>/v1`. |
-| `embedding_dim` | Must match the embedding model. **Baked into the stream/index at provision time** — changing it requires re-provisioning the DLP stream. The **only** setting that still needs a re-provision. |
+| `embedding_dim` | **Auto-detected at provision** by probing the embedding model through `dlp_embed` — operators don't set it. The `config.yaml` value is only a fallback used if the endpoint is unreachable at provision. Shown read-only in Settings. |
 | `risk_model` | Small model for `dlp_risk`, `dlp_rerank`, `dlp_understand_query`. |
 | `summary_model` | Frontier model for `dlp_summarize`. |
 
@@ -330,12 +330,15 @@ key that does not already exist, so re-provisioning or `POST /api/rules/sync`
 never clobbers runtime edits. To **reset** a row to the `config.yaml` default,
 delete it (`DELETE FROM agentguard_dlp_config WHERE key='…'`) and re-run sync.
 
-**Re-provision vs. hot config:** only `embedding_dim` is baked at provision time
-(it sizes the embedding column and HNSW index), so it is the only change
-`/settings` flags as `reprovision_required`. Model/endpoint/timeout/token/catalog
-changes are hot via the stream. Note that editing those in `config.yaml` only
-takes effect on the **next fresh seed** (a key that's already present is
-preserved); change them at runtime by upserting the stream.
+**Re-provision vs. hot config:** model/endpoint/timeout/token/catalog changes are
+hot via the stream (editing them in `config.yaml` only takes effect on the next
+fresh seed — an existing key is preserved). The one provision-time value,
+`embedding_dim`, is **auto-detected** by probing the embedding model through
+`dlp_embed` at provision, so nothing is a hand-entered re-provision trigger and
+`/settings` no longer shows a drift banner. Re-provision on demand (Settings →
+Semantic DLP → **Re-provision DLP**) after switching the embedding model — that
+re-probes the dimension and rebuilds the index/MV. `/api/rules/sync` and the
+setup wizard record the detected dimension into the provision snapshot.
 
 ---
 
@@ -345,10 +348,12 @@ DLP provisioning lives in `backend/internal/timeplus/dlp.go`:
 
 - **`InitDLP(cfg)`** — creates `agentguard_dlp_enriched`, drops the enrichment MV
   (so it is rebuilt with the current definition and never blocks a UDF replace),
-  attempts the HNSW index (best-effort), creates the `agentguard_dlp_config`
-  mutable stream and **seeds it (seed-if-absent)** from `DLPConfigRows(cfg)`,
-  creates/replaces the six static UDFs, and recreates `mv_dlp_enrich` (which
-  `LEFT JOIN`s the config stream). Idempotent. Skipped when `dlp.enabled: false`.
+  creates the `agentguard_dlp_config` mutable stream and **seeds it
+  (seed-if-absent)** from `DLPConfigRows(cfg)`, creates/replaces the six static
+  UDFs, **probes the embedding dimension** via `dlp_embed` (falling back to the
+  configured value if the endpoint is unreachable), attempts the HNSW index
+  best-effort at that dimension, and recreates `mv_dlp_enrich` (which `LEFT JOIN`s
+  the config stream). Idempotent. Skipped when `dlp.enabled: false`.
 - Wired into **`timeplus.Init()`**, so the setup wizard
   (`POST /api/setup/provision`) and **`POST /api/rules/sync`** both pick it up.
   Note re-provision rebuilds the UDFs/MV and seeds *missing* config rows, but
@@ -481,8 +486,11 @@ Explicitly **not** built in Phase 1 (Phase 2/3):
 Known limitations of the shipped surface:
 
 - The model API key is visible to anyone with Timeplus DDL access (§3).
-- `embedding_dim` is fixed at provision time; changing it requires
-  re-provisioning the DLP stream (§5).
+- `embedding_dim` is auto-detected at provision (probed via `dlp_embed`).
+  Switching the embedding model to one with a different dimension needs a
+  re-provision (Settings → Re-provision DLP) to re-detect it and rebuild the
+  index; previously-embedded rows keep their old-dimension vectors (no backfill),
+  so mixing dimensions in the same window is not supported (§5).
 - The HNSW vector index is best-effort; on builds without `vector_similarity`,
   retrieval uses brute-force `cosine_distance` (§2.1).
 
@@ -511,8 +519,7 @@ dlp:
   base_url: http://host.docker.internal:11434/v1   # Timeplus in Docker, Ollama on host
   # base_url: http://localhost:11434/v1            # Timeplus running natively
   api_key: ""                                       # Ollama ignores auth
-  embedding_model: mxbai-embed-large                # 1024 dims
-  embedding_dim: 1024
+  embedding_model: mxbai-embed-large                # dim auto-detected at provision
   risk_model: qwen2.5-coder:7b
   summary_model: qwen2.5-coder:7b
   request_timeout_seconds: 50                        # clamped to [5,55]
@@ -528,9 +535,12 @@ direct-response model (`qwen2.5-coder:7b`, `llama3.2:1b`) is recommended.
 The Settings → Semantic DLP **Test endpoint** button now verifies the
 embedding dimension and detects empty-content reasoning models.
 
-**Embedding dimension must match the model** and is baked into the
-`agentguard_dlp_enriched` stream. Changing `embedding_dim` requires
-dropping and recreating the stream + MV before re-provisioning:
+**Embedding dimension is auto-detected** by probing the model through `dlp_embed`
+at provision — no need to set `embedding_dim`. If you switch to an embedding model
+with a **different** dimension, re-provision (Settings → Re-provision DLP) to
+re-detect it and rebuild the index. Because previously-embedded rows keep their
+old-dimension vectors (no backfill), if you want a clean slate at the new
+dimension, drop and recreate the enriched stream before re-provisioning:
 
 ```sql
 DROP VIEW IF EXISTS mv_dlp_enrich;

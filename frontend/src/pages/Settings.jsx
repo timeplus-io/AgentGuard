@@ -243,6 +243,15 @@ export default function Settings() {
                 <div className="mt-6 border-t border-gray-700/50 pt-4">
                   <h4 className="text-sm font-semibold text-gray-100 mb-1">Runtime configuration</h4>
                   <DLPConfigEditor />
+                  <div className="mt-4 flex items-center gap-3">
+                    <button onClick={reprovisionDLP} disabled={reprovisioning}
+                      className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600 disabled:opacity-50">
+                      {reprovisioning ? 'Re-provisioning…' : 'Re-provision DLP'}
+                    </button>
+                    <span className="text-[11px] text-gray-500">
+                      Re-detects the embedding dimension and rebuilds the pipeline. Run after switching the embedding model.
+                    </span>
+                  </div>
                 </div>
               )}
             </section>

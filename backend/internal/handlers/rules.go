@@ -571,24 +571,31 @@ func MVStatus(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 // "re-provision required" for values that were just applied (notably
 // embedding_dim). No-op when DLP is disabled or nothing changed. Mirrors the
 // snapshot the setup wizard writes (setup.go).
-func recordDLPProvisioned(cfg *config.Config, dlp config.DLPConfig) {
+func recordDLPProvisioned(cfg *config.Config, dlp config.DLPConfig, detectedDim int) {
 	if !dlp.Enabled {
 		return
+	}
+	// Prefer the probed dimension; fall back to the last-known/configured value
+	// when the endpoint was unreachable at provision time.
+	embDim := detectedDim
+	if embDim <= 0 {
+		embDim = dlp.EmbeddingDim
 	}
 	next := config.ProvisionedDLP{
 		Recorded:              true,
 		EmbeddingModel:        dlp.EmbeddingModel,
-		EmbeddingDim:          dlp.EmbeddingDim,
+		EmbeddingDim:          embDim,
 		RiskModel:             dlp.RiskModel,
 		SummaryModel:          dlp.SummaryModel,
 		RequestTimeoutSeconds: dlp.RequestTimeoutSeconds,
 		MaxOutputTokens:       dlp.MaxOutputTokens,
 	}
 	config.Mu.Lock()
-	if cfg.ProvisionedDLP == next {
+	if cfg.ProvisionedDLP == next && cfg.DLP.EmbeddingDim == embDim {
 		config.Mu.Unlock()
 		return
 	}
+	cfg.DLP.EmbeddingDim = embDim // reflect the detected dim in the live config
 	cfg.ProvisionedDLP = next
 	snapshot := *cfg
 	path := cfg.ConfigPath
@@ -676,10 +683,10 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 		if err := tp.SyncDLP(cfg.Timeplus, cfg.DLP); err != nil {
 			log.Printf("rules: SyncMVs DLP sync: %v", err)
 		} else {
-			// Record what we just provisioned so GET /api/config stops reporting
-			// "re-provision required" for values (e.g. embedding_dim) that this
-			// sync just applied. Mirrors the setup wizard.
-			recordDLPProvisioned(shared, cfg.DLP)
+			// Probe the model for the embedding dimension and record what we just
+			// provisioned, so GET /api/config reflects the auto-detected dim.
+			detectedDim, _ := tp.ProbeEmbeddingDim(&cfg.Timeplus)
+			recordDLPProvisioned(shared, cfg.DLP, detectedDim)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"results": results})
