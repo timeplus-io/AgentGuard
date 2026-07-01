@@ -49,6 +49,6 @@ export function buildEnableChanges(form) {
     'dlp.summary_model': summary,
     'dlp.enabled': true,
   }
-  if (trim(form.api_key) !== '') changes['dlp.api_key'] = form.api_key
+  if (trim(form.api_key) !== '') changes['dlp.api_key'] = trim(form.api_key)
   return changes
 }

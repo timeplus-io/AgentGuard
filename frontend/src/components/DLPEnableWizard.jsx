@@ -90,11 +90,18 @@ export default function DLPEnableWizard({ status, onProvisioned }) {
     setEnabling(true)
     setError(null)
     try {
-      await api.updateConfig(buildEnableChanges(form))
+      const changes = buildEnableChanges(form)
+      if (status?.enabled) delete changes['dlp.enabled']
+      await api.updateConfig(changes)
       await api.syncRules()
       onProvisioned?.()
     } catch (e) {
-      setError(e?.message || 'Provisioning failed')
+      if (e?.errors && typeof e.errors === 'object') {
+        const details = Object.entries(e.errors).map(([k, v]) => `${k}: ${v}`).join('; ')
+        setError(details || e?.message || 'Provisioning failed')
+      } else {
+        setError(e?.message || 'Provisioning failed')
+      }
     } finally {
       setEnabling(false)
     }
