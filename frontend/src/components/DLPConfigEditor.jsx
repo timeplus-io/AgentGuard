@@ -64,6 +64,7 @@ export default function DLPConfigEditor() {
   const [loadErr, setLoadErr] = useState(null)
   const [saving, setSaving] = useState(false)
   const [banner, setBanner] = useState(null)
+  const [test, setTest] = useState(null)
 
   const load = useCallback(() => {
     api.getDLPConfig()
@@ -149,6 +150,32 @@ export default function DLPConfigEditor() {
     }
   }
 
+  // resolve a model reference (catalog name) to its actual model id.
+  const resolveModelId = (ref) => {
+    const row = (draft?.shared.models || []).find((m) => m.name === ref)
+    return (row && row.model) || ref
+  }
+
+  // Test the shared endpoint against the values currently in the form (not the
+  // saved/config.yaml ones), using the resolved embedding + risk model ids. A
+  // blank api_key falls back to the server default. Per-model endpoint overrides
+  // aren't individually tested here.
+  async function testEndpoint() {
+    setTest({ pending: true })
+    try {
+      const r = await api.testDLPConfig({
+        base_url: draft.shared.base_url,
+        api_key: draft.shared.api_key,
+        embedding_model: resolveModelId(draft.embed.model),
+        embedding_dim: 0, // backend uses the provisioned/config dimension
+        risk_model: resolveModelId(draft.udfs.dlp_risk.model),
+      })
+      setTest(r)
+    } catch (e) {
+      setTest({ ok: false, error: e?.message || 'test failed' })
+    }
+  }
+
   if (loadErr) {
     return (
       <p className="text-xs text-error">
@@ -187,6 +214,34 @@ export default function DLPConfigEditor() {
           <label className="space-y-1"><span className={labelCls}>Timeout (s)</span>
             <input className={inputCls} type="number" value={draft.shared.timeout} onChange={(e) => setShared({ timeout: e.target.value })} />
           </label>
+        </div>
+        <div className="mt-3 flex items-center gap-3 flex-wrap">
+          <button onClick={testEndpoint} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">Test endpoint</button>
+          <span className="text-[11px] text-gray-500">Tests the values above (not the saved ones) with the embedding + risk models.</span>
+          {test?.pending && <span className="text-xs text-gray-400">Testing…</span>}
+          {test && !test.pending && (test.checks ? (
+            <div className="text-xs space-y-0.5 basis-full">
+              <div className={test.checks.reachable?.ok ? 'text-emerald-400' : 'text-error'}>
+                {test.checks.reachable?.ok ? '✓ reachable' : `✗ reachable: ${test.checks.reachable?.error || ''}`}
+              </div>
+              {test.checks.embedding && (
+                <div className={test.checks.embedding.ok ? 'text-emerald-400' : 'text-error'}>
+                  {test.checks.embedding.ok
+                    ? `✓ embedding dim ${test.checks.embedding.dim}`
+                    : `✗ embedding dim ${test.checks.embedding.dim ?? '?'} (expected ${test.checks.embedding.expected}) — set dlp.embedding_dim + re-provision`}
+                </div>
+              )}
+              {test.checks.chat && (
+                <div className={test.checks.chat.ok ? 'text-emerald-400' : 'text-error'}>
+                  {test.checks.chat.ok ? '✓ chat' : `✗ chat: ${test.checks.chat.note || 'failed'}`}
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className={`text-xs ${test.ok ? 'text-emerald-400' : 'text-error'}`}>
+              {test.ok ? 'Endpoint reachable' : `Failed: ${test.error}`}
+            </span>
+          ))}
         </div>
       </div>
 
