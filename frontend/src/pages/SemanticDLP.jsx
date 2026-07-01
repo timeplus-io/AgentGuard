@@ -4,6 +4,7 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
+import DLPEnableWizard from '../components/DLPEnableWizard'
 
 const EXAMPLE_PROMPTS = [
   'Did any agent leak credentials or API keys in the last week?',
@@ -77,52 +78,6 @@ function RoleBadge({ role }) {
     <span className={`text-[10px] font-semibold uppercase rounded-full px-2 py-0.5 ${styles[role] || styles.tool}`}>
       {role || '—'}
     </span>
-  )
-}
-
-// ── Unprovisioned call-to-action ─────────────────────────────────────────────
-
-function SetupCTA({ status, onProvision, provisioning, provisionError }) {
-  const missing = []
-  if (status.enabled) {
-    if (!status.stream_exists) missing.push('agentguard_dlp_enriched stream')
-    if (!status.mv_exists) missing.push('mv_dlp_enrich materialized view')
-    for (const [fn, ok] of Object.entries(status.udfs || {})) {
-      if (!ok) missing.push(`${fn} UDF`)
-    }
-  }
-  return (
-    <section className="bg-[#211e29] rounded-sm p-10 flex flex-col items-center text-center gap-4">
-      <span className="material-symbols-outlined text-5xl text-[#ffb0cf]">policy</span>
-      <h3 className="text-lg font-semibold text-gray-100">
-        Semantic DLP is not {status.enabled ? 'provisioned' : 'enabled'}
-      </h3>
-      <p className="text-xs text-gray-400 max-w-md">
-        {status.enabled
-          ? 'The enrichment pipeline (stream, UDFs, and materialized view) has not been created in Timeplus yet. Provisioning creates the missing pieces without restarting the server.'
-          : 'Enabling turns on the enrichment + query pipeline and provisions the stream, UDFs, and materialized view in Timeplus — no restart required. You can point it at your model endpoint afterwards in Settings or the DLP config.'}
-      </p>
-      {missing.length > 0 && (
-        <ul className="text-[11px] text-gray-400 font-mono">
-          {missing.map(m => <li key={m}>✗ {m}</li>)}
-        </ul>
-      )}
-      <button
-        onClick={onProvision}
-        disabled={provisioning}
-        className="px-5 py-2 text-xs font-semibold rounded bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-95 transition-transform disabled:opacity-50"
-      >
-        {provisioning
-          ? (status.enabled ? 'Provisioning…' : 'Enabling…')
-          : (status.enabled ? 'Provision now' : 'Enable Semantic DLP')}
-      </button>
-      {provisionError && <p className="text-xs text-[#ffb4ab]">{provisionError}</p>}
-      {!status.enabled && (
-        <p className="text-[11px] text-gray-500 max-w-md">
-          If <code className="font-mono">DLP_ENABLED</code> is set as an environment variable it takes precedence — unset it to control this from the UI.
-        </p>
-      )}
-    </section>
   )
 }
 
@@ -651,8 +606,6 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
 export default function SemanticDLP() {
   const [status, setStatus] = useState(null)
   const [statusError, setStatusError] = useState(null)
-  const [provisioning, setProvisioning] = useState(false)
-  const [provisionError, setProvisionError] = useState(null)
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [openMessageId, setOpenMessageId] = useState(null)
 
@@ -663,25 +616,6 @@ export default function SemanticDLP() {
   }, [])
 
   useEffect(() => { loadStatus() }, [loadStatus])
-
-  // Enable (if needed) then provision. dlp.enabled is a hot config key, so
-  // flipping it applies to the live server without a restart; syncRules() then
-  // runs InitDLP to create the stream, UDFs, and MV.
-  async function provision() {
-    setProvisioning(true)
-    setProvisionError(null)
-    try {
-      if (!status?.enabled) {
-        await api.updateConfig({ 'dlp.enabled': true })
-      }
-      await api.syncRules()
-      loadStatus()
-    } catch (err) {
-      setProvisionError(err?.message || 'Provisioning failed')
-    } finally {
-      setProvisioning(false)
-    }
-  }
 
   const provisioned = status?.enabled && status?.stream_exists && status?.mv_exists
     && Object.values(status?.udfs || {}).every(Boolean)
@@ -711,12 +645,7 @@ export default function SemanticDLP() {
           ) : !status ? (
             <p className="text-xs text-gray-400">Loading…</p>
           ) : !provisioned ? (
-            <SetupCTA
-              status={status}
-              onProvision={provision}
-              provisioning={provisioning}
-              provisionError={provisionError}
-            />
+            <DLPEnableWizard status={status} onProvisioned={loadStatus} />
           ) : (
             <>
               <AskPanel onOpenMessage={setOpenMessageId} />
