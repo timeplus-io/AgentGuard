@@ -374,6 +374,20 @@ now** and only runs the sync. (If `DLP_ENABLED` is set as an environment variabl
 it overrides the file and the UI can't change it — unset it to control from the
 UI.)
 
+### First-time enable (UI)
+
+The `/dlp` page shows a config + validation card until DLP is fully provisioned.
+Enter the model endpoint (base URL, optional API key), the embedding model, the
+chat model (used by risk / understand / rerank), and an optional summary model,
+then click **Validate models**. Validation calls the real endpoint —
+reachability, one embedding call (any non-empty vector; the dimension is
+auto-detected at provision), and a chat completion per distinct chat model.
+**Enable & provision** is blocked until every model validates; editing any field
+after a pass requires re-validating. On success the values are written to the
+`config.yaml` seed keys, `dlp.enabled` is turned on, and the pipeline is
+provisioned (stream, UDFs, MV) with no restart. After provisioning, endpoint and
+model settings are edited live in Settings via the `agentguard_dlp_config` stream.
+
 ---
 
 ## 7. API Surface
