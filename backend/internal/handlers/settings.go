@@ -237,7 +237,8 @@ func TestDLPConfig(cfg *config.Config) gin.HandlerFunc {
 			APIKey         string `json:"api_key"`
 			EmbeddingModel string `json:"embedding_model"`
 			EmbeddingDim   int    `json:"embedding_dim"`
-			RiskModel      string `json:"risk_model"`
+			RiskModel      string   `json:"risk_model"`
+			ChatModels     []string `json:"chat_models"`
 		}
 		_ = c.ShouldBindJSON(&body)
 
@@ -270,10 +271,25 @@ func TestDLPConfig(cfg *config.Config) gin.HandlerFunc {
 		ok := reach["ok"] == true
 		if ok {
 			emb := dlpCheckEmbedding(c, client, baseURL, key, embModel, expectedDim)
-			chat := dlpCheckChat(c, client, baseURL, key, riskModel, maxTokens)
 			checks["embedding"] = emb
-			checks["chat"] = chat
-			ok = emb["ok"] == true && chat["ok"] == true
+			ok = emb["ok"] == true
+
+			// Validate each distinct chat model; fall back to the risk model.
+			chatModels := dedupeNonEmpty(body.ChatModels)
+			if len(chatModels) == 0 {
+				chatModels = []string{riskModel}
+			}
+			chats := make([]gin.H, 0, len(chatModels))
+			for _, m := range chatModels {
+				ch := dlpCheckChat(c, client, baseURL, key, m, maxTokens)
+				ch["model"] = m
+				chats = append(chats, ch)
+				if ch["ok"] != true {
+					ok = false
+				}
+			}
+			checks["chats"] = chats
+			checks["chat"] = chats[0] // back-compat: Settings editor reads this
 		}
 		c.JSON(http.StatusOK, gin.H{"ok": ok, "checks": checks})
 	}
@@ -284,6 +300,21 @@ func orStr(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// dedupeNonEmpty trims, drops blanks, and removes duplicates, preserving order.
+func dedupeNonEmpty(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		s = strings.TrimSpace(s)
+		if s == "" || seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	return out
 }
 
 func dlpCheckReachable(c *gin.Context, client *http.Client, baseURL, key string) gin.H {
@@ -324,7 +355,12 @@ func dlpCheckEmbedding(c *gin.Context, client *http.Client, baseURL, key, model 
 		return gin.H{"ok": false, "error": "no embedding returned"}
 	}
 	dim := len(parsed.Data[0].Embedding)
-	return gin.H{"ok": dim == expected, "dim": dim, "expected": expected}
+	okDim := dim == expected
+	if expected <= 0 {
+		// Dimension unknown (pre-provision): success is any non-empty vector.
+		okDim = dim > 0
+	}
+	return gin.H{"ok": okDim, "dim": dim, "expected": expected}
 }
 
 func dlpCheckChat(c *gin.Context, client *http.Client, baseURL, key, model string, maxTokens int) gin.H {
