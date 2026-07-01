@@ -344,6 +344,15 @@ DLP provisioning lives in `backend/internal/timeplus/dlp.go`:
 The server starts independently of Timeplus; if the instance is unreachable,
 provisioning fails but the binary itself starts cleanly.
 
+**Enabling from the UI.** When DLP is off or unprovisioned, the `/dlp` page shows
+a call-to-action. If `dlp.enabled` is `false`, the button reads **Enable Semantic
+DLP** — it flips `dlp.enabled` (a hot config key, no restart) via
+`PUT /api/config` and then runs provisioning via `POST /api/rules/sync`. If DLP is
+already enabled but the streams/UDFs/MV are missing, the button reads **Provision
+now** and only runs the sync. (If `DLP_ENABLED` is set as an environment variable
+it overrides the file and the UI can't change it — unset it to control from the
+UI.)
+
 ---
 
 ## 7. API Surface
