@@ -96,8 +96,9 @@ func TestDLPConfigRows(t *testing.T) {
 		!strings.Contains(rows[DLPCfgKeyShared], `"timeout":50`) {
 		t.Errorf("shared row missing endpoint/key/timeout: %s", rows[DLPCfgKeyShared])
 	}
-	// Model catalog: names → actual model ids, defined once.
-	for _, want := range []string{`"models":{`, `"chat":"gpt-4o-mini"`, `"embedding":"text-embedding-3-small"`, `"summary":"gpt-4o"`} {
+	// Model catalog: names → endpoint objects (each can carry its own base_url/
+	// api_key), defined once.
+	for _, want := range []string{`"models":{`, `"chat":{"model":"gpt-4o-mini"}`, `"embedding":{"model":"text-embedding-3-small"}`, `"summary":{"model":"gpt-4o"}`} {
 		if !strings.Contains(rows[DLPCfgKeyShared], want) {
 			t.Errorf("shared row missing model catalog %q: %s", want, rows[DLPCfgKeyShared])
 		}

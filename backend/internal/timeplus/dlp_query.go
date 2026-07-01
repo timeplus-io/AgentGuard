@@ -43,6 +43,22 @@ def _merged(shareds, configs):
     m.update(first(configs))
     return m
 
+def _endpoint(cfg):
+    # Resolve (base_url, api_key, model) for this UDF from its model reference.
+    # cfg.model is a name into cfg.models; each entry is {model[,base_url,api_key]}
+    # and inherits the shared top-level base_url/api_key when it omits them. An
+    # unknown name is used as a literal model id on the shared endpoint.
+    ref = cfg.get('model') or ''
+    entry = (cfg.get('models') or {}).get(ref)
+    if isinstance(entry, str):
+        entry = {'model': entry}
+    elif not isinstance(entry, dict):
+        entry = {}
+    base = entry.get('base_url') or cfg.get('base_url') or ''
+    api_key = entry.get('api_key', cfg.get('api_key') or '')
+    model = entry.get('model') or ref
+    return base, api_key, model
+
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
     return (m.get('content') or '').strip() or \
@@ -82,10 +98,7 @@ def _understand(question, base, api_key, model, max_tokens, timeout):
 
 def dlp_understand_query(questions, shareds, configs):
     cfg = _merged(shareds, configs)
-    base = cfg.get('base_url') or ''
-    api_key = cfg.get('api_key') or ''
-    model = cfg.get('model') or ''
-    model = (cfg.get('models') or {}).get(model, model)
+    base, api_key, model = _endpoint(cfg)
     try:
         max_tokens = int(cfg.get('max_tokens') or 512)
     except Exception:
@@ -131,6 +144,22 @@ def _merged(shareds, configs):
     m.update(first(configs))
     return m
 
+def _endpoint(cfg):
+    # Resolve (base_url, api_key, model) for this UDF from its model reference.
+    # cfg.model is a name into cfg.models; each entry is {model[,base_url,api_key]}
+    # and inherits the shared top-level base_url/api_key when it omits them. An
+    # unknown name is used as a literal model id on the shared endpoint.
+    ref = cfg.get('model') or ''
+    entry = (cfg.get('models') or {}).get(ref)
+    if isinstance(entry, str):
+        entry = {'model': entry}
+    elif not isinstance(entry, dict):
+        entry = {}
+    base = entry.get('base_url') or cfg.get('base_url') or ''
+    api_key = entry.get('api_key', cfg.get('api_key') or '')
+    model = entry.get('model') or ref
+    return base, api_key, model
+
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
     return (m.get('content') or '').strip() or \
@@ -171,10 +200,7 @@ def _score_chunk(question, snippets, base, api_key, model, max_tokens, timeout):
 
 def dlp_rerank(questions, contents, shareds, configs):
     cfg = _merged(shareds, configs)
-    base = cfg.get('base_url') or ''
-    api_key = cfg.get('api_key') or ''
-    model = cfg.get('model') or ''
-    model = (cfg.get('models') or {}).get(model, model)
+    base, api_key, model = _endpoint(cfg)
     try:
         max_tokens = int(cfg.get('max_tokens') or 512)
     except Exception:
@@ -225,6 +251,22 @@ def _merged(shareds, configs):
     m.update(first(configs))
     return m
 
+def _endpoint(cfg):
+    # Resolve (base_url, api_key, model) for this UDF from its model reference.
+    # cfg.model is a name into cfg.models; each entry is {model[,base_url,api_key]}
+    # and inherits the shared top-level base_url/api_key when it omits them. An
+    # unknown name is used as a literal model id on the shared endpoint.
+    ref = cfg.get('model') or ''
+    entry = (cfg.get('models') or {}).get(ref)
+    if isinstance(entry, str):
+        entry = {'model': entry}
+    elif not isinstance(entry, dict):
+        entry = {}
+    base = entry.get('base_url') or cfg.get('base_url') or ''
+    api_key = entry.get('api_key', cfg.get('api_key') or '')
+    model = entry.get('model') or ref
+    return base, api_key, model
+
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
     return (m.get('content') or '').strip() or \
@@ -249,10 +291,7 @@ def _summarize(question, evidence, base, api_key, model, max_tokens, timeout):
 
 def dlp_summarize(questions, evidences, shareds, configs):
     cfg = _merged(shareds, configs)
-    base = cfg.get('base_url') or ''
-    api_key = cfg.get('api_key') or ''
-    model = cfg.get('model') or ''
-    model = (cfg.get('models') or {}).get(model, model)
+    base, api_key, model = _endpoint(cfg)
     try:
         max_tokens = int(cfg.get('max_tokens') or 800)
     except Exception:

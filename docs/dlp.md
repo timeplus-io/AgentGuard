@@ -268,25 +268,38 @@ row`, its own row winning):
 | `dlp_understand_query` / `dlp_rerank` | `model` (name), `max_tokens` |
 | `dlp_summarize` | `model` (name), `max_tokens` |
 
-**Named model catalog.** `shared.models` maps a name → an actual model id; each
-UDF's `model` is a **name** that resolves against it at call time. So a model is
-defined once and pointed at by several UDFs — e.g. `risk`, `understand`, and
-`rerank` all reference `"chat"`, so changing `shared.models.chat` updates all
-three. Defaults:
+**Named model catalog with per-model endpoints.** `shared.models` maps a name → an
+**endpoint object** `{"model": <id> [, "base_url": …, "api_key": …]}`. Each UDF's
+`model` is a **name** that resolves against the catalog at call time, giving that
+UDF its `base_url` + `api_key` + `model` id. So:
+
+- **A model is defined once, referenced by many UDFs** — `risk`, `understand`, and
+  `rerank` all reference `"chat"`, so editing `shared.models.chat` updates all three.
+- **Each model can live on its own endpoint** — an entry's `base_url`/`api_key`
+  override the shared top-level ones; omit them to inherit. So embeddings can hit
+  OpenAI while chat hits a local Ollama, each with its own key.
 
 ```json
-shared:     {"base_url":"…","api_key":"…","timeout":50,
-             "models":{"chat":"gpt-4o-mini","embedding":"text-embedding-3-small","summary":"gpt-4o"}}
-dlp_embed:  {"model":"embedding","max_chars":8000}
-dlp_risk:   {"model":"chat","max_tokens":512,"keywords":[…],"tag_for":{…}}
-dlp_summarize: {"model":"summary","max_tokens":800}
+shared: {
+  "base_url": "http://localhost:4000/v1",   // default endpoint (inherited)
+  "api_key":  "",                            // default key (inherited)
+  "timeout":  50,
+  "models": {
+    "chat":      {"model": "gpt-4o-mini"},                                              // inherits shared endpoint
+    "embedding": {"model": "text-embedding-3-small", "base_url": "https://api.openai.com/v1", "api_key": "sk-…"},
+    "summary":   {"model": "gpt-4o"}
+  }
+}
+dlp_embed:     {"model": "embedding", "max_chars": 8000}
+dlp_risk:      {"model": "chat", "max_tokens": 512, "keywords": [...], "tag_for": {...}}
+dlp_summarize: {"model": "summary", "max_tokens": 800}
 ```
 
 Names are arbitrary — define `model1`/`model2`/… and point each UDF wherever you
-like. A `model` that isn't a catalog name is used as a **literal** model id
-(backward compatible). A per-UDF row may also override any shared field (e.g.
-point one UDF at a different `base_url` or its own `models`) since it wins the
-merge.
+like. A `model` name that isn't in the catalog is used as a **literal** model id on
+the shared endpoint (backward compatible). Per-model `api_key`s are redacted by
+`GET /api/dlp/config` and preserved on `PUT` just like the top-level one. (Only
+`timeout` remains shared, not per-model.)
 
 Because the stream is read/write, **the config stream is authoritative at
 runtime**. The preferred way to change it is the API

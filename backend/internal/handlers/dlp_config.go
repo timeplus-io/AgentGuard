@@ -21,19 +21,34 @@ type dlpConfigRowView struct {
 	UpdatedBy string          `json:"updated_by"`
 }
 
-// redactAPIKey parses a config value, blanks any "api_key" field, and reports
-// whether a non-empty key was present. Non-object/!JSON values pass through.
+// blankAPIKey blanks a non-empty "api_key" on m, returning whether one existed.
+func blankAPIKey(m map[string]any) bool {
+	v, ok := m["api_key"]
+	if !ok {
+		return false
+	}
+	s, _ := v.(string)
+	m["api_key"] = ""
+	return s != ""
+}
+
+// redactAPIKey parses a config value and blanks every "api_key" — the top-level
+// one and each per-model one under "models" — reporting whether any non-empty key
+// was present. Non-object/!JSON values pass through.
 func redactAPIKey(value string) (json.RawMessage, bool) {
 	var m map[string]any
 	if err := json.Unmarshal([]byte(value), &m); err != nil {
 		return json.RawMessage(value), false
 	}
-	had := false
-	if v, ok := m["api_key"]; ok {
-		if s, ok := v.(string); ok && s != "" {
-			had = true
+	had := blankAPIKey(m)
+	if models, ok := m["models"].(map[string]any); ok {
+		for _, mv := range models {
+			if entry, ok := mv.(map[string]any); ok {
+				if blankAPIKey(entry) {
+					had = true
+				}
+			}
 		}
-		m["api_key"] = ""
 	}
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -65,18 +80,29 @@ func GetDLPConfig(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// preserveAPIKey injects the stored api_key into a new value when the submitted
-// value omits it or leaves it blank, so a GET→edit→PUT round-trip (which never
-// echoes the key) doesn't wipe it. Pass through for keys without an api_key.
+// fillAPIKey copies existing["api_key"] into m when m's is missing or blank, so a
+// GET→edit→PUT round-trip (which never echoes keys) doesn't wipe a stored key.
+func fillAPIKey(m, existing map[string]any) {
+	if m == nil || existing == nil {
+		return
+	}
+	if v, present := m["api_key"]; present {
+		if s, _ := v.(string); s != "" {
+			return // caller supplied a new key
+		}
+	}
+	if old, ok := existing["api_key"].(string); ok && old != "" {
+		m["api_key"] = old
+	}
+}
+
+// preserveAPIKey injects stored api keys (top-level and per-model) into a new
+// value wherever the submitted value omits or blanks them. Pass through for
+// values with no api_key anywhere.
 func preserveAPIKey(tpCfg *config.TimeplusConfig, key, value string) (string, error) {
 	var m map[string]any
 	if err := json.Unmarshal([]byte(value), &m); err != nil {
 		return value, nil // non-object value (e.g. nothing to preserve)
-	}
-	v, present := m["api_key"]
-	s, _ := v.(string)
-	if present && s != "" {
-		return value, nil // caller supplied a new key
 	}
 	existing, err := tp.ReadDLPConfigValue(tpCfg, key)
 	if err != nil {
@@ -89,11 +115,21 @@ func preserveAPIKey(tpCfg *config.TimeplusConfig, key, value string) (string, er
 	if err := json.Unmarshal([]byte(existing), &em); err != nil {
 		return value, nil
 	}
-	old, ok := em["api_key"].(string)
-	if !ok || old == "" {
-		return value, nil
+	fillAPIKey(m, em)
+	if models, ok := m["models"].(map[string]any); ok {
+		emodels, _ := em["models"].(map[string]any)
+		for name, mv := range models {
+			entry, ok := mv.(map[string]any)
+			if !ok {
+				continue
+			}
+			var eentry map[string]any
+			if emodels != nil {
+				eentry, _ = emodels[name].(map[string]any)
+			}
+			fillAPIKey(entry, eentry)
+		}
 	}
-	m["api_key"] = old
 	b, err := json.Marshal(m)
 	if err != nil {
 		return value, nil

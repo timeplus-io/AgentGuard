@@ -32,4 +32,22 @@ func TestRedactAPIKey(t *testing.T) {
 	if had3 {
 		t.Error("empty api_key must report api_key_set false")
 	}
+
+	// Per-model api_key nested under models must also be redacted + counted.
+	red4, had4 := redactAPIKey(`{"api_key":"","models":{"chat":{"model":"m","api_key":"sk-per-model"}}}`)
+	if !had4 {
+		t.Error("nested per-model api_key should set api_key_set true")
+	}
+	var m4 map[string]any
+	if err := json.Unmarshal(red4, &m4); err != nil {
+		t.Fatalf("redacted value not JSON: %v", err)
+	}
+	models := m4["models"].(map[string]any)
+	chat := models["chat"].(map[string]any)
+	if chat["api_key"] != "" {
+		t.Errorf("nested api_key not redacted: %v", chat["api_key"])
+	}
+	if chat["model"] != "m" {
+		t.Error("nested non-secret fields must be preserved")
+	}
 }

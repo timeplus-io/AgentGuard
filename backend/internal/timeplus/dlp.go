@@ -191,14 +191,27 @@ def _merged(shareds, configs):
     m.update(first(configs))
     return m
 
+def _endpoint(cfg):
+    # Resolve (base_url, api_key, model) for this UDF from its model reference.
+    # cfg.model is a name into cfg.models; each entry is {model[,base_url,api_key]}
+    # and inherits the shared top-level base_url/api_key when it omits them. An
+    # unknown name is used as a literal model id on the shared endpoint.
+    ref = cfg.get('model') or ''
+    entry = (cfg.get('models') or {}).get(ref)
+    if isinstance(entry, str):
+        entry = {'model': entry}
+    elif not isinstance(entry, dict):
+        entry = {}
+    base = entry.get('base_url') or cfg.get('base_url') or ''
+    api_key = entry.get('api_key', cfg.get('api_key') or '')
+    model = entry.get('model') or ref
+    return base, api_key, model
+
 def dlp_embed(contents, roles, shareds, configs):
     n = len(contents)
     out = [[] for _ in range(n)]
     cfg = _merged(shareds, configs)
-    base = cfg.get('base_url') or ''
-    api_key = cfg.get('api_key') or ''
-    model = cfg.get('model') or ''
-    model = (cfg.get('models') or {}).get(model, model)
+    base, api_key, model = _endpoint(cfg)
     try:
         timeout = float(cfg.get('timeout') or 50)
     except Exception:
@@ -259,6 +272,22 @@ def _merged(shareds, configs):
     m.update(first(configs))
     return m
 
+def _endpoint(cfg):
+    # Resolve (base_url, api_key, model) for this UDF from its model reference.
+    # cfg.model is a name into cfg.models; each entry is {model[,base_url,api_key]}
+    # and inherits the shared top-level base_url/api_key when it omits them. An
+    # unknown name is used as a literal model id on the shared endpoint.
+    ref = cfg.get('model') or ''
+    entry = (cfg.get('models') or {}).get(ref)
+    if isinstance(entry, str):
+        entry = {'model': entry}
+    elif not isinstance(entry, dict):
+        entry = {}
+    base = entry.get('base_url') or cfg.get('base_url') or ''
+    api_key = entry.get('api_key', cfg.get('api_key') or '')
+    model = entry.get('model') or ref
+    return base, api_key, model
+
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
     return (m.get('content') or '').strip() or \
@@ -296,10 +325,7 @@ def _classify(text, ets, base, api_key, model, max_tokens, timeout):
 
 def dlp_risk(contents, entity_types_list, shareds, configs):
     cfg = _merged(shareds, configs)
-    base = cfg.get('base_url') or ''
-    api_key = cfg.get('api_key') or ''
-    model = cfg.get('model') or ''
-    model = (cfg.get('models') or {}).get(model, model)
+    base, api_key, model = _endpoint(cfg)
     try:
         max_tokens = int(cfg.get('max_tokens') or 512)
     except Exception:
@@ -397,9 +423,11 @@ func DLPConfigRows(cfg config.DLPConfig) map[string]string {
 		summarizeTokens = 800
 	}
 	// Per-UDF rows reference a model by NAME from the shared catalog
-	// (shared.models). A UDF resolves its `model` against that map at call time,
-	// falling back to treating it as a literal model id if it isn't a known name.
-	// So a model is defined once and pointed at by several UDFs.
+	// (shared.models). A UDF resolves its `model` against that catalog at call
+	// time; each catalog entry is a full endpoint {model[, base_url, api_key]}, so
+	// different models can live on different endpoints. base_url/api_key omitted
+	// from an entry inherit the shared top-level defaults. If the name isn't in
+	// the catalog it is treated as a literal model id on the shared endpoint.
 	chat := func(modelRef string, maxTokens int) map[string]any {
 		return map[string]any{"model": modelRef, "max_tokens": maxTokens}
 	}
@@ -407,17 +435,20 @@ func DLPConfigRows(cfg config.DLPConfig) map[string]string {
 	riskRow["keywords"] = dlpDefaultRiskKeywords
 	riskRow["tag_for"] = dlpTagForFromCatalog(catalog)
 
+	// model catalog entry: model id + optional per-model endpoint override.
+	modelEntry := func(id string) map[string]any { return map[string]any{"model": id} }
+
 	rows := map[string]any{
-		// Settings shared by every network UDF: the endpoint (rotate the key /
-		// swap the URL here once) and the named-model catalog.
+		// Settings shared by every network UDF: the default endpoint (inherited by
+		// catalog entries that don't specify their own) and the named-model catalog.
 		DLPCfgKeyShared: map[string]any{
 			"base_url": cfg.BaseURL,
 			"api_key":  cfg.APIKey,
 			"timeout":  cfg.RequestTimeoutSeconds,
 			"models": map[string]any{
-				"chat":      cfg.RiskModel,
-				"embedding": cfg.EmbeddingModel,
-				"summary":   cfg.SummaryModel,
+				"chat":      modelEntry(cfg.RiskModel),
+				"embedding": modelEntry(cfg.EmbeddingModel),
+				"summary":   modelEntry(cfg.SummaryModel),
 			},
 		},
 		DLPCfgKeyEntities: map[string]any{
