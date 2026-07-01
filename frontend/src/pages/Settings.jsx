@@ -3,7 +3,14 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import Toggle from '../components/Toggle'
+import DLPConfigEditor from '../components/DLPConfigEditor'
 import { api } from '../api/client'
+
+// DLP keys that remain server-config (config.yaml): the enable switch and the
+// embedding dimension (baked into the stream/index). Everything else — endpoint,
+// models, timeouts, tokens, entity catalog — is edited live below via the config
+// stream, so it's hidden from the flat key list to avoid two sources of truth.
+const DLP_SERVER_KEYS = new Set(['dlp.enabled', 'dlp.embedding_dim'])
 
 const SOURCE_LABEL = {
   default: 'default',
@@ -227,7 +234,10 @@ export default function Settings() {
             <section key={section.id} className="mb-6 bg-gray-800 rounded-sm px-6 py-4">
               <h3 className="text-base font-medium text-gray-100 mb-2">{section.title}</h3>
               <div className="divide-y divide-gray-700/50">
-                {section.keys.map((k) => (
+                {(section.id === 'dlp'
+                  ? section.keys.filter((k) => DLP_SERVER_KEYS.has(k.key))
+                  : section.keys
+                ).map((k) => (
                   <div key={k.key}>
                     <KeyField k={k} draftValue={draftFor(k)} onChange={(v) => setDraft(k.key, v)} />
                     {fieldErrors[k.key] && <p className="text-error text-xs pb-2">{fieldErrors[k.key]}</p>}
@@ -276,6 +286,13 @@ export default function Settings() {
                       </span>
                     )
                   )}
+                </div>
+              )}
+
+              {section.id === 'dlp' && (
+                <div className="mt-6 border-t border-gray-700/50 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-100 mb-1">Runtime configuration</h4>
+                  <DLPConfigEditor />
                 </div>
               )}
             </section>

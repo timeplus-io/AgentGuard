@@ -302,9 +302,12 @@ the shared endpoint (backward compatible). Per-model `api_key`s are redacted by
 `timeout` remains shared, not per-model.)
 
 Because the stream is read/write, **the config stream is authoritative at
-runtime**. The preferred way to change it is the API
+runtime**. Edit it from the **Settings page** (`/settings` → Semantic DLP →
+*Runtime configuration*): a structured editor for the shared endpoint, the model
+catalog (with per-model base_url/api_key), and each function's model + token
+budget, plus a JSON pane for the entity catalog. It saves via the API
 (`GET /api/dlp/config`, `PUT /api/dlp/config/:key` — which validates the JSON,
-structurally checks the entity catalog, and preserves the stored `api_key` when
+structurally checks the entity catalog, and preserves stored `api_key`s when
 omitted). You can also upsert directly via SQL — re-`INSERT` the same `key` — and
 the ingest MV (next event) and funnel (next query) use it immediately, no rebuild
 and no re-provision:
