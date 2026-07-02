@@ -294,6 +294,7 @@ const ddlDLPRiskUDF = `CREATE OR REPLACE FUNCTION dlp_risk(content string, entit
 RETURNS string
 LANGUAGE PYTHON AS $$
 import json
+import re
 import requests
 
 DEFAULT_KEYWORDS = ('password', 'secret', 'api key', 'apikey', 'token', 'credential',
@@ -301,6 +302,10 @@ DEFAULT_KEYWORDS = ('password', 'secret', 'api key', 'apikey', 'token', 'credent
             'private key', 'salary', 'ssn', 'id card')
 DEFAULT_TAG_FOR = {'phone': 'PHONE', 'email': 'EMAIL', 'ip': 'IP', 'domain': 'DOMAIN',
            'person': 'PERSON', 'company': 'COMPANY', 'secret': 'CREDENTIAL'}
+# Fallback when config carries no prompt; kept byte-identical to the Go seed
+# (dlpDefaultRiskPrompt) by TestDLPDefaultPromptsMatchUDFs. The strict-JSON
+# instruction is load-bearing: the reply is parsed as {"score": .., "tags": [..]}.
+DEFAULT_PROMPT = 'You are a data-leakage classifier for AI-agent conversation logs. Respond with strict JSON only: {"score": <0..1>, "tags": [<zero or more of PII, PHONE, EMAIL, CREDENTIAL, SOURCE_CODE, CUSTOMER_DATA, FINANCIAL, EXFILTRATION>]}. Detected entity types: {entity_types}. Message: {message}'
 
 def _cfg(configs):
     # Config is already resolved (dlp_config_resolve); take the first non-empty.
@@ -328,14 +333,14 @@ def _heuristic(ets, text, tag_for, keywords):
         tags.append('PII')
     return json.dumps({'score': round(score, 2), 'tags': sorted(set(tags))})
 
-def _classify(text, ets, base, api_key, model, max_tokens, timeout):
+def _classify(text, ets, base, api_key, model, max_tokens, timeout, tpl):
     headers = {'Content-Type': 'application/json'}
     if api_key:
         headers['Authorization'] = 'Bearer ' + api_key
-    prompt = ('You are a data-leakage classifier for AI-agent conversation logs. '
-              'Respond with strict JSON only: {"score": <0..1>, "tags": [<zero or more of '
-              'PII, PHONE, EMAIL, CREDENTIAL, SOURCE_CODE, CUSTOMER_DATA, FINANCIAL, EXFILTRATION>]}. '
-              'Detected entity types: ' + ', '.join(ets) + '. Message: ' + text[:4000])
+    # Single-pass render: substituted content is never re-scanned, so message
+    # text containing a literal placeholder cannot inject into the template.
+    values = {'entity_types': ', '.join(ets), 'message': text[:4000]}
+    prompt = re.sub(r'\{(entity_types|message)\}', lambda m: values[m.group(1)], tpl)
     resp = requests.post(base + '/chat/completions', headers=headers, json={
         'model': model,
         'messages': [{'role': 'user', 'content': prompt}],
@@ -362,6 +367,7 @@ def dlp_risk(contents, entity_types_list, configs):
         timeout = 50
     keywords = tuple(cfg.get('keywords') or DEFAULT_KEYWORDS)
     tag_for = cfg.get('tag_for') or DEFAULT_TAG_FOR
+    tpl = cfg.get('prompt') or DEFAULT_PROMPT
     out = []
     for i, text in enumerate(contents):
         text = text or ''
@@ -372,13 +378,43 @@ def dlp_risk(contents, entity_types_list, configs):
         try:
             if not base:
                 raise Exception('no endpoint')
-            out.append(_classify(text, ets, base, api_key, model, max_tokens, timeout))
+            out.append(_classify(text, ets, base, api_key, model, max_tokens, timeout, tpl))
         except Exception:
             out.append(_heuristic(ets, text, tag_for, keywords))
     return out
 $$`
 
 // ---------- Config rendering & seeding ----------
+
+// Default prompt templates for the four LLM UDFs, seeded into their config rows
+// so operators can tune them at runtime (#197). Placeholders ({question},
+// {message}, …) are substituted by the UDF in a single re.sub pass; the strict-
+// JSON instructions and TASK markers in the defaults are load-bearing (reply
+// parsing / mock-model dispatch). Each value must stay byte-identical to the
+// DEFAULT_PROMPT fallback inside its UDF body — TestDLPDefaultPromptsMatchUDFs
+// enforces that (with \n normalized to the Python escape).
+const (
+	dlpDefaultRiskPrompt       = `You are a data-leakage classifier for AI-agent conversation logs. Respond with strict JSON only: {"score": <0..1>, "tags": [<zero or more of PII, PHONE, EMAIL, CREDENTIAL, SOURCE_CODE, CUSTOMER_DATA, FINANCIAL, EXFILTRATION>]}. Detected entity types: {entity_types}. Message: {message}`
+	dlpDefaultUnderstandPrompt = `TASK: QUERY_UNDERSTANDING. Parse this security-audit question into retrieval intent. Respond with strict JSON only: {"keywords": [up to 8 lowercase search words], "entity_types": [zero or more of phone, email, ip, domain, person, company, secret], "risk_tags": [zero or more of PII, PHONE, EMAIL, CREDENTIAL, SOURCE_CODE, CUSTOMER_DATA, FINANCIAL, EXFILTRATION], "time_range_days": <integer>}. Question: {question}`
+	dlpDefaultRerankPrompt     = `TASK: RERANK. Score how well each numbered ITEM answers the QUESTION, 0.0 (irrelevant) to 1.0 (directly answers it). Respond with strict JSON only, mapping each item number to its score, e.g. {"1": 0.0, "2": 1.0}. ITEMS: {count}
+QUESTION: {question}
+{items}`
+	dlpDefaultSummarizePrompt = `TASK: AUDIT_SUMMARY. You are a security auditor. Using ONLY the JSON evidence messages below, answer the question: who, when, and what data was involved. Cite evidence inline as [message_id]. If the evidence does not support a finding, say so. QUESTION: {question}
+EVIDENCE: {evidence}`
+)
+
+// DLPDefaultPrompts returns the built-in prompt template per LLM UDF key.
+// GET /api/dlp/config uses it to report the EFFECTIVE prompt when a stored row
+// carries none (rows seeded before #197, or a cleared field) — the UDF falls
+// back to exactly this text, so the operator should see it rather than a blank.
+func DLPDefaultPrompts() map[string]string {
+	return map[string]string{
+		DLPCfgKeyRisk:       dlpDefaultRiskPrompt,
+		DLPCfgKeyUnderstand: dlpDefaultUnderstandPrompt,
+		DLPCfgKeyRerank:     dlpDefaultRerankPrompt,
+		DLPCfgKeySummarize:  dlpDefaultSummarizePrompt,
+	}
+}
 
 // dlpEntitySpec is one entry in the entity catalog (the dlp_extract_entities
 // config). regex entries use Pattern (+ optional Flags, e.g. "i"); dictionary
@@ -454,10 +490,10 @@ func DLPConfigRows(cfg config.DLPConfig) map[string]string {
 	// different models can live on different endpoints. base_url/api_key omitted
 	// from an entry inherit the shared top-level defaults. If the name isn't in
 	// the catalog it is treated as a literal model id on the shared endpoint.
-	chat := func(modelRef string, maxTokens int) map[string]any {
-		return map[string]any{"model": modelRef, "max_tokens": maxTokens}
+	chat := func(modelRef string, maxTokens int, prompt string) map[string]any {
+		return map[string]any{"model": modelRef, "max_tokens": maxTokens, "prompt": prompt}
 	}
-	riskRow := chat("chat", cfg.MaxOutputTokens)
+	riskRow := chat("chat", cfg.MaxOutputTokens, dlpDefaultRiskPrompt)
 	riskRow["keywords"] = dlpDefaultRiskKeywords
 	riskRow["tag_for"] = dlpTagForFromCatalog(catalog)
 
@@ -486,9 +522,9 @@ func DLPConfigRows(cfg config.DLPConfig) map[string]string {
 			"max_chars": 8000,
 		},
 		DLPCfgKeyRisk:       riskRow,
-		DLPCfgKeyUnderstand: chat("chat", cfg.MaxOutputTokens),
-		DLPCfgKeyRerank:     chat("chat", cfg.MaxOutputTokens),
-		DLPCfgKeySummarize:  chat("summary", summarizeTokens),
+		DLPCfgKeyUnderstand: chat("chat", cfg.MaxOutputTokens, dlpDefaultUnderstandPrompt),
+		DLPCfgKeyRerank:     chat("chat", cfg.MaxOutputTokens, dlpDefaultRerankPrompt),
+		DLPCfgKeySummarize:  chat("summary", summarizeTokens, dlpDefaultSummarizePrompt),
 	}
 	out := make(map[string]string, len(rows))
 	for k, v := range rows {

@@ -29,6 +29,28 @@ func TestValidateDLPConfigValue(t *testing.T) {
 	}
 }
 
+// LLM UDF rows: a present prompt must be a string; absent/string prompts pass.
+func TestValidateDLPConfigPrompt(t *testing.T) {
+	for _, key := range []string{DLPCfgKeyRisk, DLPCfgKeyUnderstand, DLPCfgKeyRerank, DLPCfgKeySummarize} {
+		if err := ValidateDLPConfigValue(key, `{"model":"chat","prompt":"Classify: {message}"}`); err != nil {
+			t.Errorf("%s: string prompt rejected: %v", key, err)
+		}
+		if err := ValidateDLPConfigValue(key, `{"model":"chat"}`); err != nil {
+			t.Errorf("%s: absent prompt rejected: %v", key, err)
+		}
+		if err := ValidateDLPConfigValue(key, `{"prompt":42}`); err == nil {
+			t.Errorf("%s: non-string prompt should be rejected", key)
+		}
+		if err := ValidateDLPConfigValue(key, `{"prompt":["a"]}`); err == nil {
+			t.Errorf("%s: array prompt should be rejected", key)
+		}
+	}
+	// Non-LLM keys are unaffected by the prompt check.
+	if err := ValidateDLPConfigValue(DLPCfgKeyEmbed, `{"prompt":42}`); err != nil {
+		t.Errorf("embed row should not run the prompt check: %v", err)
+	}
+}
+
 func TestIsDLPConfigKey(t *testing.T) {
 	if !IsDLPConfigKey(DLPCfgKeyRisk) {
 		t.Error("dlp_risk should be a valid key")

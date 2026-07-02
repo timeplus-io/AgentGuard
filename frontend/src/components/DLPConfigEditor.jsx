@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 
-// Chat UDFs edit a model reference + a token budget. dlp_embed is handled
-// separately (it has max_chars, not max_tokens).
+// Chat UDFs edit a model reference, a token budget, and a prompt template.
+// dlp_embed is handled separately (it has max_chars, no prompt).
+// placeholders: the template variables that UDF substitutes at call time.
 const CHAT_UDFS = [
-  { key: 'dlp_understand_query', label: 'Query understanding' },
-  { key: 'dlp_rerank', label: 'Rerank' },
-  { key: 'dlp_risk', label: 'Risk classification' },
-  { key: 'dlp_summarize', label: 'Summary report' },
+  { key: 'dlp_understand_query', label: 'Query understanding', placeholders: ['{question}'], json: true },
+  { key: 'dlp_rerank', label: 'Rerank', placeholders: ['{count}', '{question}', '{items}'], json: true },
+  { key: 'dlp_risk', label: 'Risk classification', placeholders: ['{entity_types}', '{message}'], json: true },
+  { key: 'dlp_summarize', label: 'Summary report', placeholders: ['{question}', '{evidence}'], json: false },
 ]
 
 const inputCls =
@@ -48,7 +49,7 @@ function buildDraft(byKey) {
   }
   for (const { key } of CHAT_UDFS) {
     const v = byKey[key]?.value || {}
-    draft.udfs[key] = { model: v.model || '', max_tokens: v.max_tokens ?? 512 }
+    draft.udfs[key] = { model: v.model || '', max_tokens: v.max_tokens ?? 512, prompt: v.prompt || '' }
   }
   const emb = byKey.dlp_embed?.value || {}
   draft.embed = { model: emb.model || '', max_chars: emb.max_chars ?? 8000 }
@@ -127,7 +128,8 @@ export default function DLPConfigEditor() {
       return JSON.parse(entitiesText)
     }
     const u = draft.udfs[key]
-    return { ...prev, model: u.model, max_tokens: Number(u.max_tokens) || 0 }
+    // prompt: '' = use the UDF's built-in default (clearing the field resets it)
+    return { ...prev, model: u.model, max_tokens: Number(u.max_tokens) || 0, prompt: u.prompt }
   }
 
   async function save() {
@@ -277,13 +279,30 @@ export default function DLPConfigEditor() {
               <input className={inputCls} type="number" value={draft.embed.max_chars} onChange={(e) => setEmbed({ max_chars: e.target.value })} />
             </label>
           </div>
-          {CHAT_UDFS.map(({ key, label }) => (
-            <div key={key} className="grid grid-cols-[1.3fr_1fr_0.8fr] gap-3 items-center">
-              <span className="text-sm text-gray-300">{label}</span>
-              <ModelSelect value={draft.udfs[key].model} onChange={(v) => setUdf(key, { model: v })} />
-              <label className="flex items-center gap-1 text-[11px] text-gray-400">max tokens
-                <input className={inputCls} type="number" value={draft.udfs[key].max_tokens} onChange={(e) => setUdf(key, { max_tokens: e.target.value })} />
-              </label>
+          {CHAT_UDFS.map(({ key, label, placeholders, json }) => (
+            <div key={key} className="space-y-1">
+              <div className="grid grid-cols-[1.3fr_1fr_0.8fr] gap-3 items-center">
+                <span className="text-sm text-gray-300">{label}</span>
+                <ModelSelect value={draft.udfs[key].model} onChange={(v) => setUdf(key, { model: v })} />
+                <label className="flex items-center gap-1 text-[11px] text-gray-400">max tokens
+                  <input className={inputCls} type="number" value={draft.udfs[key].max_tokens} onChange={(e) => setUdf(key, { max_tokens: e.target.value })} />
+                </label>
+              </div>
+              <details>
+                <summary className="text-[11px] text-gray-500 cursor-pointer select-none hover:text-gray-400">
+                  Prompt template <span className="text-gray-600">· variables: {placeholders.join(' ')}</span>
+                </summary>
+                <textarea
+                  className="mt-1 w-full h-28 rounded-sm bg-gray-900 text-gray-100 font-mono text-xs p-3 focus:outline-none focus:ring-1 focus:ring-[#f256a3]"
+                  value={draft.udfs[key].prompt}
+                  onChange={(e) => setUdf(key, { prompt: e.target.value })}
+                  placeholder="(empty = built-in default)"
+                  spellCheck={false}
+                />
+                <p className="text-[11px] text-gray-500">
+                  {json ? 'Keep the strict-JSON instruction — the reply is parsed. ' : ''}Clear the field to reset to the built-in default.
+                </p>
+              </details>
             </div>
           ))}
         </div>
