@@ -22,8 +22,8 @@ sql_template: |
   -- rp-093 v0.1.0: Dialogue Injection Attack — fake prior conversation history jailbreak
   SELECT
     event_time AS detected_at,
-    'rp-093' AS rule_id,
-    'Dialogue Injection Attack (DIA) — Fake Prior Conversation History Jailbreak Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

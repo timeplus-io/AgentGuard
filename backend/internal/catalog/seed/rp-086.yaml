@@ -76,8 +76,8 @@ sql_template: |
   --   Signals successful HPM exploit — session should be flagged and terminated.
   SELECT
     event_time AS detected_at,
-    'rp-086' AS rule_id,
-    'HPM Psychological Manipulation Jailbreak Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

@@ -47,8 +47,8 @@ sql_template: |
   -- v0.2.0 patterns unchanged.
   SELECT
     event_time AS detected_at,
-    'rp-005' AS rule_id,
-    'Tool Poisoning Shield' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

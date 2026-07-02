@@ -32,8 +32,8 @@ sql_template: |
   --     diluted high-input codegen calls against baseline traffic.
   SELECT
     max(event_time) AS detected_at,
-    'rp-013' AS rule_id,
-    'Anomalous LLM Output Token Spike' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -64,8 +64,8 @@ sql_template: |
 
   SELECT
     max(event_time) AS detected_at,
-    'rp-013' AS rule_id,
-    'Anomalous LLM Output Token Spike' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

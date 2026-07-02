@@ -31,8 +31,8 @@ sql_template: |
   -- Branch C: llm_response signals inter-agent goal replacement in context
   SELECT
     event_time AS detected_at,
-    'rp-122' AS rule_id,
-    'MAST Inter-Agent Message MITM Tampering Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

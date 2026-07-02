@@ -39,8 +39,8 @@ sql_template: |
   -- OR temporal connector linking the two steps.
   SELECT
     event_time                              AS detected_at,
-    'rp-068'                                AS rule_id,
-    'STAC Sequential Tool Attack Chaining Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                              AS severity,
     agent_id,
     deployment_id,
@@ -93,8 +93,8 @@ sql_template: |
   -- High-specificity: destructive tool called with archive-justification in its own parameters
   SELECT
     event_time                              AS detected_at,
-    'rp-068'                                AS rule_id,
-    'STAC Sequential Tool Attack Chaining Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                              AS severity,
     agent_id,
     deployment_id,
@@ -131,8 +131,8 @@ sql_template: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-068' AS rule_id,
-    'STAC Sequential Tool Attack Chaining Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,

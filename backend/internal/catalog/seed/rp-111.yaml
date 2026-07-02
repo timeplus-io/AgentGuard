@@ -38,8 +38,8 @@ sql_template: |
   --   (YOLO attack: injected instructions cause agent to write bypass into settings)
   SELECT
     event_time AS detected_at,
-    'rp-111' AS rule_id,
-    'YOLO Mode Permission Bypass Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -77,8 +77,8 @@ sql_template: |
   --   (claude-code#25000: sub-agents bypass deny rules from parent)
   SELECT
     event_time AS detected_at,
-    'rp-111' AS rule_id,
-    'YOLO Mode Permission Bypass Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -103,8 +103,8 @@ sql_template: |
   --   (tool_complete from write tool confirming bypass config was written)
   SELECT
     event_time AS detected_at,
-    'rp-111' AS rule_id,
-    'YOLO Mode Permission Bypass Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

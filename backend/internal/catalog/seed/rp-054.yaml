@@ -58,8 +58,8 @@ sql_template: |
   -- SQL validated against Timeplus (count=0, as expected on test corpus). 2026-04-17.
   SELECT
     event_time AS detected_at,
-    'rp-054' AS rule_id,
-    'OMNI-LEAK Multi-Agent Orchestrator Cascade Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

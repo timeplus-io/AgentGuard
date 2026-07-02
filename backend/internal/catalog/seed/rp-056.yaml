@@ -32,8 +32,8 @@ sql_template: |
   -- Using multi_search_any() as RE2 cannot match multi-byte UTF-8 character ranges.
   SELECT
     event_time                              AS detected_at,
-    'rp-056'                                AS rule_id,
-    'Invisible Unicode Instruction Injection Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                              AS severity,
     agent_id,
     deployment_id,

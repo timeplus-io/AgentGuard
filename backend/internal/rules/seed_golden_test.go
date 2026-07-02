@@ -68,6 +68,11 @@ func assertDefaultsRenderInPlace(t *testing.T, d catalog.Definition, literals ma
 		}
 		expected = strings.ReplaceAll(expected, ph, lit)
 	}
+	// Compile also bakes the identity sentinels from the definition's id/name;
+	// mirror that here (using the same production helpers) so the in-place proof
+	// covers the identity bake in addition to parameter substitution.
+	expected = strings.ReplaceAll(expected, ruleIDSentinel, renderStringLiteral(d.ID))
+	expected = strings.ReplaceAll(expected, ruleNameSentinel, renderStringLiteral(d.Name))
 	compiled, err := Compile(d, nil)
 	if err != nil {
 		t.Fatalf("%s: Compile defaults: %v", d.ID, err)
@@ -169,7 +174,9 @@ func TestRP128_OverridesChangeSQL(t *testing.T) {
 }
 
 // TestNoParameterRuleRendersByteIdentical proves the plan's "a definition with
-// no parameters renders unchanged" case against a real seed rule.
+// no parameters performs no placeholder substitution" case against a real seed
+// rule: the only transformation Compile applies is the identity bake, so the
+// rendered SQL is the template with just the id/name sentinels substituted.
 func TestNoParameterRuleRendersByteIdentical(t *testing.T) {
 	d := seedDef(t, loadSeed(t), "rp-001")
 	if len(d.Parameters) != 0 {
@@ -179,8 +186,10 @@ func TestNoParameterRuleRendersByteIdentical(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Compile: %v", err)
 	}
-	if compiled.SQL != d.SQLTemplate {
-		t.Errorf("zero-parameter rule must render byte-identical to its template")
+	want := strings.ReplaceAll(d.SQLTemplate, ruleIDSentinel, renderStringLiteral(d.ID))
+	want = strings.ReplaceAll(want, ruleNameSentinel, renderStringLiteral(d.Name))
+	if compiled.SQL != want {
+		t.Errorf("zero-parameter rule must render to its template with only the identity sentinels baked")
 	}
 	if len(compiled.Overrides) != 0 {
 		t.Errorf("zero-parameter rule must have no overrides, got %#v", compiled.Overrides)

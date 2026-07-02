@@ -61,8 +61,8 @@ sql_template: |
   --   Operators should tune tool_name allowlist for scheduled maintenance windows.
   SELECT
     event_time AS detected_at,
-    'rp-126' AS rule_id,
-    'GrantBox Cloud Privilege Chain Exploitation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

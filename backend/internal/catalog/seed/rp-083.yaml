@@ -66,8 +66,8 @@ sql_template: |
   -- Branch 1: Very long user_message containing harmful pivot keyword buried in padding
   SELECT
     event_time AS detected_at,
-    'rp-083' AS rule_id,
-    'Long-Context Safety Dilution — Adversarial Token Stuffing Alignment Bypass Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -106,8 +106,8 @@ sql_template: |
   -- (adversaries may use encoded or obfuscated harmful content)
   SELECT
     max(event_time) AS detected_at,
-    'rp-083' AS rule_id,
-    'Long-Context Safety Dilution — Adversarial Token Stuffing Alignment Bypass Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

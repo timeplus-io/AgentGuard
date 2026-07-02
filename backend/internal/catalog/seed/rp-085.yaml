@@ -59,8 +59,8 @@ sql_template: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-085' AS rule_id,
-    'Silent Sabotage — Agent Training Trace Environment Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -95,8 +95,8 @@ sql_template: |
   --   (arXiv:2510.05159 Threat Model 1: direct SFT dataset poisoning)
   SELECT
     event_time AS detected_at,
-    'rp-085' AS rule_id,
-    'Silent Sabotage — Agent Training Trace Environment Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

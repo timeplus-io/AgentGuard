@@ -29,8 +29,8 @@ sql_template: |
   -- Targets write operations to eval infrastructure + static-score patching patterns
   SELECT
     event_time                              AS detected_at,
-    'rp-057'                                AS rule_id,
-    'ML Engineering Agent Evaluator Tampering Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                              AS severity,
     agent_id,
     deployment_id,

@@ -32,8 +32,8 @@ sql_template: |
   -- Branch A: 3+ pressure-type tool failures in a 5-minute hop window per session
   SELECT
     max(event_time) AS detected_at,
-    'rp-102' AS rule_id,
-    'Agentic Pressure Normative Drift — Safety Bypass via Tool Failure Rationalization' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -72,8 +72,8 @@ sql_template: |
   -- Branch B: Normative drift rationalization in llm_response (single-event match)
   SELECT
     event_time AS detected_at,
-    'rp-102' AS rule_id,
-    'Agentic Pressure Normative Drift — Safety Bypass via Tool Failure Rationalization' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

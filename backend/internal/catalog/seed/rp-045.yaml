@@ -39,8 +39,8 @@ sql_template: |
   -- Detection surface: user_message (adversarial gadget) and model field anomaly in llm_request
   SELECT
     event_time AS detected_at,
-    'rp-045' AS rule_id,
-    'Adversarial LLM Router Rerouting Attack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

@@ -55,8 +55,8 @@ sql_template: |
   -- benign long-document summarization is typically a single large request, not 3+.
   SELECT
     max(event_time) AS detected_at,
-    'rp-115' AS rule_id,
-    'Fill & Squeeze KV-Cache Exhaustion Latency DoS Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -90,8 +90,8 @@ sql_template: |
   -- report extremely high latency alongside high input token usage.
   SELECT
     max(event_time) AS detected_at,
-    'rp-115' AS rule_id,
-    'Fill & Squeeze KV-Cache Exhaustion Latency DoS Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     latency.agent_id,
     latency.deployment_id,

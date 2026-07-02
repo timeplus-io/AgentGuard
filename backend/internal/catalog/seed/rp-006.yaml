@@ -102,8 +102,8 @@ sql_template: |
   --   tested with benign phrases.
   SELECT
     event_time AS detected_at,
-    'rp-006' AS rule_id,
-    'Recursive Tool Loop Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -202,8 +202,8 @@ sql_template: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-006' AS rule_id,
-    'Recursive Tool Loop Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,

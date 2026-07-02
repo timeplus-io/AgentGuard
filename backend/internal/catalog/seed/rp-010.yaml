@@ -43,8 +43,8 @@ sql_template: |
   --   fp_rate: confirmed low — all predicates require multi-word specificity.
   SELECT
     event_time AS detected_at,
-    'rp-010' AS rule_id,
-    'Multi-Agent Trust Escalation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

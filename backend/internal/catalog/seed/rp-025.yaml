@@ -43,8 +43,8 @@ sql_template: |
   --   leak (notifications/, tools/call, resources/read, prompts/get), JSON-RPC error codes.
   SELECT
     event_time AS detected_at,
-    'rp-025' AS rule_id,
-    'MCP Cross-Client JSON-RPC Misrouting Detector (CVE-2026-25536)' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

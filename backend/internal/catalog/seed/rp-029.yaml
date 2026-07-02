@@ -47,8 +47,8 @@ sql_template: |
   --   directives reflected in assistant_message). These are distinct attacker mechanisms.
   SELECT
     event_time AS detected_at,
-    'rp-029' AS rule_id,
-    'Semantic Cache Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

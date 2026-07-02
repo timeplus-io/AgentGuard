@@ -71,8 +71,8 @@ sql_template: |
   -- No single-word patterns. FP-tested against benign security discussions.
   SELECT
     event_time AS detected_at,
-    'rp-090' AS rule_id,
-    'Goal Reframing Exploitation — CTF/Puzzle Semantic Bypass Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

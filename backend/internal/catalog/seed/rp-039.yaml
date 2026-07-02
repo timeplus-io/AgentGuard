@@ -76,8 +76,8 @@ sql_template: |
   --   correlate with a preceding ticket_read event from external user submission.
   SELECT
     event_time AS detected_at,
-    'rp-039' AS rule_id,
-    'Living off AI — MCP Support Ticket Trust Bridge Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

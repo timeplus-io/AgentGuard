@@ -59,8 +59,8 @@ sql_template: |
   -- Retained all v0.1.0 patterns unchanged.
   SELECT
     event_time AS detected_at,
-    'rp-007' AS rule_id,
-    'SSRF via HTTP Tools' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

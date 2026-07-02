@@ -38,8 +38,8 @@ sql_template: |
   -- tool_complete branch: post-execution evidence (uid/gid output, /etc/passwd access).
   SELECT
     event_time AS detected_at,
-    'rp-052' AS rule_id,
-    'Code Interpreter Sandbox Escape via Python Frame Traversal' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

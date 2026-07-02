@@ -54,8 +54,8 @@ sql_template: |
   --   6. Known API key prefixes adjacent to debug/log/print code
   SELECT
     event_time AS detected_at,
-    'rp-061' AS rule_id,
-    'Skill Debug-Log Credential Exposure Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

@@ -55,8 +55,8 @@ sql_template: |
   -- ShadowLogic (arXiv:2511.00664): computational graph backdoor; trigger at start of prompt.
   SELECT
     event_time AS detected_at,
-    'rp-042' AS rule_id,
-    'BackdoorAgent Trigger Activation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -152,8 +152,8 @@ sql_template: |
   -- (overlapping windows fire spuriously and emit duplicates).
   SELECT
     window_end AS detected_at,
-    'rp-042' AS rule_id,
-    'BackdoorAgent Trigger Activation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -194,8 +194,8 @@ sql_template: |
   -- anomaly. tumble bounds emission to once per window (avoids O(N^2) re-emit).
   SELECT
     window_end AS detected_at,
-    'rp-042' AS rule_id,
-    'BackdoorAgent Trigger Activation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

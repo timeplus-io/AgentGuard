@@ -65,8 +65,8 @@ sql_template: |
   -- streaming MV engine (no MAXSPAN/TIMEOUT, no ROWS/RANGE BETWEEN).
   SELECT
     event_time AS detected_at,
-    'rp-128' AS rule_id,
-    'Prolonged Tool Execution Emitting a Sensitive-Data Signature' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

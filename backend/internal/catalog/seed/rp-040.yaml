@@ -51,8 +51,8 @@ sql_template: |
   -- Outbound channel: HTTP/email/Slack/webhook/logging/DNS/upload tool invocations
   SELECT
     probe.event_time AS detected_at,
-    'rp-040' AS rule_id,
-    'Causality Laundering: Denial-Feedback Leakage Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     probe.agent_id,
     probe.deployment_id,

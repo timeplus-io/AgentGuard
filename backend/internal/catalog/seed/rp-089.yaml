@@ -77,8 +77,8 @@ sql_template: |
   -- FP test: "storage.all" alone → no match (combined with shadow capability context)
   SELECT
     event_time AS detected_at,
-    'rp-089' AS rule_id,
-    'Shadow Feature & Platform Hook Exploitation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

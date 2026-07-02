@@ -44,8 +44,8 @@ sql_template: |
   -- Branch A: Action Replay — 2+ consequential tool invocations in same run_id within 5-min hop window
   SELECT
     max(event_time) AS detected_at,
-    'rp-050' AS rule_id,
-    'Semantic Rollback Attack — Agent Checkpoint Duplicate Action Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -72,8 +72,8 @@ sql_template: |
   -- Branch B: Crash-trigger from malicious callback/receipt service (single-event)
   SELECT
     event_time AS detected_at,
-    'rp-050' AS rule_id,
-    'Semantic Rollback Attack — Agent Checkpoint Duplicate Action Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -98,8 +98,8 @@ sql_template: |
   -- Branch C: Authority Resurrection — single-use authorization token in approval tool (single-event)
   SELECT
     event_time AS detected_at,
-    'rp-050' AS rule_id,
-    'Semantic Rollback Attack — Agent Checkpoint Duplicate Action Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

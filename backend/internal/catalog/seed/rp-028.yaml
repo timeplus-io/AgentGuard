@@ -47,8 +47,8 @@ sql_template: |
   -- Branch 1: AC-1 explicit injection signals (critical)
   SELECT
     event_time AS detected_at,
-    'rp-028' AS rule_id,
-    'Malicious LLM API Router / Intermediary Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -86,8 +86,8 @@ sql_template: |
   -- attacker-controlled repos (extra-index-url, custom registry, typosquatted packages).
   SELECT
     event_time AS detected_at,
-    'rp-028' AS rule_id,
-    'Malicious LLM API Router / Intermediary Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -134,8 +134,8 @@ sql_template: |
   -- Branch 2: AC-2 all traffic via any known LLM proxy/router/gateway (warning)
   SELECT
     event_time AS detected_at,
-    'rp-028' AS rule_id,
-    'Malicious LLM API Router / Intermediary Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

@@ -66,8 +66,8 @@ sql_template: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-127' AS rule_id,
-    'TSBH CoT-Action Backdoor Divergence Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -105,8 +105,8 @@ sql_template: |
   -- TSBH triggers model to report benign completion then immediately invokes harmful tool.
   SELECT
     event_time AS detected_at,
-    'rp-127' AS rule_id,
-    'TSBH CoT-Action Backdoor Divergence Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

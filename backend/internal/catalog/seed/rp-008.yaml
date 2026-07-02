@@ -57,8 +57,8 @@ sql_template: |
   --   fp_rate: low maintained — all new patterns are CI/CD-specific env var names rarely in benign text
   SELECT
     event_time AS detected_at,
-    'rp-008' AS rule_id,
-    'Credential Harvesting via Agent Context' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

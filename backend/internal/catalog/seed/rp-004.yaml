@@ -43,8 +43,8 @@ sql_template: |
   -- fp_rate improved from high to medium by adding source-context conditions.
   SELECT
     event_time           AS detected_at,
-    'rp-004'             AS rule_id,
-    'Supply Chain Watch' AS rule_name,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning'            AS severity,
     agent_id,
     deployment_id,

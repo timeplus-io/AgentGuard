@@ -48,8 +48,8 @@ sql_template: |
   --   SQL validated against Timeplus (count=3 on test corpus).
   SELECT
     event_time AS detected_at,
-    'rp-026' AS rule_id,
-    'Embedding Vector Exfiltration via RAG Tool Output' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

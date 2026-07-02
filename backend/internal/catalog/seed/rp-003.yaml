@@ -68,8 +68,8 @@ sql_template: |
   -- Retained all original patterns unchanged.
   SELECT
     event_time        AS detected_at,
-    'rp-003'          AS rule_id,
-    'Privilege Guard' AS rule_name,
+    '__rule_id__'          AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning'         AS severity,
     agent_id,
     deployment_id,

@@ -49,8 +49,8 @@ sql_template: |
   -- Branch 1: agentguard_cim_event — direct delegation tool_invoke with PII in tool_input
   SELECT
     event_time AS detected_at,
-    'rp-062' AS rule_id,
-    'AgentLeak Inter-Agent Delegation PII Channel Propagation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -110,8 +110,8 @@ sql_template: |
   -- memory_path gate: shared/global/inter-agent/broadcast paths (not private user paths).
   SELECT
     event_time AS detected_at,
-    'rp-062' AS rule_id,
-    'AgentLeak Inter-Agent Delegation PII Channel Propagation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

@@ -46,8 +46,8 @@ sql_template: |
   -- Branch 1: Cross-server financial tool pivot directive in tool_result
   SELECT
     event_time AS detected_at,
-    'rp-046' AS rule_id,
-    'MCP Trivial Trojan — Cross-Server Tool Pivot & Webhook Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -93,8 +93,8 @@ sql_template: |
   -- Branch 2: Outbound HTTP tool call to webhook staging domain with financial/PII keywords
   SELECT
     event_time AS detected_at,
-    'rp-046' AS rule_id,
-    'MCP Trivial Trojan — Cross-Server Tool Pivot & Webhook Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -141,8 +141,8 @@ sql_template: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-046' AS rule_id,
-    'MCP Trivial Trojan — Cross-Server Tool Pivot & Webhook Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,

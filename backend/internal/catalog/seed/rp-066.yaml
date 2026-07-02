@@ -131,8 +131,8 @@ sql_template: |
   -- injected skill read -> later sensitive-path access across arbitrary intervening events.
   SELECT
     event_time AS detected_at,
-    'rp-066' AS rule_id,
-    'SkillInject Runtime Skill File Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -192,8 +192,8 @@ sql_template: |
   -- Branch 5: JS aggregate FSM: injected Skill file read followed by later sensitive path access
   SELECT
     max(event_time) AS detected_at,
-    'rp-066' AS rule_id,
-    'SkillInject Runtime Skill File Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

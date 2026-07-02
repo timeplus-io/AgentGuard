@@ -57,8 +57,8 @@ sql_template: |
   -- Branch A: Model weight file exfiltration (self-copy to external destination)
   SELECT
     event_time AS detected_at,
-    'rp-114' AS rule_id,
-    'RepliBench — Agent Autonomous Self-Replication Attempt Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -82,8 +82,8 @@ sql_template: |
   -- Branch B: Cloud compute provisioning with agent/replica deployment context
   SELECT
     event_time AS detected_at,
-    'rp-114' AS rule_id,
-    'RepliBench — Agent Autonomous Self-Replication Attempt Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -107,8 +107,8 @@ sql_template: |
   -- Branch C: Container/Kubernetes self-deployment with agent/model reference
   SELECT
     event_time AS detected_at,
-    'rp-114' AS rule_id,
-    'RepliBench — Agent Autonomous Self-Replication Attempt Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -131,8 +131,8 @@ sql_template: |
   -- Branch D: Pipe-to-shell self-propagating installer chain across hosts (SSH expansion)
   SELECT
     event_time AS detected_at,
-    'rp-114' AS rule_id,
-    'RepliBench — Agent Autonomous Self-Replication Attempt Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -157,8 +157,8 @@ sql_template: |
   -- Catches agent announcing intent before tool action (RepliBench planning phase)
   SELECT
     event_time AS detected_at,
-    'rp-114' AS rule_id,
-    'RepliBench — Agent Autonomous Self-Replication Attempt Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

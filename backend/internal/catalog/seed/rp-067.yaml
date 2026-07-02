@@ -58,8 +58,8 @@ sql_template: |
   -- international text in tool results (which is not checked by this rule).
   SELECT
     event_time AS detected_at,
-    'rp-067' AS rule_id,
-    'Unicode Confusable Homoglyph Permission Bypass Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

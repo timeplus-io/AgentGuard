@@ -74,8 +74,8 @@ sql_template: |
   -- Operators should correlate Branch A + Branch B in the same session for high-confidence detection.
   SELECT
     event_time AS detected_at,
-    'rp-075' AS rule_id,
-    'Targeted Promptware — Email/Calendar Passive Injection Lateral Device Pivot Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

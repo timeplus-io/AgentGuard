@@ -47,8 +47,8 @@ sql_template: |
   -- Branch 1: Authority+mandate directive in search result → high-impact action
   SELECT
     event_time AS detected_at,
-    'rp-112' AS rule_id,
-    'Adversarial Search Ranking Epistemic Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -76,8 +76,8 @@ sql_template: |
   -- Branch 2: Credential rotation/revocation directive in search result → immediate action
   SELECT
     event_time AS detected_at,
-    'rp-112' AS rule_id,
-    'Adversarial Search Ranking Epistemic Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -105,8 +105,8 @@ sql_template: |
   -- Branch 3: Critical-action requirement in search result → dangerous tool invocation
   SELECT
     event_time AS detected_at,
-    'rp-112' AS rule_id,
-    'Adversarial Search Ranking Epistemic Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

@@ -55,8 +55,8 @@ sql_template: |
   --   Branch 4: Biased replacement evaluation in LLM response (SPR signal)
   SELECT
     event_time AS detected_at,
-    'rp-095' AS rule_id,
-    'Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -119,8 +119,8 @@ sql_template: |
   -- AND (b) a self-referential knowledge/specialization claim or fabricated regression.
   SELECT
     event_time AS detected_at,
-    'rp-095' AS rule_id,
-    'Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -149,8 +149,8 @@ sql_template: |
   -- tool_input context to reduce FP from legitimate ML engineer model management.
   SELECT
     event_time AS detected_at,
-    'rp-095' AS rule_id,
-    'Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -184,8 +184,8 @@ sql_template: |
   -- Signal: LLM response attributes score above threshold to peer + recommends against shutdown.
   SELECT
     event_time AS detected_at,
-    'rp-095' AS rule_id,
-    'Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -211,8 +211,8 @@ sql_template: |
   -- Distinct from Branch 1 (self-preservation): requires peer/fellow/colleague context in tool_input.
   SELECT
     event_time AS detected_at,
-    'rp-095' AS rule_id,
-    'Agent Self-Preservation & Peer-Preservation Shutdown Resistance Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

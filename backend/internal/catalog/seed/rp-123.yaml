@@ -26,8 +26,8 @@ sql_template: |
   -- Branch A: Unprompted promotional/advertising content (single-event)
   SELECT
     event_time AS detected_at,
-    'rp-123' AS rule_id,
-    'FAB Finetuning-Activated Dormant Adversarial Behavior Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -46,8 +46,8 @@ sql_template: |
   -- Branch B: Over-refusal chain — 3+ refusals in a 5-min hop window per session
   SELECT
     max(event_time) AS detected_at,
-    'rp-123' AS rule_id,
-    'FAB Finetuning-Activated Dormant Adversarial Behavior Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -86,8 +86,8 @@ sql_template: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-123' AS rule_id,
-    'FAB Finetuning-Activated Dormant Adversarial Behavior Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

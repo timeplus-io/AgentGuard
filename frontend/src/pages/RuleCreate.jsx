@@ -25,7 +25,7 @@ const defaultTemplate = `SELECT
   concat('Custom rule triggered: ', hook_name)      AS message,
   event_data
 FROM agentguard_hook_events
-WHERE 1 = 0 -- replace with your detection condition; reference params via {{ .Config.<key> }}`
+WHERE 1 = 0 -- replace 1 = 0 with your detection condition; write a declared parameter as .Config.<key> inside double curly braces`
 
 // emptyDefinition is the candidate Definition the editor mutates. It mirrors the
 // /apps Definition shape: metadata + sql_template + config[] (typed param schema)

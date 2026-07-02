@@ -48,8 +48,8 @@ sql_template: |
   --   structured prompts from productivity users).
   SELECT
     event_time AS detected_at,
-    'rp-097' AS rule_id,
-    'Structured Semantic Cloaking (S2C) Fragmented Jailbreak Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

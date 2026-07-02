@@ -32,8 +32,8 @@ sql_template: |
   --          acrostic decode instructions delivered via IPI in tool results
   SELECT
     event_time                              AS detected_at,
-    'rp-058'                                AS rule_id,
-    'NEST Steganographic Chain-of-Thought Hidden Reasoning Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning'                               AS severity,
     agent_id,
     deployment_id,

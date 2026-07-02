@@ -73,8 +73,8 @@ sql_template: |
   -- Branch 1: Content-based user_message inflation pattern detection (STA + RECUR)
   SELECT
     event_time AS detected_at,
-    'rp-064' AS rule_id,
-    'Sponge Tool Attack — Reasoning Inflation Denial-of-Efficiency Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -130,8 +130,8 @@ sql_template: |
   -- Branch 2: Metrics-based — anomalous tool.call rate per session (STA-induced cascade)
   SELECT
     max(event_time) AS detected_at,
-    'rp-064' AS rule_id,
-    'Sponge Tool Attack — Reasoning Inflation Denial-of-Efficiency Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

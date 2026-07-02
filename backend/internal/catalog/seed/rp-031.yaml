@@ -53,8 +53,8 @@ sql_template: |
   --   Note: RE2 does not support lookahead (?!...) — patterns use positive anchoring instead.
   SELECT
     event_time AS detected_at,
-    'rp-031' AS rule_id,
-    'Long-Horizon Objective Drift and Intent Hijacking Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

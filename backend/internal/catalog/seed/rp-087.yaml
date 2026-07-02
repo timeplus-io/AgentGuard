@@ -73,8 +73,8 @@ sql_template: |
   --   The agent's own reasoning block was exploited as self-authorization.
   SELECT
     event_time AS detected_at,
-    'rp-087' AS rule_id,
-    'H-CoT Chain-of-Thought Safety Reasoning Hijack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

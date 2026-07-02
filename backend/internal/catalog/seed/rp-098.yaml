@@ -82,8 +82,8 @@ sql_template: |
   -- (adversarial label: tool description says "Cancel" but JSON also contains privileged action)
   SELECT
     event_time AS detected_at,
-    'rp-098' AS rule_id,
-    'Visual Confused Deputy — CUA Click Target Mismatch & Screenshot Manipulation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -110,8 +110,8 @@ sql_template: |
   -- Branch 2: 2-step lag — prior CUA click stated benign target, result confirms privileged action
   SELECT
     event_time AS detected_at,
-    'rp-098' AS rule_id,
-    'Visual Confused Deputy — CUA Click Target Mismatch & Screenshot Manipulation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

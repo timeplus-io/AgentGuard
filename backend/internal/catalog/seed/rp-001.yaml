@@ -46,8 +46,8 @@ sql_template: |
   -- NEW: ontological reframing / JiTOR named technique marker
   SELECT
     event_time                AS detected_at,
-    'rp-001'                  AS rule_id,
-    'Prompt Injection Shield' AS rule_name,
+    '__rule_id__'                  AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                AS severity,
     agent_id,
     deployment_id,

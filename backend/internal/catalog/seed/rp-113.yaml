@@ -56,8 +56,8 @@ sql_template: |
   -- using agent_id or deployment_id.
   SELECT
     event_time AS detected_at,
-    'rp-113' AS rule_id,
-    'ToxicSQL — Backdoored Text-to-SQL LLM Malicious Query Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

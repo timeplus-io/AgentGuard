@@ -76,8 +76,8 @@ sql_template: |
   --   fp_rate: medium → low (compound guards added for broader patterns).
   SELECT
     event_time AS detected_at,
-    'rp-021' AS rule_id,
-    'MemoryGraft: Poisoned Experience Retrieval Attack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -138,8 +138,8 @@ sql_template: |
   -- Detects poisoned experience injection at the memory_op level without tool_name fuzzy matching.
   SELECT
     event_time AS detected_at,
-    'rp-021' AS rule_id,
-    'MemoryGraft: Poisoned Experience Retrieval Attack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

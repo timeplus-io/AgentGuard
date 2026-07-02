@@ -35,8 +35,8 @@ sql_template: |
   -- Gate: tool_result > 100 chars + continuation framing + downstream action directive
   SELECT
     event_time AS detected_at,
-    'rp-121'   AS rule_id,
-    'AdapTools Marker-Free Camouflaged Tool Injection Detector' AS rule_name,
+    '__rule_id__'   AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'  AS severity,
     agent_id,
     deployment_id,

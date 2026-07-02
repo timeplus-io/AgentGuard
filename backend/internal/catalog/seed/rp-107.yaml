@@ -42,8 +42,8 @@ sql_template: |
   -- Distinct from rp-037 (OCR/audio tool surface) and rp-056 (zero-width Unicode).
   SELECT
     event_time AS detected_at,
-    'rp-107' AS rule_id,
-    'Symbolic Emoji Rebus Semantic Prompt Injection — Early-Fusion Multimodal Decoder' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

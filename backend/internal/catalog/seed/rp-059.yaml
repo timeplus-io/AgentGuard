@@ -54,8 +54,8 @@ sql_template: |
   --   7. iframe with src attribute in LLM output
   SELECT
     event_time AS detected_at,
-    'rp-059' AS rule_id,
-    'LLM Markdown Output XSS and Downstream Rendering Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

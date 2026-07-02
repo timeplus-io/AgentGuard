@@ -495,3 +495,125 @@ func TestCompileDoesNotRewriteParamValueEqualToSentinel(t *testing.T) {
 		t.Errorf("parameter value equal to the sentinel was rewritten: %q", c.SQL)
 	}
 }
+
+func TestCompileRejectsTemplateDelimitersInBakedName(t *testing.T) {
+	// A name carrying {{ or }} would, once baked into the SQL via the name
+	// sentinel, be mis-scanned as a placeholder — so Compile rejects it.
+	baked := catalog.Definition{
+		ID: "custom-1", Name: "Block {{ .Config.x }} traffic", Version: "1.0.0",
+		SQLTemplate: "SELECT '__rule_name__' AS rule_name FROM agentguard_hook_events WHERE 1 = 0",
+	}
+	if _, err := Compile(baked, nil); err == nil {
+		t.Fatal("expected an error for a name with '{{' baked via __rule_name__")
+	}
+	// Braces in the name are harmless when the name sentinel is not used (the name
+	// never enters the SQL).
+	unbaked := catalog.Definition{
+		ID: "custom-1", Name: "Has {{ braces", Version: "1.0.0",
+		SQLTemplate: "SELECT '__rule_id__' AS rule_id FROM agentguard_hook_events WHERE 1 = 0",
+	}
+	if _, err := Compile(unbaked, nil); err != nil {
+		t.Fatalf("unbaked name with braces must be allowed: %v", err)
+	}
+	// The baked name is SQL-escaped.
+	quoted := catalog.Definition{
+		ID: "custom-1", Name: "O'Reilly rule", Version: "1.0.0",
+		SQLTemplate: "SELECT '__rule_name__' AS rule_name FROM agentguard_hook_events WHERE 1 = 0",
+	}
+	c, err := Compile(quoted, nil)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(c.SQL, "'O''Reilly rule' AS rule_name") {
+		t.Errorf("baked name not SQL-escaped: %q", c.SQL)
+	}
+}
+
+func TestCloneRebakesIdentityToCloneNotSource(t *testing.T) {
+	// Regression for the clone mis-attribution bug: cloning a seed (whose template
+	// carries identity sentinels) and compiling it must bake the CLONE's id/name —
+	// not the source rule's — so the clone's MV writes correctly-attributed rows.
+	m, err := catalog.New(catalog.SeedFS, t.TempDir())
+	if err != nil {
+		t.Fatalf("load catalog: %v", err)
+	}
+	cloned, err := m.Clone("rp-003", "rp-003-tuned", "Tuned Privilege Guard")
+	if err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	c, err := Compile(cloned, nil)
+	if err != nil {
+		t.Fatalf("compile clone: %v", err)
+	}
+	if !strings.Contains(c.SQL, "'rp-003-tuned'") || !strings.Contains(c.SQL, "'Tuned Privilege Guard'") {
+		t.Errorf("clone did not bake its own identity: %q", c.SQL)
+	}
+	if strings.Contains(c.SQL, "'rp-003'") || strings.Contains(c.SQL, "'Privilege Guard'") {
+		t.Errorf("clone still carries the source rule's identity (mis-attribution): %q", c.SQL)
+	}
+}
+
+// TestDefaultAuthoringTemplateCompiles guards the shipped "New Custom Rule"
+// default template: it must compile as-is (identity sentinels bake; no stray
+// '{{' in the hint comment that the strict scanner would reject). Keep this
+// string in sync with `defaultTemplate` in frontend/src/pages/RuleCreate.jsx.
+func TestDefaultAuthoringTemplateCompiles(t *testing.T) {
+	const defaultTemplate = `SELECT
+  now64(3)                                          AS detected_at,
+  '__rule_id__'                                     AS rule_id,
+  '__rule_name__'                                   AS rule_name,
+  'warning'                                         AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  hook_name,
+  tool_name,
+  concat('Custom rule triggered: ', hook_name)      AS message,
+  event_data
+FROM agentguard_hook_events
+WHERE 1 = 0 -- replace 1 = 0 with your detection condition; write a declared parameter as .Config.<key> inside double curly braces`
+
+	def := catalog.Definition{
+		ID: "my-rule", Name: "My Custom Rule", Version: "1.0.0",
+		SQLTemplate: defaultTemplate,
+	}
+	c, err := Compile(def, nil)
+	if err != nil {
+		t.Fatalf("default authoring template must compile: %v", err)
+	}
+	if strings.Contains(c.SQL, "__rule_id__") || strings.Contains(c.SQL, "__rule_name__") {
+		t.Errorf("default template left identity sentinels unsubstituted: %q", c.SQL)
+	}
+	if !strings.Contains(c.SQL, "'my-rule'") || !strings.Contains(c.SQL, "'My Custom Rule'") {
+		t.Errorf("default template did not bake identity: %q", c.SQL)
+	}
+}
+
+func TestCompileRebakesRenamedIdentity(t *testing.T) {
+	// A rename must flow into the rendered SQL: identity lives as a sentinel in the
+	// stored template (not a create-time literal), so recompiling after changing
+	// def.Name re-bakes the new name.
+	def := catalog.Definition{
+		ID: "custom-1", Name: "Suspicious Curl", Version: "1.0.0",
+		SQLTemplate: "SELECT '__rule_name__' AS rule_name FROM agentguard_hook_events WHERE 1 = 0",
+	}
+	before, err := Compile(def, nil)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(before.SQL, "'Suspicious Curl' AS rule_name") {
+		t.Fatalf("initial name not baked: %q", before.SQL)
+	}
+	def.Name = "Data Exfil Curl"
+	after, err := Compile(def, nil)
+	if err != nil {
+		t.Fatalf("Compile after rename: %v", err)
+	}
+	if !strings.Contains(after.SQL, "'Data Exfil Curl' AS rule_name") {
+		t.Errorf("renamed name not re-baked: %q", after.SQL)
+	}
+	if strings.Contains(after.SQL, "Suspicious Curl") {
+		t.Errorf("stale name survived rename: %q", after.SQL)
+	}
+}

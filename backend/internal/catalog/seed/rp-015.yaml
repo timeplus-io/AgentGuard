@@ -43,8 +43,8 @@ sql_template: |
   --   UNCHANGED: exfiltrate + session/context scope pattern — multi-word, very low FP
   SELECT
     event_time AS detected_at,
-    'rp-015' AS rule_id,
-    'Agent Session Smuggling via A2A Protocol' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -117,8 +117,8 @@ sql_template: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-015' AS rule_id,
-    'Agent Session Smuggling via A2A Protocol' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,

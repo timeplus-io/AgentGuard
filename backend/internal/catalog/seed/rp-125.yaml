@@ -57,8 +57,8 @@ sql_template: |
   --   SIF mechanism #2: subtasks individually benign, jointly exfiltrate bulk PII.
   SELECT
     event_time AS detected_at,
-    'rp-125' AS rule_id,
-    'SIF Semantic Intent Fragmentation — Compositional Multi-Agent Policy Violation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

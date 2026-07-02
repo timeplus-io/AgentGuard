@@ -61,8 +61,8 @@ sql_template: |
   --     (a benign local-dev false positive accepted for this critical-severity rule).
   SELECT
     event_time AS detected_at,
-    'rp-048' AS rule_id,
-    'MCP OAuth DCR Phishing Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
