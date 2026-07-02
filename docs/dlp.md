@@ -138,21 +138,26 @@ Claude Code, OpenClaw, and Hermes all enrich identically.
 
 `mv_dlp_enrich` calls three UDFs per message. The UDF bodies are **static** — every
 config value (endpoint, model names, timeouts, token budgets, the entity catalog,
-risk keywords, tag map) arrives through `config` string parameters, read live from
+risk keywords, tag map) arrives through a `config` string parameter, read live from
 the `agentguard_dlp_config` mutable stream via streaming `LEFT JOIN`s on literal
-keys (see §5). The network UDFs take **two** config args — the **`shared`** row
-(`base_url`, `api_key`, `timeout`, common to all) and their own per-UDF row
-(`model`, `max_tokens`, …) — and merge them at call time (`shared ⊕ own`, own
-wins). An operator upsert therefore changes ingest behavior on the **next event**,
-with no UDF redeploy and no re-provision. Python UDFs receive batched lists, so
-the API-calling UDFs make **one request per batch**, not per row, and parse
-config once per batch.
+keys (see §5). Rather than pass the raw `shared` row into every network UDF, the MV
+folds the **`shared`** row (`base_url`, `api_key`, `timeout`, model catalog) and a
+UDF's own per-UDF row (`model`, `max_tokens`, …) with the pure UDF
+`dlp_config_resolve(shared, config)` — it merges `shared ⊕ own` (own wins), resolves
+the `model` name against the catalog into a concrete endpoint, and **strips the
+catalog** — so each network UDF receives ONE flat `config` and never sees `shared`
+or any other model (#195). `dlp_config_resolve` runs per row over the JOINed config
+columns, so it stays live: an operator upsert changes ingest behavior on the **next
+event**, with no UDF redeploy and no re-provision. Python UDFs receive batched
+lists, so the API-calling UDFs make **one request per batch**, not per row, and
+parse config once per batch.
 
 | UDF | Signature | Behavior |
 |-----|-----------|----------|
-| `dlp_extract_entities` | `(content, config) -> map(string, array(string))` | Network-free, so no `shared` arg. Regex + dictionary extraction driven by `config.entities[]` (default catalog: phone, email, IP, domain, and secrets — AWS keys, `sk-`/`ghp_` tokens, JWTs, private keys). Each entry has `kind` (`regex`\|`dictionary`), `store` (`raw`\|`masked`), `tag`, optional `flags`. Patterns are compiled once per distinct config blob. Secret/`masked` values are masked before return. |
-| `dlp_embed` | `(content, role, shared, config) -> array(float32)` | Batched `POST {base_url}/embeddings` with `{config.model}` (endpoint from `shared`). `role` gates embedding (tool rows → `[]`). Truncates to `config.max_chars`. On any error or absent `base_url` returns `[]`. |
-| `dlp_risk` | `(content, entity_types, shared, config) -> string` (JSON) | Gated by `config.keywords`: with no entity types and no keyword, returns `{"score":0,"tags":[]}` without a network call. Otherwise a chat-completion to `{config.model}` (endpoint from `shared`); on error (or absent `base_url`) falls back to a heuristic using `config.tag_for`. Returns e.g. `{"score":0.91,"tags":["PII","PHONE"]}`. |
+| `dlp_config_resolve` | `(shared, config) -> string` (JSON) | Pure (no network). Deep-merges `shared ⊕ own` (own wins), resolves `model` against the `shared.models` catalog into concrete `base_url`/`api_key`/`model` (per-entry override → shared fallback → literal passthrough), and removes `models` from the output. The single home for merge + endpoint resolution; every network call site wraps its config in it. |
+| `dlp_extract_entities` | `(content, config) -> map(string, array(string))` | Network-free, so no resolver needed. Regex + dictionary extraction driven by `config.entities[]` (default catalog: phone, email, IP, domain, and secrets — AWS keys, `sk-`/`ghp_` tokens, JWTs, private keys). Each entry has `kind` (`regex`\|`dictionary`), `store` (`raw`\|`masked`), `tag`, optional `flags`. Patterns are compiled once per distinct config blob. Secret/`masked` values are masked before return. |
+| `dlp_embed` | `(content, role, config) -> array(float32)` | `config` is pre-resolved by `dlp_config_resolve`. Batched `POST {base_url}/embeddings` with `{config.model}`. `role` gates embedding (tool rows → `[]`). Truncates to `config.max_chars`. On any error or absent `base_url` returns `[]`. |
+| `dlp_risk` | `(content, entity_types, config) -> string` (JSON) | `config` is pre-resolved. Gated by `config.keywords`: with no entity types and no keyword, returns `{"score":0,"tags":[]}` without a network call. Otherwise a chat-completion to `{config.model}`; on error (or absent `base_url`) falls back to a heuristic using `config.tag_for`. Returns e.g. `{"score":0.91,"tags":["PII","PHONE"]}`. |
 
 **Fail-open invariant:** no UDF may raise. Enrichment degradation produces
 empty/zero columns, never a blocked MV. The MV uses `LEFT JOIN` + `coalesce`, so
@@ -174,14 +179,16 @@ conversation content, so use a scoped key for the model endpoint.
 through SQL. The response is an **NDJSON stream** — one JSON object per stage,
 flushed as it completes, so the UI can render progressively.
 
-Every funnel UDF also takes `shared` + `config` arguments, each supplied as a
+Every funnel UDF takes a single resolved `config` argument:
+`dlp_config_resolve(:shared, :config)`, where `:shared` and `:config` are each a
 coalesced scalar sub-query against `agentguard_dlp_config`
 (`coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='…'), '')`).
 Unlike the ingest MV, a historical query is re-planned on each execution, so the
-sub-query always reads the latest upsert — `coalesce(…, '')` keeps the argument
-non-nullable (a nullable arg makes map/array-returning UDFs fail to type).
+sub-queries always read the latest upsert — `coalesce(…, '')` keeps the arguments
+non-nullable (a nullable arg makes map/array-returning UDFs fail to type). The Go
+helper `dlpResolvedCfg(key)` renders the `dlp_config_resolve(shared, key)` wrapper.
 
-1. **Understand** — `SELECT dlp_understand_query(:question, :shared, :config)` → intent JSON
+1. **Understand** — `SELECT dlp_understand_query(:question, dlp_config_resolve(:shared, :config))` → intent JSON
    (`keywords`, `entity_types`, `risk_tags`, `time_range_days`). On parse
    failure, keywords are derived from the question itself.
    → `{"stage":"intent","intent":{…}}`
@@ -190,7 +197,7 @@ non-nullable (a nullable arg makes map/array-returning UDFs fail to type).
      filter, `ORDER BY risk_score DESC, event_time DESC LIMIT 200`. Recalls
      rows regardless of embedding presence.
    - **Vector** — time filter + `length(embedding) > 0`,
-     `ORDER BY cosine_distance(embedding, dlp_embed(:question,'user',:shared,:config)) LIMIT 100`.
+     `ORDER BY cosine_distance(embedding, dlp_embed(:question,'user',dlp_config_resolve(:shared,:config))) LIMIT 100`.
      Best-effort; failure (e.g. dim drift) degrades to structured-only.
 
    Merged + deduped by `message_id` in Go → candidate set (≤300).
@@ -199,11 +206,11 @@ non-nullable (a nullable arg makes map/array-returning UDFs fail to type).
    > This deviates from the spec's original single hybrid statement:
    > `cosine_distance` errors on empty embeddings, and fail-open rows have
    > `embedding = []`, so the channels are split and merged in Go.
-3. **Rerank** — `SELECT dlp_rerank(:question, content, :shared, :config)` over the candidate
+3. **Rerank** — `SELECT dlp_rerank(:question, content, dlp_config_resolve(:shared, :config))` over the candidate
    batch scores relevance 0–1 with `{risk_model}`; top `top_n` (default 20,
    max 50) kept. On failure, falls back to recall order.
    → `{"stage":"reranked","kept":K}`
-4. **Summarize** — `SELECT dlp_summarize(:question, :evidence_json, :shared, :config)` over the
+4. **Summarize** — `SELECT dlp_summarize(:question, :evidence_json, dlp_config_resolve(:shared, :config))` over the
    top-N → an audit report citing `message_id`s.
    → `{"stage":"answer","report":"…","evidence":[…]}`
 
@@ -211,9 +218,10 @@ Any stage error is terminal: `{"stage":"error","error":"…"}`. If DLP is
 disabled or unprovisioned, the endpoint returns **503** (plain JSON, before
 streaming starts) so the client handles it uniformly.
 
-Query-time UDFs (`dlp_understand_query(question, shared, config)`,
-`dlp_rerank(question, content, shared, config)`, `dlp_summarize(question, evidence, shared, config)`)
-are static and config-driven like the ingest UDFs; their default config rows set
+Query-time UDFs (`dlp_understand_query(question, config)`,
+`dlp_rerank(question, content, config)`, `dlp_summarize(question, evidence, config)`)
+are static and config-driven like the ingest UDFs, each taking one resolved
+`config` (via `dlp_config_resolve`); their default config rows set
 `dlp_summarize` to `{summary_model}` (frontier) and the other two to
 `{risk_model}` (small).
 
@@ -257,7 +265,9 @@ CREATE MUTABLE STREAM agentguard_dlp_config (
 ```
 
 Keys and what each holds (a network UDF's effective config is `shared ⊕ its own
-row`, its own row winning):
+row`, its own row winning — folded and endpoint-resolved by `dlp_config_resolve`
+at each call site, so the UDF itself receives only the flat result, never
+`shared`):
 
 | Key | Holds |
 |-----|-------|

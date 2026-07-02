@@ -15,15 +15,15 @@ func TestDLPQueryUDFSignatures(t *testing.T) {
 		want []string
 	}{
 		{"understand", ddlDLPUnderstandUDF, []string{
-			"CREATE OR REPLACE FUNCTION dlp_understand_query(question string, shared string, config string)",
+			"CREATE OR REPLACE FUNCTION dlp_understand_query(question string, config string)",
 			"RETURNS string", "LANGUAGE PYTHON", "TASK: QUERY_UNDERSTANDING",
 		}},
 		{"rerank", ddlDLPRerankUDF, []string{
-			"CREATE OR REPLACE FUNCTION dlp_rerank(question string, content string, shared string, config string)",
+			"CREATE OR REPLACE FUNCTION dlp_rerank(question string, content string, config string)",
 			"RETURNS float64", "TASK: RERANK",
 		}},
 		{"summarize", ddlDLPSummarizeUDF, []string{
-			"CREATE OR REPLACE FUNCTION dlp_summarize(question string, evidence string, shared string, config string)",
+			"CREATE OR REPLACE FUNCTION dlp_summarize(question string, evidence string, config string)",
 			"RETURNS string", "TASK: AUDIT_SUMMARY",
 		}},
 	}
@@ -37,8 +37,9 @@ func TestDLPQueryUDFSignatures(t *testing.T) {
 	}
 }
 
-// Each network funnel UDF must parse model/endpoint/timeout/tokens from config
-// and keep the _msg_content fallback helper.
+// Each network funnel UDF reads its endpoint from the single pre-resolved config
+// (no shared param, no in-body merge/catalog walk) and keeps the _msg_content
+// fallback helper.
 func TestDLPQueryUDFsParseConfig(t *testing.T) {
 	for name, ddl := range map[string]string{
 		"understand": ddlDLPUnderstandUDF,
@@ -46,13 +47,16 @@ func TestDLPQueryUDFsParseConfig(t *testing.T) {
 		"summarize":  ddlDLPSummarizeUDF,
 	} {
 		for _, want := range []string{
-			"_merged(shareds, configs)", "cfg.get('base_url')", "cfg.get('model')",
+			"_cfg(configs)", "cfg.get('base_url')", "cfg.get('model')",
 			"cfg.get('timeout')", "_msg_content", "timeout=timeout",
-			"base, api_key, model = _endpoint(cfg)", // per-model endpoint resolution
-			"entry.get('base_url')",                 // catalog entry can override base_url
 		} {
 			if !strings.Contains(ddl, want) {
 				t.Errorf("%s: missing %q", name, want)
+			}
+		}
+		for _, unwanted := range []string{"_merged(", "_endpoint(", "entry.get("} {
+			if strings.Contains(ddl, unwanted) {
+				t.Errorf("%s: should no longer contain %q (moved to dlp_config_resolve)", name, unwanted)
 			}
 		}
 	}

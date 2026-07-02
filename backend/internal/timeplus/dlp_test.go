@@ -37,7 +37,21 @@ func assertCleanDDL(t *testing.T, name, ddl string) {
 // allDLPUDFs lists every UDF body constant for shared invariants.
 func allDLPUDFs() map[string]string {
 	return map[string]string{
+		"resolve":    ddlDLPConfigResolveUDF,
 		"entities":   ddlDLPEntitiesUDF,
+		"embed":      ddlDLPEmbedUDF,
+		"risk":       ddlDLPRiskUDF,
+		"understand": ddlDLPUnderstandUDF,
+		"rerank":     ddlDLPRerankUDF,
+		"summarize":  ddlDLPSummarizeUDF,
+	}
+}
+
+// networkDLPUDFs are the UDFs that call the model endpoint. Each now takes a
+// SINGLE resolved `config` param (dlp_config_resolve folds shared⊕own before the
+// call) — no `shared` param, no in-body merge/catalog walk.
+func networkDLPUDFs() map[string]string {
+	return map[string]string{
 		"embed":      ddlDLPEmbedUDF,
 		"risk":       ddlDLPRiskUDF,
 		"understand": ddlDLPUnderstandUDF,
@@ -55,15 +69,43 @@ func TestDLPUDFsAreStaticAndKeyless(t *testing.T) {
 		if strings.Contains(ddl, "API_KEY =") || strings.Contains(ddl, "BASE_URL =") {
 			t.Errorf("%s: UDF body bakes endpoint/key; must read from config param", name)
 		}
-		if name == "entities" {
-			continue // network-free; takes only (content, config), no shared/merge
+	}
+	// Network UDFs take one resolved config param and never see `shared` or the
+	// model catalog — the merge/resolution lives only in dlp_config_resolve.
+	for name, ddl := range networkDLPUDFs() {
+		if strings.Contains(ddl, "shared string, config string") {
+			t.Errorf("%s: network UDF must not take a `shared` param; config is pre-resolved", name)
 		}
-		if !strings.Contains(ddl, "shared string, config string") {
-			t.Errorf("%s: UDF signature missing trailing 'shared string, config string' params", name)
+		if strings.Contains(ddl, "_merged(") || strings.Contains(ddl, "_endpoint(") {
+			t.Errorf("%s: merge/endpoint resolution must move to dlp_config_resolve", name)
 		}
-		if !strings.Contains(ddl, "_merged(shareds, configs)") {
-			t.Errorf("%s: UDF missing shared⊕config merge", name)
+		if !strings.Contains(ddl, "_cfg(configs)") {
+			t.Errorf("%s: network UDF should read its single config via _cfg(configs)", name)
 		}
+	}
+}
+
+// dlp_config_resolve is the ONE place shared⊕own merge + model-catalog resolution
+// lives. It must merge, resolve the model reference (incl. per-entry endpoint
+// overrides), and strip the `models` catalog so the resolved config carries only
+// what a single UDF runs with.
+func TestDLPConfigResolveUDF(t *testing.T) {
+	ddl := ddlDLPConfigResolveUDF
+	assertCleanDDL(t, "resolve", ddl)
+	for _, want := range []string{
+		"CREATE OR REPLACE FUNCTION dlp_config_resolve(shared string, config string)",
+		"RETURNS string", "LANGUAGE PYTHON",
+		"cfg.update(_parse(config_s))", // shared ⊕ own, own wins
+		"entry.get('base_url')",        // per-model endpoint override honored
+		"cfg.pop('models', None)",      // catalog stripped from output
+	} {
+		if !strings.Contains(ddl, want) {
+			t.Errorf("resolve UDF missing %q", want)
+		}
+	}
+	// Pure: it must not make network calls.
+	if strings.Contains(ddl, "import requests") || strings.Contains(ddl, "requests.post") {
+		t.Error("dlp_config_resolve must be pure (no network)")
 	}
 }
 
@@ -179,7 +221,7 @@ func TestDLPEntitiesUDFSignature(t *testing.T) {
 
 func TestDLPEmbedUDFSignature(t *testing.T) {
 	for _, want := range []string{
-		"CREATE OR REPLACE FUNCTION dlp_embed(content string, role string, shared string, config string)",
+		"CREATE OR REPLACE FUNCTION dlp_embed(content string, role string, config string)",
 		"RETURNS array(float32)", "LANGUAGE PYTHON", "/embeddings",
 	} {
 		if !strings.Contains(ddlDLPEmbedUDF, want) {
@@ -190,7 +232,7 @@ func TestDLPEmbedUDFSignature(t *testing.T) {
 
 func TestDLPRiskUDFSignature(t *testing.T) {
 	for _, want := range []string{
-		"CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string), shared string, config string)",
+		"CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string), config string)",
 		"RETURNS string", "/chat/completions",
 	} {
 		if !strings.Contains(ddlDLPRiskUDF, want) {
@@ -219,8 +261,8 @@ func TestDLPMVReferencesConfigJoins(t *testing.T) {
 		"CREATE MATERIALIZED VIEW IF NOT EXISTS mv_dlp_enrich",
 		"INTO agentguard_dlp_enriched",
 		"dlp_extract_entities(content, cfg_entities)",
-		"dlp_risk(content, map_keys(entities), cfg_shared, cfg_risk)",
-		"dlp_embed(content, role, cfg_shared, cfg_embed)",
+		"dlp_risk(content, map_keys(entities), dlp_config_resolve(cfg_shared, cfg_risk))",
+		"dlp_embed(content, role, dlp_config_resolve(cfg_shared, cfg_embed))",
 		"LEFT JOIN agentguard_dlp_config AS cs ON base.k_shared = cs.key",
 		"LEFT JOIN agentguard_dlp_config AS ce ON base.k_ent = ce.key",
 		"LEFT JOIN agentguard_dlp_config AS cr ON base.k_risk = cr.key",
