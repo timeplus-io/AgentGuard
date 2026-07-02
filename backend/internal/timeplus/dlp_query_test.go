@@ -38,8 +38,9 @@ func TestDLPQueryUDFSignatures(t *testing.T) {
 }
 
 // Each network funnel UDF reads its endpoint from the single pre-resolved config
-// (no shared param, no in-body merge/catalog walk) and keeps the _msg_content
-// fallback helper.
+// (no shared param, no in-body merge/catalog walk), keeps the _msg_content
+// fallback helper, and renders its prompt from the tunable config template
+// (#197: DEFAULT_PROMPT fallback + single-pass re.sub, no inline construction).
 func TestDLPQueryUDFsParseConfig(t *testing.T) {
 	for name, ddl := range map[string]string{
 		"understand": ddlDLPUnderstandUDF,
@@ -49,6 +50,7 @@ func TestDLPQueryUDFsParseConfig(t *testing.T) {
 		for _, want := range []string{
 			"_cfg(configs)", "cfg.get('base_url')", "cfg.get('model')",
 			"cfg.get('timeout')", "_msg_content", "timeout=timeout",
+			"cfg.get('prompt') or DEFAULT_PROMPT", "re.sub(r'\\{(",
 		} {
 			if !strings.Contains(ddl, want) {
 				t.Errorf("%s: missing %q", name, want)
@@ -58,6 +60,9 @@ func TestDLPQueryUDFsParseConfig(t *testing.T) {
 			if strings.Contains(ddl, unwanted) {
 				t.Errorf("%s: should no longer contain %q (moved to dlp_config_resolve)", name, unwanted)
 			}
+		}
+		if strings.Contains(ddl, "prompt = ('") {
+			t.Errorf("%s: still builds its prompt inline; must render the config template", name)
 		}
 	}
 }

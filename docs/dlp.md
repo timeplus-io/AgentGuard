@@ -274,9 +274,9 @@ at each call site, so the UDF itself receives only the flat result, never
 | `shared` | `base_url`, `api_key`, `timeout`, and **`models`** — common to every network UDF; set the endpoint, rotate the key, or define models here **once** |
 | `dlp_extract_entities` | `entities` catalog + `max_per_type` (network-free; no `shared`) |
 | `dlp_embed` | `model` (catalog name), `max_chars` |
-| `dlp_risk` | `model` (name), `max_tokens`, `keywords`, `tag_for` |
-| `dlp_understand_query` / `dlp_rerank` | `model` (name), `max_tokens` |
-| `dlp_summarize` | `model` (name), `max_tokens` |
+| `dlp_risk` | `model` (name), `max_tokens`, `keywords`, `tag_for`, `prompt` |
+| `dlp_understand_query` / `dlp_rerank` | `model` (name), `max_tokens`, `prompt` |
+| `dlp_summarize` | `model` (name), `max_tokens`, `prompt` |
 
 **Named model catalog with per-model endpoints.** `shared.models` maps a name → an
 **endpoint object** `{"model": <id> [, "base_url": …, "api_key": …]}`. Each UDF's
@@ -311,11 +311,37 @@ the shared endpoint (backward compatible). Per-model `api_key`s are redacted by
 `GET /api/dlp/config` and preserved on `PUT` just like the top-level one. (Only
 `timeout` remains shared, not per-model.)
 
+**Tunable prompts (#197).** Each LLM UDF's `prompt` is the **full prompt template**,
+seeded with the built-in default and editable at runtime. The UDF substitutes its
+template variables in a single pass (`re.sub`), so substituted content — which may
+itself contain a literal `{placeholder}` — is never re-scanned. Values are
+truncated to the UDF's limits *before* substitution. An empty/absent `prompt`
+falls back to the built-in default, so clearing the field resets it.
+
+| UDF | Template variables |
+|-----|--------------------|
+| `dlp_risk` | `{entity_types}` (comma-joined detected types), `{message}` (content, ≤4000 chars) |
+| `dlp_understand_query` | `{question}` (≤2000 chars) |
+| `dlp_rerank` | `{count}` (batch size), `{question}` (≤1000 chars), `{items}` (numbered snippets, ≤600 chars each) |
+| `dlp_summarize` | `{question}` (≤1000 chars), `{evidence}` (evidence JSON, ≤12000 chars) |
+
+A variable you omit simply isn't sent. Two parts of the defaults are
+**load-bearing**: the strict-JSON instruction (risk/understand/rerank parse the
+reply — a reply that doesn't parse falls back to the heuristic / recall order),
+and the `TASK: <NAME>` markers plus rerank's `ITEMS: {count}` (the mock model
+server dispatches on them, so the integration test needs the defaults intact;
+real models don't care). `PUT /api/dlp/config/:key` validates only that `prompt`
+is a string — everything else degrades fail-open rather than being blocked.
+`GET /api/dlp/config` always reports the **effective** prompt: a row that
+carries none (seeded before prompts existed, or cleared) is returned with the
+built-in default filled in, so the editor never shows a blank template.
+
 Because the stream is read/write, **the config stream is authoritative at
 runtime**. Edit it from the **Settings page** (`/settings` → Semantic DLP →
 *Runtime configuration*): a structured editor for the shared endpoint, the model
 catalog (with per-model base_url/api_key), and each function's model + token
-budget, plus a JSON pane for the entity catalog. It saves via the API
+budget + prompt template (collapsed under each function, with its variables
+listed), plus a JSON pane for the entity catalog. It saves via the API
 (`GET /api/dlp/config`, `PUT /api/dlp/config/:key` — which validates the JSON,
 structurally checks the entity catalog, and preserves stored `api_key`s when
 omitted). You can also upsert directly via SQL — re-`INSERT` the same `key` — and

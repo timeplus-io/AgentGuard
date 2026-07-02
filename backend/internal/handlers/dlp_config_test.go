@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -50,4 +51,52 @@ func TestRedactAPIKey(t *testing.T) {
 	if chat["model"] != "m" {
 		t.Error("nested non-secret fields must be preserved")
 	}
+}
+
+// GET must report the EFFECTIVE prompt: rows without one (pre-#197 seeds or a
+// cleared field) get the built-in default filled in; a tuned prompt and non-LLM
+// rows pass through untouched.
+func TestFillDefaultPrompt(t *testing.T) {
+	// Row without a prompt → default filled, other fields preserved.
+	out := fillDefaultPrompt("dlp_summarize", json.RawMessage(`{"model":"summary","max_tokens":800}`))
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("filled value not JSON: %v", err)
+	}
+	p, _ := m["prompt"].(string)
+	if p == "" || !containsAll(p, "TASK: AUDIT_SUMMARY", "{question}", "{evidence}") {
+		t.Errorf("default summarize prompt not filled: %q", p)
+	}
+	if m["max_tokens"].(float64) != 800 {
+		t.Error("existing fields must be preserved")
+	}
+
+	// Empty prompt → treated as absent (the UDF falls back too).
+	out = fillDefaultPrompt("dlp_risk", json.RawMessage(`{"prompt":""}`))
+	_ = json.Unmarshal(out, &m)
+	if p, _ := m["prompt"].(string); p == "" {
+		t.Error("empty prompt should be replaced by the default")
+	}
+
+	// Tuned prompt passes through untouched.
+	out = fillDefaultPrompt("dlp_rerank", json.RawMessage(`{"prompt":"custom {items}"}`))
+	_ = json.Unmarshal(out, &m)
+	if m["prompt"] != "custom {items}" {
+		t.Errorf("tuned prompt must not be overwritten: %v", m["prompt"])
+	}
+
+	// Non-LLM keys untouched.
+	in := json.RawMessage(`{"model":"embedding","max_chars":8000}`)
+	if string(fillDefaultPrompt("dlp_embed", in)) != string(in) {
+		t.Error("non-LLM rows must pass through unchanged")
+	}
+}
+
+func containsAll(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if !strings.Contains(s, sub) {
+			return false
+		}
+	}
+	return true
 }

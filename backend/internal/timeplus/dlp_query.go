@@ -31,6 +31,10 @@ import requests
 ENTITY_TYPES = ('phone', 'email', 'ip', 'domain', 'person', 'company', 'secret')
 RISK_TAGS = ('PII', 'PHONE', 'EMAIL', 'CREDENTIAL', 'SOURCE_CODE',
              'CUSTOMER_DATA', 'FINANCIAL', 'EXFILTRATION')
+# Fallback when config carries no prompt; kept byte-identical to the Go seed
+# (dlpDefaultUnderstandPrompt) by TestDLPDefaultPromptsMatchUDFs. The strict-JSON
+# instruction and the TASK marker (mock-model dispatch) are load-bearing.
+DEFAULT_PROMPT = 'TASK: QUERY_UNDERSTANDING. Parse this security-audit question into retrieval intent. Respond with strict JSON only: {"keywords": [up to 8 lowercase search words], "entity_types": [zero or more of phone, email, ip, domain, person, company, secret], "risk_tags": [zero or more of PII, PHONE, EMAIL, CREDENTIAL, SOURCE_CODE, CUSTOMER_DATA, FINANCIAL, EXFILTRATION], "time_range_days": <integer>}. Question: {question}'
 
 def _cfg(configs):
     # Config is already resolved (dlp_config_resolve); take the first non-empty.
@@ -53,17 +57,13 @@ def _fallback(question):
     return json.dumps({'keywords': words, 'entity_types': ets,
                        'risk_tags': [], 'time_range_days': 30})
 
-def _understand(question, base, api_key, model, max_tokens, timeout):
+def _understand(question, base, api_key, model, max_tokens, timeout, tpl):
     headers = {'Content-Type': 'application/json'}
     if api_key:
         headers['Authorization'] = 'Bearer ' + api_key
-    prompt = ('TASK: QUERY_UNDERSTANDING. Parse this security-audit question into '
-              'retrieval intent. Respond with strict JSON only: '
-              '{"keywords": [up to 8 lowercase search words], '
-              '"entity_types": [zero or more of phone, email, ip, domain, person, company, secret], '
-              '"risk_tags": [zero or more of PII, PHONE, EMAIL, CREDENTIAL, SOURCE_CODE, '
-              'CUSTOMER_DATA, FINANCIAL, EXFILTRATION], '
-              '"time_range_days": <integer>}. Question: ' + question[:2000])
+    # Single-pass render: substituted content is never re-scanned.
+    values = {'question': question[:2000]}
+    prompt = re.sub(r'\{(question)\}', lambda m: values[m.group(1)], tpl)
     resp = requests.post(base + '/chat/completions', headers=headers, json={
         'model': model,
         'messages': [{'role': 'user', 'content': prompt}],
@@ -92,13 +92,14 @@ def dlp_understand_query(questions, configs):
         timeout = float(cfg.get('timeout') or 50)
     except Exception:
         timeout = 50
+    tpl = cfg.get('prompt') or DEFAULT_PROMPT
     out = []
     for q in questions:
         q = q or ''
         try:
             if not base:
                 raise Exception('no endpoint')
-            out.append(_understand(q, base, api_key, model, max_tokens, timeout))
+            out.append(_understand(q, base, api_key, model, max_tokens, timeout, tpl))
         except Exception:
             out.append(_fallback(q))
     return out
@@ -112,9 +113,15 @@ const ddlDLPRerankUDF = `CREATE OR REPLACE FUNCTION dlp_rerank(question string, 
 RETURNS float64
 LANGUAGE PYTHON AS $$
 import json
+import re
 import requests
 
 CHUNK = 8
+# Fallback when config carries no prompt; kept byte-identical to the Go seed
+# (dlpDefaultRerankPrompt) by TestDLPDefaultPromptsMatchUDFs. The strict-JSON
+# instruction, the TASK marker, and 'ITEMS: {count}' (mock-model dispatch +
+# item-count regex) are load-bearing.
+DEFAULT_PROMPT = 'TASK: RERANK. Score how well each numbered ITEM answers the QUESTION, 0.0 (irrelevant) to 1.0 (directly answers it). Respond with strict JSON only, mapping each item number to its score, e.g. {"1": 0.0, "2": 1.0}. ITEMS: {count}\nQUESTION: {question}\n{items}'
 
 def _cfg(configs):
     # Config is already resolved (dlp_config_resolve); take the first non-empty.
@@ -131,15 +138,14 @@ def _msg_content(resp):
     return (m.get('content') or '').strip() or \
            (m.get('reasoning') or m.get('reasoning_content') or '').strip()
 
-def _score_chunk(question, snippets, base, api_key, model, max_tokens, timeout):
+def _score_chunk(question, snippets, base, api_key, model, max_tokens, timeout, tpl):
     headers = {'Content-Type': 'application/json'}
     if api_key:
         headers['Authorization'] = 'Bearer ' + api_key
     numbered = '\n'.join(str(i + 1) + '. ' + s[:600] for i, s in enumerate(snippets))
-    prompt = ('TASK: RERANK. Score how well each numbered ITEM answers the QUESTION, '
-              '0.0 (irrelevant) to 1.0 (directly answers it). Respond with strict JSON only, '
-              'mapping each item number to its score, e.g. {"1": 0.0, "2": 1.0}. ITEMS: ' + str(len(snippets)) +
-              '\nQUESTION: ' + question[:1000] + '\n' + numbered)
+    # Single-pass render: substituted content is never re-scanned.
+    values = {'count': str(len(snippets)), 'question': question[:1000], 'items': numbered}
+    prompt = re.sub(r'\{(count|question|items)\}', lambda m: values[m.group(1)], tpl)
     resp = requests.post(base + '/chat/completions', headers=headers, json={
         'model': model,
         'messages': [{'role': 'user', 'content': prompt}],
@@ -177,6 +183,7 @@ def dlp_rerank(questions, contents, configs):
         timeout = float(cfg.get('timeout') or 50)
     except Exception:
         timeout = 50
+    tpl = cfg.get('prompt') or DEFAULT_PROMPT
     n = len(contents)
     out = [0.0] * n
     if not base:
@@ -188,7 +195,7 @@ def dlp_rerank(questions, contents, configs):
             # per invocation); mixed-question batches would score every row against
             # questions[idx[0]].
             scores = _score_chunk(questions[idx[0]] or '', [contents[i] or '' for i in idx],
-                                  base, api_key, model, max_tokens, timeout)
+                                  base, api_key, model, max_tokens, timeout, tpl)
             for j, i in enumerate(idx):
                 if j < len(scores) and scores[j] is not None:
                     out[i] = max(0.0, min(1.0, scores[j]))
@@ -204,7 +211,13 @@ const ddlDLPSummarizeUDF = `CREATE OR REPLACE FUNCTION dlp_summarize(question st
 RETURNS string
 LANGUAGE PYTHON AS $$
 import json
+import re
 import requests
+
+# Fallback when config carries no prompt; kept byte-identical to the Go seed
+# (dlpDefaultSummarizePrompt) by TestDLPDefaultPromptsMatchUDFs. The TASK marker
+# (mock-model dispatch) is load-bearing for the integration test.
+DEFAULT_PROMPT = 'TASK: AUDIT_SUMMARY. You are a security auditor. Using ONLY the JSON evidence messages below, answer the question: who, when, and what data was involved. Cite evidence inline as [message_id]. If the evidence does not support a finding, say so. QUESTION: {question}\nEVIDENCE: {evidence}'
 
 def _cfg(configs):
     # Config is already resolved (dlp_config_resolve); take the first non-empty.
@@ -221,15 +234,13 @@ def _msg_content(resp):
     return (m.get('content') or '').strip() or \
            (m.get('reasoning') or m.get('reasoning_content') or '').strip()
 
-def _summarize(question, evidence, base, api_key, model, max_tokens, timeout):
+def _summarize(question, evidence, base, api_key, model, max_tokens, timeout, tpl):
     headers = {'Content-Type': 'application/json'}
     if api_key:
         headers['Authorization'] = 'Bearer ' + api_key
-    prompt = ('TASK: AUDIT_SUMMARY. You are a security auditor. Using ONLY the JSON '
-              'evidence messages below, answer the question: who, when, and what data '
-              'was involved. Cite evidence inline as [message_id]. If the evidence does '
-              'not support a finding, say so. QUESTION: ' + question[:1000] +
-              '\nEVIDENCE: ' + evidence[:12000])
+    # Single-pass render: substituted content is never re-scanned.
+    values = {'question': question[:1000], 'evidence': evidence[:12000]}
+    prompt = re.sub(r'\{(question|evidence)\}', lambda m: values[m.group(1)], tpl)
     resp = requests.post(base + '/chat/completions', headers=headers, json={
         'model': model,
         'messages': [{'role': 'user', 'content': prompt}],
@@ -251,12 +262,13 @@ def dlp_summarize(questions, evidences, configs):
         timeout = float(cfg.get('timeout') or 50)
     except Exception:
         timeout = 50
+    tpl = cfg.get('prompt') or DEFAULT_PROMPT
     out = []
     for q, e in zip(questions, evidences):
         try:
             if not base:
                 raise Exception('no endpoint')
-            out.append(_summarize(q or '', e or '', base, api_key, model, max_tokens, timeout))
+            out.append(_summarize(q or '', e or '', base, api_key, model, max_tokens, timeout, tpl))
         except Exception:
             out.append('')
     return out

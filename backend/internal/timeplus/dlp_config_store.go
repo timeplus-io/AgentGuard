@@ -94,10 +94,29 @@ func WriteDLPConfig(cfg *config.TimeplusConfig, key, value, updatedBy string) er
 // which Go's RE2 cannot faithfully compile, so a Go compile check would falsely
 // reject valid patterns. A malformed pattern is skipped by the fail-open
 // extractor at runtime (it simply never matches).
+//
+// For the LLM UDF keys a present `prompt` must be a string (#197). Placeholder
+// presence is NOT enforced: a missing placeholder just means that data isn't
+// sent, and parse failures fail open — the load-bearing parts are documented,
+// not blocked.
 func ValidateDLPConfigValue(key, value string) error {
 	var generic any
 	if err := json.Unmarshal([]byte(value), &generic); err != nil {
 		return fmt.Errorf("value is not valid JSON: %w", err)
+	}
+	switch key {
+	case DLPCfgKeyRisk, DLPCfgKeyUnderstand, DLPCfgKeyRerank, DLPCfgKeySummarize:
+		var row struct {
+			Prompt any `json:"prompt"`
+		}
+		if err := json.Unmarshal([]byte(value), &row); err != nil {
+			return fmt.Errorf("%s config: %w", key, err)
+		}
+		if row.Prompt != nil {
+			if _, ok := row.Prompt.(string); !ok {
+				return fmt.Errorf("%s: prompt must be a string", key)
+			}
+		}
 	}
 	if key != DLPCfgKeyEntities {
 		return nil

@@ -187,6 +187,45 @@ func TestDLPConfigRows(t *testing.T) {
 			t.Errorf("entities row missing %q", want)
 		}
 	}
+	// Each LLM UDF row seeds a tunable prompt template carrying its placeholders (#197).
+	for key, phs := range map[string][]string{
+		DLPCfgKeyRisk:       {"{entity_types}", "{message}"},
+		DLPCfgKeyUnderstand: {"{question}"},
+		DLPCfgKeyRerank:     {"{count}", "{question}", "{items}"},
+		DLPCfgKeySummarize:  {"{question}", "{evidence}"},
+	} {
+		if !strings.Contains(rows[key], `"prompt":"`) {
+			t.Errorf("%s row: missing seeded prompt", key)
+		}
+		for _, ph := range phs {
+			if !strings.Contains(rows[key], ph) {
+				t.Errorf("%s row: prompt missing placeholder %s", key, ph)
+			}
+		}
+	}
+	// Non-LLM rows carry no prompt.
+	for _, key := range []string{DLPCfgKeyShared, DLPCfgKeyEntities, DLPCfgKeyEmbed} {
+		if strings.Contains(rows[key], `"prompt"`) {
+			t.Errorf("%s row should not carry a prompt", key)
+		}
+	}
+}
+
+// The Go seed constants must be byte-identical to the DEFAULT_PROMPT fallback
+// inside each UDF body (with real newlines normalized to the Python \n escape),
+// so "row has default prompt" and "row has no prompt" behave the same.
+func TestDLPDefaultPromptsMatchUDFs(t *testing.T) {
+	for name, tc := range map[string]struct{ seed, ddl string }{
+		"risk":       {dlpDefaultRiskPrompt, ddlDLPRiskUDF},
+		"understand": {dlpDefaultUnderstandPrompt, ddlDLPUnderstandUDF},
+		"rerank":     {dlpDefaultRerankPrompt, ddlDLPRerankUDF},
+		"summarize":  {dlpDefaultSummarizePrompt, ddlDLPSummarizeUDF},
+	} {
+		pythonLiteral := "DEFAULT_PROMPT = '" + strings.ReplaceAll(tc.seed, "\n", `\n`) + "'"
+		if !strings.Contains(tc.ddl, pythonLiteral) {
+			t.Errorf("%s: UDF DEFAULT_PROMPT is not byte-identical to the Go seed", name)
+		}
+	}
 }
 
 func TestDLPSummarizeTokenFloorHonorsLargerValue(t *testing.T) {
@@ -234,10 +273,16 @@ func TestDLPRiskUDFSignature(t *testing.T) {
 	for _, want := range []string{
 		"CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string), config string)",
 		"RETURNS string", "/chat/completions",
+		// Tunable prompt (#197): config prompt with fallback, single-pass render.
+		"cfg.get('prompt') or DEFAULT_PROMPT",
+		`re.sub(r'\{(entity_types|message)\}'`,
 	} {
 		if !strings.Contains(ddlDLPRiskUDF, want) {
 			t.Errorf("risk UDF missing %q", want)
 		}
+	}
+	if strings.Contains(ddlDLPRiskUDF, "prompt = ('") {
+		t.Error("risk UDF still builds its prompt inline; must render the config template")
 	}
 }
 

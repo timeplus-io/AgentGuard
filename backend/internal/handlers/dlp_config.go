@@ -57,8 +57,32 @@ func redactAPIKey(value string) (json.RawMessage, bool) {
 	return json.RawMessage(b), had
 }
 
+// fillDefaultPrompt reports the EFFECTIVE prompt for an LLM UDF row: when the
+// stored row carries no (or an empty) prompt the UDF falls back to the built-in
+// default, so the API shows that default instead of a blank field. Rows for
+// non-LLM keys and unparsable values pass through untouched.
+func fillDefaultPrompt(key string, value json.RawMessage) json.RawMessage {
+	def, ok := tp.DLPDefaultPrompts()[key]
+	if !ok {
+		return value
+	}
+	var m map[string]any
+	if err := json.Unmarshal(value, &m); err != nil || m == nil {
+		return value
+	}
+	if s, _ := m["prompt"].(string); s != "" {
+		return value
+	}
+	m["prompt"] = def
+	b, err := json.Marshal(m)
+	if err != nil {
+		return value
+	}
+	return b
+}
+
 // GetDLPConfig handles GET /api/dlp/config — returns the live config rows with
-// api keys redacted.
+// api keys redacted and effective (default-filled) prompts.
 func GetDLPConfig(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rc := auth.RequestCfg(c, cfg)
@@ -72,7 +96,7 @@ func GetDLPConfig(cfg *config.Config) gin.HandlerFunc {
 		for _, r := range rows {
 			redacted, hadKey := redactAPIKey(r.Value)
 			out = append(out, dlpConfigRowView{
-				Key: r.Key, Value: redacted, APIKeySet: hadKey,
+				Key: r.Key, Value: fillDefaultPrompt(r.Key, redacted), APIKeySet: hadKey,
 				UpdatedAt: r.UpdatedAt, UpdatedBy: r.UpdatedBy,
 			})
 		}
