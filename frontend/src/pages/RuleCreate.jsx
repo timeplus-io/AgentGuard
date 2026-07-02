@@ -215,6 +215,16 @@ export default function RuleCreate({ mode = 'create' }) {
             }
           />
 
+          {/* Editing a definition republishes it and, when the rule is installed,
+              drops/recreates its MV (Proton has no in-place ALTER). Self-gated in
+              copy so it stays accurate for create and uninstalled-edit, which
+              redeploy nothing. */}
+          {isEdit && (
+            <p className="text-[11px] text-gray-500">
+              If this rule is installed, publishing redeploys its detection view and in-flight stateful windows reset.
+            </p>
+          )}
+
           {versionUnchanged && (
             <div className="px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-sm text-xs text-amber-300 flex items-center gap-2">
               <span className="material-symbols-outlined text-sm shrink-0">info</span>

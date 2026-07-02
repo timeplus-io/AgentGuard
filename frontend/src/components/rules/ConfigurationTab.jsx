@@ -12,8 +12,9 @@ import { api } from '../../api/client'
 //   schema    – ordered array of parameter definitions
 //   defaults  – { key: normalizedDefault }
 //   effective – { key: effectiveValue } (defaults overlaid with current overrides)
+//   enabled   – whether the rule has a live MV (drives the redeploy notice)
 //   onSaved(updatedInstance) – called after a successful configuration save
-export default function ConfigurationTab({ ruleId, schema, defaults, effective, onSaved }) {
+export default function ConfigurationTab({ ruleId, schema, defaults, effective, enabled, onSaved }) {
   // baseline is the last-saved effective config; edits diff against it.
   const baseline = useMemo(() => buildInitial(schema, effective, defaults), [schema, effective, defaults])
   const [values, setValues] = useState(baseline)
@@ -140,6 +141,15 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
           <span className="material-symbols-outlined text-red-400 text-[18px] shrink-0 mt-0.5">error</span>
           <p className="text-xs text-red-400 break-all">{saveError}</p>
         </div>
+      )}
+
+      {/* A live rule's MV is dropped/recreated on save (Proton has no in-place
+          ALTER), so any in-flight stateful window is lost. Only meaningful when
+          the rule is enabled — a disabled rule has no MV to redeploy. */}
+      {enabled && (
+        <p className="text-[11px] text-gray-500">
+          Saving redeploys the detection view; in-flight stateful windows reset.
+        </p>
       )}
 
       {/* Save bar (sticky-ish): only actionable when there are unsaved, valid changes. */}

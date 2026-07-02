@@ -154,16 +154,20 @@ export default function RuleDetail() {
   }
 
   const handleClone = async () => {
-    if (!cloneNewId.trim() || !cloneNewName.trim()) {
+    const newId = cloneNewId.trim()
+    const newName = cloneNewName.trim()
+    if (!newId || !newName) {
       setCloneError('ID and name are required')
       return
     }
     setCloneLoading(true)
     setCloneError(null)
     try {
-      await api.cloneCatalogRule(id, { id: cloneNewId.trim(), name: cloneNewName.trim() })
+      const created = await api.cloneCatalogRule(id, { id: newId, name: newName })
       setCloneModal(false)
-      navigate(`/rules`)
+      // Clone implies "edit next" — route straight into the new custom
+      // definition's editor rather than back to the rules list.
+      navigate(`/rules/${created?.id || newId}/edit`)
     } catch (e) {
       setCloneError(e?.message || 'Clone failed')
     } finally {
@@ -398,8 +402,9 @@ export default function RuleDetail() {
                 </button>
               )}
 
-              {/* Custom definitions are directly editable; builtin/imported are
-                  immutable seeds, so operators clone to an editable custom copy. */}
+              {/* Local custom definitions (incl. imported, which load as
+                  origin=custom) are editable in place; catalog-managed builtin
+                  seeds are immutable, so operators clone them to a custom copy. */}
               {rule.definition && rule.definition.origin === 'custom' ? (
                 <Link
                   to={`/rules/${id}/edit`}
@@ -563,6 +568,7 @@ export default function RuleDetail() {
                     schema={rule.schema}
                     defaults={rule.defaults}
                     effective={rule.effective}
+                    enabled={inst.enabled}
                     onSaved={() => reload()}
                   />
                 )
