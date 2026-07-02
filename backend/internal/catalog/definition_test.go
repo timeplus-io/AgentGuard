@@ -53,6 +53,22 @@ func TestDefinitionValidate_RequiredFields(t *testing.T) {
 	}
 }
 
+// TestDefinitionValidate_DescriptionOptional is the backend half of the
+// create-form ⇄ validator contract (frontend half:
+// frontend/src/components/rules/ruleDefinitionContract.test.js). The required set
+// is exactly id/name/version/sql_template (TestDefinitionValidate_RequiredFields);
+// description — and the other metadata fields — are OPTIONAL. A #33 Phase B
+// regression made the create form require a non-empty description even though
+// validate() never has; this pins the backend side so the form can be safely
+// derived from this contract instead of hand-mirroring (and over-tightening) it.
+func TestDefinitionValidate_DescriptionOptional(t *testing.T) {
+	d := validDef() // validDef sets no description, severity, category, etc.
+	d.Description = ""
+	if err := d.Validate(); err != nil {
+		t.Fatalf("a definition with an empty description must be valid (backend does not require it): %v", err)
+	}
+}
+
 func TestDefinitionValidate_Parameters(t *testing.T) {
 	param := func(mutate func(*Parameter)) Parameter {
 		p := Parameter{Key: "threshold", Label: "Threshold", Type: "integer", Default: 5}

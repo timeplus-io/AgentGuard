@@ -8,6 +8,7 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import ParamSchemaEditor, { validateKey, stripInternal, makeUid } from '../components/rules/ParamSchemaEditor'
+import { hasRequiredFields } from '../components/rules/ruleDefinitionContract'
 import { api } from '../api/client'
 
 const defaultTemplate = `SELECT
@@ -145,12 +146,11 @@ export default function RuleCreate({ mode = 'create' }) {
 
   // Local schema validity: every param key must be present and well-formed.
   const keyErrors = (def.config || []).some((p) => validateKey(p.key) != null)
+  // Required-field completeness is derived from the shared contract (mirrors the
+  // backend Definition.validate() required set), so the form can never quietly
+  // require a field the backend treats as optional — notably description.
   const canSave =
-    (isEdit || def.id.trim() !== '') &&
-    def.name.trim() !== '' &&
-    def.description.trim() !== '' &&
-    def.sql_template.trim() !== '' &&
-    def.version.trim() !== '' &&
+    hasRequiredFields(def, { isEdit }) &&
     !keyErrors &&
     !versionUnchanged &&
     !saving
@@ -273,7 +273,7 @@ export default function RuleCreate({ mode = 'create' }) {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="rule-description" className={labelCls}>Description *</label>
+                  <label htmlFor="rule-description" className={labelCls}>Description</label>
                   <textarea id="rule-description" value={def.description} onChange={(e) => setField('description', e.target.value)} placeholder="What does this rule detect?" rows={3} className={`${inputCls} resize-none`} />
                 </div>
 
