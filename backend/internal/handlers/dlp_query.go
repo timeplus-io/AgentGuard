@@ -42,6 +42,14 @@ func dlpCfgSubquery(key string) string {
 	return fmt.Sprintf("coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='%s'), '')", key)
 }
 
+// dlpResolvedCfg returns a single, fully-resolved config expression for one UDF:
+// dlp_config_resolve folds the shared endpoint row and the UDF's own row into a
+// flat config (base_url/api_key/model/…) so the UDF never receives the shared
+// model catalog. Both rows are read live via dlpCfgSubquery (re-planned per run).
+func dlpResolvedCfg(key string) string {
+	return fmt.Sprintf("dlp_config_resolve(%s, %s)", dlpCfgSubquery(tp.DLPCfgKeyShared), dlpCfgSubquery(key))
+}
+
 // parseDLPIntent decodes the dlp_understand_query JSON; on failure it derives
 // keywords from the question itself. The window is clamped to [1, 365].
 func parseDLPIntent(raw, question string) models.DLPIntent {
@@ -92,11 +100,11 @@ ORDER BY risk_score DESC, event_time DESC
 LIMIT %d`, dlpRecallCols, where, dlpStructuredLimit)
 
 	vector = fmt.Sprintf(`SELECT %s,
-       cosine_distance(embedding, dlp_embed('%s', 'user', %s, %s)) AS dist
+       cosine_distance(embedding, dlp_embed('%s', 'user', %s)) AS dist
 FROM table(agentguard_dlp_enriched)
 WHERE %s AND length(embedding) > 0
 ORDER BY dist ASC
-LIMIT %d`, dlpRecallCols, escapeSQLStr(question), dlpCfgSubquery(tp.DLPCfgKeyShared), dlpCfgSubquery(tp.DLPCfgKeyEmbed), timeFilter, dlpVectorLimit)
+LIMIT %d`, dlpRecallCols, escapeSQLStr(question), dlpResolvedCfg(tp.DLPCfgKeyEmbed), timeFilter, dlpVectorLimit)
 	return structured, vector
 }
 
@@ -124,9 +132,9 @@ func buildDLPRerankSQL(question string, ids []string) string {
 	for i, id := range ids {
 		quoted[i] = "'" + escapeSQLStr(id) + "'"
 	}
-	return fmt.Sprintf(`SELECT message_id, dlp_rerank('%s', content, %s, %s) AS score
+	return fmt.Sprintf(`SELECT message_id, dlp_rerank('%s', content, %s) AS score
 FROM table(agentguard_dlp_enriched)
-WHERE message_id IN (%s)`, escapeSQLStr(question), dlpCfgSubquery(tp.DLPCfgKeyShared), dlpCfgSubquery(tp.DLPCfgKeyRerank), strings.Join(quoted, ", "))
+WHERE message_id IN (%s)`, escapeSQLStr(question), dlpResolvedCfg(tp.DLPCfgKeyRerank), strings.Join(quoted, ", "))
 }
 
 // rowToDLPEvidence maps a recall row to a cited-evidence record, truncating
@@ -227,7 +235,7 @@ func DLPQuery(cfg *config.Config) gin.HandlerFunc {
 
 		// 1. Understand.
 		intentRows, err := tp.Query(&cfg.Timeplus,
-			fmt.Sprintf(`SELECT dlp_understand_query('%s', %s, %s) AS intent`, escapeSQLStr(question), dlpCfgSubquery(tp.DLPCfgKeyShared), dlpCfgSubquery(tp.DLPCfgKeyUnderstand)))
+			fmt.Sprintf(`SELECT dlp_understand_query('%s', %s) AS intent`, escapeSQLStr(question), dlpResolvedCfg(tp.DLPCfgKeyUnderstand)))
 		if err != nil {
 			fail("understand", err)
 			return
@@ -304,8 +312,8 @@ func DLPQuery(cfg *config.Config) gin.HandlerFunc {
 		evidenceJSON, _ := json.Marshal(evidence)
 		report := ""
 		reportRows, err := tp.Query(&cfg.Timeplus, fmt.Sprintf(
-			`SELECT dlp_summarize('%s', '%s', %s, %s) AS report`,
-			escapeSQLStr(question), escapeSQLStr(string(evidenceJSON)), dlpCfgSubquery(tp.DLPCfgKeyShared), dlpCfgSubquery(tp.DLPCfgKeySummarize)))
+			`SELECT dlp_summarize('%s', '%s', %s) AS report`,
+			escapeSQLStr(question), escapeSQLStr(string(evidenceJSON)), dlpResolvedCfg(tp.DLPCfgKeySummarize)))
 		if err != nil {
 			log.Printf("dlp: query summarize (returning evidence without report): %v", err)
 		} else if len(reportRows) == 1 {

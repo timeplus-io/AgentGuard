@@ -168,7 +168,7 @@ def check(cond, label):
 check(s.get("stream_exists"), "agentguard_dlp_enriched exists")
 check(s.get("mv_exists"), "mv_dlp_enrich exists")
 udfs = s.get("udfs", {})
-check(all(udfs.values()) and len(udfs) == 6, f"all 6 DLP UDFs present ({sum(bool(v) for v in udfs.values())}/6)")
+check(all(udfs.values()) and len(udfs) == 7, f"all 7 DLP UDFs present ({sum(bool(v) for v in udfs.values())}/7)")
 check(s.get("total_rows", 0) > 0, f"enriched rows present (total={s.get('total_rows')})")
 check(s.get("embedded_rows", 0) > 0, f"embeddings generated (embedded={s.get('embedded_rows')})")
 check(s.get("flagged_rows", 0) > 0, f"risk flagged (flagged={s.get('flagged_rows')})")

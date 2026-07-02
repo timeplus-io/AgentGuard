@@ -1,11 +1,13 @@
 package timeplus
 
 // Query-time DLP UDFs. Same conventions as the ingest UDFs in dlp.go: batched
-// lists in/out, fail-open (never raise), and a trailing `config` string (JSON)
-// that carries the endpoint, key, model, timeout and token budget. The bodies
-// are STATIC — config is supplied at call time from agentguard_dlp_config (the
-// funnel passes it via a coalesced scalar sub-query), so there is no API key in
-// the UDF source and no re-provision needed to change models/endpoint.
+// lists in/out, fail-open (never raise), and a single trailing `config` string
+// (JSON) that is ALREADY RESOLVED (flat base_url/api_key/model/timeout/tokens)
+// by dlp_config_resolve at the call site — the UDF never sees the shared model
+// catalog. The bodies are STATIC — config is supplied at call time from
+// agentguard_dlp_config (the funnel wraps the shared + per-UDF rows in
+// dlp_config_resolve), so there is no API key in the UDF source and no
+// re-provision needed to change models/endpoint.
 //
 // The "TASK: <NAME>" prompt prefixes are load-bearing: the mock model server
 // (backend/scripts/dlp_mock_model.py) dispatches on them for keyless tests.
@@ -14,12 +16,12 @@ package timeplus
 // model prompts. Prompt injection is an accepted risk for this internal
 // operator tool — same rationale as the API-key note in dlp.go.
 
-// _dlp_cfg(configs) (defined inline in each UDF) returns the first non-empty
-// parsed config in the batch, or {} on absence/parse failure.
+// _cfg(configs) (defined inline in each UDF) returns the first non-empty parsed
+// config in the batch, or {} on absence/parse failure.
 
 // dlp_understand_query(question, config): parse an audit question into retrieval
 // intent. Falls back to keyword extraction when the endpoint is unset or errors.
-const ddlDLPUnderstandUDF = `CREATE OR REPLACE FUNCTION dlp_understand_query(question string, shared string, config string)
+const ddlDLPUnderstandUDF = `CREATE OR REPLACE FUNCTION dlp_understand_query(question string, config string)
 RETURNS string
 LANGUAGE PYTHON AS $$
 import json
@@ -30,34 +32,15 @@ ENTITY_TYPES = ('phone', 'email', 'ip', 'domain', 'person', 'company', 'secret')
 RISK_TAGS = ('PII', 'PHONE', 'EMAIL', 'CREDENTIAL', 'SOURCE_CODE',
              'CUSTOMER_DATA', 'FINANCIAL', 'EXFILTRATION')
 
-def _merged(shareds, configs):
-    def first(xs):
-        for s in xs:
-            if s:
-                try:
-                    return json.loads(s)
-                except Exception:
-                    return {}
-        return {}
-    m = first(shareds)
-    m.update(first(configs))
-    return m
-
-def _endpoint(cfg):
-    # Resolve (base_url, api_key, model) for this UDF from its model reference.
-    # cfg.model is a name into cfg.models; each entry is {model[,base_url,api_key]}
-    # and inherits the shared top-level base_url/api_key when it omits them. An
-    # unknown name is used as a literal model id on the shared endpoint.
-    ref = cfg.get('model') or ''
-    entry = (cfg.get('models') or {}).get(ref)
-    if isinstance(entry, str):
-        entry = {'model': entry}
-    elif not isinstance(entry, dict):
-        entry = {}
-    base = entry.get('base_url') or cfg.get('base_url') or ''
-    api_key = entry.get('api_key', cfg.get('api_key') or '')
-    model = entry.get('model') or ref
-    return base, api_key, model
+def _cfg(configs):
+    # Config is already resolved (dlp_config_resolve); take the first non-empty.
+    for s in configs:
+        if s:
+            try:
+                return json.loads(s)
+            except Exception:
+                return {}
+    return {}
 
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
@@ -96,9 +79,11 @@ def _understand(question, base, api_key, model, max_tokens, timeout):
         'time_range_days': int(parsed.get('time_range_days') or 30),
     })
 
-def dlp_understand_query(questions, shareds, configs):
-    cfg = _merged(shareds, configs)
-    base, api_key, model = _endpoint(cfg)
+def dlp_understand_query(questions, configs):
+    cfg = _cfg(configs)
+    base = cfg.get('base_url') or ''
+    api_key = cfg.get('api_key') or ''
+    model = cfg.get('model') or ''
     try:
         max_tokens = int(cfg.get('max_tokens') or 512)
     except Exception:
@@ -123,7 +108,7 @@ $$`
 // 0..1. Chunks the batch into small groups per chat call and asks for
 // number-keyed scores so a local model can't misalign a chunk's scores onto the
 // wrong items; any item the model does not score defaults to 0.0.
-const ddlDLPRerankUDF = `CREATE OR REPLACE FUNCTION dlp_rerank(question string, content string, shared string, config string)
+const ddlDLPRerankUDF = `CREATE OR REPLACE FUNCTION dlp_rerank(question string, content string, config string)
 RETURNS float64
 LANGUAGE PYTHON AS $$
 import json
@@ -131,34 +116,15 @@ import requests
 
 CHUNK = 8
 
-def _merged(shareds, configs):
-    def first(xs):
-        for s in xs:
-            if s:
-                try:
-                    return json.loads(s)
-                except Exception:
-                    return {}
-        return {}
-    m = first(shareds)
-    m.update(first(configs))
-    return m
-
-def _endpoint(cfg):
-    # Resolve (base_url, api_key, model) for this UDF from its model reference.
-    # cfg.model is a name into cfg.models; each entry is {model[,base_url,api_key]}
-    # and inherits the shared top-level base_url/api_key when it omits them. An
-    # unknown name is used as a literal model id on the shared endpoint.
-    ref = cfg.get('model') or ''
-    entry = (cfg.get('models') or {}).get(ref)
-    if isinstance(entry, str):
-        entry = {'model': entry}
-    elif not isinstance(entry, dict):
-        entry = {}
-    base = entry.get('base_url') or cfg.get('base_url') or ''
-    api_key = entry.get('api_key', cfg.get('api_key') or '')
-    model = entry.get('model') or ref
-    return base, api_key, model
+def _cfg(configs):
+    # Config is already resolved (dlp_config_resolve); take the first non-empty.
+    for s in configs:
+        if s:
+            try:
+                return json.loads(s)
+            except Exception:
+                return {}
+    return {}
 
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
@@ -198,9 +164,11 @@ def _score_chunk(question, snippets, base, api_key, model, max_tokens, timeout):
             out[k] = float(sc[k])
     return out
 
-def dlp_rerank(questions, contents, shareds, configs):
-    cfg = _merged(shareds, configs)
-    base, api_key, model = _endpoint(cfg)
+def dlp_rerank(questions, contents, configs):
+    cfg = _cfg(configs)
+    base = cfg.get('base_url') or ''
+    api_key = cfg.get('api_key') or ''
+    model = cfg.get('model') or ''
     try:
         max_tokens = int(cfg.get('max_tokens') or 512)
     except Exception:
@@ -232,40 +200,21 @@ $$`
 // dlp_summarize(question, evidence, config): produce the final audit report over
 // the top-N evidence JSON. Returns ” on failure; the Go handler substitutes a
 // deterministic fallback line.
-const ddlDLPSummarizeUDF = `CREATE OR REPLACE FUNCTION dlp_summarize(question string, evidence string, shared string, config string)
+const ddlDLPSummarizeUDF = `CREATE OR REPLACE FUNCTION dlp_summarize(question string, evidence string, config string)
 RETURNS string
 LANGUAGE PYTHON AS $$
 import json
 import requests
 
-def _merged(shareds, configs):
-    def first(xs):
-        for s in xs:
-            if s:
-                try:
-                    return json.loads(s)
-                except Exception:
-                    return {}
-        return {}
-    m = first(shareds)
-    m.update(first(configs))
-    return m
-
-def _endpoint(cfg):
-    # Resolve (base_url, api_key, model) for this UDF from its model reference.
-    # cfg.model is a name into cfg.models; each entry is {model[,base_url,api_key]}
-    # and inherits the shared top-level base_url/api_key when it omits them. An
-    # unknown name is used as a literal model id on the shared endpoint.
-    ref = cfg.get('model') or ''
-    entry = (cfg.get('models') or {}).get(ref)
-    if isinstance(entry, str):
-        entry = {'model': entry}
-    elif not isinstance(entry, dict):
-        entry = {}
-    base = entry.get('base_url') or cfg.get('base_url') or ''
-    api_key = entry.get('api_key', cfg.get('api_key') or '')
-    model = entry.get('model') or ref
-    return base, api_key, model
+def _cfg(configs):
+    # Config is already resolved (dlp_config_resolve); take the first non-empty.
+    for s in configs:
+        if s:
+            try:
+                return json.loads(s)
+            except Exception:
+                return {}
+    return {}
 
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
@@ -289,9 +238,11 @@ def _summarize(question, evidence, base, api_key, model, max_tokens, timeout):
     }, timeout=timeout)
     return _msg_content(resp)
 
-def dlp_summarize(questions, evidences, shareds, configs):
-    cfg = _merged(shareds, configs)
-    base, api_key, model = _endpoint(cfg)
+def dlp_summarize(questions, evidences, configs):
+    cfg = _cfg(configs)
+    base = cfg.get('base_url') or ''
+    api_key = cfg.get('api_key') or ''
+    model = cfg.get('model') or ''
     try:
         max_tokens = int(cfg.get('max_tokens') or 800)
     except Exception:

@@ -169,31 +169,36 @@ def dlp_extract_entities(contents, configs):
     return out
 $$`
 
-// dlp_embed: batched embeddings via the OpenAI-compatible endpoint. Config is
-// the merge of the shared row (base_url/api_key/timeout) and this UDF's row
-// (model/max_chars). Only user/assistant rows with content are embedded (tool
-// rows get []).
-const ddlDLPEmbedUDF = `CREATE OR REPLACE FUNCTION dlp_embed(content string, role string, shared string, config string)
-RETURNS array(float32)
+// dlp_config_resolve(shared, config) folds the shared endpoint row and one UDF's
+// own row into a SINGLE, fully-resolved config so a network UDF only ever sees
+// what it runs with — never the shared model catalog or other UDFs' models. It:
+//  1. deep-merges shared ⊕ own (own wins),
+//  2. resolves the `model` NAME against the merged `models` catalog into a
+//     concrete endpoint (per-entry base_url/api_key override → shared top-level
+//     fallback → literal passthrough for an unknown name), overwriting
+//     base_url/api_key/model, and
+//  3. strips the `models` catalog from the output.
+//
+// It is PURE (no network) and runs per row over the JOINed config columns in the
+// ingest MV — a per-row function stays live per event (unlike a scalar sub-query,
+// which freezes at MV creation), so runtime config upserts still take effect.
+const ddlDLPConfigResolveUDF = `CREATE OR REPLACE FUNCTION dlp_config_resolve(shared string, config string)
+RETURNS string
 LANGUAGE PYTHON AS $$
 import json
-import requests
 
-def _merged(shareds, configs):
-    def first(xs):
-        for s in xs:
-            if s:
-                try:
-                    return json.loads(s)
-                except Exception:
-                    return {}
-        return {}
-    m = first(shareds)
-    m.update(first(configs))
-    return m
+def _parse(s):
+    if s:
+        try:
+            return json.loads(s)
+        except Exception:
+            return {}
+    return {}
 
-def _endpoint(cfg):
-    # Resolve (base_url, api_key, model) for this UDF from its model reference.
+def _resolve(shared_s, config_s):
+    cfg = _parse(shared_s)
+    cfg.update(_parse(config_s))
+    # Resolve the model reference into a concrete (base_url, api_key, model).
     # cfg.model is a name into cfg.models; each entry is {model[,base_url,api_key]}
     # and inherits the shared top-level base_url/api_key when it omits them. An
     # unknown name is used as a literal model id on the shared endpoint.
@@ -203,16 +208,53 @@ def _endpoint(cfg):
         entry = {'model': entry}
     elif not isinstance(entry, dict):
         entry = {}
-    base = entry.get('base_url') or cfg.get('base_url') or ''
-    api_key = entry.get('api_key', cfg.get('api_key') or '')
-    model = entry.get('model') or ref
-    return base, api_key, model
+    cfg['base_url'] = entry.get('base_url') or cfg.get('base_url') or ''
+    cfg['api_key'] = entry.get('api_key', cfg.get('api_key') or '')
+    cfg['model'] = entry.get('model') or ref
+    cfg.pop('models', None)
+    return json.dumps(cfg)
 
-def dlp_embed(contents, roles, shareds, configs):
+def dlp_config_resolve(shareds, configs):
+    n = max(len(shareds), len(configs))
+    out = []
+    for i in range(n):
+        sh = shareds[i] if i < len(shareds) else ''
+        co = configs[i] if i < len(configs) else ''
+        try:
+            out.append(_resolve(sh, co))
+        except Exception:
+            out.append('{}')
+    return out
+$$`
+
+// dlp_embed: batched embeddings via the OpenAI-compatible endpoint. Config is a
+// single resolved row (base_url/api_key/model/timeout/max_chars) produced by
+// dlp_config_resolve at the call site. Only user/assistant rows with content are
+// embedded (tool rows get []).
+const ddlDLPEmbedUDF = `CREATE OR REPLACE FUNCTION dlp_embed(content string, role string, config string)
+RETURNS array(float32)
+LANGUAGE PYTHON AS $$
+import json
+import requests
+
+def _cfg(configs):
+    # The config is already resolved (dlp_config_resolve) — flat base_url/api_key/
+    # model. Take the first non-empty in the batch (one endpoint per invocation).
+    for s in configs:
+        if s:
+            try:
+                return json.loads(s)
+            except Exception:
+                return {}
+    return {}
+
+def dlp_embed(contents, roles, configs):
     n = len(contents)
     out = [[] for _ in range(n)]
-    cfg = _merged(shareds, configs)
-    base, api_key, model = _endpoint(cfg)
+    cfg = _cfg(configs)
+    base = cfg.get('base_url') or ''
+    api_key = cfg.get('api_key') or ''
+    model = cfg.get('model') or ''
     try:
         timeout = float(cfg.get('timeout') or 50)
     except Exception:
@@ -248,7 +290,7 @@ $$`
 // dlp_risk: gated risk classification. Keywords + tag_for + the model endpoint
 // all come from `config`. Falls back to a deterministic heuristic when the
 // endpoint is unset or errors.
-const ddlDLPRiskUDF = `CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string), shared string, config string)
+const ddlDLPRiskUDF = `CREATE OR REPLACE FUNCTION dlp_risk(content string, entity_types array(string), config string)
 RETURNS string
 LANGUAGE PYTHON AS $$
 import json
@@ -260,34 +302,15 @@ DEFAULT_KEYWORDS = ('password', 'secret', 'api key', 'apikey', 'token', 'credent
 DEFAULT_TAG_FOR = {'phone': 'PHONE', 'email': 'EMAIL', 'ip': 'IP', 'domain': 'DOMAIN',
            'person': 'PERSON', 'company': 'COMPANY', 'secret': 'CREDENTIAL'}
 
-def _merged(shareds, configs):
-    def first(xs):
-        for s in xs:
-            if s:
-                try:
-                    return json.loads(s)
-                except Exception:
-                    return {}
-        return {}
-    m = first(shareds)
-    m.update(first(configs))
-    return m
-
-def _endpoint(cfg):
-    # Resolve (base_url, api_key, model) for this UDF from its model reference.
-    # cfg.model is a name into cfg.models; each entry is {model[,base_url,api_key]}
-    # and inherits the shared top-level base_url/api_key when it omits them. An
-    # unknown name is used as a literal model id on the shared endpoint.
-    ref = cfg.get('model') or ''
-    entry = (cfg.get('models') or {}).get(ref)
-    if isinstance(entry, str):
-        entry = {'model': entry}
-    elif not isinstance(entry, dict):
-        entry = {}
-    base = entry.get('base_url') or cfg.get('base_url') or ''
-    api_key = entry.get('api_key', cfg.get('api_key') or '')
-    model = entry.get('model') or ref
-    return base, api_key, model
+def _cfg(configs):
+    # Config is already resolved (dlp_config_resolve); take the first non-empty.
+    for s in configs:
+        if s:
+            try:
+                return json.loads(s)
+            except Exception:
+                return {}
+    return {}
 
 def _msg_content(resp):
     m = resp.json()['choices'][0]['message']
@@ -324,9 +347,11 @@ def _classify(text, ets, base, api_key, model, max_tokens, timeout):
     return json.dumps({'score': float(parsed.get('score', 0)),
                        'tags': [str(x) for x in parsed.get('tags', [])]})
 
-def dlp_risk(contents, entity_types_list, shareds, configs):
-    cfg = _merged(shareds, configs)
-    base, api_key, model = _endpoint(cfg)
+def dlp_risk(contents, entity_types_list, configs):
+    cfg = _cfg(configs)
+    base = cfg.get('base_url') or ''
+    api_key = cfg.get('api_key') or ''
+    model = cfg.get('model') or ''
     try:
         max_tokens = int(cfg.get('max_tokens') or 512)
     except Exception:
@@ -528,7 +553,10 @@ func seedDLPConfig(ctx context.Context, conn proton.Conn, dlpCfg config.DLPConfi
 // live from agentguard_dlp_config via streaming LEFT JOINs on literal keys, so a
 // config upsert takes effect on the next event with no MV restart. LEFT JOIN
 // (with coalesce) guarantees an event is never dropped when a config row is
-// missing — the UDF just fails open. Layers: base (CIM → role/content/keys) →
+// missing — the UDF just fails open. The shared + per-UDF rows are folded into a
+// single resolved config per network UDF by dlp_config_resolve (a per-row
+// function over the JOINed columns, so it stays live — unlike a scalar sub-query,
+// which would freeze at MV creation). Layers: base (CIM → role/content/keys) →
 // join+filter (attach cfg_* columns) → enrich (entities, risk) → final (project
 // + embed).
 const ddlDLPEnrichMV = `
@@ -549,12 +577,12 @@ SELECT
   entities,
   array_map(x -> replace_all(x, '"', ''), json_extract_array_raw(risk_json, 'tags')) AS risk_tags,
   json_extract_float(risk_json, 'score') AS risk_score,
-  dlp_embed(content, role, cfg_shared, cfg_embed) AS embedding
+  dlp_embed(content, role, dlp_config_resolve(cfg_shared, cfg_embed)) AS embedding
 FROM (
   SELECT
     *,
     dlp_extract_entities(content, cfg_entities) AS entities,
-    dlp_risk(content, map_keys(entities), cfg_shared, cfg_risk) AS risk_json
+    dlp_risk(content, map_keys(entities), dlp_config_resolve(cfg_shared, cfg_risk)) AS risk_json
   FROM (
     SELECT
       base.event_time AS event_time,
@@ -607,8 +635,9 @@ FROM (
 // result always matches what gets stored. Returns 0 when the endpoint is
 // unreachable or the model is missing (dlp_embed fails open to []).
 const dlpProbeDimSQL = `SELECT length(dlp_embed('dimension probe', 'user',
-  coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='shared'), ''),
-  coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='dlp_embed'), ''))) AS d`
+  dlp_config_resolve(
+    coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='shared'), ''),
+    coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='dlp_embed'), '')))) AS d`
 
 // probeEmbeddingDim runs the probe over a native connection (used inside
 // provisioning). ok is false when the dimension can't be determined.
@@ -696,6 +725,7 @@ func InitDLP(ctx context.Context, conn proton.Conn, dlpCfg config.DLPConfig, emi
 
 	emit("running", "$ Creating DLP enrichment UDFs…")
 	udfs := []struct{ name, ddl string }{
+		{"dlp_config_resolve", ddlDLPConfigResolveUDF},
 		{"dlp_extract_entities", ddlDLPEntitiesUDF},
 		{"dlp_embed", ddlDLPEmbedUDF},
 		{"dlp_risk", ddlDLPRiskUDF},
