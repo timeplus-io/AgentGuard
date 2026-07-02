@@ -26,6 +26,9 @@ frontend/.env.*.local
 backend/server
 backend/*.exe
 backend/config.yaml
+# Runtime local rule catalog definitions and overrides (source definitions live
+# under backend/internal/catalog/seed/; this dir is per-deployment local state)
+/backend/catalog/
 
 # Environment
 .env
