@@ -14,6 +14,17 @@ import (
 // the inner expression is tolerated by the scanner (trimmed before prefix check).
 const placeholderPrefix = ".Config."
 
+// Identity sentinels. The catalog authoring surface ships these literals in its
+// default sql_template because a template is written before its rule id/name are
+// known; Compile substitutes them (from the definition's own id/name) so a
+// created/installed MV writes correctly-attributed detection rows. They are
+// quoted so they read as ordinary SQL string literals in the author-facing
+// template and never appear inside a {{ }} placeholder.
+const (
+	ruleIDSentinel   = "'__rule_id__'"
+	ruleNameSentinel = "'__rule_name__'"
+)
+
 // The strict syntax for the <key> part of a placeholder is
 // catalog.ValidParameterID — the same rule catalog enforces on declared
 // parameter keys — so the scanner rejects anything (whitespace, uppercase,
@@ -217,6 +228,36 @@ func renderTemplate(def catalog.Definition, values map[string]any) (string, erro
 	return b.String(), nil
 }
 
+// bakeIdentity returns a copy of def whose sql_template has the identity
+// sentinels ('__rule_id__' / '__rule_name__') replaced by the definition's own
+// id and (SQL-escaped) name. Templates without the sentinels — every builtin
+// seed, and any author who wrote real identity columns — are returned unchanged.
+// The input def is passed by value and never mutated, so the caller's copy (and
+// therefore its Hash) is unaffected.
+//
+// Baking is applied to the template before parameter rendering (see Compile) so
+// a string parameter whose value happens to equal a sentinel is not rewritten.
+// A rule name carrying {{ or }} is rejected here because, once baked into the
+// SQL, it would be re-scanned as a placeholder — the same injection guard the
+// legacy create path enforces.
+func bakeIdentity(def catalog.Definition) (catalog.Definition, error) {
+	t := def.SQLTemplate
+	if !strings.Contains(t, ruleIDSentinel) && !strings.Contains(t, ruleNameSentinel) {
+		return def, nil
+	}
+	if strings.Contains(t, ruleNameSentinel) &&
+		(strings.Contains(def.Name, "{{") || strings.Contains(def.Name, "}}")) {
+		return catalog.Definition{}, &DefinitionError{
+			Kind: DefinitionBadTemplate,
+			Err:  fmt.Errorf("rule name must not contain '{{' or '}}' when the template bakes it in via __rule_name__"),
+		}
+	}
+	t = strings.ReplaceAll(t, ruleIDSentinel, "'"+EscapeSQLString(def.ID)+"'")
+	t = strings.ReplaceAll(t, ruleNameSentinel, "'"+EscapeSQLString(def.Name)+"'")
+	def.SQLTemplate = t
+	return def, nil
+}
+
 // Compile is the top-level entry point of the parameter compiler. It
 // validates the template against the declared parameters, normalizes the
 // defaults and the supplied overrides (decoded JSON values keyed by
@@ -230,19 +271,29 @@ func renderTemplate(def catalog.Definition, values map[string]any) (string, erro
 // constraints — are returned as a *DefinitionError instead, so handlers can
 // map the two to different HTTP statuses with errors.As.
 func Compile(def catalog.Definition, overrides map[string]any) (Compiled, error) {
-	if err := ValidateTemplate(def); err != nil {
-		return Compiled{}, err
-	}
-	defaults, err := normalizedDefaults(def)
+	// Hash the ORIGINAL definition (the persisted, sentinel-carrying form) — the
+	// baked render copy below must not change what an installed snapshot compares
+	// against, or the rule would look permanently upgradeable.
+	hash := def.Hash()
+	// Bake identity sentinels into a render copy before rendering parameters, so
+	// a parameter value equal to a sentinel is not rewritten.
+	renderDef, err := bakeIdentity(def)
 	if err != nil {
 		return Compiled{}, err
 	}
-	norm, err := NormalizeOverrides(def, overrides)
+	if err := ValidateTemplate(renderDef); err != nil {
+		return Compiled{}, err
+	}
+	defaults, err := normalizedDefaults(renderDef)
+	if err != nil {
+		return Compiled{}, err
+	}
+	norm, err := NormalizeOverrides(renderDef, overrides)
 	if err != nil {
 		return Compiled{}, err
 	}
 	effective := effectiveValues(defaults, norm)
-	sql, err := renderTemplate(def, effective)
+	sql, err := renderTemplate(renderDef, effective)
 	if err != nil {
 		return Compiled{}, err
 	}
@@ -250,6 +301,6 @@ func Compile(def catalog.Definition, overrides map[string]any) (Compiled, error)
 		Overrides:      canonicalOverrides(defaults, norm),
 		Effective:      effective,
 		SQL:            sql,
-		DefinitionHash: def.Hash(),
+		DefinitionHash: hash,
 	}, nil
 }

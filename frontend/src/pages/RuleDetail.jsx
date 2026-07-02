@@ -402,17 +402,19 @@ export default function RuleDetail() {
                 </button>
               )}
 
-              {/* Local custom definitions (incl. imported, which load as
-                  origin=custom) are editable in place; catalog-managed builtin
-                  seeds are immutable, so operators clone them to a custom copy. */}
-              {rule.definition && rule.definition.origin === 'custom' ? (
+              {/* Only local custom definitions (origin=custom) are editable in
+                  place. Builtin seeds and imported definitions (origin=imported)
+                  are immutable, so operators clone them to an editable custom
+                  copy. An orphaned installed rule (definition removed from the
+                  catalog) has no known origin and gets no definition action. */}
+              {rule.definition?.origin === 'custom' ? (
                 <Link
                   to={`/rules/${id}/edit`}
                   className="px-4 py-2 text-xs font-semibold rounded-sm border border-[#ffb0cf]/30 text-[#ffb0cf] hover:bg-[#ffb0cf]/10 transition-colors"
                 >
                   Edit definition
                 </Link>
-              ) : rule.definition ? (
+              ) : (rule.definition?.origin === 'builtin' || rule.definition?.origin === 'imported') ? (
                 <button
                   onClick={openCloneModal}
                   disabled={actionLoading}

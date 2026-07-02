@@ -424,3 +424,74 @@ func TestCompileRendersRegexAndDuration(t *testing.T) {
 		t.Fatalf("SQL:\n got %q\nwant %q", c.SQL, want)
 	}
 }
+
+// The authoring surface ships '__rule_id__'/'__rule_name__' identity sentinels
+// in its default template (a template is written before its rule id is known).
+// Compile must bake them from the definition's own id/name so an installed MV
+// writes correctly-attributed detection rows — see the following tests.
+
+func TestCompileBakesIdentitySentinels(t *testing.T) {
+	def := catalog.Definition{
+		ID: "my-rule", Name: "My Rule", Version: "1.0.0",
+		SQLTemplate: "SELECT '__rule_id__' AS rule_id, '__rule_name__' AS rule_name FROM agentguard_hook_events WHERE 1 = 0",
+	}
+	c, err := Compile(def, nil)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if strings.Contains(c.SQL, "__rule_id__") || strings.Contains(c.SQL, "__rule_name__") {
+		t.Fatalf("identity sentinels left unsubstituted: %q", c.SQL)
+	}
+	if !strings.Contains(c.SQL, "'my-rule' AS rule_id") {
+		t.Errorf("rule_id sentinel not baked from def.ID: %q", c.SQL)
+	}
+	if !strings.Contains(c.SQL, "'My Rule' AS rule_name") {
+		t.Errorf("rule_name sentinel not baked from def.Name: %q", c.SQL)
+	}
+}
+
+func TestCompileHashIsOriginalDefinitionNotBaked(t *testing.T) {
+	def := catalog.Definition{
+		ID: "my-rule", Name: "My Rule", Version: "1.0.0",
+		SQLTemplate: "SELECT '__rule_id__' AS rule_id, '__rule_name__' AS rule_name FROM agentguard_hook_events WHERE 1 = 0",
+	}
+	c, err := Compile(def, nil)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	// The compiled hash must equal the ORIGINAL (sentinel-carrying) definition's
+	// hash, not the baked copy's — otherwise an installed snapshot's stored hash
+	// would never match the catalog definition's hash and the rule would look
+	// permanently "upgradeable".
+	if c.DefinitionHash != def.Hash() {
+		t.Errorf("DefinitionHash = %q, want original def.Hash() %q", c.DefinitionHash, def.Hash())
+	}
+	// Guard the guard: baking genuinely changes the hashed content, so this
+	// assertion is only meaningful if the baked copy's hash actually differs.
+	baked := def
+	baked.SQLTemplate = "SELECT 'my-rule' AS rule_id, 'My Rule' AS rule_name FROM agentguard_hook_events WHERE 1 = 0"
+	if baked.Hash() == def.Hash() {
+		t.Fatal("test precondition failed: baked template hashes identically to original")
+	}
+}
+
+func TestCompileDoesNotRewriteParamValueEqualToSentinel(t *testing.T) {
+	// Baking must happen BEFORE parameter rendering: a string parameter whose
+	// value is literally "__rule_id__" must survive into the SQL unchanged, not
+	// be rewritten to the rule id by a bake step that ran after rendering.
+	def := catalog.Definition{
+		ID: "my-rule", Name: "My Rule", Version: "1.0.0",
+		SQLTemplate: "SELECT '__rule_id__' AS rule_id FROM agentguard_hook_events WHERE tool_name = {{ .Config.needle }}",
+		Parameters:  []catalog.Parameter{{Key: "needle", Label: "Needle", Type: "string", Default: "__rule_id__"}},
+	}
+	c, err := Compile(def, nil)
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !strings.Contains(c.SQL, "'my-rule' AS rule_id") {
+		t.Errorf("identity column not baked: %q", c.SQL)
+	}
+	if !strings.Contains(c.SQL, "tool_name = '__rule_id__'") {
+		t.Errorf("parameter value equal to the sentinel was rewritten: %q", c.SQL)
+	}
+}

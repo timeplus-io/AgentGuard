@@ -129,8 +129,12 @@ export default function RuleCreate({ mode = 'create' }) {
     try {
       const payload = buildPayload()
       if (isEdit) {
-        await api.updateCatalogRule(id, payload)
-        navigate(`/rules/${id}`)
+        const res = await api.updateCatalogRule(id, payload)
+        // The response carries an `instance` only when the rule is installed.
+        // /rules/:id is instance-detail and 404s for a definition-only publish
+        // (e.g. a freshly cloned, not-yet-installed rule), so route those to the
+        // catalog list instead of a dead end.
+        navigate(res?.instance ? `/rules/${id}` : '/rules')
       } else {
         await api.createCatalogRule(payload)
         navigate('/rules')

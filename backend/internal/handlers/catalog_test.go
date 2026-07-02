@@ -262,6 +262,36 @@ func TestCompileCatalogRule_OmittedType(t *testing.T) {
 	}
 }
 
+// TestCompileCatalogRule_BakesIdentitySentinels: the compile preview substitutes
+// the authoring template's '__rule_id__'/'__rule_name__' identity sentinels from
+// the definition's own id/name, so the previewed SQL matches what a create/install
+// would deploy (rather than leaving literal sentinels that break detection
+// attribution).
+func TestCompileCatalogRule_BakesIdentitySentinels(t *testing.T) {
+	w := postCompile(t, map[string]any{
+		"definition": map[string]any{
+			"id": "my-rule", "name": "My Rule", "version": "1.0.0",
+			"sql_template": "SELECT '__rule_id__' AS rule_id, '__rule_name__' AS rule_name FROM agentguard_hook_events WHERE 1 = 0",
+		},
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var out struct {
+		RenderedSQL string `json:"rendered_sql"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if strings.Contains(out.RenderedSQL, "__rule_id__") || strings.Contains(out.RenderedSQL, "__rule_name__") {
+		t.Errorf("compile preview left identity sentinels unsubstituted: %q", out.RenderedSQL)
+	}
+	if !strings.Contains(out.RenderedSQL, "'my-rule' AS rule_id") ||
+		!strings.Contains(out.RenderedSQL, "'My Rule' AS rule_name") {
+		t.Errorf("compile preview did not bake identity from id/name: %q", out.RenderedSQL)
+	}
+}
+
 func TestCompileCatalogRule_BadTemplate(t *testing.T) {
 	w := postCompile(t, map[string]any{
 		"definition": map[string]any{
