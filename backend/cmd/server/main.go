@@ -207,6 +207,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.GET("/dlp/messages", handlers.ListEnrichedMessages(cfg))
 			protected.GET("/dlp/messages/:id", handlers.GetEnrichedMessage(cfg))
 			protected.GET("/dlp/profiles", handlers.DLPProfilesHandler(cfg))
+			protected.GET("/dlp/config", handlers.GetDLPConfig(cfg))
+			protected.PUT("/dlp/config/:key", handlers.UpsertDLPConfig(cfg))
 			protected.POST("/onboarding/generate", handlers.GenerateConfig)
 			protected.GET("/onboarding/install-script", handlers.ServeInstallScript)
 			protected.POST("/proton/query", handlers.ProtonQueryHandler(cfg))

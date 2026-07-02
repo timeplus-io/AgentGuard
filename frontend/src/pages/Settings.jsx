@@ -3,7 +3,14 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import Toggle from '../components/Toggle'
+import DLPConfigEditor from '../components/DLPConfigEditor'
 import { api } from '../api/client'
+
+// DLP keys that remain server-config (config.yaml): the enable switch and the
+// embedding dimension (baked into the stream/index). Everything else — endpoint,
+// models, timeouts, tokens, entity catalog — is edited live below via the config
+// stream, so it's hidden from the flat key list to avoid two sources of truth.
+const DLP_SERVER_KEYS = new Set(['dlp.enabled', 'dlp.embedding_dim'])
 
 const SOURCE_LABEL = {
   default: 'default',
@@ -98,7 +105,6 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [banner, setBanner] = useState(null) // {type, msg}
   const [tpTest, setTpTest] = useState(null)
-  const [dlpTest, setDlpTest] = useState(null)
   const [reprovisioning, setReprovisioning] = useState(false)
 
   const load = useCallback(() => {
@@ -148,23 +154,6 @@ export default function Settings() {
       const r = await api.testTimeplusConfig(host, Number(port))
       setTpTest(r)
     } catch (e) { setTpTest({ ok: false, error: e.message }) }
-  }
-
-  const testDLP = async () => {
-    const base = drafts['dlp.base_url'] ?? findValue('dlp.base_url')
-    const key = drafts['dlp.api_key'] ?? ''
-    const payload = {
-      base_url: base,
-      api_key: key,
-      embedding_model: drafts['dlp.embedding_model'] ?? findValue('dlp.embedding_model'),
-      embedding_dim: Number(drafts['dlp.embedding_dim'] ?? findValue('dlp.embedding_dim')) || 0,
-      risk_model: drafts['dlp.risk_model'] ?? findValue('dlp.risk_model'),
-    }
-    setDlpTest({ pending: true })
-    try {
-      const r = await api.testDLPConfig(payload)
-      setDlpTest(r)
-    } catch (e) { setDlpTest({ ok: false, error: e.message }) }
   }
 
   const reprovisionDLP = async () => {
@@ -227,7 +216,10 @@ export default function Settings() {
             <section key={section.id} className="mb-6 bg-gray-800 rounded-sm px-6 py-4">
               <h3 className="text-base font-medium text-gray-100 mb-2">{section.title}</h3>
               <div className="divide-y divide-gray-700/50">
-                {section.keys.map((k) => (
+                {(section.id === 'dlp'
+                  ? section.keys.filter((k) => DLP_SERVER_KEYS.has(k.key))
+                  : section.keys
+                ).map((k) => (
                   <div key={k.key}>
                     <KeyField k={k} draftValue={draftFor(k)} onChange={(v) => setDraft(k.key, v)} />
                     {fieldErrors[k.key] && <p className="text-error text-xs pb-2">{fieldErrors[k.key]}</p>}
@@ -248,34 +240,18 @@ export default function Settings() {
               )}
 
               {section.id === 'dlp' && (
-                <div className="mt-3 flex items-center gap-3">
-                  <button onClick={testDLP} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">Test endpoint</button>
-                  {dlpTest?.pending && <span className="text-xs text-gray-400">Testing…</span>}
-                  {dlpTest && !dlpTest.pending && (
-                    dlpTest.checks ? (
-                      <div className="text-xs space-y-0.5">
-                        <div className={dlpTest.checks.reachable?.ok ? 'text-emerald-400' : 'text-error'}>
-                          {dlpTest.checks.reachable?.ok ? '✓ reachable' : `✗ reachable: ${dlpTest.checks.reachable?.error || ''}`}
-                        </div>
-                        {dlpTest.checks.embedding && (
-                          <div className={dlpTest.checks.embedding.ok ? 'text-emerald-400' : 'text-error'}>
-                            {dlpTest.checks.embedding.ok
-                              ? `✓ embedding dim ${dlpTest.checks.embedding.dim}`
-                              : `✗ embedding dim ${dlpTest.checks.embedding.dim ?? '?'} (expected ${dlpTest.checks.embedding.expected})`}
-                          </div>
-                        )}
-                        {dlpTest.checks.chat && (
-                          <div className={dlpTest.checks.chat.ok ? 'text-emerald-400' : 'text-error'}>
-                            {dlpTest.checks.chat.ok ? '✓ chat' : `✗ chat: ${dlpTest.checks.chat.note || 'failed'}`}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className={`text-xs ${dlpTest.ok ? 'text-emerald-400' : 'text-error'}`}>
-                        {dlpTest.ok ? 'Endpoint reachable' : `Failed: ${dlpTest.error}`}
-                      </span>
-                    )
-                  )}
+                <div className="mt-6 border-t border-gray-700/50 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-100 mb-1">Runtime configuration</h4>
+                  <DLPConfigEditor />
+                  <div className="mt-4 flex items-center gap-3">
+                    <button onClick={reprovisionDLP} disabled={reprovisioning}
+                      className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600 disabled:opacity-50">
+                      {reprovisioning ? 'Re-provisioning…' : 'Re-provision DLP'}
+                    </button>
+                    <span className="text-[11px] text-gray-500">
+                      Re-detects the embedding dimension and rebuilds the pipeline. Run after switching the embedding model.
+                    </span>
+                  </div>
                 </div>
               )}
             </section>
