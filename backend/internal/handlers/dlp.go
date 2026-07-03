@@ -17,6 +17,7 @@ import (
 )
 
 var dlpUDFNames = []string{
+	"dlp_config_resolve",
 	"dlp_extract_entities", "dlp_embed", "dlp_risk",
 	"dlp_understand_query", "dlp_rerank", "dlp_summarize",
 }

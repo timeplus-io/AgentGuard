@@ -13,10 +13,10 @@ const (
 
 // KeyMeta declares everything the API and UI need to know about one config key.
 type KeyMeta struct {
-	Key         string   // viper dotted key, e.g. "dlp.api_key"
-	Section     string   // section id, e.g. "dlp"
-	Label       string   // human label
-	Description string   // help text
+	Key         string // viper dotted key, e.g. "dlp.api_key"
+	Section     string // section id, e.g. "dlp"
+	Label       string // human label
+	Description string // help text
 	Type        KeyType
 	EnumValues  []string // for TypeEnum
 	EnvVar      string   // overriding env var name, "" if none
@@ -108,8 +108,8 @@ func Registry() []KeyMeta {
 			Description: "Model used to embed content. Baked into UDFs — change needs re-provision.",
 			Type:        TypeString, EnvVar: "DLP_EMBEDDING_MODEL", Reprovision: true},
 		{Key: "dlp.embedding_dim", Section: "dlp", Label: "Embedding dimension",
-			Description: "Vector dimension. Baked into the DLP stream — change needs re-provision (stream recreate).",
-			Type:        TypeInt, EnvVar: "DLP_EMBEDDING_DIM", Reprovision: true},
+			Description: "Auto-detected from the embedding model at provision (probed via dlp_embed). Read-only; the configured value is only a fallback used when the endpoint is unreachable.",
+			Type:        TypeInt, EnvVar: "DLP_EMBEDDING_DIM", ReadOnly: true},
 		{Key: "dlp.risk_model", Section: "dlp", Label: "Risk model",
 			Description: "Model used for risk classification. Baked into UDFs — change needs re-provision.",
 			Type:        TypeString, EnvVar: "DLP_RISK_MODEL", Reprovision: true},

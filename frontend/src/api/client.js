@@ -213,6 +213,10 @@ export const api = {
   dlpMessage: (id) => get(`/dlp/messages/${encodeURIComponent(id)}`),
   syncRules: () => post('/rules/sync', {}),
 
+  // Runtime DLP config stream (agentguard_dlp_config): per-UDF rows + shared row.
+  getDLPConfig: () => get('/dlp/config'),
+  putDLPConfig: (key, value) => put(`/dlp/config/${encodeURIComponent(key)}`, { value }),
+
   // ── Configuration (Settings page) ───────────────────────────────────────────
   getConfig: () => get('/config'),
   updateConfig: (changes) => put('/config', changes),

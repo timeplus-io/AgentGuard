@@ -110,6 +110,15 @@ func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 			return
 		}
 
+		// embedding_dim is auto-detected by probing the model through dlp_embed;
+		// fall back to the configured value if the endpoint was unreachable.
+		embDim := cfg.DLP.EmbeddingDim
+		if cfg.DLP.Enabled {
+			if d, err := tp.ProbeEmbeddingDim(&timeplusCfg); err == nil && d > 0 {
+				embDim = d
+			}
+		}
+
 		// Persist non-credential config so server knows setup is done after restart.
 		newCfg := *cfg
 		newCfg.Timeplus.Host = body.Host
@@ -117,10 +126,11 @@ func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 		newCfg.Timeplus.NativePort = body.NativePort
 		newCfg.AgentGuardURL = agentGuardURL
 		newCfg.SetupComplete = true
+		newCfg.DLP.EmbeddingDim = embDim
 		newCfg.ProvisionedDLP = config.ProvisionedDLP{
 			Recorded:              true,
 			EmbeddingModel:        cfg.DLP.EmbeddingModel,
-			EmbeddingDim:          cfg.DLP.EmbeddingDim,
+			EmbeddingDim:          embDim,
 			RiskModel:             cfg.DLP.RiskModel,
 			SummaryModel:          cfg.DLP.SummaryModel,
 			RequestTimeoutSeconds: cfg.DLP.RequestTimeoutSeconds,
@@ -138,6 +148,7 @@ func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 		cfg.Timeplus.NativePort = body.NativePort
 		cfg.AgentGuardURL = agentGuardURL
 		cfg.SetupComplete = true
+		cfg.DLP.EmbeddingDim = embDim
 		cfg.ProvisionedDLP = newCfg.ProvisionedDLP
 		config.Mu.Unlock()
 

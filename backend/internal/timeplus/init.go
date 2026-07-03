@@ -1139,13 +1139,13 @@ SELECT
     multi_if(
       span_attributes['openinference.span.kind'] = 'LLM', 'llm_input',
       span_attributes['openinference.span.kind'] = 'TOOL', 'before_tool_call',
-      span_attributes['agentguard.span.kind'] == 'SESSION', 'session_start',
+      span_attributes['agentguard.span.kind'] = 'SESSION', 'session_start',
       'span_start'
     ),
     multi_if(
       span_attributes['openinference.span.kind'] = 'LLM', 'llm_output',
       span_attributes['openinference.span.kind'] = 'TOOL', 'after_tool_call',
-      span_attributes['agentguard.span.kind'] == 'SESSION', 'session_end',
+      span_attributes['agentguard.span.kind'] = 'SESSION', 'session_end',
       'span_end'
     )
   )                                                                       AS hook_name,
@@ -1172,6 +1172,9 @@ SELECT
 FROM otel_traces
 ARRAY JOIN array_cast(1, 2) AS idx
 WHERE _tp_time > earliest_ts()
+  AND (span_attributes['openinference.span.kind'] = 'LLM'
+    OR span_attributes['openinference.span.kind'] = 'TOOL'
+    OR span_attributes['agentguard.span.kind'] = 'SESSION')
 `
 
 // ddlCIMMetricsHermesLlmMV extracts LLM token and latency metrics from

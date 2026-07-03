@@ -22,7 +22,7 @@ type configKeyView struct {
 	Description string   `json:"description"`
 	Type        string   `json:"type"`
 	Value       any      `json:"value"` // left nil (→ JSON null) for secrets; never echoes the secret
-	Set         bool     `json:"set"`             // for secrets: whether a value exists
+	Set         bool     `json:"set"`   // for secrets: whether a value exists
 	Source      string   `json:"source"`
 	EnvVar      string   `json:"env_var,omitempty"`
 	Flag        string   `json:"flag,omitempty"`
@@ -101,24 +101,14 @@ func restartRequired(cfg *config.Config, fileKeys, changedFlags map[string]bool)
 	return false
 }
 
-// reprovisionRequired is true when DLP is enabled, a provision snapshot exists,
-// and any baked-in DLP model setting differs from that snapshot.
+// reprovisionRequired is retained for API compatibility but is always false:
+// no DLP setting is a hand-entered, provision-baked value anymore. embedding_dim
+// is auto-detected from the model at provision (probed via dlp_embed); everything
+// else (models, endpoint, timeout, tokens, entity catalog) is read live from the
+// agentguard_dlp_config mutable stream. Operators re-provision on demand (e.g.
+// after switching the embedding model) via the Settings action, not a drift flag.
 func reprovisionRequired(cfg *config.Config) bool {
-	if !cfg.DLP.Enabled || !cfg.ProvisionedDLP.Recorded {
-		return false
-	}
-	p := cfg.ProvisionedDLP
-	// RequestTimeoutSeconds/MaxOutputTokens were added after the snapshot
-	// format shipped, so a snapshot recorded before this change carries 0 for
-	// them. Recorded values are always clamped (>=5 / >=16), so 0 unambiguously
-	// means "legacy snapshot" — skip those comparisons rather than spuriously
-	// flagging every pre-existing deployment as needing a re-provision.
-	return cfg.DLP.EmbeddingModel != p.EmbeddingModel ||
-		cfg.DLP.EmbeddingDim != p.EmbeddingDim ||
-		cfg.DLP.RiskModel != p.RiskModel ||
-		cfg.DLP.SummaryModel != p.SummaryModel ||
-		(p.RequestTimeoutSeconds != 0 && cfg.DLP.RequestTimeoutSeconds != p.RequestTimeoutSeconds) ||
-		(p.MaxOutputTokens != 0 && cfg.DLP.MaxOutputTokens != p.MaxOutputTokens)
+	return false
 }
 
 // GetConfig returns the full effective configuration with per-key sources.

@@ -43,7 +43,9 @@ func TestRegistryMetaInvariants(t *testing.T) {
 	if m, _ := MetaFor("server.port"); !m.Restart {
 		t.Error("server.port must be Restart")
 	}
-	if m, _ := MetaFor("dlp.embedding_dim"); !m.Reprovision {
-		t.Error("dlp.embedding_dim must be Reprovision")
+	// embedding_dim is auto-detected from the model at provision (probed via
+	// dlp_embed), so it's read-only and no longer a re-provision-drift trigger.
+	if m, _ := MetaFor("dlp.embedding_dim"); !m.ReadOnly || m.Reprovision {
+		t.Error("dlp.embedding_dim must be ReadOnly and not Reprovision")
 	}
 }

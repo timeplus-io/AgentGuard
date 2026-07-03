@@ -80,8 +80,8 @@ func TestDLPStatusDisabled(t *testing.T) {
 	if got.Enabled {
 		t.Error("Enabled should be false")
 	}
-	if len(got.UDFs) != 6 {
-		t.Errorf("UDFs map should list all 6 tracked UDFs even when disabled, got %d", len(got.UDFs))
+	if len(got.UDFs) != 7 {
+		t.Errorf("UDFs map should list all 7 tracked UDFs even when disabled, got %d", len(got.UDFs))
 	}
 }
 
@@ -140,7 +140,7 @@ func TestDLPStatusHealthy(t *testing.T) {
 		case strings.Contains(q, "system.tables"):
 			_, _ = io.WriteString(w, `{"data":[{"name":"agentguard_dlp_enriched"},{"name":"mv_dlp_enrich"}]}`)
 		case strings.Contains(q, "SHOW FUNCTIONS"):
-			_, _ = io.WriteString(w, `{"data":[{"name":"dlp_extract_entities"},{"name":"dlp_embed"},{"name":"dlp_risk"},{"name":"dlp_understand_query"},{"name":"dlp_rerank"},{"name":"dlp_summarize"},{"name":"notify_agentguard_udf"}]}`)
+			_, _ = io.WriteString(w, `{"data":[{"name":"dlp_config_resolve"},{"name":"dlp_extract_entities"},{"name":"dlp_embed"},{"name":"dlp_risk"},{"name":"dlp_understand_query"},{"name":"dlp_rerank"},{"name":"dlp_summarize"},{"name":"notify_agentguard_udf"}]}`)
 		case strings.Contains(q, "count()"):
 			_, _ = io.WriteString(w, `{"data":[{"total":"100","embedded":"80","flagged":"7"}]}`)
 		default:
@@ -166,7 +166,7 @@ func TestDLPStatusHealthy(t *testing.T) {
 	if !got.Enabled || !got.StreamExists || !got.MVExists {
 		t.Errorf("stream/mv flags wrong: %+v", got)
 	}
-	for _, fn := range []string{"dlp_extract_entities", "dlp_embed", "dlp_risk", "dlp_understand_query", "dlp_rerank", "dlp_summarize"} {
+	for _, fn := range []string{"dlp_config_resolve", "dlp_extract_entities", "dlp_embed", "dlp_risk", "dlp_understand_query", "dlp_rerank", "dlp_summarize"} {
 		if !got.UDFs[fn] {
 			t.Errorf("UDF %s should be present", fn)
 		}

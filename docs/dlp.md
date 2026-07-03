@@ -136,26 +136,39 @@ Claude Code, OpenClaw, and Hermes all enrich identically.
 
 ## 3. Ingest Enrichment
 
-`mv_dlp_enrich` calls three UDFs per message. All are provisioned by Go code
-that interpolates config values (`base_url`, `api_key`, model names) into the
-UDF source — the same pattern as `notify_agentguard_udf`. Python UDFs receive
-batched lists, so the API-calling UDFs make **one request per batch**, not per
-row.
+`mv_dlp_enrich` calls three UDFs per message. The UDF bodies are **static** — every
+config value (endpoint, model names, timeouts, token budgets, the entity catalog,
+risk keywords, tag map) arrives through a `config` string parameter, read live from
+the `agentguard_dlp_config` mutable stream via streaming `LEFT JOIN`s on literal
+keys (see §5). Rather than pass the raw `shared` row into every network UDF, the MV
+folds the **`shared`** row (`base_url`, `api_key`, `timeout`, model catalog) and a
+UDF's own per-UDF row (`model`, `max_tokens`, …) with the pure UDF
+`dlp_config_resolve(shared, config)` — it merges `shared ⊕ own` (own wins), resolves
+the `model` name against the catalog into a concrete endpoint, and **strips the
+catalog** — so each network UDF receives ONE flat `config` and never sees `shared`
+or any other model (#195). `dlp_config_resolve` runs per row over the JOINed config
+columns, so it stays live: an operator upsert changes ingest behavior on the **next
+event**, with no UDF redeploy and no re-provision. Python UDFs receive batched
+lists, so the API-calling UDFs make **one request per batch**, not per row, and
+parse config once per batch.
 
 | UDF | Signature | Behavior |
 |-----|-----------|----------|
-| `dlp_extract_entities` | `(content string) -> map(string, array(string))` | Regex + dictionary for phone, email, IP, domain, and secrets (AWS keys, `sk-`/`ghp_` tokens, JWTs, private keys). Secret values masked before return. **No network.** |
-| `dlp_embed` | `(content string, role string) -> array(float32)` | Batched `POST {base_url}/embeddings` with `{embedding_model}`. The `role` param gates embedding inside Python (tool rows → `[]`). Truncates input to a safe length. On any error returns `[]`. |
-| `dlp_risk` | `(content string, entity_types array(string)) -> string` (JSON) | Gated: with no entity types and no risk keywords, returns `{"score":0,"tags":[]}` without a network call. Otherwise a chat-completion to `{risk_model}` for strict-JSON multi-label classification; on error falls back to a heuristic derived from entity types. Returns e.g. `{"score":0.91,"tags":["PII","PHONE"]}`. |
+| `dlp_config_resolve` | `(shared, config) -> string` (JSON) | Pure (no network). Deep-merges `shared ⊕ own` (own wins), resolves `model` against the `shared.models` catalog into concrete `base_url`/`api_key`/`model` (per-entry override → shared fallback → literal passthrough), and removes `models` from the output. The single home for merge + endpoint resolution; every network call site wraps its config in it. |
+| `dlp_extract_entities` | `(content, config) -> map(string, array(string))` | Network-free, so no resolver needed. Regex + dictionary extraction driven by `config.entities[]` (default catalog: phone, email, IP, domain, and secrets — AWS keys, `sk-`/`ghp_` tokens, JWTs, private keys). Each entry has `kind` (`regex`\|`dictionary`), `store` (`raw`\|`masked`), `tag`, optional `flags`. Patterns are compiled once per distinct config blob. Secret/`masked` values are masked before return. |
+| `dlp_embed` | `(content, role, config) -> array(float32)` | `config` is pre-resolved by `dlp_config_resolve`. Batched `POST {base_url}/embeddings` with `{config.model}`. `role` gates embedding (tool rows → `[]`). Truncates to `config.max_chars`. On any error or absent `base_url` returns `[]`. |
+| `dlp_risk` | `(content, entity_types, config) -> string` (JSON) | `config` is pre-resolved. Gated by `config.keywords`: with no entity types and no keyword, returns `{"score":0,"tags":[]}` without a network call. Otherwise a chat-completion to `{config.model}`; on error (or absent `base_url`) falls back to a heuristic using `config.tag_for`. Returns e.g. `{"score":0.91,"tags":["PII","PHONE"]}`. |
 
 **Fail-open invariant:** no UDF may raise. Enrichment degradation produces
-empty/zero columns, never a blocked MV.
+empty/zero columns, never a blocked MV. The MV uses `LEFT JOIN` + `coalesce`, so
+a missing config row never drops an event — the UDF just sees `''` and fails
+open.
 
-**Secrets caveat:** the model API key is embedded verbatim in the UDF source at
-provision time, so it is visible via `SHOW FUNCTIONS`/`system.functions` to
-anyone with Timeplus DDL access. This is a documented, accepted limitation —
-Timeplus credentials already gate the raw conversation content; use a scoped
-key for the model endpoint.
+**Secrets note:** the model API key now lives in the `agentguard_dlp_config`
+stream (a `value` column) rather than in the UDF source, so it is **no longer
+exposed via `SHOW FUNCTIONS`/`system.functions`**. It is still readable by anyone
+with access to the config stream; Timeplus credentials already gate the raw
+conversation content, so use a scoped key for the model endpoint.
 
 ---
 
@@ -166,7 +179,16 @@ key for the model endpoint.
 through SQL. The response is an **NDJSON stream** — one JSON object per stage,
 flushed as it completes, so the UI can render progressively.
 
-1. **Understand** — `SELECT dlp_understand_query(:question)` → intent JSON
+Every funnel UDF takes a single resolved `config` argument:
+`dlp_config_resolve(:shared, :config)`, where `:shared` and `:config` are each a
+coalesced scalar sub-query against `agentguard_dlp_config`
+(`coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='…'), '')`).
+Unlike the ingest MV, a historical query is re-planned on each execution, so the
+sub-queries always read the latest upsert — `coalesce(…, '')` keeps the arguments
+non-nullable (a nullable arg makes map/array-returning UDFs fail to type). The Go
+helper `dlpResolvedCfg(key)` renders the `dlp_config_resolve(shared, key)` wrapper.
+
+1. **Understand** — `SELECT dlp_understand_query(:question, dlp_config_resolve(:shared, :config))` → intent JSON
    (`keywords`, `entity_types`, `risk_tags`, `time_range_days`). On parse
    failure, keywords are derived from the question itself.
    → `{"stage":"intent","intent":{…}}`
@@ -175,7 +197,7 @@ flushed as it completes, so the UI can render progressively.
      filter, `ORDER BY risk_score DESC, event_time DESC LIMIT 200`. Recalls
      rows regardless of embedding presence.
    - **Vector** — time filter + `length(embedding) > 0`,
-     `ORDER BY cosine_distance(embedding, dlp_embed(:question,'user')) LIMIT 100`.
+     `ORDER BY cosine_distance(embedding, dlp_embed(:question,'user',dlp_config_resolve(:shared,:config))) LIMIT 100`.
      Best-effort; failure (e.g. dim drift) degrades to structured-only.
 
    Merged + deduped by `message_id` in Go → candidate set (≤300).
@@ -184,11 +206,11 @@ flushed as it completes, so the UI can render progressively.
    > This deviates from the spec's original single hybrid statement:
    > `cosine_distance` errors on empty embeddings, and fail-open rows have
    > `embedding = []`, so the channels are split and merged in Go.
-3. **Rerank** — `SELECT dlp_rerank(:question, content)` over the candidate
+3. **Rerank** — `SELECT dlp_rerank(:question, content, dlp_config_resolve(:shared, :config))` over the candidate
    batch scores relevance 0–1 with `{risk_model}`; top `top_n` (default 20,
    max 50) kept. On failure, falls back to recall order.
    → `{"stage":"reranked","kept":K}`
-4. **Summarize** — `SELECT dlp_summarize(:question, :evidence_json)` over the
+4. **Summarize** — `SELECT dlp_summarize(:question, :evidence_json, dlp_config_resolve(:shared, :config))` over the
    top-N → an audit report citing `message_id`s.
    → `{"stage":"answer","report":"…","evidence":[…]}`
 
@@ -196,10 +218,11 @@ Any stage error is terminal: `{"stage":"error","error":"…"}`. If DLP is
 disabled or unprovisioned, the endpoint returns **503** (plain JSON, before
 streaming starts) so the client handles it uniformly.
 
-Query-time UDFs (`dlp_understand_query(question)`,
-`dlp_rerank(question, content)`, `dlp_summarize(question, evidence)`) follow the
-same provisioning/interpolation rules as the ingest UDFs;
-`dlp_summarize` uses `{summary_model}` (frontier), the other two use
+Query-time UDFs (`dlp_understand_query(question, config)`,
+`dlp_rerank(question, content, config)`, `dlp_summarize(question, evidence, config)`)
+are static and config-driven like the ingest UDFs, each taking one resolved
+`config` (via `dlp_config_resolve`); their default config rows set
+`dlp_summarize` to `{summary_model}` (frontier) and the other two to
 `{risk_model}` (small).
 
 ---
@@ -224,14 +247,134 @@ dlp:
 |-----|-------|
 | `enabled` | When `false`, provisioning skips DLP and the API endpoints return 503. |
 | `base_url` | The URL the **UDFs** call. When Timeplus runs in Docker and the endpoint is on the host, this is `http://host.docker.internal:<port>/v1`. |
-| `embedding_dim` | Must match the embedding model. **Baked into the stream/index at provision time** — changing it requires re-provisioning the DLP stream. |
-| `risk_model` | Small model for `dlp_risk` and `dlp_rerank`. |
+| `embedding_dim` | **Auto-detected at provision** by probing the embedding model through `dlp_embed` — operators don't set it. The `config.yaml` value is only a fallback used if the endpoint is unreachable at provision. Shown read-only in Settings. |
+| `risk_model` | Small model for `dlp_risk`, `dlp_rerank`, `dlp_understand_query`. |
 | `summary_model` | Frontier model for `dlp_summarize`. |
 
-These settings are editable from the **Settings** page (`/settings`); changing a
-model or `base_url` flags a re-provision (the values are baked into UDFs). The
-last-provisioned snapshot is recorded under `provisioned.dlp.*` for drift
-detection.
+### 5.1 The `agentguard_dlp_config` mutable stream (runtime config)
+
+`config.yaml` provides **boot defaults**. At provision time those defaults are
+rendered (`DLPConfigRows`) into a **shared** endpoint row plus one row per UDF in
+a **mutable** stream:
+
+```sql
+CREATE MUTABLE STREAM agentguard_dlp_config (
+  key string, value string,            -- value is a JSON blob
+  updated_at datetime64(3) DEFAULT now64(3), updated_by string
+) PRIMARY KEY (key)
+```
+
+Keys and what each holds (a network UDF's effective config is `shared ⊕ its own
+row`, its own row winning — folded and endpoint-resolved by `dlp_config_resolve`
+at each call site, so the UDF itself receives only the flat result, never
+`shared`):
+
+| Key | Holds |
+|-----|-------|
+| `shared` | `base_url`, `api_key`, `timeout`, and **`models`** — common to every network UDF; set the endpoint, rotate the key, or define models here **once** |
+| `dlp_extract_entities` | `entities` catalog + `max_per_type` (network-free; no `shared`) |
+| `dlp_embed` | `model` (catalog name), `max_chars` |
+| `dlp_risk` | `model` (name), `max_tokens`, `keywords`, `tag_for`, `prompt` |
+| `dlp_understand_query` / `dlp_rerank` | `model` (name), `max_tokens`, `prompt` |
+| `dlp_summarize` | `model` (name), `max_tokens`, `prompt` |
+
+**Named model catalog with per-model endpoints.** `shared.models` maps a name → an
+**endpoint object** `{"model": <id> [, "base_url": …, "api_key": …]}`. Each UDF's
+`model` is a **name** that resolves against the catalog at call time, giving that
+UDF its `base_url` + `api_key` + `model` id. So:
+
+- **A model is defined once, referenced by many UDFs** — `risk`, `understand`, and
+  `rerank` all reference `"chat"`, so editing `shared.models.chat` updates all three.
+- **Each model can live on its own endpoint** — an entry's `base_url`/`api_key`
+  override the shared top-level ones; omit them to inherit. So embeddings can hit
+  OpenAI while chat hits a local Ollama, each with its own key.
+
+```json
+shared: {
+  "base_url": "http://localhost:4000/v1",   // default endpoint (inherited)
+  "api_key":  "",                            // default key (inherited)
+  "timeout":  50,
+  "models": {
+    "chat":      {"model": "gpt-4o-mini"},                                              // inherits shared endpoint
+    "embedding": {"model": "text-embedding-3-small", "base_url": "https://api.openai.com/v1", "api_key": "sk-…"},
+    "summary":   {"model": "gpt-4o"}
+  }
+}
+dlp_embed:     {"model": "embedding", "max_chars": 8000}
+dlp_risk:      {"model": "chat", "max_tokens": 512, "keywords": [...], "tag_for": {...}}
+dlp_summarize: {"model": "summary", "max_tokens": 800}
+```
+
+Names are arbitrary — define `model1`/`model2`/… and point each UDF wherever you
+like. A `model` name that isn't in the catalog is used as a **literal** model id on
+the shared endpoint (backward compatible). Per-model `api_key`s are redacted by
+`GET /api/dlp/config` and preserved on `PUT` just like the top-level one. (Only
+`timeout` remains shared, not per-model.)
+
+**Tunable prompts (#197).** Each LLM UDF's `prompt` is the **full prompt template**,
+seeded with the built-in default and editable at runtime. The UDF substitutes its
+template variables in a single pass (`re.sub`), so substituted content — which may
+itself contain a literal `{placeholder}` — is never re-scanned. Values are
+truncated to the UDF's limits *before* substitution. An empty/absent `prompt`
+falls back to the built-in default, so clearing the field resets it.
+
+| UDF | Template variables |
+|-----|--------------------|
+| `dlp_risk` | `{entity_types}` (comma-joined detected types), `{message}` (content, ≤4000 chars) |
+| `dlp_understand_query` | `{question}` (≤2000 chars) |
+| `dlp_rerank` | `{count}` (batch size), `{question}` (≤1000 chars), `{items}` (numbered snippets, ≤600 chars each) |
+| `dlp_summarize` | `{question}` (≤1000 chars), `{evidence}` (evidence JSON, ≤12000 chars) |
+
+A variable you omit simply isn't sent. Two parts of the defaults are
+**load-bearing**: the strict-JSON instruction (risk/understand/rerank parse the
+reply — a reply that doesn't parse falls back to the heuristic / recall order),
+and the `TASK: <NAME>` markers plus rerank's `ITEMS: {count}` (the mock model
+server dispatches on them, so the integration test needs the defaults intact;
+real models don't care). `PUT /api/dlp/config/:key` validates only that `prompt`
+is a string — everything else degrades fail-open rather than being blocked.
+`GET /api/dlp/config` always reports the **effective** prompt: a row that
+carries none (seeded before prompts existed, or cleared) is returned with the
+built-in default filled in, so the editor never shows a blank template.
+
+Because the stream is read/write, **the config stream is authoritative at
+runtime**. Edit it from the **Settings page** (`/settings` → Semantic DLP →
+*Runtime configuration*): a structured editor for the shared endpoint, the model
+catalog (with per-model base_url/api_key), and each function's model + token
+budget + prompt template (collapsed under each function, with its variables
+listed), plus a JSON pane for the entity catalog. It saves via the API
+(`GET /api/dlp/config`, `PUT /api/dlp/config/:key` — which validates the JSON,
+structurally checks the entity catalog, and preserves stored `api_key`s when
+omitted). You can also upsert directly via SQL — re-`INSERT` the same `key` — and
+the ingest MV (next event) and funnel (next query) use it immediately, no rebuild
+and no re-provision:
+
+```sql
+-- add a credit-card pattern to the entity catalog, live:
+INSERT INTO agentguard_dlp_config (key, value, updated_by)
+VALUES ('dlp_extract_entities',
+        '{"max_per_type":20,"entities":[ … ,{"type":"credit_card","kind":"regex","store":"masked","tag":"FINANCIAL","pattern":"(?<!\\d)(?:\\d[ -]?){13,16}(?!\\d)"}]}',
+        'analyst');
+```
+
+Validate regex patterns before upserting (a bad pattern is silently skipped by
+the fail-open extractor, so a typo means "type never matches", not an error).
+Loose patterns also raise per-message LLM cost — any detected entity un-gates
+`dlp_risk` — so pattern *precision* is a cost lever.
+
+**Seeding is seed-if-absent:** `InitDLP`/`SyncDLP` insert a default row only for a
+key that does not already exist, so re-provisioning or `POST /api/rules/sync`
+never clobbers runtime edits. To **reset** a row to the `config.yaml` default,
+delete it (`DELETE FROM agentguard_dlp_config WHERE key='…'`) and re-run sync.
+
+**Re-provision vs. hot config:** model/endpoint/timeout/token/catalog changes are
+hot via the stream (editing them in `config.yaml` only takes effect on the next
+fresh seed — an existing key is preserved). The one provision-time value,
+`embedding_dim`, is **auto-detected** by probing the embedding model through
+`dlp_embed` at provision, so nothing is a hand-entered re-provision trigger and
+`/settings` no longer shows a drift banner. Re-provision on demand (Settings →
+Semantic DLP → **Re-provision DLP**) after switching the embedding model — that
+re-probes the dimension and rebuilds the index/MV. `/api/rules/sync` and the
+setup wizard record the detected dimension into the provision snapshot.
 
 ---
 
@@ -239,18 +382,33 @@ detection.
 
 DLP provisioning lives in `backend/internal/timeplus/dlp.go`:
 
-- **`InitDLP(cfg)`** — creates `agentguard_dlp_enriched`, attempts the HNSW
-  index (best-effort), creates/replaces the six UDFs with interpolated config,
-  and creates `mv_dlp_enrich`. Idempotent (`IF NOT EXISTS` / `CREATE OR
-  REPLACE`). Skipped when `dlp.enabled: false`.
+- **`InitDLP(cfg)`** — creates `agentguard_dlp_enriched`, drops the enrichment MV
+  (so it is rebuilt with the current definition and never blocks a UDF replace),
+  creates the `agentguard_dlp_config` mutable stream and **seeds it
+  (seed-if-absent)** from `DLPConfigRows(cfg)`, creates/replaces the six static
+  UDFs, **probes the embedding dimension** via `dlp_embed` (falling back to the
+  configured value if the endpoint is unreachable), attempts the HNSW index
+  best-effort at that dimension, and recreates `mv_dlp_enrich` (which `LEFT JOIN`s
+  the config stream). Idempotent. Skipped when `dlp.enabled: false`.
 - Wired into **`timeplus.Init()`**, so the setup wizard
-  (`POST /api/setup/provision`) and **`POST /api/rules/sync`** both pick it up —
-  config changes (endpoint, models) apply without re-running the wizard.
+  (`POST /api/setup/provision`) and **`POST /api/rules/sync`** both pick it up.
+  Note re-provision rebuilds the UDFs/MV and seeds *missing* config rows, but
+  does **not** overwrite existing config rows — runtime model/endpoint changes
+  are made by upserting `agentguard_dlp_config`, not by re-provisioning (§5.1).
 - **`/api/dlp/status`** reports stream existence, MV state, UDF presence, row
   counts, and embedding coverage (rows with a non-empty embedding).
 
 The server starts independently of Timeplus; if the instance is unreachable,
 provisioning fails but the binary itself starts cleanly.
+
+**Enabling from the UI.** When DLP is off or unprovisioned, the `/dlp` page shows
+a call-to-action. If `dlp.enabled` is `false`, the button reads **Enable Semantic
+DLP** — it flips `dlp.enabled` (a hot config key, no restart) via
+`PUT /api/config` and then runs provisioning via `POST /api/rules/sync`. If DLP is
+already enabled but the streams/UDFs/MV are missing, the button reads **Provision
+now** and only runs the sync. (If `DLP_ENABLED` is set as an environment variable
+it overrides the file and the UI can't change it — unset it to control from the
+UI.)
 
 ---
 
@@ -264,6 +422,8 @@ All endpoints are behind the auth middleware (`/api/dlp/*`).
 | GET | `/api/dlp/messages` | `ListEnrichedMessages` | Browse enriched rows. Filters: `risk_tag`, `entity_type`, `agent_id`, `session_id`, `role`, `since`/`until` (RFC3339), `min_score`; paginated (`page`/`limit`, max 500). |
 | GET | `/api/dlp/messages/:id` | `GetEnrichedMessage` | Full enriched record by `message_id`. |
 | GET | `/api/dlp/profiles` | `DLPProfilesHandler` | Top risk agents / sessions / tags over a `?days=` window (default 30). |
+| GET | `/api/dlp/config` | `GetDLPConfig` | Current `agentguard_dlp_config` rows (one per UDF). `api_key` redacted; `api_key_set` reports whether one is stored. |
+| PUT | `/api/dlp/config/:key` | `UpsertDLPConfig` | Upsert one config row (`{"value": <json>}`). Validates JSON (+ entity-catalog structure); preserves the stored `api_key` when the body omits/blanks it. Takes effect live, no re-provision. |
 | GET | `/api/dlp/status` | `DLPStatusHandler` | Provisioning + enrichment health. |
 | POST | `/api/config/test-dlp` | `TestDLPConfig` | Tests `base_url` reachability (`GET /models`); never 5xx on an unreachable endpoint. |
 
@@ -362,8 +522,11 @@ Explicitly **not** built in Phase 1 (Phase 2/3):
 Known limitations of the shipped surface:
 
 - The model API key is visible to anyone with Timeplus DDL access (§3).
-- `embedding_dim` is fixed at provision time; changing it requires
-  re-provisioning the DLP stream (§5).
+- `embedding_dim` is auto-detected at provision (probed via `dlp_embed`).
+  Switching the embedding model to one with a different dimension needs a
+  re-provision (Settings → Re-provision DLP) to re-detect it and rebuild the
+  index; previously-embedded rows keep their old-dimension vectors (no backfill),
+  so mixing dimensions in the same window is not supported (§5).
 - The HNSW vector index is best-effort; on builds without `vector_similarity`,
   retrieval uses brute-force `cosine_distance` (§2.1).
 
@@ -392,8 +555,7 @@ dlp:
   base_url: http://host.docker.internal:11434/v1   # Timeplus in Docker, Ollama on host
   # base_url: http://localhost:11434/v1            # Timeplus running natively
   api_key: ""                                       # Ollama ignores auth
-  embedding_model: mxbai-embed-large                # 1024 dims
-  embedding_dim: 1024
+  embedding_model: mxbai-embed-large                # dim auto-detected at provision
   risk_model: qwen2.5-coder:7b
   summary_model: qwen2.5-coder:7b
   request_timeout_seconds: 50                        # clamped to [5,55]
@@ -409,9 +571,12 @@ direct-response model (`qwen2.5-coder:7b`, `llama3.2:1b`) is recommended.
 The Settings → Semantic DLP **Test endpoint** button now verifies the
 embedding dimension and detects empty-content reasoning models.
 
-**Embedding dimension must match the model** and is baked into the
-`agentguard_dlp_enriched` stream. Changing `embedding_dim` requires
-dropping and recreating the stream + MV before re-provisioning:
+**Embedding dimension is auto-detected** by probing the model through `dlp_embed`
+at provision — no need to set `embedding_dim`. If you switch to an embedding model
+with a **different** dimension, re-provision (Settings → Re-provision DLP) to
+re-detect it and rebuild the index. Because previously-embedded rows keep their
+old-dimension vectors (no backfill), if you want a clean slate at the new
+dimension, drop and recreate the enriched stream before re-provisioning:
 
 ```sql
 DROP VIEW IF EXISTS mv_dlp_enrich;
