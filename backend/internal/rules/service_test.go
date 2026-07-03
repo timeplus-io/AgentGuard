@@ -500,6 +500,63 @@ func TestConfigure_NotInstalled(t *testing.T) {
 	}
 }
 
+// TestUpgradeLockout_SentinelRewriteIsNotAnUpgrade is the finding-1 regression at
+// the service level (Describe/Configure), complementing TestConfigure_
+// DefinitionChangedConflicts. An installed snapshot carries the OLD literal-
+// identity hash ('rp-001' AS rule_id / '<name>' AS rule_name baked into the
+// template), while the catalog now holds the sentinel-style definition
+// ('__rule_id__' / '__rule_name__'). The two render byte-identical SQL, so
+// canonical (identity-baked) hashing must treat them as the same definition:
+// Describe must NOT flag an upgrade and Configure must NOT reject with the
+// "upgrade the rule before configuring" conflict. Without canonical hashing every
+// seed installed before the sentinel rewrite would be locked out of its
+// Configuration tab — the core user-visible failure of finding 1.
+func TestUpgradeLockout_SentinelRewriteIsNotAnUpgrade(t *testing.T) {
+	const id, name = "rp-001", "Name rp-001"
+	tmpl := func(idCol, nameCol string) string {
+		return "SELECT " + idCol + " AS rule_id, " + nameCol +
+			" AS rule_name FROM agentguard_hook_events WHERE v = {{ .Config.t }}"
+	}
+	base := catalog.Definition{
+		ID: id, Name: name, Version: "1.0.0", Description: "desc",
+		Severity: "warning", Category: "test", FPRate: "low",
+		HookSources: "PreToolUse", RequiredTelemetry: "hooks",
+		Parameters: []catalog.Parameter{intParam("t", 15, f64(1), f64(100))},
+		Origin:     catalog.OriginBuiltin,
+	}
+	literalDef := base
+	literalDef.SQLTemplate = tmpl("'"+id+"'", "'"+name+"'")
+	sentinelDef := base
+	sentinelDef.SQLTemplate = tmpl("'__rule_id__'", "'__rule_name__'")
+
+	// Preconditions: the raw hashes genuinely differ (else the test proves
+	// nothing), but the canonical hash of the sentinel definition equals the old
+	// literal-identity snapshot hash.
+	if literalDef.Hash() == sentinelDef.Hash() {
+		t.Fatal("precondition: literal and sentinel raw hashes must differ")
+	}
+	if got := CanonicalDefinitionHash(sentinelDef); got != literalDef.Hash() {
+		t.Fatalf("precondition: canonical(sentinel)=%q must equal old literal snapshot hash=%q", got, literalDef.Hash())
+	}
+
+	svc, st, _, _ := newTestService(&fakeDefs{defs: map[string]catalog.Definition{id: sentinelDef}})
+	// Old snapshot: definition_hash bound to the literal-identity form
+	// (installedInst stores def.Hash()).
+	st.latest[id] = installedInst(literalDef, true, 2, map[string]any{"t": json.Number("15")}, nil)
+
+	view, err := svc.Describe(id)
+	if err != nil {
+		t.Fatalf("describe: %v", err)
+	}
+	if view.Upgrade != nil {
+		t.Errorf("Describe flagged a phantom upgrade for a sentinel rewrite that renders identical SQL")
+	}
+
+	if _, err := svc.Configure(id, map[string]any{"t": 30}, "bob", "tune"); err != nil {
+		t.Fatalf("Configure was locked out by a phantom upgrade: %v", err)
+	}
+}
+
 func TestConfigure_MVCreateFailureRestoresPreviousMV(t *testing.T) {
 	def := testDef("rp-001", "1.0.0", intParam("t", 15, f64(1), f64(100)))
 	svc, st, mv, rec := newTestService(&fakeDefs{defs: map[string]catalog.Definition{"rp-001": def}})
