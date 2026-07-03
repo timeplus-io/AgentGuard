@@ -97,7 +97,6 @@ export default function Settings() {
 
   const sections = data?.sections || []
   const activeId = activeSectionFromHash(location.hash, sections)
-  const activeSection = sections.find((s) => s.id === activeId)
   const dirtyCounts = dirtyCountsBySection(drafts, keyToSectionMap(sections))
   const restartIds = sectionIdsWithFlag(sections, 'restart')
   const reprovisionIds = sectionIdsWithFlag(sections, 'reprovision')
@@ -148,21 +147,23 @@ export default function Settings() {
                 reprovisionIds={reprovisionIds}
                 showRestart={!!data?.restart_required}
                 showReprovision={!!data?.reprovision_required}
-                onSelect={(id) => navigate(`#${id}`, { replace: true })}
+                onSelect={(id) => { navigate(`#${id}`, { replace: true }); window.scrollTo(0, 0) }}
               />
               <div className="flex-1 min-w-0">
-                {activeSection && (
-                  <SettingsSection
-                    section={activeSection}
-                    draftFor={draftFor}
-                    setDraft={setDraft}
-                    fieldErrors={fieldErrors}
-                    tpTest={tpTest}
-                    onTestTimeplus={testTimeplus}
-                    reprovisioning={reprovisioning}
-                    onReprovision={reprovisionDLP}
-                  />
-                )}
+                {sections.map((s) => (
+                  <div key={s.id} className={s.id === activeId ? '' : 'hidden'}>
+                    <SettingsSection
+                      section={s}
+                      draftFor={draftFor}
+                      setDraft={setDraft}
+                      fieldErrors={fieldErrors}
+                      tpTest={tpTest}
+                      onTestTimeplus={testTimeplus}
+                      reprovisioning={reprovisioning}
+                      onReprovision={reprovisionDLP}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           )}

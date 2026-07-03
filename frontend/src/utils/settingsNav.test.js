@@ -43,6 +43,10 @@ describe('dirtyCountsBySection', () => {
     expect(dirtyCountsBySection({}, map)).toEqual({})
     expect(dirtyCountsBySection(undefined, map)).toEqual({})
   })
+
+  it('returns an empty object when the key map is undefined', () => {
+    expect(dirtyCountsBySection({ 'timeplus.host': 'x' }, undefined)).toEqual({})
+  })
 })
 
 describe('sectionIdsWithFlag', () => {

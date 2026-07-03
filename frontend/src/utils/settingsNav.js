@@ -13,7 +13,7 @@ export function keyToSectionMap(sections) {
 export function dirtyCountsBySection(drafts, keyToSection) {
   const counts = {}
   for (const key of Object.keys(drafts || {})) {
-    const sid = keyToSection[key]
+    const sid = (keyToSection || {})[key]
     if (!sid) continue
     counts[sid] = (counts[sid] || 0) + 1
   }
