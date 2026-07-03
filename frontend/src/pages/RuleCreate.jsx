@@ -159,6 +159,19 @@ export default function RuleCreate({ mode = 'create' }) {
     !versionUnchanged &&
     !saving
 
+  // Why Save is disabled — surfaced as the button's tooltip (and, for the version
+  // gate, its label) so a disabled Publish button is never a silent dead end.
+  // Ordered most-blocking first; `saving` is transient so it needs no reason.
+  const saveDisabledReason = saving
+    ? null
+    : !hasRequiredFields(def, { isEdit })
+      ? 'Fill in the required fields (name, version, SQL template).'
+      : keyErrors
+        ? 'Give every parameter a valid key.'
+        : versionUnchanged
+          ? 'Bump the version to publish this edit.'
+          : null
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#15121d] text-gray-100">
@@ -215,9 +228,16 @@ export default function RuleCreate({ mode = 'create' }) {
                 <button
                   onClick={handleSave}
                   disabled={!canSave}
+                  title={saveDisabledReason || undefined}
                   className="px-5 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[0.98] transition-all"
                 >
-                  {saving ? 'Saving…' : isEdit ? 'Publish edit' : 'Create definition'}
+                  {saving
+                    ? 'Saving…'
+                    : versionUnchanged
+                      ? 'Bump version to publish'
+                      : isEdit
+                        ? 'Publish edit'
+                        : 'Create definition'}
                 </button>
               </div>
             }
