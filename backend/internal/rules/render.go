@@ -258,6 +258,36 @@ func bakeIdentity(def catalog.Definition) (catalog.Definition, error) {
 	return def, nil
 }
 
+// CanonicalDefinitionHash is the single hash used for install-snapshot equality
+// and upgrade detection. It hashes the definition's CANONICAL form:
+//   - Apps normalization (omitted types → string, numeric defaults canonicalized),
+//     via catalog.NormalizeDefinition, and
+//   - identity sentinels baked ('__rule_id__'/'__rule_name__' replaced with the
+//     rule's own id/name), via bakeIdentity.
+//
+// Baking is what makes finding-1 safe: a builtin whose identity columns were
+// rewritten from literals ('rp-001' AS rule_id) to sentinels renders to
+// byte-identical SQL, so it must hash identically — otherwise every install made
+// before the rewrite would show a phantom "upgradeable" and lock its
+// Configuration tab behind a needless, MV-resetting upgrade. Normalization is
+// what makes finding-2 safe: a numeric default submitted as json.Number hashes
+// the same as its persisted native-scalar form.
+//
+// EVERY hash comparison against a stored RuleInstance.DefinitionHash MUST go
+// through this function (Compile records it; the read model and the
+// configure/upgrade guards compare against it), or the two sides can disagree.
+// If bakeIdentity rejects the definition (a name carrying '{{'/'}}' under the
+// name sentinel) the un-baked normalized form is hashed — such a definition
+// cannot compile and will be rejected on its own path; the hash only needs to be
+// deterministic.
+func CanonicalDefinitionHash(def catalog.Definition) string {
+	def = catalog.NormalizeDefinition(def)
+	if baked, err := bakeIdentity(def); err == nil {
+		def = baked
+	}
+	return def.Hash()
+}
+
 // Compile is the top-level entry point of the parameter compiler. It
 // validates the template against the declared parameters, normalizes the
 // defaults and the supplied overrides (decoded JSON values keyed by
@@ -271,10 +301,12 @@ func bakeIdentity(def catalog.Definition) (catalog.Definition, error) {
 // constraints — are returned as a *DefinitionError instead, so handlers can
 // map the two to different HTTP statuses with errors.As.
 func Compile(def catalog.Definition, overrides map[string]any) (Compiled, error) {
-	// Hash the ORIGINAL definition (the persisted, sentinel-carrying form) — the
-	// baked render copy below must not change what an installed snapshot compares
-	// against, or the rule would look permanently upgradeable.
-	hash := def.Hash()
+	// Record the CANONICAL hash (normalized + identity-baked). Every install
+	// snapshot stores this and every upgrade/configure guard compares against it
+	// via CanonicalDefinitionHash, so a sentinel rewrite that renders identical
+	// SQL — or a numeric default submitted in a different scalar form — does not
+	// look like an upgrade. See CanonicalDefinitionHash.
+	hash := CanonicalDefinitionHash(def)
 	// Bake identity sentinels into a render copy before rendering parameters, so
 	// a parameter value equal to a sentinel is not rewritten.
 	renderDef, err := bakeIdentity(def)

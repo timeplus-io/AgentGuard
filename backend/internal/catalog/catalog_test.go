@@ -1502,6 +1502,34 @@ func TestNormalizeDefinition(t *testing.T) {
 	}
 }
 
+// TestNormalizeDefinitionCanonicalizesNumericDefaults pins the finding-2 fix:
+// numeric-default canonicalization must live in NormalizeDefinition (the shared
+// ingestion step), not only in saveLocked. A default that arrives as a
+// json.Number (JSON body decoded with UseNumber) and its native-scalar
+// equivalent must produce the SAME Definition.Hash() after normalization, so
+// the hash Compile records at install time matches the persisted (YAML
+// round-tripped) definition's hash and the rule is never flagged phantom-
+// upgradeable.
+func TestNormalizeDefinitionCanonicalizesNumericDefaults(t *testing.T) {
+	mk := func(def any) Definition {
+		return Definition{
+			ID: "rp-n", Name: "n", Version: "1.0.0",
+			SQLTemplate: "SELECT 1 WHERE x > {{ .Config.threshold }}",
+			Parameters:  []Parameter{{Key: "threshold", Type: "integer", Default: def}},
+		}
+	}
+	// "5.0" (a whole value written with a decimal point) vs native int64(5).
+	fromJSON := NormalizeDefinition(mk(json.Number("5.0")))
+	native := NormalizeDefinition(mk(int64(5)))
+	if fromJSON.Hash() != native.Hash() {
+		t.Errorf("hash after NormalizeDefinition: json.Number %q vs int64 %q — numeric default not canonicalized",
+			fromJSON.Hash(), native.Hash())
+	}
+	if _, isNum := fromJSON.Parameters[0].Default.(json.Number); isNum {
+		t.Errorf("NormalizeDefinition left a json.Number default in place: %#v", fromJSON.Parameters[0].Default)
+	}
+}
+
 // omittedTypeDoc is a structurally complete local definition whose single
 // parameter omits its type (Apps semantics: an absent type means string).
 const omittedTypeDoc = "id: rp-local\nname: Local\nversion: 1.0.0\n" +

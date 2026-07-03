@@ -401,7 +401,7 @@ func (s *Service) Describe(ruleID string) (InstanceView, error) {
 			view.Defaults = defaults
 			plan := PlanUpgradeOverrides(def, inst.Overrides)
 			view.Effective = effectiveValues(defaults, plan.Overrides)
-			if def.Hash() != inst.DefinitionHash {
+			if CanonicalDefinitionHash(def) != inst.DefinitionHash {
 				view.Upgrade = &plan
 			}
 		}
@@ -524,7 +524,7 @@ func (s *Service) Configure(ruleID string, overrides map[string]any, actor, reas
 	if !ok {
 		return RuleInstance{}, &ConflictError{Message: "rule definition is no longer in the catalog; cannot reconfigure an orphaned rule"}
 	}
-	if def.Hash() != cur.DefinitionHash {
+	if CanonicalDefinitionHash(def) != cur.DefinitionHash {
 		return RuleInstance{}, &ConflictError{Message: "rule definition has changed since install; upgrade the rule before configuring it"}
 	}
 
@@ -786,7 +786,7 @@ func (s *Service) Upgrade(ruleID, actor, reason string) (RuleInstance, error) {
 	if !ok {
 		return RuleInstance{}, &ConflictError{Message: "rule definition is no longer in the catalog; nothing to upgrade to"}
 	}
-	if def.Hash() == cur.DefinitionHash {
+	if CanonicalDefinitionHash(def) == cur.DefinitionHash {
 		return cur, nil // already at the catalog version
 	}
 

@@ -450,28 +450,39 @@ func TestCompileBakesIdentitySentinels(t *testing.T) {
 	}
 }
 
-func TestCompileHashIsOriginalDefinitionNotBaked(t *testing.T) {
-	def := catalog.Definition{
+func TestCompileHashSentinelEqualsBaked(t *testing.T) {
+	// Finding 1: rewriting a builtin's identity columns from literals
+	// ('rp-001' AS rule_id) to sentinels ('__rule_id__' AS rule_id) renders to
+	// byte-identical SQL, so it MUST hash identically — otherwise every seed
+	// installed before the rewrite would show a phantom "upgradeable" and its
+	// Configuration tab would lock behind a needless (MV-resetting) upgrade.
+	sentinel := catalog.Definition{
 		ID: "my-rule", Name: "My Rule", Version: "1.0.0",
 		SQLTemplate: "SELECT '__rule_id__' AS rule_id, '__rule_name__' AS rule_name FROM agentguard_hook_events WHERE 1 = 0",
 	}
-	c, err := Compile(def, nil)
+	literal := catalog.Definition{
+		ID: "my-rule", Name: "My Rule", Version: "1.0.0",
+		SQLTemplate: "SELECT 'my-rule' AS rule_id, 'My Rule' AS rule_name FROM agentguard_hook_events WHERE 1 = 0",
+	}
+	cs, err := Compile(sentinel, nil)
 	if err != nil {
-		t.Fatalf("Compile: %v", err)
+		t.Fatalf("Compile sentinel: %v", err)
 	}
-	// The compiled hash must equal the ORIGINAL (sentinel-carrying) definition's
-	// hash, not the baked copy's — otherwise an installed snapshot's stored hash
-	// would never match the catalog definition's hash and the rule would look
-	// permanently "upgradeable".
-	if c.DefinitionHash != def.Hash() {
-		t.Errorf("DefinitionHash = %q, want original def.Hash() %q", c.DefinitionHash, def.Hash())
+	cl, err := Compile(literal, nil)
+	if err != nil {
+		t.Fatalf("Compile literal: %v", err)
 	}
-	// Guard the guard: baking genuinely changes the hashed content, so this
-	// assertion is only meaningful if the baked copy's hash actually differs.
-	baked := def
-	baked.SQLTemplate = "SELECT 'my-rule' AS rule_id, 'My Rule' AS rule_name FROM agentguard_hook_events WHERE 1 = 0"
-	if baked.Hash() == def.Hash() {
-		t.Fatal("test precondition failed: baked template hashes identically to original")
+	if cs.DefinitionHash != cl.DefinitionHash {
+		t.Errorf("sentinel hash %q != literal hash %q — sentinel rewrite trips a phantom upgrade",
+			cs.DefinitionHash, cl.DefinitionHash)
+	}
+	// CanonicalDefinitionHash is the single hash used for install-snapshot
+	// equality; it must agree with what Compile records.
+	if got := CanonicalDefinitionHash(sentinel); got != cs.DefinitionHash {
+		t.Errorf("CanonicalDefinitionHash(sentinel) %q != Compile hash %q", got, cs.DefinitionHash)
+	}
+	if got := CanonicalDefinitionHash(literal); got != cs.DefinitionHash {
+		t.Errorf("CanonicalDefinitionHash(literal) %q != sentinel hash %q", got, cs.DefinitionHash)
 	}
 }
 

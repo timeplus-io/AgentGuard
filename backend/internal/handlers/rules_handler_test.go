@@ -11,10 +11,57 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/catalog"
+	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/rules"
 )
 
 func init() { gin.SetMode(gin.TestMode) }
+
+// TestCreateRule_DuplicateIDIsAtomicConflict verifies the legacy POST /api/rules
+// path (finding 3) claims the rule ID through the atomic catalog SaveIfAbsent:
+// a create whose ID already exists is rejected with 409 and never overwrites the
+// existing definition. The old path used a non-atomic ValidateID()+Save() with an
+// unconditional rollback Delete, so two concurrent same-ID creates could both
+// pass the guard and one's failed install could delete the definition backing the
+// other's installed rule. The concurrency guarantee behind the atomic claim is
+// proven deterministically at the catalog layer by
+// catalog.TestSaveIfAbsent_ConcurrentSameIDExactlyOneWins; this test pins the
+// handler's contract (409 + no overwrite) at the API boundary.
+func TestCreateRule_DuplicateIDIsAtomicConflict(t *testing.T) {
+	mgr := newParamCatalogManager(t)
+	lc := rules.NewLifecycle(mgr)
+	cfg := &config.Config{}
+	r := gin.New()
+	r.POST("/rules", CreateRule(cfg, mgr, lc))
+
+	// A pre-existing custom definition the create must not clobber.
+	existing := catalog.Definition{
+		ID: "rp-dup", Name: "Existing", Version: "1.0.0",
+		SQLTemplate: "SELECT 'keep' AS marker FROM agentguard_hook_events WHERE 1 = 0",
+		Origin:      catalog.OriginCustom,
+	}
+	if err := mgr.Save(existing); err != nil {
+		t.Fatalf("seed existing definition: %v", err)
+	}
+
+	body := `{"id":"rp-dup","name":"Overwriter","description":"d",` +
+		`"query_sql":"SELECT 'CLOBBER' AS marker FROM agentguard_hook_events WHERE 1 = 0"}`
+	req := httptest.NewRequest(http.MethodPost, "/rules", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("duplicate id: want 409, got %d: %s", w.Code, w.Body.String())
+	}
+	got, ok := mgr.Lookup("rp-dup")
+	if !ok {
+		t.Fatal("pre-existing definition was deleted by a duplicate create")
+	}
+	if got.Name != "Existing" || !strings.Contains(got.SQLTemplate, "'keep'") {
+		t.Errorf("pre-existing definition was overwritten: name=%q sql=%q", got.Name, got.SQLTemplate)
+	}
+}
 
 func TestRespondRuleError_StatusMapping(t *testing.T) {
 	cases := []struct {

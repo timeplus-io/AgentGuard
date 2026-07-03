@@ -117,7 +117,9 @@ type Compiled struct {
 	Effective map[string]any `json:"effective"`
 	// SQL is the rendered sql_template with every placeholder substituted.
 	SQL string `json:"sql"`
-	// DefinitionHash is catalog.Definition.Hash() of the compiled definition.
+	// DefinitionHash is CanonicalDefinitionHash of the compiled definition (its
+	// normalized, identity-baked hash) — the single value all upgrade/configure
+	// guards compare against.
 	DefinitionHash string `json:"definition_hash"`
 }
 

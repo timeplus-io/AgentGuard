@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -143,7 +142,7 @@ func ListRules(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gi
 		packs := make([]models.RulePack, 0, len(instances))
 		for _, inst := range instances {
 			p := instanceToPack(inst)
-			if def, ok := mgr.Lookup(inst.RuleID); ok && def.Hash() != inst.DefinitionHash {
+			if def, ok := mgr.Lookup(inst.RuleID); ok && rules.CanonicalDefinitionHash(def) != inst.DefinitionHash {
 				p.Upgradeable = true
 				p.LatestVersion = def.Version
 			}
@@ -418,16 +417,6 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) g
 		if ruleID == "" {
 			ruleID = fmt.Sprintf("custom-%d", time.Now().UnixNano())
 		}
-		if err := mgr.ValidateID(ruleID); err != nil {
-			// A duplicate ID is a conflict; a malformed/empty/too-long ID is a
-			// client input error.
-			status := http.StatusBadRequest
-			if strings.Contains(err.Error(), "already exists") {
-				status = http.StatusConflict
-			}
-			c.JSON(status, gin.H{"error": err.Error()})
-			return
-		}
 
 		// Store the submitted query verbatim — sentinels and all. The compiler
 		// bakes the '__rule_id__'/'__rule_name__' identity at render time
@@ -449,19 +438,26 @@ func CreateRule(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) g
 			UDFs:        body.UDFs,
 			Origin:      catalog.OriginCustom,
 		}
-		if err := mgr.Save(def); err != nil {
-			// Save validates the definition (bad SQL template / UDF ownership →
-			// client error) and writes the file (IO → server error).
+		// SaveIfAbsent claims the ID atomically: the existence check and the write
+		// happen under one lock, so a duplicate ID is rejected with ErrExists (→409)
+		// rather than the old non-atomic ValidateID()+Save() where two concurrent
+		// creates of the same ID could both pass the guard and overwrite each other.
+		// It also runs full definition validation (bad id/template/UDF → 400/409).
+		// Mirrors CreateCatalogRule so the legacy and catalog create paths share the
+		// same atomic claim; the concurrency guarantee is proven at the catalog layer
+		// by TestSaveIfAbsent_ConcurrentSameIDExactlyOneWins.
+		if err := mgr.SaveIfAbsent(def); err != nil {
 			log.Printf("rules: CreateRule save %s: %v", ruleID, err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			respondCatalogError(c, err)
 			return
 		}
 
 		inst, err := lc.For(&reqCfg.Timeplus).Install(ruleID, nil, sessionUser(c), "create custom rule")
 		if err != nil {
-			// Roll back the catalog Save so a failed creation does not leave an
-			// orphaned (uninstalled) definition behind — important since an omitted
-			// id auto-generates a fresh one on every retry.
+			// Roll back only the definition THIS request created (SaveIfAbsent
+			// succeeded above, so we own it) — never a definition an earlier or
+			// concurrent request installed under the same ID. Also matters because an
+			// omitted id auto-generates a fresh one on every retry.
 			if delErr := mgr.Delete(ruleID); delErr != nil {
 				log.Printf("rules: CreateRule rollback delete %s: %v", ruleID, delErr)
 			}
@@ -526,7 +522,7 @@ func ListCatalog(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) 
 				item.Installed = true
 				item.Enabled = inst.Enabled
 				item.InstalledVersion = inst.DefinitionVersion
-				item.Upgradeable = e.Hash() != inst.DefinitionHash
+				item.Upgradeable = rules.CanonicalDefinitionHash(e) != inst.DefinitionHash
 			}
 			items = append(items, item)
 		}

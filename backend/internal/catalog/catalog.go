@@ -288,15 +288,23 @@ func canonicalizeNumericDefault(p Parameter) any {
 	return p.Default
 }
 
-// defaultEmptyTypes returns params with any empty Type defaulted to "string",
-// mirroring the Timeplus Apps rule that an omitted parameter type means string.
-// It allocates a copy only when defaulting is needed, so it never mutates the
-// caller's slice (Save takes d by value, but d.Parameters shares its backing
-// array with the caller).
-func defaultEmptyTypes(params []Parameter) []Parameter {
+// normalizeParams returns params with Timeplus Apps-compatibility normalization
+// applied: an omitted Type defaults to "string", and a json.Number default (what
+// a JSON body decoded with UseNumber() produces) is canonicalized to a native
+// scalar (see canonicalizeNumericDefault). It allocates a copy only when some
+// normalization is needed, so it never mutates the caller's slice (callers take
+// the Definition by value, but d.Parameters shares its backing array).
+//
+// Type is defaulted before the numeric canonicalization because
+// canonicalizeNumericDefault dispatches on the parameter type.
+func normalizeParams(params []Parameter) []Parameter {
 	needs := false
 	for _, p := range params {
 		if p.Type == "" {
+			needs = true
+			break
+		}
+		if _, ok := p.Default.(json.Number); ok {
 			needs = true
 			break
 		}
@@ -310,19 +318,23 @@ func defaultEmptyTypes(params []Parameter) []Parameter {
 		if out[i].Type == "" {
 			out[i].Type = "string"
 		}
+		out[i].Default = canonicalizeNumericDefault(out[i])
 	}
 	return out
 }
 
 // NormalizeDefinition returns d with Timeplus Apps-compatibility normalization
-// applied: a parameter with an omitted type defaults to "string".
+// applied: a parameter with an omitted type defaults to "string", and a
+// json.Number default is canonicalized to a native scalar.
 // This is the single normalization step every ingestion path runs before
-// validation or compilation (Save, seed/local-dir load, zip import, compile
-// preview, and the installed-edit redeploy), so the omitted-type rule holds
-// catalog-wide rather than only on the API Save path. It only allocates when
-// normalization is needed, and never mutates the caller's Definition.
+// validation, compilation, or HASHING (Save, seed/local-dir load, zip import,
+// compile preview, the installed-edit redeploy, and CanonicalDefinitionHash), so
+// a definition hashes identically regardless of whether its numeric defaults
+// arrived as json.Number or native scalars — the invariant install-snapshot hash
+// equality (upgrade detection) depends on. It only allocates when normalization
+// is needed, and never mutates the caller's Definition.
 func NormalizeDefinition(d Definition) Definition {
-	d.Parameters = defaultEmptyTypes(d.Parameters)
+	d.Parameters = normalizeParams(d.Parameters)
 	return d
 }
 
@@ -363,9 +375,11 @@ func (m *Manager) saveLocked(d Definition) error {
 	if d.Origin == "" {
 		d.Origin = OriginCustom
 	}
-	// Default an omitted parameter type to "string" (Timeplus Apps semantics)
-	// before validation, so a typeless param is accepted and persisted with a
-	// concrete type rather than rejected downstream as an unknown type.
+	// Normalize before validation: default an omitted parameter type to "string"
+	// (Timeplus Apps semantics) and canonicalize json.Number defaults to native
+	// scalars, so a typeless param is accepted, numeric defaults survive the YAML
+	// round-trip, and the persisted definition hashes identically to the form
+	// Compile recorded at install time.
 	d = NormalizeDefinition(d)
 	if err := d.Validate(); err != nil {
 		return fmt.Errorf("invalid definition %s: %w", d.ID, err)
@@ -395,19 +409,10 @@ func (m *Manager) saveLocked(d Definition) error {
 	if other, ok := m.mvKeyConflict(d.ID); ok {
 		return fmt.Errorf("%w: id %q collides with rule %q in the materialized-view namespace (hyphens are not significant there); choose a distinct id", ErrExists, d.ID, other)
 	}
-	// Canonicalize numeric defaults to native scalars before persisting so they
-	// survive the YAML round-trip (see canonicalizeNumericDefault). Copy the
-	// slice first: Save takes d by value but d.Parameters shares its backing
-	// array with the caller, so an in-place write would mutate the caller's
-	// Definition too.
-	if len(d.Parameters) > 0 {
-		params := make([]Parameter, len(d.Parameters))
-		copy(params, d.Parameters)
-		for i := range params {
-			params[i].Default = canonicalizeNumericDefault(params[i])
-		}
-		d.Parameters = params
-	}
+	// Numeric defaults are already canonicalized to native scalars by the
+	// NormalizeDefinition call above, so they survive the YAML round-trip (a
+	// json.Number would be marshaled as a quoted string and reload as a Go
+	// string, failing numeric validation).
 	data, err := yaml.Marshal(d)
 	if err != nil {
 		return fmt.Errorf("marshal definition %s: %w", d.ID, err)
