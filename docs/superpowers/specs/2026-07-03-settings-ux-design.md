@@ -34,12 +34,16 @@ untouched):
 - **Left:** sticky section nav (~200px wide, `sticky` below the top nav)
   listing the sections from `data.sections` in API order (Server, Timeplus
   Connection, AgentGuard, Catalog, Approval Holds, Semantic DLP, Setup).
-- **Right:** only the **active section** renders.
+- **Right:** only the **active section** is visible; all sections stay
+  mounted (inactive ones CSS-hidden via Tailwind `hidden`) so embedded
+  editors like `DLPConfigEditor` keep their in-progress local state across
+  tab switches.
 
 The active section id is stored in the URL hash (`/settings#dlp`) so tabs
 deep-link and survive refresh. An unknown or absent hash falls back to the
-first section. Switching tabs updates the hash without adding history entries
-beyond normal hash navigation.
+first section. Tab switches call `navigate(..., { replace: true })`, so Back
+returns to the previously visited page rather than stepping back through
+tabs — this is deliberate.
 
 Styling follows the Digital Sentry system: active nav item = lighter background
 tier (tonal layering), no borders, no shadows, radius ≤ 4px. Same interaction
