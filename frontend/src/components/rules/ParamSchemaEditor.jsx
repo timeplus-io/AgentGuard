@@ -370,7 +370,7 @@ function MultiChoiceDefaultEditor({ row, onUpdate }) {
             onClick={() => toggle(opt)}
             className={`text-[11px] rounded-full px-2.5 py-1 transition-colors ${
               active
-                ? 'bg-[#ffb0cf] text-[#3d0023]'
+                ? 'bg-primary text-[#3d0023]'
                 : 'bg-surface-container-lowest text-gray-300 hover:bg-surface-variant'
             }`}
           >

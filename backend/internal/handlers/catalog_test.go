@@ -434,6 +434,32 @@ func TestCatalogRoutes_RegisterWithoutPanic(t *testing.T) {
 	}
 }
 
+// TestCompileCatalogRule_RejectsDeprecatedLengthConstraint verifies the deprecated
+// min_length/max_length constraints are rejected loudly when submitted via a JSON
+// authoring request (finding 5). The JSON decode path must PARSE the fields (not
+// silently ignore them the way json:"-" would), so validation can reject them —
+// otherwise a JSON author could smuggle a length constraint that is quietly
+// dropped, the exact silent loosening the fix exists to prevent.
+func TestCompileCatalogRule_RejectsDeprecatedLengthConstraint(t *testing.T) {
+	r := gin.New()
+	r.POST("/rules/catalog/compile", CompileCatalogRule())
+
+	body := `{"definition":{"id":"rp-len","name":"Len","version":"1.0.0",` +
+		`"sql_template":"SELECT 1 WHERE t = {{ .Config.tool }}",` +
+		`"config":[{"key":"tool","type":"string","default":"bash","min_length":1}]}}`
+	req := httptest.NewRequest(http.MethodPost, "/rules/catalog/compile", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("deprecated min_length via JSON: want 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "min_length") {
+		t.Errorf("error should name min_length: %s", w.Body.String())
+	}
+}
+
 // TestCreateCatalogRule_DuplicateCustomID verifies that POST /rules/catalog returns
 // 409 when the submitted ID already exists as a custom definition, so the handler
 // never silently overwrites an existing entry.

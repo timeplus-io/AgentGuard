@@ -12,6 +12,7 @@ import (
 )
 
 func f64(v float64) *float64 { return &v }
+func iptr(v int) *int        { return &v }
 
 // validDef returns a minimal Definition that passes Validate.
 func validDef() Definition {
@@ -119,6 +120,19 @@ func TestDefinitionValidate_Parameters(t *testing.T) {
 		{"nil default", []Parameter{param(func(p *Parameter) { p.Default = nil })}, "default is required"},
 		{"choice without options", []Parameter{{Key: "mode", Type: "choice", Default: "x"}}, "non-empty options"},
 		{"multi_choice without options", []Parameter{{Key: "modes", Type: "multi_choice", Default: []any{"x"}}}, "non-empty options"},
+		// Duplicate options are rejected: multi_choice canonicalizes selected
+		// values by iterating Options, so a repeated option would emit a duplicate
+		// canonical value that then fails every later re-normalization (an
+		// unrecoverable un-editable rule). See internal/rules normalizeValue.
+		{"choice with duplicate options", []Parameter{{Key: "mode", Type: "choice", Default: "x", Options: []string{"x", "x"}}}, "duplicate option"},
+		{"multi_choice with duplicate options", []Parameter{{Key: "modes", Type: "multi_choice", Default: []any{"x"}, Options: []string{"x", "y", "x"}}}, "duplicate option"},
+		// min_items/max_items must be >= 1 for list-like params: empty lists are
+		// globally rejected, so "min_items: 0" is a constraint the form can never
+		// satisfy — the UI would render a "min 0 items" hint it always violates.
+		{"list with min_items 0", []Parameter{{Key: "items", Type: "list", Default: []any{"x"}, MinItems: iptr(0)}}, "min_items"},
+		{"multi_choice with min_items 0", []Parameter{{Key: "modes", Type: "multi_choice", Default: []any{"x"}, Options: []string{"x"}, MinItems: iptr(0)}}, "min_items"},
+		{"list with max_items 0", []Parameter{{Key: "items", Type: "list", Default: []any{"x"}, MaxItems: iptr(0)}}, "max_items"},
+		{"list with min_items above max_items", []Parameter{{Key: "items", Type: "list", Default: []any{"x"}, MinItems: iptr(3), MaxItems: iptr(2)}}, "max_items"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -133,6 +147,32 @@ func TestDefinitionValidate_Parameters(t *testing.T) {
 			}
 			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 				t.Fatalf("expected error containing %q, got %v", c.wantErr, err)
+			}
+		})
+	}
+}
+
+// TestDefinitionValidate_RejectsDeprecatedLengthConstraints pins the finding-5
+// fix: min_length/max_length were dropped from the parameter schema during the
+// Apps-vocabulary alignment. A pre-existing (Phase A) definition that used
+// min_length to bar empty strings must FAIL LOUDLY at validation rather than
+// silently loading with the constraint dropped — a silent loosening would let an
+// empty value through, so an empty-string substring test would then match every
+// event. The fields are parsed (so the value is seen) and rejected with a clear
+// message.
+func TestDefinitionValidate_RejectsDeprecatedLengthConstraints(t *testing.T) {
+	for _, key := range []string{"min_length", "max_length"} {
+		t.Run(key, func(t *testing.T) {
+			doc := "id: rp-len\nname: Len\nversion: 1.0.0\n" +
+				"sql_template: \"SELECT 1 WHERE t = {{ .Config.tool }}\"\n" +
+				"config:\n  - key: tool\n    type: string\n    default: bash\n    " + key + ": 1\n"
+			var d Definition
+			if err := yaml.Unmarshal([]byte(doc), &d); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			err := d.Validate()
+			if err == nil || !strings.Contains(err.Error(), key) {
+				t.Fatalf("expected rejection mentioning %q, got %v", key, err)
 			}
 		})
 	}

@@ -78,6 +78,18 @@ type Parameter struct {
 	Aliases     []string `yaml:"aliases,omitempty"     json:"aliases,omitempty"`
 	Unit        string   `yaml:"unit,omitempty"        json:"unit,omitempty"`
 	Secret      bool     `yaml:"secret,omitempty"      json:"secret,omitempty"`
+
+	// MinLength/MaxLength are DEPRECATED Phase A string-length constraints that
+	// were removed in the Timeplus Apps vocabulary alignment. They are still
+	// PARSED from BOTH yaml and json — the JSON authoring endpoints
+	// (/rules/catalog, /rules/catalog/compile) decode a Definition, so json:"-"
+	// would let a JSON author silently smuggle a constraint that is quietly
+	// dropped, the exact silent loosening this deprecation exists to prevent — so
+	// that validate() can reject a definition that carries them with a clear, loud
+	// error. omitempty keeps them out of the JSON/hash surface of a valid
+	// definition, which never carries them (validate rejects any that do).
+	MinLength *int `yaml:"min_length,omitempty" json:"min_length,omitempty"`
+	MaxLength *int `yaml:"max_length,omitempty" json:"max_length,omitempty"`
 }
 
 // parameterTypes is the set of supported parameter types. The vocabulary mirrors
@@ -324,11 +336,43 @@ func (d Definition) validate() error {
 		if p.Secret {
 			return fmt.Errorf("config[%d] (%s): secret parameters are not supported — parameters are rendered into SQL and must never store secrets", i, p.Key)
 		}
+		if p.MinLength != nil || p.MaxLength != nil {
+			return fmt.Errorf("config[%d] (%s): min_length/max_length are no longer supported (removed in the Apps vocabulary alignment); enforce a length bound via the SQL template or a regex parameter", i, p.Key)
+		}
 		if p.Default == nil {
 			return fmt.Errorf("config[%d] (%s): default is required", i, p.Key)
 		}
-		if (p.Type == "choice" || p.Type == "multi_choice") && len(p.Options) == 0 {
-			return fmt.Errorf("config[%d] (%s): %s requires non-empty options", i, p.Key, p.Type)
+		if p.Type == "choice" || p.Type == "multi_choice" {
+			if len(p.Options) == 0 {
+				return fmt.Errorf("config[%d] (%s): %s requires non-empty options", i, p.Key, p.Type)
+			}
+			// Options must be unique. multi_choice canonicalization (internal/rules
+			// normalizeValue) rebuilds a selected value by iterating Options, so a
+			// repeated option would emit a duplicate canonical value that then fails
+			// its own dedup check on every later re-normalization — leaving the rule
+			// permanently un-editable. Reject the duplicate here, at authoring time.
+			seenOpt := make(map[string]bool, len(p.Options))
+			for _, opt := range p.Options {
+				if seenOpt[opt] {
+					return fmt.Errorf("config[%d] (%s): duplicate option %q", i, p.Key, opt)
+				}
+				seenOpt[opt] = true
+			}
+		}
+		if p.Type == "list" || p.Type == "multi_choice" {
+			// Empty lists are always rejected (internal/rules normalizeStringList),
+			// so a min_items/max_items below 1 is a bound the form can never satisfy —
+			// and "min_items: 0" would render a "min 0 items" hint the UI always
+			// violates. Reject the incoherent bound here at authoring time.
+			if p.MinItems != nil && *p.MinItems < 1 {
+				return fmt.Errorf("config[%d] (%s): min_items must be >= 1 (empty lists are always rejected), got %d", i, p.Key, *p.MinItems)
+			}
+			if p.MaxItems != nil && *p.MaxItems < 1 {
+				return fmt.Errorf("config[%d] (%s): max_items must be >= 1, got %d", i, p.Key, *p.MaxItems)
+			}
+			if p.MinItems != nil && p.MaxItems != nil && *p.MinItems > *p.MaxItems {
+				return fmt.Errorf("config[%d] (%s): min_items (%d) must not exceed max_items (%d)", i, p.Key, *p.MinItems, *p.MaxItems)
+			}
 		}
 		if p.Type == "duration" && p.Unit == "" {
 			return fmt.Errorf("config[%d] (%s): duration requires a unit", i, p.Key)
