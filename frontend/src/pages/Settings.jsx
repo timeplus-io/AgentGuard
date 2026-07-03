@@ -1,100 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
-import Toggle from '../components/Toggle'
-import DLPConfigEditor from '../components/DLPConfigEditor'
+import SettingsNav from '../components/settings/SettingsNav'
+import SettingsSection from '../components/settings/SettingsSection'
+import {
+  keyToSectionMap,
+  dirtyCountsBySection,
+  sectionIdsWithFlag,
+  activeSectionFromHash,
+} from '../utils/settingsNav'
 import { api } from '../api/client'
-
-// DLP keys that remain server-config (config.yaml): the enable switch and the
-// embedding dimension (baked into the stream/index). Everything else — endpoint,
-// models, timeouts, tokens, entity catalog — is edited live below via the config
-// stream, so it's hidden from the flat key list to avoid two sources of truth.
-const DLP_SERVER_KEYS = new Set(['dlp.enabled', 'dlp.embedding_dim'])
-
-const SOURCE_LABEL = {
-  default: 'default',
-  file: 'config file',
-  env: 'environment',
-  flag: 'CLI flag',
-}
-
-function SourceChip({ k }) {
-  const label = SOURCE_LABEL[k.source] || k.source
-  const title =
-    k.source === 'env' ? `Set by ${k.env_var} — file edits have no effect until the variable is removed`
-    : k.source === 'flag' ? `Set by --${k.flag} — file edits have no effect`
-    : undefined
-  return (
-    <span title={title} className="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 bg-gray-700 text-gray-300">
-      {label}
-    </span>
-  )
-}
-
-function KeyField({ k, draftValue, onChange }) {
-  const disabled = !k.editable
-  const value = draftValue
-  const baseInput =
-    'w-full bg-gray-900 text-gray-100 text-sm rounded-sm px-3 py-2 outline-none focus:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed'
-
-  let input
-  if (k.type === 'bool') {
-    input = <Toggle checked={!!value} onChange={(v) => onChange(v)} disabled={disabled} />
-  } else if (k.type === 'enum') {
-    input = (
-      <select className={baseInput} value={value ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-        {k.enum_values?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-      </select>
-    )
-  } else if (k.type === 'secret') {
-    input = (
-      <input
-        type="password"
-        className={baseInput}
-        disabled={disabled}
-        placeholder={k.set ? '•••••••• (set)' : 'not set'}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    )
-  } else if (k.type === 'int') {
-    input = (
-      <input
-        type="number"
-        className={baseInput}
-        disabled={disabled}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-      />
-    )
-  } else {
-    input = (
-      <input
-        type="text"
-        className={baseInput}
-        disabled={disabled}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    )
-  }
-
-  return (
-    <div className="py-3">
-      <div className="flex items-center justify-between gap-3 mb-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-100">{k.label}</span>
-          <SourceChip k={k} />
-          {k.restart && <span className="text-[10px] text-amber-400">requires restart</span>}
-          {k.reprovision && <span className="text-[10px] text-amber-400">requires re-provision</span>}
-        </div>
-      </div>
-      <p className="text-xs text-gray-400 mb-2">{k.description}</p>
-      <div className="max-w-md">{input}</div>
-    </div>
-  )
-}
 
 export default function Settings() {
   const [data, setData] = useState(null)
@@ -106,6 +23,8 @@ export default function Settings() {
   const [banner, setBanner] = useState(null) // {type, msg}
   const [tpTest, setTpTest] = useState(null)
   const [reprovisioning, setReprovisioning] = useState(false)
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const load = useCallback(() => {
     setLoading(true)
@@ -176,12 +95,19 @@ export default function Settings() {
     return ''
   }
 
+  const sections = data?.sections || []
+  const activeId = activeSectionFromHash(location.hash, sections)
+  const activeSection = sections.find((s) => s.id === activeId)
+  const dirtyCounts = dirtyCountsBySection(drafts, keyToSectionMap(sections))
+  const restartIds = sectionIdsWithFlag(sections, 'restart')
+  const reprovisionIds = sectionIdsWithFlag(sections, 'reprovision')
+
   return (
     <div className="min-h-screen bg-[#15121d] text-gray-100">
       <Sidebar />
       <TopNav />
       <main className="pl-sidebar pt-16 pb-24 min-h-screen">
-        <div className="p-8 max-w-4xl">
+        <div className="p-8 max-w-5xl">
           <PageHeader title="Settings" subtitle="View and edit AgentGuard server configuration. Keys set by environment variables or CLI flags are read-only." />
 
           {loading && <p className="text-gray-400 text-sm">Loading…</p>}
@@ -212,50 +138,34 @@ export default function Settings() {
             </div>
           )}
 
-          {data?.sections?.map((section) => (
-            <section key={section.id} className="mb-6 bg-gray-800 rounded-sm px-6 py-4">
-              <h3 className="text-base font-medium text-gray-100 mb-2">{section.title}</h3>
-              <div className="divide-y divide-gray-700/50">
-                {(section.id === 'dlp'
-                  ? section.keys.filter((k) => DLP_SERVER_KEYS.has(k.key))
-                  : section.keys
-                ).map((k) => (
-                  <div key={k.key}>
-                    <KeyField k={k} draftValue={draftFor(k)} onChange={(v) => setDraft(k.key, v)} />
-                    {fieldErrors[k.key] && <p className="text-error text-xs pb-2">{fieldErrors[k.key]}</p>}
-                  </div>
-                ))}
+          {sections.length > 0 && (
+            <div className="flex gap-6 items-start">
+              <SettingsNav
+                sections={sections}
+                activeId={activeId}
+                dirtyCounts={dirtyCounts}
+                restartIds={restartIds}
+                reprovisionIds={reprovisionIds}
+                showRestart={!!data?.restart_required}
+                showReprovision={!!data?.reprovision_required}
+                onSelect={(id) => navigate(`#${id}`, { replace: true })}
+              />
+              <div className="flex-1 min-w-0">
+                {activeSection && (
+                  <SettingsSection
+                    section={activeSection}
+                    draftFor={draftFor}
+                    setDraft={setDraft}
+                    fieldErrors={fieldErrors}
+                    tpTest={tpTest}
+                    onTestTimeplus={testTimeplus}
+                    reprovisioning={reprovisioning}
+                    onReprovision={reprovisionDLP}
+                  />
+                )}
               </div>
-
-              {section.id === 'timeplus' && (
-                <div className="mt-3 flex items-center gap-3">
-                  <button onClick={testTimeplus} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">Test connection</button>
-                  {tpTest?.pending && <span className="text-xs text-gray-400">Testing…</span>}
-                  {tpTest && !tpTest.pending && (
-                    <span className={`text-xs ${tpTest.ok ? 'text-emerald-400' : 'text-error'}`}>
-                      {tpTest.ok ? 'Connection OK' : `Failed: ${tpTest.error}`}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {section.id === 'dlp' && (
-                <div className="mt-6 border-t border-gray-700/50 pt-4">
-                  <h4 className="text-sm font-semibold text-gray-100 mb-1">Runtime configuration</h4>
-                  <DLPConfigEditor />
-                  <div className="mt-4 flex items-center gap-3">
-                    <button onClick={reprovisionDLP} disabled={reprovisioning}
-                      className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600 disabled:opacity-50">
-                      {reprovisioning ? 'Re-provisioning…' : 'Re-provision DLP'}
-                    </button>
-                    <span className="text-[11px] text-gray-500">
-                      Re-detects the embedding dimension and rebuilds the pipeline. Run after switching the embedding model.
-                    </span>
-                  </div>
-                </div>
-              )}
-            </section>
-          ))}
+            </div>
+          )}
         </div>
 
         {dirtyKeys.length > 0 && (
