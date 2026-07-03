@@ -293,3 +293,64 @@ func TestIntegration_RuleRP128Detection(t *testing.T) {
 		t.Errorf("%s: got %d, want 0 (matches signature but below the duration floor)", fastHit, counts[fastHit])
 	}
 }
+
+// TestIntegration_DeleteCatalogRule proves the guarded DELETE /api/rules/catalog/:id
+// lifecycle against a real timeplusd (the install-state guard needs Timeplus, so
+// the fake-querier unit tests only cover the builtin-reject / not-found paths):
+//   - an uninstalled custom definition deletes (200) and is then gone (404),
+//   - an INSTALLED custom definition is rejected (409) until it is uninstalled,
+//     after which the definition deletes cleanly,
+//   - a builtin definition is always rejected (409).
+//
+// This is the escape hatch for the eager-persist clone flow (an abandoned/failed
+// clone edit would otherwise leave an un-removable orphan).
+func TestIntegration_DeleteCatalogRule(t *testing.T) {
+	r := newRuleE2E(t)
+	pfx := randPfx(t)
+
+	minimalDef := func(id string) map[string]any {
+		return map[string]any{
+			"id": id, "name": "Del Test " + id, "version": "1.0.0",
+			"description": "delete-catalog integration test", "severity": "warning",
+			"category": "test", "hook_sources": "tool_complete",
+			"sql_template": detectionTemplate(id, "event_type = 'tool_complete'"),
+		}
+	}
+	delCatalog := func(id string) (int, string) {
+		resp := doReq(t, r.client, "DELETE", "/api/rules/catalog/"+id, "")
+		return resp.StatusCode, readBody(t, resp)
+	}
+
+	// 1. Uninstalled custom definition → delete succeeds, then it is gone.
+	idA := "rp-itest-del-" + pfx
+	r.createCustomRule(minimalDef(idA))
+	if code, body := delCatalog(idA); code != http.StatusOK {
+		t.Fatalf("delete uninstalled custom %s: want 200, got %d %s", idA, code, body)
+	}
+	resp := doGet(t, r.client, "/api/rules/catalog/"+idA)
+	body := readBody(t, resp)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("after delete, GET catalog %s: want 404, got %d %s", idA, resp.StatusCode, body)
+	}
+
+	// 2. Installed custom definition → delete rejected (409) until uninstalled.
+	idB := "rp-itest-del2-" + pfx
+	r.createCustomRule(minimalDef(idB))
+	r.installCustomRule(idB, "{}")
+	if code, body := delCatalog(idB); code != http.StatusConflict {
+		t.Fatalf("delete INSTALLED custom %s: want 409, got %d %s", idB, code, body)
+	}
+	// Uninstall the live instance, then the definition deletes cleanly.
+	uresp := doReq(t, r.client, "DELETE", "/api/rules/"+idB, "")
+	if ubody := readBody(t, uresp); uresp.StatusCode != http.StatusOK {
+		t.Fatalf("uninstall %s: want 200, got %d %s", idB, uresp.StatusCode, ubody)
+	}
+	if code, body := delCatalog(idB); code != http.StatusOK {
+		t.Fatalf("delete after uninstall %s: want 200, got %d %s", idB, code, body)
+	}
+
+	// 3. Builtin definition → always rejected.
+	if code, body := delCatalog("rp-003"); code != http.StatusConflict {
+		t.Fatalf("delete builtin rp-003: want 409, got %d %s", code, body)
+	}
+}

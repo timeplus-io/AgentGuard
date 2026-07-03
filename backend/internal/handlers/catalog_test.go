@@ -434,6 +434,45 @@ func TestCatalogRoutes_RegisterWithoutPanic(t *testing.T) {
 	}
 }
 
+// TestDeleteCatalogRule_BuiltinRejected verifies DELETE /rules/catalog/:id refuses
+// to delete a builtin (seed) definition with 409 — builtins are embedded and
+// immutable; the definition must survive the rejected call.
+func TestDeleteCatalogRule_BuiltinRejected(t *testing.T) {
+	mgr := newParamCatalogManager(t) // rp-003 is builtin (seed)
+	lc := rules.NewLifecycle(mgr)
+	cfg := &config.Config{}
+	r := gin.New()
+	r.DELETE("/rules/catalog/:id", DeleteCatalogRule(cfg, mgr, lc))
+
+	req := httptest.NewRequest(http.MethodDelete, "/rules/catalog/rp-003", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("delete builtin: want 409, got %d: %s", w.Code, w.Body.String())
+	}
+	if _, ok := mgr.Lookup("rp-003"); !ok {
+		t.Error("builtin rp-003 must still exist after a rejected delete")
+	}
+}
+
+// TestDeleteCatalogRule_NotFound verifies DELETE /rules/catalog/:id returns 404 for
+// an unknown ID (checked before any install-state / Timeplus lookup).
+func TestDeleteCatalogRule_NotFound(t *testing.T) {
+	mgr := newParamCatalogManager(t)
+	lc := rules.NewLifecycle(mgr)
+	cfg := &config.Config{}
+	r := gin.New()
+	r.DELETE("/rules/catalog/:id", DeleteCatalogRule(cfg, mgr, lc))
+
+	req := httptest.NewRequest(http.MethodDelete, "/rules/catalog/does-not-exist", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("delete unknown id: want 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 // TestCompileCatalogRule_RejectsDeprecatedLengthConstraint verifies the deprecated
 // min_length/max_length constraints are rejected loudly when submitted via a JSON
 // authoring request (finding 5). The JSON decode path must PARSE the fields (not

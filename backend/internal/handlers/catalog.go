@@ -245,6 +245,65 @@ func UpdateCatalogRule(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifec
 	}
 }
 
+// DeleteCatalogRule handles DELETE /api/rules/catalog/:id.
+// It removes a LOCAL (custom/imported) catalog definition that is NOT installed.
+// Deleting an uninstalled clone/draft is the escape hatch for the eager-persist
+// clone flow: clone writes the definition immediately, so an abandoned or
+// failed edit would otherwise leave an un-removable orphan.
+//
+// Guards (all rejections leave the definition untouched):
+//   - unknown ID                         → 404
+//   - builtin (seed) definition          → 409 (immutable; clone to customize)
+//   - a live installed instance exists   → 409 (uninstall first — deleting the
+//     definition out from under a running MV would orphan it)
+//   - install-state unverifiable (Timeplus down) → 503 (fail safe, do not delete)
+//
+// On success it deletes the local catalog file + in-memory entry and returns 200.
+func DeleteCatalogRule(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		reqCfg := auth.RequestCfg(c, cfg)
+		id := c.Param("id")
+
+		def, ok := mgr.Lookup(id)
+		if !ok {
+			c.JSON(http.StatusNotFound, gin.H{"error": "rule definition not found"})
+			return
+		}
+		// Builtins are embedded seed definitions, not file-backed — they cannot be
+		// deleted (only shadowed by a local override). Clone to customize instead.
+		if def.Origin == catalog.OriginBuiltin {
+			c.JSON(http.StatusConflict, gin.H{"error": "builtin rule definitions are immutable and cannot be deleted; clone it to a custom rule instead"})
+			return
+		}
+		// A live (installed, non-deleted) instance must be uninstalled first: the MV
+		// runs from the instance snapshot, so deleting the catalog definition would
+		// orphan a running detection that can no longer be edited or upgraded.
+		// Describe returns ErrNotFound when no live instance exists (never installed,
+		// or already uninstalled) — the only state in which deletion is safe.
+		_, derr := lc.For(&reqCfg.Timeplus).Describe(id)
+		switch {
+		case derr == nil:
+			c.JSON(http.StatusConflict, gin.H{"error": "rule is installed; uninstall it before deleting the definition"})
+			return
+		case errors.Is(derr, rules.ErrNotFound):
+			// Not installed → safe to delete.
+		default:
+			// Install state could not be verified (e.g. Timeplus unreachable). Fail
+			// safe: refuse rather than risk deleting an installed rule's definition.
+			log.Printf("catalog: DeleteCatalogRule %s: install-state check failed: %v", id, derr)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "cannot verify install state (data store unavailable); try again"})
+			return
+		}
+
+		if err := mgr.Delete(id); err != nil {
+			log.Printf("catalog: DeleteCatalogRule %s: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete definition"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"deleted": id})
+	}
+}
+
 // ImportCatalog handles POST /api/rules/catalog/import.
 // Accepts a multipart form with a "file" field containing a zip archive of YAML rule files.
 // Query param ?force=true overwrites existing entries even when the imported version is not newer.

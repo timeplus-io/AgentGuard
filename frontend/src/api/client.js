@@ -161,6 +161,10 @@ export const api = {
   createCatalogRule: (definition) => post('/rules/catalog', definition),
   // Edit a custom definition; atomically republishes + redeploys an installed MV.
   updateCatalogRule: (id, definition) => put(`/rules/catalog/${encodeURIComponent(id)}`, definition),
+  // Delete a LOCAL (custom/imported) catalog definition that is not installed.
+  // Rejects builtins (409) and installed rules (409 — uninstall first); the
+  // thrown error's .status/.message carry the reason.
+  deleteCatalogRule: (id) => del(`/rules/catalog/${encodeURIComponent(id)}`),
   getRule: (id) => get(`/rules/${id}`),
   toggleRule: (id) => post(`/rules/${id}/toggle`, {}),
   // Upgrade is bodyless and catalog-only; on 409 the thrown error's .body carries

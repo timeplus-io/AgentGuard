@@ -50,6 +50,10 @@ export default function RuleDetail() {
   const [cloneNewName, setCloneNewName] = useState('')
   const [cloneError, setCloneError] = useState(null)
   const [cloneLoading, setCloneLoading] = useState(false)
+  // Set when clone returns 409 (the target ID already has a definition): drives the
+  // recovery choices (open existing / delete draft / pick another ID) instead of a
+  // dead-end error, since clone eagerly persists.
+  const [cloneExists, setCloneExists] = useState(false)
   // Content tabs (left → right): configuration | description | sql | udfs | detections
   const [contentTab, setContentTab] = useState('configuration')
 
@@ -162,6 +166,7 @@ export default function RuleDetail() {
     }
     setCloneLoading(true)
     setCloneError(null)
+    setCloneExists(false)
     try {
       const created = await api.cloneCatalogRule(id, { id: newId, name: newName })
       setCloneModal(false)
@@ -169,7 +174,39 @@ export default function RuleDetail() {
       // definition's editor rather than back to the rules list.
       navigate(`/rules/${created?.id || newId}/edit`)
     } catch (e) {
-      setCloneError(e?.message || 'Clone failed')
+      if (e?.status === 409) {
+        // The target ID already has a definition (clone persists eagerly, so a
+        // prior clone or abandoned edit can leave one behind). Offer a safe
+        // recovery path rather than dead-ending.
+        setCloneExists(true)
+        setCloneError(`A rule "${newId}" already exists.`)
+      } else {
+        setCloneError(e?.message || 'Clone failed')
+      }
+    } finally {
+      setCloneLoading(false)
+    }
+  }
+
+  // Recovery: jump into the existing definition's editor.
+  const openExistingClone = () => {
+    setCloneModal(false)
+    navigate(`/rules/${cloneNewId.trim()}/edit`)
+  }
+
+  // Recovery: explicitly delete the existing (uninstalled) draft after confirming.
+  // The backend rejects with 409 if it is installed or builtin — that reason is
+  // surfaced verbatim; no auto-delete ever happens.
+  const deleteExistingClone = async () => {
+    const existingId = cloneNewId.trim()
+    if (!window.confirm(`Delete the existing definition "${existingId}"? This permanently removes the uninstalled custom rule.`)) return
+    setCloneLoading(true)
+    setCloneError(null)
+    try {
+      await api.deleteCatalogRule(existingId)
+      setCloneExists(false) // freed — the user can Clone into this ID again
+    } catch (e) {
+      setCloneError(e?.message || 'Delete failed')
     } finally {
       setCloneLoading(false)
     }
@@ -309,7 +346,7 @@ export default function RuleDetail() {
                 <input
                   type="text"
                   value={cloneNewId}
-                  onChange={e => setCloneNewId(e.target.value)}
+                  onChange={e => { setCloneNewId(e.target.value); setCloneExists(false); setCloneError(null) }}
                   placeholder="e.g. rp-003-custom"
                   className="w-full bg-[#0f0c17] border border-zinc-700 rounded-sm px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#ffb0cf]/50"
                 />
@@ -326,11 +363,31 @@ export default function RuleDetail() {
               </div>
             </div>
             {cloneError && (
-              <p className="text-xs text-[#ffb4ab] font-mono">{cloneError}</p>
+              <p className={`text-xs font-mono ${cloneExists ? 'text-amber-300' : 'text-[#ffb4ab]'}`}>{cloneError}</p>
+            )}
+            {cloneExists && (
+              <div className="flex flex-col gap-2 rounded-sm bg-[#0f0c17] p-3">
+                <p className="text-[11px] text-gray-400">Change the ID above to clone under a new name, or:</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={openExistingClone}
+                    className="flex-1 px-3 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors"
+                  >
+                    Open existing definition
+                  </button>
+                  <button
+                    onClick={deleteExistingClone}
+                    disabled={cloneLoading}
+                    className="flex-1 px-3 py-2 text-xs font-semibold rounded-sm bg-[#3a1720] text-[#ffb4ab] hover:bg-[#4a1d29] transition-colors disabled:opacity-50"
+                  >
+                    Delete existing draft
+                  </button>
+                </div>
+              </div>
             )}
             <div className="flex gap-3 justify-end pt-1">
               <button
-                onClick={() => { setCloneModal(false); setCloneError(null) }}
+                onClick={() => { setCloneModal(false); setCloneError(null); setCloneExists(false) }}
                 className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors"
               >
                 Cancel
@@ -340,7 +397,7 @@ export default function RuleDetail() {
                 disabled={cloneLoading}
                 className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors disabled:opacity-50"
               >
-                {cloneLoading ? 'Cloning…' : 'Clone'}
+                {cloneLoading ? 'Working…' : 'Clone'}
               </button>
             </div>
           </div>
