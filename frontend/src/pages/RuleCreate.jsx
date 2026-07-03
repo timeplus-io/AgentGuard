@@ -203,7 +203,11 @@ export default function RuleCreate({ mode = 'create' }) {
             actions={
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => navigate(isEdit ? `/rules/${id}` : '/rules')}
+                  // Always return to the catalog list. /rules/:id is instance-detail
+                  // and 404s for a definition-only rule (e.g. a freshly cloned,
+                  // not-yet-installed definition being edited), so Cancel must not
+                  // route there — same reason the save path falls back to /rules.
+                  onClick={() => navigate('/rules')}
                   className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
                 >
                   Cancel
