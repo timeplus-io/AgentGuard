@@ -7,8 +7,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/gin-gonic/gin"
+	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/rules"
 )
 
@@ -151,4 +153,48 @@ func TestInstanceToPack(t *testing.T) {
 		!p.Enabled || p.BlockPolicy != "hold" || p.Revision != 7 || p.SnapshotID != "snap-7" {
 		t.Fatalf("projection mismatch: %+v", p)
 	}
+}
+
+// TestOrphanedInstalledRuleIDs verifies SyncMVs's orphan detection: a sync result
+// whose rule_id has no catalog definition is reported (installed but orphaned),
+// while an installed rule still backed by the catalog is not. The result is always
+// a non-nil slice so the API field is [] not null.
+func TestOrphanedInstalledRuleIDs(t *testing.T) {
+	mgr, err := catalog.New(fstest.MapFS{}, t.TempDir())
+	if err != nil {
+		t.Fatalf("catalog.New: %v", err)
+	}
+	// rp-live has a catalog definition; rp-gone does not.
+	if err := mgr.Save(catalog.Definition{ID: "rp-live", Name: "Live", Version: "1.0.0",
+		SQLTemplate: "SELECT 1", Severity: "warning"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	t.Run("reports only orphaned, preserving order", func(t *testing.T) {
+		results := []rules.SyncResult{
+			{RuleID: "rp-live", Action: "replaced"},
+			{RuleID: "rp-gone", Action: "created"},
+			{RuleID: "rp-also-gone", Action: "ok"},
+		}
+		got := orphanedInstalledRuleIDs(results, mgr)
+		want := []string{"rp-gone", "rp-also-gone"}
+		if len(got) != len(want) {
+			t.Fatalf("orphaned = %v, want %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("orphaned = %v, want %v", got, want)
+			}
+		}
+	})
+
+	t.Run("none orphaned returns non-nil empty slice", func(t *testing.T) {
+		got := orphanedInstalledRuleIDs([]rules.SyncResult{{RuleID: "rp-live"}}, mgr)
+		if got == nil {
+			t.Fatal("orphaned = nil, want non-nil empty slice (JSON [] not null)")
+		}
+		if len(got) != 0 {
+			t.Fatalf("orphaned = %v, want empty", got)
+		}
+	})
 }

@@ -201,7 +201,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.PUT("/rules/catalog/:id", handlers.UpdateCatalogRule(cfg, mgr, lifecycle))
 			protected.POST("/rules/catalog/:id/clone", handlers.CloneCatalogRule(mgr))
 			protected.GET("/rules/mv-status", handlers.MVStatus(cfg, lifecycle))
-			protected.POST("/rules/sync", handlers.SyncMVs(cfg, lifecycle))
+			protected.POST("/rules/sync", handlers.SyncMVs(cfg, mgr, lifecycle))
 			protected.POST("/rules", handlers.CreateRule(cfg, mgr, lifecycle))
 			protected.GET("/rules/:id", handlers.GetRule(cfg, lifecycle))
 			protected.POST("/rules/:id/install", handlers.InstallRule(cfg, lifecycle))

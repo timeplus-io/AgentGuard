@@ -620,7 +620,7 @@ func MVStatus(cfg *config.Config, lc *rules.Lifecycle) gin.HandlerFunc {
 }
 
 // SyncMVs reconciles Proton MVs with the current snapshots without a restart.
-func SyncMVs(cfg *config.Config, lc *rules.Lifecycle) gin.HandlerFunc {
+func SyncMVs(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		reqCfg := auth.RequestCfg(c, cfg)
 		results, err := lc.For(&reqCfg.Timeplus).Sync()
@@ -629,14 +629,40 @@ func SyncMVs(cfg *config.Config, lc *rules.Lifecycle) gin.HandlerFunc {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
+		// Orphaned installed rules: reconcile just rebuilt their MVs from the
+		// instance snapshot (so they keep detecting), but their catalog definition
+		// is gone — they cannot be edited or upgraded until it is restored or the
+		// rule is reinstalled. Surface them loudly here (a WARNING plus an explicit
+		// response field) rather than only as a passive in_catalog:false that a
+		// caller has to go looking for. Sync results already enumerate every
+		// installed rule_id, so this needs no extra query.
+		orphaned := orphanedInstalledRuleIDs(results, mgr)
+		if len(orphaned) > 0 {
+			log.Printf("rules: SyncMVs: WARNING: %d installed rule(s) have no catalog definition and were reconciled from their last-deployed snapshot: %v — restore the definition or reinstall to edit/upgrade them", len(orphaned), orphaned)
+		}
 		// Best-effort DLP re-provision so endpoint/model config changes apply
 		// without the setup wizard. Failure must not fail rule-MV sync.
 		if err := tp.SyncDLP(reqCfg.Timeplus, reqCfg.DLP); err != nil {
 			log.Printf("rules: SyncMVs DLP sync: %v", err)
 		}
 
-		c.JSON(http.StatusOK, gin.H{"results": results})
+		c.JSON(http.StatusOK, gin.H{"results": results, "orphaned": orphaned})
 	}
+}
+
+// orphanedInstalledRuleIDs returns the rule_ids among sync results whose catalog
+// definition is absent: installed rules whose MV reconcile keeps running from the
+// snapshot but which can no longer be edited or upgraded (the definition was
+// dropped, e.g. a non-compiling local file skipped at load). Returns a non-nil
+// empty slice so the JSON field serializes as [] rather than null.
+func orphanedInstalledRuleIDs(results []rules.SyncResult, mgr *catalog.Manager) []string {
+	orphaned := []string{}
+	for _, r := range results {
+		if !mgr.Exists(r.RuleID) {
+			orphaned = append(orphaned, r.RuleID)
+		}
+	}
+	return orphaned
 }
 
 // isThreatAlreadyOpen queries agentguard_threats to check whether an open

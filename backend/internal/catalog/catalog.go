@@ -147,7 +147,13 @@ func (m *Manager) loadDir(dir string, target map[string]Definition) error {
 		// surface at install. Skip it the same way as a structurally-invalid one.
 		if m.SemanticValidator != nil {
 			if err := m.SemanticValidator(def); err != nil {
-				log.Printf("catalog: skipping non-compiling local definition %s: %v", path, err)
+				// WARNING, not a quiet skip: if a rule was installed from this
+				// definition, its detection MV keeps running the last-deployed SQL
+				// (startup/sync reconcile from the instance snapshot, never the
+				// catalog), but the rule is now ORPHANED — it cannot be edited or
+				// upgraded until the definition compiles again or the rule is
+				// reinstalled. /api/rules/sync reports orphaned installed rules.
+				log.Printf("catalog: WARNING: dropping non-compiling local definition %s from the catalog: %v — any rule installed from it is now orphaned (MV still running, but not editable/upgradeable)", path, err)
 				continue
 			}
 		}
