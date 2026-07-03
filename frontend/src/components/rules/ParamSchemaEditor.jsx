@@ -312,22 +312,7 @@ function DefaultInput({ row, onUpdate }) {
         </select>
       )
     case 'list':
-      return (
-        <input
-          type="text"
-          value={Array.isArray(row.default) ? row.default.join(', ') : row.default ?? ''}
-          onChange={(e) =>
-            set(
-              e.target.value
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean),
-            )
-          }
-          placeholder="comma, separated, values"
-          className={`${inputCls} font-mono`}
-        />
-      )
+      return <ListDefaultInput row={row} onUpdate={onUpdate} />
     case 'multi_choice':
       return <MultiChoiceDefaultEditor row={row} onUpdate={onUpdate} />
     case 'regex':
@@ -351,6 +336,37 @@ function DefaultInput({ row, onUpdate }) {
         />
       )
   }
+}
+
+// ListDefaultInput edits a free-form list default as comma-separated text. It
+// keeps the raw text in local state (the source of truth for the input) and
+// stores the parsed, trimmed, non-empty array underneath. A previous version
+// derived the input value from `array.join(', ')` and re-parsed on every
+// keystroke, so filter(Boolean) dropped the trailing empty segment the instant a
+// comma was typed — the comma vanished and a second item could never be started.
+// Seeded once on mount (a type switch remounts this via the DefaultInput branch,
+// so there is no external reset to re-sync).
+function ListDefaultInput({ row, onUpdate }) {
+  const [text, setText] = useState(() =>
+    Array.isArray(row.default) ? row.default.join(', ') : typeof row.default === 'string' ? row.default : '',
+  )
+  return (
+    <input
+      type="text"
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value)
+        onUpdate({
+          default: e.target.value
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean),
+        })
+      }}
+      placeholder="comma, separated, values"
+      className={`${inputCls} font-mono`}
+    />
+  )
 }
 
 function MultiChoiceDefaultEditor({ row, onUpdate }) {
