@@ -25,6 +25,15 @@ type Manager struct {
 	local map[string]Definition // from catalogDir, read-write
 	dir   string
 
+	// saveMu serializes catalog mutations (Save/SaveIfAbsent/Clone/Delete) so a
+	// mutation's existence/conflict checks and its file+map write are one atomic
+	// unit. mu still guards concurrent map access for readers; saveMu is the
+	// coarser writer lock that closes the check-then-act races a bare
+	// Exists()+Save() has (e.g. two concurrent create/clone of the same ID both
+	// passing the 409 guard). It is never held while acquiring mu for a read, so
+	// the two locks do not nest in a deadlock-prone order.
+	saveMu sync.Mutex
+
 	// SemanticValidator, if set, runs parameter-compiler validation on a
 	// definition during Save/ImportZip (in addition to structural Validate()),
 	// so authoring defects in user-supplied definitions are rejected at write
@@ -308,7 +317,37 @@ func NormalizeDefinition(d Definition) Definition {
 	return d
 }
 
+// Save validates a definition, writes it to the local catalog directory, and
+// updates the in-memory map, OVERWRITING any existing definition with the same
+// ID. This is the path for intentional overwrites: seed overrides, edit
+// republish, and rollback. For create/clone — where a colliding ID must be
+// rejected, not overwritten — use SaveIfAbsent.
 func (m *Manager) Save(d Definition) error {
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
+	return m.saveLocked(d)
+}
+
+// SaveIfAbsent is Save but rejects an ID already in the catalog with ErrExists
+// instead of overwriting it. The existence check and the write happen under the
+// same mutation lock, so two concurrent creates or clones of the same ID cannot
+// both succeed — the atomic form of a check-then-act Exists()+Save(). Create and
+// clone use this so the documented 409-on-duplicate contract actually holds
+// under concurrency.
+func (m *Manager) SaveIfAbsent(d Definition) error {
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
+	if m.Exists(d.ID) {
+		return ErrExists
+	}
+	return m.saveLocked(d)
+}
+
+// saveLocked is the shared implementation of Save/SaveIfAbsent. The caller MUST
+// hold saveMu; it does not acquire saveMu itself, so callers that already hold
+// it (SaveIfAbsent, Clone) can compose an existence check with the write as one
+// atomic unit.
+func (m *Manager) saveLocked(d Definition) error {
 	if m.dir == "" {
 		return fmt.Errorf("no catalog directory configured")
 	}
@@ -327,15 +366,15 @@ func (m *Manager) Save(d Definition) error {
 			return fmt.Errorf("invalid definition %s: %w", d.ID, err)
 		}
 	}
-	// NOTE: the cross-rule uniqueness checks below — UDF-name ownership and the
-	// MV-namespace key — are each a check-then-act race across different rule IDs:
-	// two concurrent Saves claiming the same UDF name, or two IDs that collapse to
-	// the same MV key, can both pass before either writes to m.local. Save is NOT
-	// serialized by the rules lifecycle service (CreateRule calls Save outside the
-	// per-rule lock, and the lock is keyed by rule_id while these races are
-	// cross-rule); a catalog-wide mutation lock around validate-then-commit is the
-	// real fix. Tolerated for now: custom-rule creation is a low-frequency
-	// operator action.
+	// The cross-rule uniqueness checks below — UDF-name ownership and the
+	// MV-namespace key — are check-then-act across different rule IDs. They are
+	// safe because every catalog mutation runs under saveMu (Save/SaveIfAbsent/
+	// Clone/Delete all hold it), so two writers that would claim the same UDF
+	// name or collapse to the same MV key are serialized: the first commits to
+	// m.local before the second's checks run, and the second then sees the
+	// conflict. saveMu is the catalog-wide validate-then-commit lock; the
+	// per-rule lock in the lifecycle service is keyed by rule_id and would not
+	// cover these cross-rule races.
 	if err := m.ValidateUDFOwnership(d); err != nil {
 		return fmt.Errorf("definition %s: %w", d.ID, err)
 	}
@@ -383,6 +422,11 @@ func (m *Manager) Delete(id string) error {
 	if m.dir == "" {
 		return fmt.Errorf("no catalog directory configured")
 	}
+	// Serialize with Save/SaveIfAbsent/Clone so a delete cannot interleave with a
+	// concurrent write of the same ID and leave the file and in-memory map
+	// disagreeing.
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
 	path := filepath.Join(m.dir, id+".yaml")
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("delete %s: %w", path, err)
@@ -435,6 +479,11 @@ func (m *Manager) IsCustom(id string) bool {
 //   - ErrExists  if newID is already in the catalog.
 //   - ErrInvalid if newID is syntactically invalid.
 func (m *Manager) Clone(srcID, newID, newName string) (Definition, error) {
+	// Hold the mutation lock across the existence check and the write so two
+	// concurrent clones to the same newID cannot both pass the ErrExists guard.
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
+
 	src, ok := m.Lookup(srcID)
 	if !ok {
 		return Definition{}, ErrNotFound
@@ -457,7 +506,9 @@ func (m *Manager) Clone(srcID, newID, newName string) (Definition, error) {
 	cloned.Name = newName
 	cloned.Origin = OriginCustom
 
-	if err := m.Save(cloned); err != nil {
+	// saveLocked, not Save: we already hold saveMu, and the Exists check above
+	// plus this write must be one atomic unit.
+	if err := m.saveLocked(cloned); err != nil {
 		return Definition{}, err
 	}
 	return cloned, nil

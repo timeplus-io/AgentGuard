@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 )
@@ -1562,5 +1563,125 @@ func TestImportZip_OmittedTypeAccepted(t *testing.T) {
 	}
 	if got.Parameters[0].Type != "string" {
 		t.Errorf("imported type = %q, want string", got.Parameters[0].Type)
+	}
+}
+
+// TestSaveIfAbsent_RejectsExistingWithoutOverwrite proves SaveIfAbsent returns
+// ErrExists for an already-present ID and does NOT overwrite the stored
+// definition — the atomic form of the create/clone 409 guard.
+func TestSaveIfAbsent_RejectsExistingWithoutOverwrite(t *testing.T) {
+	tmp := t.TempDir()
+	m, err := New(fstest.MapFS{}, tmp)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	first := Definition{ID: "rp-dup", Name: "First", Version: "1.0.0",
+		SQLTemplate: "SELECT 1", Severity: "warning"}
+	if err := m.SaveIfAbsent(first); err != nil {
+		t.Fatalf("first SaveIfAbsent: %v", err)
+	}
+	second := Definition{ID: "rp-dup", Name: "Second", Version: "2.0.0",
+		SQLTemplate: "SELECT 2", Severity: "warning"}
+	if err := m.SaveIfAbsent(second); !errors.Is(err, ErrExists) {
+		t.Fatalf("second SaveIfAbsent = %v, want ErrExists", err)
+	}
+	// The stored definition must still be the first: no silent overwrite.
+	got, ok := m.Lookup("rp-dup")
+	if !ok || got.Name != "First" {
+		t.Errorf("after rejected SaveIfAbsent, Lookup = (%+v, %v), want First", got, ok)
+	}
+	data, err := os.ReadFile(filepath.Join(tmp, "rp-dup.yaml"))
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if !strings.Contains(string(data), "name: First") || strings.Contains(string(data), "name: Second") {
+		t.Errorf("file was overwritten by rejected SaveIfAbsent:\n%s", string(data))
+	}
+}
+
+// TestSaveIfAbsent_ConcurrentSameIDExactlyOneWins is the regression test for the
+// create-race: N goroutines racing to SaveIfAbsent the same ID must yield exactly
+// one success and N-1 ErrExists. With a bare Exists()+Save() several could pass
+// the check before any write and all "succeed"; saveMu makes the check-then-write
+// atomic so exactly one wins. Run with -race to exercise the map access too.
+func TestSaveIfAbsent_ConcurrentSameIDExactlyOneWins(t *testing.T) {
+	tmp := t.TempDir()
+	m, err := New(fstest.MapFS{}, tmp)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	const n = 16
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start // release all goroutines together to maximize contention
+			errs[i] = m.SaveIfAbsent(Definition{ID: "rp-race", Name: "Racer",
+				Version: "1.0.0", SQLTemplate: "SELECT 1", Severity: "warning"})
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	wins, exists, other := 0, 0, 0
+	for _, e := range errs {
+		switch {
+		case e == nil:
+			wins++
+		case errors.Is(e, ErrExists):
+			exists++
+		default:
+			other++
+		}
+	}
+	if wins != 1 || exists != n-1 || other != 0 {
+		t.Fatalf("concurrent SaveIfAbsent: wins=%d exists=%d other=%d, want 1/%d/0", wins, exists, other, n-1)
+	}
+}
+
+// TestClone_ConcurrentSameNewIDExactlyOneWins is the same regression for the
+// clone path: N goroutines cloning the same source to the same new ID must yield
+// exactly one success.
+func TestClone_ConcurrentSameNewIDExactlyOneWins(t *testing.T) {
+	tmp := t.TempDir()
+	m, err := New(fstest.MapFS{}, tmp)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := m.Save(Definition{ID: "rp-src", Name: "Source", Version: "1.0.0",
+		SQLTemplate: "SELECT 1", Severity: "warning"}); err != nil {
+		t.Fatalf("seed source: %v", err)
+	}
+	const n = 16
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			_, errs[i] = m.Clone("rp-src", "rp-clone", "Clone")
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	wins, exists, other := 0, 0, 0
+	for _, e := range errs {
+		switch {
+		case e == nil:
+			wins++
+		case errors.Is(e, ErrExists):
+			exists++
+		default:
+			other++
+		}
+	}
+	if wins != 1 || exists != n-1 || other != 0 {
+		t.Fatalf("concurrent Clone: wins=%d exists=%d other=%d, want 1/%d/0", wins, exists, other, n-1)
 	}
 }

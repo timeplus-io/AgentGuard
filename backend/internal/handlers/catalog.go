@@ -186,14 +186,12 @@ func CreateCatalogRule(mgr *catalog.Manager) gin.HandlerFunc {
 			return
 		}
 		def.Origin = catalog.OriginCustom
-		// Guard: reject duplicate IDs (custom or builtin) before Save would
-		// silently overwrite the existing catalog entry. Mirrors Clone's Exists
-		// check so POST/PUT/Clone are consistent: existing ID → 409 ErrExists.
-		if mgr.Exists(def.ID) {
-			respondCatalogError(c, catalog.ErrExists)
-			return
-		}
-		if err := mgr.Save(def); err != nil {
+		// SaveIfAbsent rejects a duplicate ID (custom or builtin) with ErrExists
+		// atomically — the existence check and the write are one unit, so two
+		// concurrent creates of the same ID cannot both return 201 with the second
+		// silently overwriting the first. Mirrors Clone so POST/PUT/Clone stay
+		// consistent: existing ID → 409 ErrExists.
+		if err := mgr.SaveIfAbsent(def); err != nil {
 			respondCatalogError(c, err)
 			return
 		}
