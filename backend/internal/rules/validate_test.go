@@ -652,3 +652,50 @@ func TestNormalize_Duration(t *testing.T) {
 		t.Fatal("fractional must reject")
 	}
 }
+
+// TestParameterTypesFullyHandled is the drift guard for the parameter-type
+// vocabulary. Every type catalog.SupportedParameterTypes() reports must be
+// handled by BOTH normalizeValue and renderValue. Today the vocabulary
+// (catalog/definition.go), the normalizeValue switch (validate.go), and the
+// renderValue switch (render.go) are three hand-synced sites; a type added to
+// the vocabulary but not to a switch, or added without a fixture here, fails
+// this test at build/test time instead of only erroring at live install.
+func TestParameterTypesFullyHandled(t *testing.T) {
+	type fixture struct {
+		param catalog.Parameter
+		raw   any
+	}
+	// One valid (Parameter, raw decoded value) per declared type.
+	fixtures := map[string]fixture{
+		"integer":      {catalog.Parameter{Key: "p", Type: "integer"}, 5},
+		"float":        {catalog.Parameter{Key: "p", Type: "float"}, 1.5},
+		"bool":         {catalog.Parameter{Key: "p", Type: "bool"}, true},
+		"string":       {catalog.Parameter{Key: "p", Type: "string"}, "hello"},
+		"choice":       {catalog.Parameter{Key: "p", Type: "choice", Options: []string{"a", "b"}}, "a"},
+		"list":         {catalog.Parameter{Key: "p", Type: "list"}, []any{"x", "y"}},
+		"multi_choice": {catalog.Parameter{Key: "p", Type: "multi_choice", Options: []string{"a", "b"}}, []any{"a"}},
+		"regex":        {catalog.Parameter{Key: "p", Type: "regex"}, ".*"},
+		"duration":     {catalog.Parameter{Key: "p", Type: "duration"}, 5},
+	}
+
+	for _, typ := range catalog.SupportedParameterTypes() {
+		typ := typ
+		t.Run(typ, func(t *testing.T) {
+			fx, ok := fixtures[typ]
+			if !ok {
+				t.Fatalf("parameter type %q has no fixture here: add one so normalize+render coverage stays exhaustive as the vocabulary grows", typ)
+			}
+			norm, err := normalizeValue(fx.param, fx.raw)
+			if err != nil {
+				t.Fatalf("normalizeValue(%s) rejected a valid value: %v", typ, err)
+			}
+			out, err := renderValue(fx.param, norm)
+			if err != nil {
+				t.Fatalf("renderValue(%s) failed on the normalized value: %v", typ, err)
+			}
+			if out == "" {
+				t.Fatalf("renderValue(%s) produced empty SQL", typ)
+			}
+		})
+	}
+}

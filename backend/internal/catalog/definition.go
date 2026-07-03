@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -95,6 +96,20 @@ var parameterTypes = map[string]bool{
 	"multi_choice": true, // option-constrained string list (Apps vocabulary)
 	"regex":        true, // AG extension: RE2-validated string rendered as a single-quoted SQL literal
 	"duration":     true, // AG extension: int64 count of a fixed unit rendered as a bare decimal integer
+}
+
+// SupportedParameterTypes returns the canonical parameter-type vocabulary,
+// sorted. It is the single source of truth for the set of types Validate
+// accepts, so other packages (and drift-guard tests that must enumerate every
+// type the normalize/render switches have to handle) can iterate it instead of
+// re-listing the types and silently falling out of sync.
+func SupportedParameterTypes() []string {
+	out := make([]string, 0, len(parameterTypes))
+	for t := range parameterTypes {
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ParameterIDPattern is the exact syntax for parameter keys (and aliases,
