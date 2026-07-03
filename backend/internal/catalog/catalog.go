@@ -30,8 +30,11 @@ type Manager struct {
 	// unit. mu still guards concurrent map access for readers; saveMu is the
 	// coarser writer lock that closes the check-then-act races a bare
 	// Exists()+Save() has (e.g. two concurrent create/clone of the same ID both
-	// passing the 409 guard). It is never held while acquiring mu for a read, so
-	// the two locks do not nest in a deadlock-prone order.
+	// passing the 409 guard). Lock ordering: a writer holds saveMu while briefly
+	// taking mu for its reads (Exists/mvKeyConflict) and its final map write, so
+	// the two locks DO nest — saveMu outer, mu inner. That cannot deadlock
+	// because the order is consistent: saveMu is always acquired before mu, and
+	// no path ever acquires saveMu while already holding mu.
 	saveMu sync.Mutex
 
 	// SemanticValidator, if set, runs parameter-compiler validation on a
