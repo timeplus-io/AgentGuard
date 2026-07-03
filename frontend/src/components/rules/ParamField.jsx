@@ -18,19 +18,19 @@ import { toggleMultiChoiceValue } from './paramValues'
 const labelCls = 'text-sm font-medium text-white'
 const descCls = 'text-[11px] text-gray-400 mt-0.5'
 const inputCls =
-  'w-full bg-[#0f0c17] text-sm text-gray-100 rounded-sm px-3 py-2 outline-none ' +
-  'focus:ring-1 focus:ring-[#ffb0cf]/50 placeholder:text-gray-500'
+  'w-full bg-surface-container-lowest text-sm text-gray-100 rounded-sm px-3 py-2 outline-none ' +
+  'focus:ring-1 focus:ring-primary/50 placeholder:text-gray-500'
 
 export default function ParamField({ param, value, defaultValue, overridden, error, onChange, onReset }) {
   return (
-    <div className="bg-[#1d1a25] rounded-sm p-4">
+    <div className="bg-surface-container-low rounded-sm p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={labelCls}>{param.label || param.key}</span>
             <code className="text-[10px] text-gray-500 font-mono">{param.key}</code>
             {overridden && (
-              <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#ffb0cf]/10 text-[#ffb0cf] border border-[#ffb0cf]/20">
+              <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
                 overridden
               </span>
             )}
@@ -41,7 +41,7 @@ export default function ParamField({ param, value, defaultValue, overridden, err
           <button
             type="button"
             onClick={onReset}
-            className="shrink-0 text-[10px] uppercase tracking-wide text-gray-400 hover:text-[#ffb0cf] transition-colors"
+            className="shrink-0 text-[10px] uppercase tracking-wide text-gray-400 hover:text-primary transition-colors"
             title="Reset to default"
           >
             Reset
@@ -58,7 +58,7 @@ export default function ParamField({ param, value, defaultValue, overridden, err
           Default: <code className="text-gray-400">{formatScalar(param, defaultValue)}</code>
           {param.unit ? <span className="ml-1 text-gray-500">({param.unit})</span> : null}
         </span>
-        {error && <span className="text-[10px] text-[#ffb4ab]">{error}</span>}
+        {error && <span className="text-[10px] text-error">{error}</span>}
       </div>
     </div>
   )
@@ -93,7 +93,7 @@ function TypedControl({ param, value, onChange }) {
           aria-checked={!!value}
           onClick={() => onChange(!value)}
           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-            value ? 'bg-[#f256a3]' : 'bg-zinc-700'
+            value ? 'bg-primary-container' : 'bg-zinc-700'
           }`}
         >
           <span
@@ -186,8 +186,8 @@ function MultiChoiceControl({ param, value, onChange }) {
             onClick={() => toggle(opt)}
             className={`text-[11px] rounded-full px-2.5 py-1 transition-colors ${
               active
-                ? 'bg-[#ffb0cf] text-[#3d0023]'
-                : 'bg-[#0f0c17] text-gray-300 hover:bg-zinc-700'
+                ? 'bg-primary text-[#3d0023]'
+                : 'bg-surface-container-lowest text-gray-300 hover:bg-zinc-700'
             }`}
           >
             <code className="font-mono">{opt}</code>
@@ -221,13 +221,13 @@ function StringListControl({ param, value, onChange }) {
         {value.map((item, i) => (
           <span
             key={item + i}
-            className="inline-flex items-center gap-1 text-[11px] bg-[#0f0c17] text-gray-100 rounded-full pl-2.5 pr-1 py-0.5"
+            className="inline-flex items-center gap-1 text-[11px] bg-surface-container-lowest text-gray-100 rounded-full pl-2.5 pr-1 py-0.5"
           >
             <code className="font-mono">{item}</code>
             <button
               type="button"
               onClick={() => removeAt(i)}
-              className="text-gray-500 hover:text-[#ffb4ab]"
+              className="text-gray-500 hover:text-error"
               title="Remove"
             >
               <span className="material-symbols-outlined text-[14px] align-middle">close</span>
@@ -259,11 +259,11 @@ function StringListControl({ param, value, onChange }) {
           <span className="material-symbols-outlined text-[16px] align-middle">add</span>
         </button>
       </div>
-      {(param.min_items || param.max_items) && (
+      {(param.min_items != null || param.max_items != null) && (
         <p className="text-[10px] text-gray-500 mt-1">
-          {param.min_items ? `min ${param.min_items}` : ''}
-          {param.min_items && param.max_items ? ' · ' : ''}
-          {param.max_items ? `max ${param.max_items}` : ''} items
+          {param.min_items != null ? `min ${param.min_items}` : ''}
+          {param.min_items != null && param.max_items != null ? ' · ' : ''}
+          {param.max_items != null ? `max ${param.max_items}` : ''} items
         </p>
       )}
     </div>
