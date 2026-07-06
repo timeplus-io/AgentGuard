@@ -467,22 +467,29 @@ type PricingListResponse struct {
 	Pricing []PricingEntry `json:"pricing"`
 }
 
+// RulePack is the list/summary projection of an installed Rule Instance
+// snapshot. Installed rules have no raw-SQL edit surface; rendered_sql is exposed
+// read-only for inspection. Full parameter schema/defaults/effective values come
+// from GET /api/rules/:id, not this summary.
 type RulePack struct {
-	ID                string   `json:"id"`
-	Name              string   `json:"name"`
-	Version           string   `json:"version"`
-	Description       string   `json:"description"`
-	QuerySQL          string   `json:"query_sql"`
-	Enabled           bool     `json:"enabled"`
-	Severity          string   `json:"severity"`
-	Category          string   `json:"category"`
-	RequiredTelemetry string   `json:"required_telemetry"`
-	FPRate            string   `json:"fp_rate"`
-	HookSources       string   `json:"hook_sources"`
-	Detections24h     int      `json:"detections_24h"`
-	LatestVersion     string   `json:"latest_version,omitempty"`
-	UDFs              []string `json:"udfs,omitempty"`
-	BlockPolicy       string   `json:"block_policy"` // hold|auto_block|log_only
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Version           string `json:"version"` // definition_version of this snapshot
+	Description       string `json:"description"`
+	RenderedSQL       string `json:"rendered_sql"`
+	Enabled           bool   `json:"enabled"`
+	Severity          string `json:"severity"`
+	Category          string `json:"category"`
+	RequiredTelemetry string `json:"required_telemetry"`
+	FPRate            string `json:"fp_rate"`
+	HookSources       string `json:"hook_sources"`
+	Detections24h     int    `json:"detections_24h"`
+	LatestVersion     string `json:"latest_version,omitempty"` // catalog version when newer
+	BlockPolicy       string `json:"block_policy"`             // hold|auto_block|log_only
+	// Snapshot identity / upgrade diagnostics.
+	Revision    uint64 `json:"revision"`
+	SnapshotID  string `json:"snapshot_id"`
+	Upgradeable bool   `json:"upgradeable"`
 }
 
 type RulesResponse struct {
@@ -500,11 +507,6 @@ type SecurityEvent struct {
 	HookName   string `json:"hook_name"`
 	Message    string `json:"message"`
 	DetectedAt string `json:"detected_at"`
-}
-
-type RuleDetailResponse struct {
-	RulePack
-	RecentDetections []SecurityEvent `json:"recent_detections"`
 }
 
 type AlertWebhookPayload struct {

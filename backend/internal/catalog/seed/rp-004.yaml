@@ -22,7 +22,7 @@ tags:
   - supply-chain
   - package-install
   - owasp-llm05
-query_sql: |
+sql_template: |
   -- Changelog v1.3.0 (2026-04-19):
   -- CRITICAL FIX: git clone lookahead (?!github.com|...) used PCRE negative lookahead
   --   which is NOT supported in RE2/Timeplus. Replaced with:
@@ -43,8 +43,8 @@ query_sql: |
   -- fp_rate improved from high to medium by adding source-context conditions.
   SELECT
     event_time           AS detected_at,
-    'rp-004'             AS rule_id,
-    'Supply Chain Watch' AS rule_name,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning'            AS severity,
     agent_id,
     deployment_id,

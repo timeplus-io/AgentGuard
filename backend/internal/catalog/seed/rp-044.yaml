@@ -127,7 +127,7 @@ udfs:
       }
     }
     $$;
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-18):
   --   VirusTotal Blog "From Automation to Infection Part II" (Feb 2026) — 5 live skill
   --   supply chain worm tradecraft techniques observed in the wild. New branches added:
@@ -145,8 +145,8 @@ query_sql: |
   --   Phase 3 (LLM output): assistant_message instructing peer config modification
   SELECT
     event_time AS detected_at,
-    'rp-044' AS rule_id,
-    'ClawWorm Self-Propagating Agent Configuration Worm Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -224,8 +224,8 @@ query_sql: |
   -- sequence across arbitrary interleaving events in the same session.
   SELECT
     max(event_time) AS detected_at,
-    'rp-044' AS rule_id,
-    'ClawWorm Self-Propagating Agent Configuration Worm Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

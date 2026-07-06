@@ -126,7 +126,7 @@ udfs:
       }
     }
     $$;
-query_sql: |
+sql_template: |
   -- rp-076 v0.2.0 (2026-05-18)
   -- MAS Control-Flow Hijacking — False Sub-Agent Status Metadata
   -- arXiv:2503.12188 (Cornell Tech, COLM 2025): 58-100% ASR on AutoGen/CrewAI/MetaGPT
@@ -158,8 +158,8 @@ query_sql: |
   -- SQL validated against Timeplus (count=0 on test corpus). 2026-04-19.
   SELECT
     event_time AS detected_at,
-    'rp-076' AS rule_id,
-    'MAS Control-Flow Hijacking — False Sub-Agent Status Metadata Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -209,8 +209,8 @@ query_sql: |
   -- Branch D: Session-level CFH FSM — false sub-agent status followed by code execution
   SELECT
     max(event_time) AS detected_at,
-    'rp-076' AS rule_id,
-    'MAS Control-Flow Hijacking — False Sub-Agent Status Metadata Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

@@ -32,7 +32,7 @@ tags:
   - owasp-asi07
   - mitre-t1195
   - arxiv-2604.09235
-query_sql: |
+sql_template: |
   -- rp-127 v0.1.0 (2026-04-23)
   -- TSBH CoT-Action Backdoor Divergence Detector
   -- arXiv:2604.09235 (Unreal Thinking: CoT Hijacking via Two-stage Backdoor, Apr 2026)
@@ -66,8 +66,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-127' AS rule_id,
-    'TSBH CoT-Action Backdoor Divergence Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -105,8 +105,8 @@ query_sql: |
   -- TSBH triggers model to report benign completion then immediately invokes harmful tool.
   SELECT
     event_time AS detected_at,
-    'rp-127' AS rule_id,
-    'TSBH CoT-Action Backdoor Divergence Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

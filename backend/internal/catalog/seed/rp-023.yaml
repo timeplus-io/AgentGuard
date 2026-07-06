@@ -114,7 +114,7 @@ udfs:
       }
     }
     $$;
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-17):
   -- NEW: setcap Linux capability grant (cap_net_raw, cap_net_admin, all=+ep)
   --   Agents using setcap to grant raw network or privilege capabilities to binaries
@@ -135,8 +135,8 @@ query_sql: |
   --   administrators, JWT credential forgery, registry run key persistence, dotfile + curl|bash.
   SELECT
     event_time AS detected_at,
-    'rp-023' AS rule_id,
-    'Agent Self-Permission Escalation Kill Chain Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -197,8 +197,8 @@ query_sql: |
   -- The UDAF tracks per-session denial state across an arbitrary number of events.
   SELECT
     max(event_time) AS detected_at,
-    'rp-023' AS rule_id,
-    'Agent Self-Permission Escalation Kill Chain Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

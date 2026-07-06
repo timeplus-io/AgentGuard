@@ -27,7 +27,7 @@ tags:
   - trust-exploitation
   - owasp-asi05
   - unit42
-query_sql: |
+sql_template: |
   -- v0.2.0 changelog:
   --   PRECISION: 'system override' plain LIKE → require directive marker (colon/period after)
   --     to avoid FP on inline phrases like "this system override policy is outdated"
@@ -43,8 +43,8 @@ query_sql: |
   --   UNCHANGED: exfiltrate + session/context scope pattern — multi-word, very low FP
   SELECT
     event_time AS detected_at,
-    'rp-015' AS rule_id,
-    'Agent Session Smuggling via A2A Protocol' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -117,8 +117,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-015' AS rule_id,
-    'Agent Session Smuggling via A2A Protocol' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,

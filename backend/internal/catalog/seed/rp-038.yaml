@@ -32,7 +32,7 @@ tags:
   - giskard-ate
   - clawguard
   - redteams
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-17):
   -- Branch A: Tightened to reduce FP from developer queries.
   --   "how to invoke/call" now scoped to "your tool/agent's tool/available tool/function"
@@ -48,8 +48,8 @@ query_sql: |
   -- Standalone Branch B → critical tool schema disclosure (schema already exfiltrated).
   SELECT
     event_time AS detected_at,
-    'rp-038' AS rule_id,
-    'Agentic Tool Extraction — Multi-Turn Schema Reconnaissance Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -128,8 +128,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-038' AS rule_id,
-    'Agentic Tool Extraction — Multi-Turn Schema Reconnaissance Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,

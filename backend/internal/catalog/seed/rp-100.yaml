@@ -32,7 +32,7 @@ tags:
   - mitre-t1070
   - owasp-asi03
   - arXiv-2604.05485
-query_sql: |
+sql_template: |
   -- rp-100 v0.1.0 (2026-04-21): Agent Audit Trail Evasion Detector
   -- Four branches on agentguard_cim_event + one on agentguard_memory_ops
   -- Branch 1: Shell log deletion (rm/truncate/shred/history wipe/auditd disable)
@@ -42,8 +42,8 @@ query_sql: |
   -- Branch 5 (memory_ops): delete op on audit/trace/log/history memory paths
   SELECT
     event_time AS detected_at,
-    'rp-100' AS rule_id,
-    'Agent Audit Trail Evasion — Self-Deletion of Execution Logs Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -112,8 +112,8 @@ query_sql: |
   -- Branch 5: Memory ops — delete operation targeting audit/trace/log/history memory paths
   SELECT
     event_time AS detected_at,
-    'rp-100' AS rule_id,
-    'Agent Audit Trail Evasion — Self-Deletion of Execution Logs Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

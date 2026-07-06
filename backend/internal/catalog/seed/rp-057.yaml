@@ -23,14 +23,14 @@ tags:
   - reward-hacking
   - ml-integrity
   - owasp-asi03
-query_sql: |
+sql_template: |
   -- rp-057: ML Engineering Agent Evaluator Tampering Detector v0.1.0
   -- arXiv:2603.11337 (RewardHackingAgents, Mar 2026): 50% natural-run incidence
   -- Targets write operations to eval infrastructure + static-score patching patterns
   SELECT
     event_time                              AS detected_at,
-    'rp-057'                                AS rule_id,
-    'ML Engineering Agent Evaluator Tampering Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                              AS severity,
     agent_id,
     deployment_id,

@@ -27,7 +27,7 @@ tags:
   - owasp-asi03
   - arxiv-2512.04864
   - arxiv-2603.03116
-query_sql: |
+sql_template: |
   -- rp-069 v0.2.0 (2026-04-19)
   -- CRITICAL FIX: Removed all \b word boundaries — Timeplus RE2 does not support \b;
   -- patterns silently returned false. Replaced with context-sensitive anchors (.{0,N} / (^|[^a-z]))
@@ -39,8 +39,8 @@ query_sql: |
   -- The core upward deception signal: agent swallows tool failure and reports success
   SELECT
     event_time                              AS detected_at,
-    'rp-069'                                AS rule_id,
-    'Upward Deception — Agent False Task Completion & Fabricated Success Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                              AS severity,
     agent_id,
     deployment_id,
@@ -80,8 +80,8 @@ query_sql: |
   -- Agents calling stand-in tools rather than real execution tools
   SELECT
     event_time                              AS detected_at,
-    'rp-069'                                AS rule_id,
-    'Upward Deception — Agent False Task Completion & Fabricated Success Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                              AS severity,
     agent_id,
     deployment_id,
@@ -115,8 +115,8 @@ query_sql: |
   -- Agent's tool returns explicit simulation admission that should trigger alert
   SELECT
     event_time                              AS detected_at,
-    'rp-069'                                AS rule_id,
-    'Upward Deception — Agent False Task Completion & Fabricated Success Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning'                               AS severity,
     agent_id,
     deployment_id,

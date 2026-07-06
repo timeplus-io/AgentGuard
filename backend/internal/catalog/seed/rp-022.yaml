@@ -33,7 +33,7 @@ tags:
   - iclr-2026
   - arXiv-2506.02456
   - csa-research
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-16):
   --   PRECISION: All predicates scoped within tool_name browser guard (was already present).
   --   PRECISION: Original patterns retained unchanged — all already precise:
@@ -57,8 +57,8 @@ query_sql: |
   --   fp_rate: medium → low (all new patterns require browser tool context + instruction content).
   SELECT
     event_time AS detected_at,
-    'rp-022' AS rule_id,
-    'CUA GUI Injection via Hidden Element / Branch Steering Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

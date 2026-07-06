@@ -80,7 +80,8 @@ Four-layer structure:
 - **`internal/timeplus/`** — Proton integration layer:
   - `client.go` — `Query()` and `ExecHTTP()` for SELECT and DDL/DML against the Proton HTTP interface.
   - `init.go` — Provisioning: called by the setup wizard (`POST /api/setup/provision`) to create OTel streams, `agentguard_rules` stream, and `agentguard_security_events` stream if they don't exist; syncs MV state with installed rules. Not called at server startup.
-  - `rules.go` — MV management (`CreateRuleMV`, `PauseRuleMV`, `ResumeRuleMV`, `DropRuleMV`, `MVName`) and builtin rule `Catalog()`.
+  - `rules.go` — Timeplus MV primitives: `MVName`, candidate preflight (`PreflightCandidate` against a disposable sink), `NO DELAY` replacement (`DropMVNoDelay`, `CreateRuleMVStrict`), `ApplyUDFs`, `MVExists`, and failed-MV health (`FailedMVs`). (Legacy `CreateRuleMV`/`PauseRuleMV`/`ResumeRuleMV` remain but are unused by the lifecycle service.)
+- **`internal/rules/`** — Editable rule parameters: the strict parameter compiler (`validate.go`/`render.go`/`compatibility.go` — typed normalization, `{{ .Config.<key> }}` rendering, upgrade planning), the revision-ordered snapshot store (`store.go`), and the per-rule-serialized lifecycle service (`service.go`) that all rule mutations delegate through. The catalog (`internal/catalog/`) owns versioned `Definition`s; `internal/rules` owns installed `RuleInstance` snapshots.
 - **`internal/web/`** — `embed.go` (embed frontend dist) / `noembed.go` (serve from disk) build-tag variants.
 
 Adding a new API resource: add structs to `models.go`, create a handler file in `internal/handlers/`, and register routes in `main.go`. There is no mock data layer — all handlers query Timeplus Enterprise directly.
@@ -115,17 +116,23 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | DELETE | `/api/cost/pricing/:provider/:model` | `DeletePricing` | Deletes from agentguard_pricing |
 | GET | `/api/cost/budget` | `GetCostBudgets` | Current per-deployment monthly budgets via arg_max over agentguard_cost_budgets |
 | POST | `/api/cost/budget` | `UpsertCostBudget` | Appends a row to agentguard_cost_budgets; `updated_by` is the session user. Send `deleted: true` to retire a budget. |
-| GET | `/api/rules` | `ListRules` | Reads from `agentguard_rules` stream |
+| GET | `/api/rules` | `ListRules` | Installed instances (current state via `arg_max(col, revision)`) + upgradeable flag |
 | GET | `/api/rules/catalog` | `ListCatalog` | Builtin catalog with installed status |
+| POST | `/api/rules/catalog` | `CreateCatalogRule` | Create a custom `Definition` (origin forced `custom`); validates + publishes, does NOT install |
+| POST | `/api/rules/catalog/compile` | `CompileCatalogRule` | Pure validate+compile preview → `{rendered_sql, definition_hash, effective, overrides}`; no catalog write, no MV, no Timeplus |
+| GET | `/api/rules/catalog/:id` | `GetCatalogRule` | Full catalog `Definition` (incl. `config[]` schema) or 404 |
+| PUT | `/api/rules/catalog/:id` | `UpdateCatalogRule` | Edit a custom definition; atomic publish+redeploy of the installed MV, rolls back both definition and MV on failure (builtin/imported → 409, clone first) |
+| POST | `/api/rules/catalog/:id/clone` | `CloneCatalogRule` | Clone a definition to a new custom rule with rescoped UDFs (not installed) |
 | POST | `/api/rules/catalog/import` | `ImportCatalog` | Import rules from JSON |
 | GET | `/api/rules/catalog/export` | `ExportCatalog` | Export catalog as JSON |
-| GET | `/api/rules/mv-status` | `MVStatus` | Health of Timeplus materialized views |
-| POST | `/api/rules/sync` | `SyncMVs` | Reconcile MV state without restart |
-| POST | `/api/rules` | `CreateRule` | Create a custom rule |
-| GET | `/api/rules/:id` | `GetRule` | |
-| POST | `/api/rules/:id/install` | `InstallRule` | Install from builtin catalog |
-| POST | `/api/rules/:id/toggle` | `ToggleRule` | Flips `enabled`; pauses/resumes MV |
-| POST | `/api/rules/:id/upgrade` | `UpgradeRule` | Upgrades version; rebuilds MV |
+| GET | `/api/rules/mv-status` | `MVStatus` | MV health: `system.tables` + `system.v_failed_mat_views`, cross-referenced with enabled |
+| POST | `/api/rules/sync` | `SyncMVs` | Reconcile MVs with snapshots (create missing/drop disabled) via the lifecycle service |
+| POST | `/api/rules` | `CreateRule` | Thin create-custom: zero-param custom definition (template ≡ rendered SQL) installed via the service |
+| GET | `/api/rules/:id` | `GetRule` | Full read model: instance + schema/defaults/overrides/effective/rendered_sql/upgrade plan/MV health |
+| POST | `/api/rules/:id/install` | `InstallRule` | Install from catalog with optional typed `overrides` (defaults otherwise) |
+| PUT | `/api/rules/:id/configuration` | `ConfigureRule` | Replace the full parameter override map; omitted keys reset to defaults |
+| POST | `/api/rules/:id/toggle` | `ToggleRule` | Flips `enabled`; drop/create the MV (no pause/resume) |
+| POST | `/api/rules/:id/upgrade` | `UpgradeRule` | Bodyless, catalog-only; preserves compatible overrides, 409 on conflict |
 | POST | `/api/rules/:id/policy` | `SetRuleBlockPolicy` | Sets `log_only`/`auto_block`/`hold` without toggling enabled |
 | DELETE | `/api/rules/:id` | `UninstallRule` | Soft-delete + drops MV |
 | POST | `/api/holds` | `CreateHold` | Synchronous hold-and-wait; called by agent plugins (unauthenticated) |
@@ -226,7 +233,7 @@ AgentGuard uses a **Common Information Model (CIM)** to normalize heterogeneous 
 | `agentguard_otel_logs` / `agentguard_otel_metrics` | Raw OTel data from Claude Code |
 | `agentguard_cim_event` | Normalized lifecycle events (session, LLM call, tool call) |
 | `agentguard_cim_metrics` | Pre-computed scalar metrics per call (tokens, cost, latency) |
-| `agentguard_rules` | Rule mutation log; current state via `arg_max(…updated_at) GROUP BY` |
+| `agentguard_rules` | Append-only Rule Instance snapshot log; current state via `arg_max(col, revision) GROUP BY rule_id` (ordered by per-rule monotonic `revision`, NOT `updated_at`) |
 | `agentguard_security_events` | Rule-triggered detections written by MVs |
 | `agentguard_cost_budgets` | Per-deployment monthly budget mutation log; current state via `arg_max(…updated_at) GROUP BY deployment_id HAVING NOT deleted` |
 | `agentguard_dlp_enriched` | One enriched row per conversation message (entities, risk tags/score, inline embedding); written by `mv_dlp_enrich`. See **Semantic DLP** below. |
@@ -236,9 +243,11 @@ Materialized views normalize raw streams into `agentguard_cim_event` and `agentg
 
 ### Rules and MVs
 
-Each enabled rule has a corresponding materialized view named `mv_rule_<id>` (e.g. `mv_rule_rp_001`). The MV queries `hook_events` and writes matches to `agentguard_security_events`. Toggle/install/uninstall operations create, pause, resume, or drop these MVs atomically alongside the rule state mutation.
+Each enabled rule has a corresponding materialized view named `mv_rule_<id>` (e.g. `mv_rule_rp001`). The MV runs the instance's `rendered_sql` (the definition's `sql_template` compiled with the instance's parameter overrides) against `agentguard_cim_event` and writes matches to `agentguard_security_events`. The lifecycle service (`internal/rules/service.go`) serializes mutations per `rule_id` and uses a **drop/create** model (not pause/resume): validate-first (candidate preflight), replace-second (`DROP VIEW … NO DELAY` then `CREATE … ` without `IF NOT EXISTS`), persist-last (append the complete snapshot), restoring the previous MV from the snapshot's last-known-good `rendered_sql`/`deployed_udfs_json` on any failure. A disabled rule has no live MV. Parameters are typed (`integer`/`float`/`bool`/`string`/`choice`/`list`/`multi_choice` (+ `regex`/`duration`)); the renderer escapes quotes/backslashes only — string params in `LIKE` are NOT wildcard-escaped (use `position()`/`multi_search_any`).
 
-`timeplus.Init()` is called by the setup wizard (`POST /api/setup/provision`) to create missing streams and sync MV state. The server starts independently of Timeplus availability — if Timeplus Enterprise is unreachable, provisioning will fail but the binary itself starts cleanly.
+`timeplus.Init()` is called by the setup wizard (`POST /api/setup/provision`) to create missing streams and sync MVs from installed instance snapshots (`rendered_sql` + `deployed_udfs_json`, never current catalog artifacts). It does NOT seed instances from the catalog — a definition existing in the catalog never makes it an installed instance. Provisioning fails fast with a clean-reprovision message if it finds a legacy/incompatible `agentguard_rules` (it compares the full expected column set and key column types). The server starts independently of Timeplus availability — if Timeplus Enterprise is unreachable, provisioning will fail but the binary itself starts cleanly.
+
+**No backward compatibility:** the new `agentguard_rules` snapshot schema is not compatible with the pre-parameter one. Existing deployments must cleanly reprovision rule resources (drop the old stream + `mv_rule_*` views, re-provision, reinstall). No `ALTER STREAM`, compatibility readers, dual writes, or `query_sql` aliases. See `docs/design.md` §5.1.3.
 
 ### Semantic DLP
 

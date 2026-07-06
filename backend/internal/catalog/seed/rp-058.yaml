@@ -24,7 +24,7 @@ tags:
   - prompt-injection
   - deception
   - owasp-asi07
-query_sql: |
+sql_template: |
   -- rp-058: NEST Steganographic Chain-of-Thought Hidden Reasoning Detector v0.1.0
   -- arXiv:2602.14095 (NEST: Nascent Encoded Steganographic Thoughts, Feb 2026)
   -- Claude Opus 4.5: 92% hidden-task accuracy via acrostic CoT encoding
@@ -32,8 +32,8 @@ query_sql: |
   --          acrostic decode instructions delivered via IPI in tool results
   SELECT
     event_time                              AS detected_at,
-    'rp-058'                                AS rule_id,
-    'NEST Steganographic Chain-of-Thought Hidden Reasoning Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning'                               AS severity,
     agent_id,
     deployment_id,

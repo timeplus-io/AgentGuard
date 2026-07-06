@@ -22,7 +22,7 @@ tags:
   - owasp-llm10
   - back-reveal
   - arXiv-2604.05432
-query_sql: |
+sql_template: |
   -- Two load-bearing shapes (regression-tested in catalog_test.go; runbook
   -- in backend/internal/catalog/testdata/):
   --   Branch A must stay tumble-wrapped — unwindowed streaming GROUP BY +
@@ -32,8 +32,8 @@ query_sql: |
   --     diluted high-input codegen calls against baseline traffic.
   SELECT
     max(event_time) AS detected_at,
-    'rp-013' AS rule_id,
-    'Anomalous LLM Output Token Spike' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -64,8 +64,8 @@ query_sql: |
 
   SELECT
     max(event_time) AS detected_at,
-    'rp-013' AS rule_id,
-    'Anomalous LLM Output Token Spike' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

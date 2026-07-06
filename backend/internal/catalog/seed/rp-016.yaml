@@ -40,7 +40,7 @@ tags:
   - arXiv-2601.09625
   - arXiv-2602.15654
   - zombie-agent
-query_sql: |
+sql_template: |
   -- v0.7.0 changelog (2026-04-20):
   --   EXTENDED: Zombie Agent (arXiv:2602.15654, ICLR 2026 Lifelong Agent Workshop, Feb 2026).
   --   Two new branches added:
@@ -91,8 +91,8 @@ query_sql: |
   --   UNCHANGED: canary token patterns (memo_exfil, exfil_ok, etc.) — zero FP in testing
   SELECT
     event_time AS detected_at,
-    'rp-016' AS rule_id,
-    'Persistent Agent Memory Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -213,8 +213,8 @@ query_sql: |
   -- Uses memory_op, memory_path, and content_payload instead of fuzzy tool_name LIKE patterns.
   SELECT
     event_time AS detected_at,
-    'rp-016' AS rule_id,
-    'Persistent Agent Memory Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -316,8 +316,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-016' AS rule_id,
-    'Persistent Agent Memory Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,
@@ -350,8 +350,8 @@ query_sql: |
   -- 4+ writes = self-reinforcing injection (Zombie-class persistence strategy).
   SELECT
     max(event_time) AS detected_at,
-    'rp-016' AS rule_id,
-    'Persistent Agent Memory Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

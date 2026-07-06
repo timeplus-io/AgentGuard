@@ -30,6 +30,7 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
+	"github.com/timeplus/agentguard/internal/rules"
 	"github.com/timeplus/agentguard/internal/web"
 )
 
@@ -113,7 +114,12 @@ func runServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading frontend assets: %w", err)
 	}
 
-	mgr, err := catalog.New(catalog.SeedFS, cfg.CatalogDir)
+	// Reject definitions whose parameter template/defaults don't compile — at
+	// Save/Import time (client error) and as local-dir files load (skipped) —
+	// rather than at first install. Injected via an option so it is set before
+	// the catalog loads its local directory, and to keep the catalog package
+	// free of an internal/rules import.
+	mgr, err := catalog.New(catalog.SeedFS, cfg.CatalogDir, catalog.WithSemanticValidator(rules.ValidateDefinition))
 	if err != nil {
 		return fmt.Errorf("loading catalog: %w", err)
 	}
@@ -125,6 +131,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
 	store := auth.NewSessionStore()
 	holdReg := holdregistry.New()
+	// lifecycle owns the process-wide per-rule mutation locks; handlers bind it
+	// to each request's Timeplus config via lifecycle.For(cfg).
+	lifecycle := rules.NewLifecycle(mgr)
 
 	// Default to release mode; set GIN_MODE=debug to enable verbose request logging.
 	if os.Getenv("GIN_MODE") == "" {
@@ -150,7 +159,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.POST("/auth/login", auth.Login(cfg, store))
 		api.POST("/auth/logout", auth.Logout(store))
 		api.POST("/setup/test-connection", handlers.TestConnection())
-		api.POST("/setup/provision", handlers.Provision(cfg, mgr, store))
+		api.POST("/setup/provision", handlers.Provision(cfg, store))
 		// /alerts/webhook is called by Timeplus (server-to-server), not by the browser,
 		// so it must be reachable without a session cookie.
 		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
@@ -182,19 +191,26 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.DELETE("/cost/pricing/:provider/:model", handlers.DeletePricing(cfg))
 			protected.GET("/cost/budget", handlers.GetCostBudgets(cfg))
 			protected.POST("/cost/budget", handlers.UpsertCostBudget(cfg))
-			protected.GET("/rules", handlers.ListRules(cfg, mgr))
-			protected.GET("/rules/catalog", handlers.ListCatalog(cfg, mgr))
+			protected.GET("/rules", handlers.ListRules(cfg, mgr, lifecycle))
+			protected.GET("/rules/catalog", handlers.ListCatalog(cfg, mgr, lifecycle))
+			protected.POST("/rules/catalog", handlers.CreateCatalogRule(mgr))
 			protected.POST("/rules/catalog/import", handlers.ImportCatalog(mgr))
 			protected.GET("/rules/catalog/export", handlers.ExportCatalog(mgr))
-			protected.GET("/rules/mv-status", handlers.MVStatus(cfg, mgr))
-			protected.POST("/rules/sync", handlers.SyncMVs(cfg, mgr))
-			protected.POST("/rules", handlers.CreateRule(cfg, mgr))
-			protected.GET("/rules/:id", handlers.GetRule(cfg, mgr))
-			protected.POST("/rules/:id/install", handlers.InstallRule(cfg, mgr))
-			protected.POST("/rules/:id/toggle", handlers.ToggleRule(cfg, mgr, holdReg, handlers.GlobalAlertBroadcaster))
-			protected.POST("/rules/:id/upgrade", handlers.UpgradeRule(cfg, mgr))
-			protected.POST("/rules/:id/policy", handlers.SetRuleBlockPolicy(cfg, mgr, holdReg, handlers.GlobalAlertBroadcaster))
-			protected.DELETE("/rules/:id", handlers.UninstallRule(cfg, mgr))
+			protected.POST("/rules/catalog/compile", handlers.CompileCatalogRule())
+			protected.GET("/rules/catalog/:id", handlers.GetCatalogRule(mgr))
+			protected.PUT("/rules/catalog/:id", handlers.UpdateCatalogRule(cfg, mgr, lifecycle))
+			protected.DELETE("/rules/catalog/:id", handlers.DeleteCatalogRule(cfg, mgr, lifecycle))
+			protected.POST("/rules/catalog/:id/clone", handlers.CloneCatalogRule(mgr))
+			protected.GET("/rules/mv-status", handlers.MVStatus(cfg, lifecycle))
+			protected.POST("/rules/sync", handlers.SyncMVs(cfg, mgr, lifecycle))
+			protected.POST("/rules", handlers.CreateRule(cfg, mgr, lifecycle))
+			protected.GET("/rules/:id", handlers.GetRule(cfg, lifecycle))
+			protected.POST("/rules/:id/install", handlers.InstallRule(cfg, lifecycle))
+			protected.PUT("/rules/:id/configuration", handlers.ConfigureRule(cfg, lifecycle))
+			protected.POST("/rules/:id/toggle", handlers.ToggleRule(cfg, lifecycle, holdReg, handlers.GlobalAlertBroadcaster))
+			protected.POST("/rules/:id/upgrade", handlers.UpgradeRule(cfg, lifecycle))
+			protected.POST("/rules/:id/policy", handlers.SetRuleBlockPolicy(cfg, lifecycle, holdReg, handlers.GlobalAlertBroadcaster))
+			protected.DELETE("/rules/:id", handlers.UninstallRule(cfg, lifecycle, holdReg, handlers.GlobalAlertBroadcaster))
 			protected.GET("/holds", handlers.ListHolds(cfg))
 			protected.GET("/holds/:hold_id", handlers.GetHold(cfg))
 			protected.POST("/holds/:hold_id/decide", handlers.DecideHold(cfg, holdReg, handlers.GlobalAlertBroadcaster))

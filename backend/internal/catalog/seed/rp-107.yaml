@@ -22,7 +22,7 @@ tags:
   - emoji-injection
   - rebus-attack
   - early-fusion
-query_sql: |
+sql_template: |
   -- rp-107 v0.1.1 (2026-04-21):
   -- CHANGELOG: Branch 5 emoji corrections:
   --   Removed \x{1F5D3} (spiral calendar \U0001F5D3) from delete/destroy branch — not a
@@ -42,8 +42,8 @@ query_sql: |
   -- Distinct from rp-037 (OCR/audio tool surface) and rp-056 (zero-width Unicode).
   SELECT
     event_time AS detected_at,
-    'rp-107' AS rule_id,
-    'Symbolic Emoji Rebus Semantic Prompt Injection — Early-Fusion Multimodal Decoder' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

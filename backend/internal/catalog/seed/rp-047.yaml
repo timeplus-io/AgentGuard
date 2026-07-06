@@ -26,12 +26,12 @@ tags:
   - owasp-llm05
   - arxiv-2505.18471
   - arxiv-2604.08407
-query_sql: |
+sql_template: |
   -- Branch 1: latency collapse in a 5-min hop window per session
   SELECT
     max(event_time) AS detected_at,
-    'rp-047' AS rule_id,
-    'LLM Model Substitution & Quality Downgrade Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -65,8 +65,8 @@ query_sql: |
   -- Branch 2: model field substitution pattern in llm_request / llm_response (single-event)
   SELECT
     event_time AS detected_at,
-    'rp-047' AS rule_id,
-    'LLM Model Substitution & Quality Downgrade Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

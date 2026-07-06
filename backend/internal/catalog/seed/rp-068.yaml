@@ -28,7 +28,7 @@ tags:
   - owasp-llm01
   - owasp-asi03
   - arxiv-2509.25624
-query_sql: |
+sql_template: |
   -- rp-068: STAC Sequential Tool Attack Chaining Detector v0.1.0
   -- arXiv:2509.25624 (STAC, ICLR 2026, AWS AI Labs / UC Berkeley)
   -- >90% ASR against GPT-4.1 across 483 evaluated attack cases.
@@ -39,8 +39,8 @@ query_sql: |
   -- OR temporal connector linking the two steps.
   SELECT
     event_time                              AS detected_at,
-    'rp-068'                                AS rule_id,
-    'STAC Sequential Tool Attack Chaining Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                              AS severity,
     agent_id,
     deployment_id,
@@ -93,8 +93,8 @@ query_sql: |
   -- High-specificity: destructive tool called with archive-justification in its own parameters
   SELECT
     event_time                              AS detected_at,
-    'rp-068'                                AS rule_id,
-    'STAC Sequential Tool Attack Chaining Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                              AS severity,
     agent_id,
     deployment_id,
@@ -131,8 +131,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-068' AS rule_id,
-    'STAC Sequential Tool Attack Chaining Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,

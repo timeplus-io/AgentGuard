@@ -32,7 +32,7 @@ tags:
   - vpi-bench
   - iclr-2026
   - arXiv-2506.02456
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-16):
   --   PRECISION: Retained 'trajectory record' and 'store this as replay' (already precise).
   --   PRECISION: Retained 'when browsing X, extract/exfil' — multi-word, specific.
@@ -53,8 +53,8 @@ query_sql: |
   --   fp_rate: medium → low (all new patterns scoped to browser tool_name guard + specific phrasing).
   SELECT
     event_time AS detected_at,
-    'rp-019' AS rule_id,
-    'eTAMP Web Agent Trajectory Memory Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

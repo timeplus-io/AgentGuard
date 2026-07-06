@@ -41,7 +41,7 @@ tags:
   - arxiv-2504.19793
   - owasp-llm05
   - cwe-441
-query_sql: |
+sql_template: |
   -- rp-080 v0.3.0 (2026-04-21)
   -- AMA: Attractive Metadata Attack (arXiv:2508.02110, NeurIPS 2025)
   -- ToolHijacker: Retrieval-layer tool selection injection (arXiv:2504.19793, NDSS 2026)
@@ -75,8 +75,8 @@ query_sql: |
   -- Branches A-E: AMA / ToolCommander at tool_invoke (existing)
   SELECT
     event_time AS detected_at,
-    'rp-080' AS rule_id,
-    'AMA Attractive Metadata Attack — Adversarial Tool Selection via Optimized Tool Metadata Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -120,8 +120,8 @@ query_sql: |
   UNION ALL
   SELECT
     event_time AS detected_at,
-    'rp-080' AS rule_id,
-    'AMA Attractive Metadata Attack — Adversarial Tool Selection via Optimized Tool Metadata Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

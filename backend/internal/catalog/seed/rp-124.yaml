@@ -30,7 +30,7 @@ tags:
   - agentic-browser
   - owasp-llm01
   - owasp-asi05
-query_sql: |
+sql_template: |
   -- rp-124 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrappers to CTE source
   --   (FROM agentguard_cim_event → FROM agentguard_cim_event) and both FROM enriched
   --   branches (→ FROM enriched). Without table(), the CTE enters streaming mode
@@ -58,8 +58,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-124' AS rule_id,
-    'Agentic Browser Cross-Origin Data Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -79,8 +79,8 @@ query_sql: |
   UNION ALL
   SELECT
     event_time AS detected_at,
-    'rp-124' AS rule_id,
-    'Agentic Browser Cross-Origin Data Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

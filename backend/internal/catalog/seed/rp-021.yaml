@@ -31,7 +31,7 @@ tags:
   - arXiv-2601.05504
   - toolhijacker
   - ndss-2026
-query_sql: |
+sql_template: |
   -- v0.4.0 changelog (2026-04-18):
   --   ADDED: Second SELECT branch via UNION ALL querying agentguard_memory_ops directly.
   --   The new branch detects MemoryGraft-style poisoned experience injection using precise
@@ -76,8 +76,8 @@ query_sql: |
   --   fp_rate: medium → low (compound guards added for broader patterns).
   SELECT
     event_time AS detected_at,
-    'rp-021' AS rule_id,
-    'MemoryGraft: Poisoned Experience Retrieval Attack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -138,8 +138,8 @@ query_sql: |
   -- Detects poisoned experience injection at the memory_op level without tool_name fuzzy matching.
   SELECT
     event_time AS detected_at,
-    'rp-021' AS rule_id,
-    'MemoryGraft: Poisoned Experience Retrieval Attack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

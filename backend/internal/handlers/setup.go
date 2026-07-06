@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/auth"
-	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
@@ -50,7 +49,7 @@ type provisionEvent struct {
 // On success it writes config.yaml; the frontend then calls /api/auth/login.
 //
 // Body: {"host":"...","port":3218,"native_port":8463,"username":"...","password":"...","agentguard_url":"..."}
-func Provision(cfg *config.Config, mgr *catalog.Manager, store *auth.SessionStore) gin.HandlerFunc {
+func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
 			Host          string `json:"host"           binding:"required"`
@@ -106,7 +105,7 @@ func Provision(cfg *config.Config, mgr *catalog.Manager, store *auth.SessionStor
 			Password:   body.Password,
 		}
 
-		if err := tp.Init(timeplusCfg, agentGuardURL, mgr.All(), cfg.DLP, sendEvent); err != nil {
+		if err := tp.Init(timeplusCfg, agentGuardURL, cfg.DLP, sendEvent); err != nil {
 			sendEvent("error", "Setup failed: "+err.Error())
 			return
 		}

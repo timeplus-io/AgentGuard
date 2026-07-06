@@ -1,8 +1,10 @@
 package catalog
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,39 +14,62 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Entry is the canonical representation of a catalog rule.
-type Entry struct {
-	ID                string   `yaml:"id"                 json:"id"`
-	Name              string   `yaml:"name"               json:"name"`
-	Version           string   `yaml:"version"            json:"version"`
-	Description       string   `yaml:"description"        json:"description"`
-	Severity          string   `yaml:"severity"           json:"severity"`
-	Category          string   `yaml:"category"           json:"category"`
-	FPRate            string   `yaml:"fp_rate"            json:"fp_rate"`
-	HookSources       string   `yaml:"hook_sources"       json:"hook_sources"`
-	RequiredTelemetry string   `yaml:"required_telemetry" json:"required_telemetry"`
-	Author            string   `yaml:"author"             json:"author"`
-	Tags              []string `yaml:"tags"               json:"tags"`
-	UDFs              []string `yaml:"udfs"               json:"udfs"`
-	QuerySQL          string   `yaml:"query_sql"          json:"query_sql"`
-}
+// The Definition model lives in definition.go; the catalog is the
+// authoritative store for rule definitions.
 
 // Manager holds the merged view of the embedded seed catalog and the
-// local catalog directory. Local entries override seed ones by ID.
+// local catalog directory. Local definitions override seed ones by ID.
 type Manager struct {
 	mu    sync.RWMutex
-	seed  map[string]Entry // from go:embed, read-only
-	local map[string]Entry // from catalogDir, read-write
+	seed  map[string]Definition // from go:embed, read-only
+	local map[string]Definition // from catalogDir, read-write
 	dir   string
+
+	// saveMu serializes catalog mutations (Save/SaveIfAbsent/Clone/Delete) so a
+	// mutation's existence/conflict checks and its file+map write are one atomic
+	// unit. mu still guards concurrent map access for readers; saveMu is the
+	// coarser writer lock that closes the check-then-act races a bare
+	// Exists()+Save() has (e.g. two concurrent create/clone of the same ID both
+	// passing the 409 guard). Lock ordering: a writer holds saveMu while briefly
+	// taking mu for its reads (Exists/mvKeyConflict) and its final map write, so
+	// the two locks DO nest — saveMu outer, mu inner. That cannot deadlock
+	// because the order is consistent: saveMu is always acquired before mu, and
+	// no path ever acquires saveMu while already holding mu.
+	saveMu sync.Mutex
+
+	// SemanticValidator, if set, runs parameter-compiler validation on a
+	// definition during Save/ImportZip (in addition to structural Validate()),
+	// so authoring defects in user-supplied definitions are rejected at write
+	// time rather than at first install. It is injected by the server wiring
+	// (rules.ValidateDefinition) to avoid a catalog→rules import cycle; nil
+	// (e.g. in tests and seed-only managers) means the check is skipped.
+	SemanticValidator func(Definition) error
 }
 
 // New creates a Manager. seedFS is the embedded FS rooted at the YAML files.
 // catalogDir is the writable directory for user overrides and additions.
-func New(seedFS fs.FS, catalogDir string) (*Manager, error) {
+// Option configures a Manager at construction, before any catalog files load.
+type Option func(*Manager)
+
+// WithSemanticValidator sets the compiler-semantic validator (typically
+// rules.ValidateDefinition) so it applies to local-directory definitions as they
+// load — not only to later Save/Import — closing the gap where a hand-placed or
+// previously-persisted local YAML with a bad template/default would enter the
+// catalog and fail only at install. Seed (builtin) definitions are not subject to
+// it: they are validated at build time by the seed test suite.
+func WithSemanticValidator(fn func(Definition) error) Option {
+	return func(m *Manager) { m.SemanticValidator = fn }
+}
+
+func New(seedFS fs.FS, catalogDir string, opts ...Option) (*Manager, error) {
 	m := &Manager{
-		seed:  make(map[string]Entry),
-		local: make(map[string]Entry),
+		seed:  make(map[string]Definition),
+		local: make(map[string]Definition),
 		dir:   catalogDir,
+	}
+	// Apply options before loading so loadDir sees the semantic validator.
+	for _, opt := range opts {
+		opt(m)
 	}
 	if err := m.loadFS(seedFS, m.seed); err != nil {
 		return nil, fmt.Errorf("load seed catalog: %w", err)
@@ -60,7 +85,7 @@ func New(seedFS fs.FS, catalogDir string) (*Manager, error) {
 	return m, nil
 }
 
-func (m *Manager) loadFS(fsys fs.FS, target map[string]Entry) error {
+func (m *Manager) loadFS(fsys fs.FS, target map[string]Definition) error {
 	return fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".yaml") {
 			return err
@@ -69,18 +94,27 @@ func (m *Manager) loadFS(fsys fs.FS, target map[string]Entry) error {
 		if err != nil {
 			return err
 		}
-		var e Entry
-		if err := yaml.Unmarshal(data, &e); err != nil {
+		var def Definition
+		if err := yaml.Unmarshal(data, &def); err != nil {
 			return fmt.Errorf("parse %s: %w", path, err)
 		}
-		if e.ID != "" {
-			target[e.ID] = e
+		def = NormalizeDefinition(def)
+		if def.ID != "" {
+			// Embedded seed definitions are always builtin, regardless of
+			// any origin stored in the YAML.
+			def.Origin = OriginBuiltin
+			target[def.ID] = def
 		}
 		return nil
 	})
 }
 
-func (m *Manager) loadDir(dir string, target map[string]Entry) error {
+// loadDir loads local-dir definitions. Invalid, unreadable, or unparseable
+// files are skipped with a log line rather than failing startup — one bad
+// file in the user's catalog directory must not take the server down. This
+// establishes the invariant that anything returned by Lookup/All has passed
+// Validate (loadFS enforces the same for seed definitions via the seed test).
+func (m *Manager) loadDir(dir string, target map[string]Definition) error {
 	des, err := os.ReadDir(dir)
 	if err != nil {
 		return err
@@ -89,57 +123,98 @@ func (m *Manager) loadDir(dir string, target map[string]Entry) error {
 		if de.IsDir() || !strings.HasSuffix(de.Name(), ".yaml") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, de.Name()))
+		path := filepath.Join(dir, de.Name())
+		data, err := os.ReadFile(path)
 		if err != nil {
+			log.Printf("catalog: skipping unreadable local definition %s: %v", path, err)
 			continue
 		}
-		var e Entry
-		if err := yaml.Unmarshal(data, &e); err != nil {
+		var def Definition
+		if err := yaml.Unmarshal(data, &def); err != nil {
+			log.Printf("catalog: skipping unparseable local definition %s: %v", path, err)
 			continue
 		}
-		if e.ID != "" {
-			target[e.ID] = e
+		if def.ID == "" {
+			log.Printf("catalog: skipping local definition %s: missing id", path)
+			continue
 		}
+		// Normalize before validation so a hand-authored (or /apps-shaped) local
+		// file that omits a parameter type is accepted rather than skipped.
+		def = NormalizeDefinition(def)
+		if err := def.Validate(); err != nil {
+			log.Printf("catalog: skipping invalid local definition %s: %v", path, err)
+			continue
+		}
+		// Compiler-semantic validation (template/defaults compile): a local file
+		// can be structurally valid yet not compile, which would otherwise only
+		// surface at install. Skip it the same way as a structurally-invalid one.
+		if m.SemanticValidator != nil {
+			if err := m.SemanticValidator(def); err != nil {
+				// WARNING, not a quiet skip: if a rule was installed from this
+				// definition, its detection MV keeps running the last-deployed SQL
+				// (startup/sync reconcile from the instance snapshot, never the
+				// catalog), but the rule is now ORPHANED — it cannot be edited or
+				// upgraded until the definition compiles again or the rule is
+				// reinstalled. /api/rules/sync reports orphaned installed rules.
+				log.Printf("catalog: WARNING: dropping non-compiling local definition %s from the catalog: %v — any rule installed from it is now orphaned (MV still running, but not editable/upgradeable)", path, err)
+				continue
+			}
+		}
+		// Reject a hand-added local file whose ID collapses onto a different
+		// already-loaded rule's MV name (seed or an earlier local). This mirrors
+		// the Save guard so the API and the on-disk load path enforce the same
+		// MV-namespace uniqueness — a local "rp001" beside seed "rp-001" would
+		// otherwise both deploy to mv_rule_rp001. mvKeyConflict reads m.seed plus
+		// whatever this pass has already written to target (== m.local during New).
+		if other, ok := m.mvKeyConflict(def.ID); ok {
+			log.Printf("catalog: skipping local definition %s: id %q collides with rule %q in the materialized-view namespace (hyphens are not significant)", path, def.ID, other)
+			continue
+		}
+		// Local definitions keep their stored origin; absent means custom.
+		if def.Origin == "" {
+			def.Origin = OriginCustom
+		}
+		target[def.ID] = def
 	}
 	return nil
 }
 
-// All returns all merged entries sorted by ID (local overrides seed).
-func (m *Manager) All() []Entry {
+// All returns all merged definitions sorted by ID (local overrides seed).
+func (m *Manager) All() []Definition {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	merged := m.mergedLocked()
-	result := make([]Entry, 0, len(merged))
-	for _, e := range merged {
-		result = append(result, e)
+	result := make([]Definition, 0, len(merged))
+	for _, d := range merged {
+		result = append(result, d)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	return result
 }
 
 // mergedLocked returns the combined map (local wins over seed). Caller must hold mu.
-func (m *Manager) mergedLocked() map[string]Entry {
-	out := make(map[string]Entry, len(m.seed)+len(m.local))
-	for id, e := range m.seed {
-		out[id] = e
+func (m *Manager) mergedLocked() map[string]Definition {
+	out := make(map[string]Definition, len(m.seed)+len(m.local))
+	for id, d := range m.seed {
+		out[id] = d
 	}
-	for id, e := range m.local {
-		out[id] = e
+	for id, d := range m.local {
+		out[id] = d
 	}
 	return out
 }
 
-// Lookup finds an entry by ID (local overrides seed).
-func (m *Manager) Lookup(id string) (Entry, bool) {
+// Lookup finds a definition by ID (local overrides seed).
+func (m *Manager) Lookup(id string) (Definition, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if e, ok := m.local[id]; ok {
-		return e, true
+	if d, ok := m.local[id]; ok {
+		return d, true
 	}
-	if e, ok := m.seed[id]; ok {
-		return e, true
+	if d, ok := m.seed[id]; ok {
+		return d, true
 	}
-	return Entry{}, false
+	return Definition{}, false
 }
 
 // Exists reports whether id is present in the catalog.
@@ -148,22 +223,230 @@ func (m *Manager) Exists(id string) bool {
 	return ok
 }
 
-// Save writes an entry to the local catalog directory and updates the in-memory map.
-// This is the path for user-created rules and overrides of seed entries.
-func (m *Manager) Save(e Entry) error {
+// MVResourceKey returns the key an ID collapses to in the Timeplus
+// materialized-view namespace. It MUST mirror internal/timeplus.MVName, which
+// names each rule's view mv_rule_<key> after stripping hyphens. Two distinct
+// rule IDs that share a key would deploy to the same view and silently clobber
+// each other, so both the catalog Save guard (mvKeyConflict) and the lifecycle
+// service's install-time guard reject the collision. (Kept here rather than
+// importing internal/timeplus to avoid pulling the Proton client into the
+// catalog/rules layers; TestMVResourceKey_StripsHyphens guards the mirror — see
+// testdata/README.md.)
+func MVResourceKey(id string) string {
+	return strings.ReplaceAll(id, "-", "")
+}
+
+// mvKeyConflict reports an existing catalog ID, different from id, that maps to
+// the same MV resource key (e.g. "rp-042" vs "rp042"). The same id is never a
+// conflict with itself, so override/edit/rollback re-saves are unaffected.
+func (m *Manager) mvKeyConflict(id string) (string, bool) {
+	key := MVResourceKey(id)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for other := range m.mergedLocked() {
+		if other != id && MVResourceKey(other) == key {
+			return other, true
+		}
+	}
+	return "", false
+}
+
+// Save validates a definition, writes it to the local catalog directory, and
+// updates the in-memory map. This is the path for user-created rules and
+// overrides of seed definitions. Definitions saved without an origin default
+// to custom.
+// canonicalizeNumericDefault converts a json.Number default — which a JSON
+// request body decoded with UseNumber() produces — into a native scalar so it
+// round-trips through YAML persistence. yaml.Marshal writes a json.Number (a
+// string kind) as a QUOTED string (default: "5"); the next load reads that back
+// as a Go string, which then fails numeric semantic validation and the whole
+// definition is silently dropped. integer/duration coerce to int64, float to
+// float64. Non-json.Number defaults — and a json.Number on a non-numeric param,
+// which is a type error the semantic validator already rejects — are returned
+// unchanged.
+func canonicalizeNumericDefault(p Parameter) any {
+	num, ok := p.Default.(json.Number)
+	if !ok {
+		return p.Default
+	}
+	switch p.Type {
+	case "float":
+		if f, err := num.Float64(); err == nil {
+			return f
+		}
+	case "integer", "duration":
+		if i, err := num.Int64(); err == nil {
+			return i
+		}
+		// A whole-valued literal written with a decimal point ("5.0") still
+		// belongs as an integer to the validator; fall back to float so it at
+		// least persists unquoted and reloads as a number, not a string.
+		if f, err := num.Float64(); err == nil {
+			return f
+		}
+	}
+	return p.Default
+}
+
+// normalizeParams returns params with Timeplus Apps-compatibility normalization
+// applied: an omitted Type defaults to "string", and a json.Number default (what
+// a JSON body decoded with UseNumber() produces) is canonicalized to a native
+// scalar (see canonicalizeNumericDefault). It allocates a copy only when some
+// normalization is needed, so it never mutates the caller's slice (callers take
+// the Definition by value, but d.Parameters shares its backing array).
+//
+// Type is defaulted before the numeric canonicalization because
+// canonicalizeNumericDefault dispatches on the parameter type.
+func normalizeParams(params []Parameter) []Parameter {
+	needs := false
+	for _, p := range params {
+		if p.Type == "" {
+			needs = true
+			break
+		}
+		if _, ok := p.Default.(json.Number); ok {
+			needs = true
+			break
+		}
+	}
+	if !needs {
+		return params
+	}
+	out := make([]Parameter, len(params))
+	copy(out, params)
+	for i := range out {
+		if out[i].Type == "" {
+			out[i].Type = "string"
+		}
+		out[i].Default = canonicalizeNumericDefault(out[i])
+	}
+	return out
+}
+
+// NormalizeDefinition returns d with Timeplus Apps-compatibility normalization
+// applied: a parameter with an omitted type defaults to "string", and a
+// json.Number default is canonicalized to a native scalar.
+// This is the single normalization step every ingestion path runs before
+// validation, compilation, or HASHING (Save, seed/local-dir load, zip import,
+// compile preview, the installed-edit redeploy, and CanonicalDefinitionHash), so
+// a definition hashes identically regardless of whether its numeric defaults
+// arrived as json.Number or native scalars — the invariant install-snapshot hash
+// equality (upgrade detection) depends on. It only allocates when normalization
+// is needed, and never mutates the caller's Definition.
+func NormalizeDefinition(d Definition) Definition {
+	d.Parameters = normalizeParams(d.Parameters)
+	return d
+}
+
+// Save validates a definition, writes it to the local catalog directory, and
+// updates the in-memory map, OVERWRITING any existing definition with the same
+// ID. This is the path for intentional overwrites: seed overrides, edit
+// republish, and rollback. For create/clone — where a colliding ID must be
+// rejected, not overwritten — use SaveIfAbsent.
+func (m *Manager) Save(d Definition) error {
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
+	return m.saveLocked(d)
+}
+
+// SaveIfAbsent is Save but rejects an ID already in the catalog with ErrExists
+// instead of overwriting it. The existence check and the write happen under the
+// same mutation lock, so two concurrent creates or clones of the same ID cannot
+// both succeed — the atomic form of a check-then-act Exists()+Save(). Create and
+// clone use this so the documented 409-on-duplicate contract actually holds
+// under concurrency.
+func (m *Manager) SaveIfAbsent(d Definition) error {
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
+	if m.Exists(d.ID) {
+		return ErrExists
+	}
+	return m.saveLocked(d)
+}
+
+// saveLocked is the shared implementation of Save/SaveIfAbsent. The caller MUST
+// hold saveMu; it does not acquire saveMu itself, so callers that already hold
+// it (SaveIfAbsent, Clone) can compose an existence check with the write as one
+// atomic unit.
+func (m *Manager) saveLocked(d Definition) error {
 	if m.dir == "" {
 		return fmt.Errorf("no catalog directory configured")
 	}
-	data, err := yaml.Marshal(e)
-	if err != nil {
-		return fmt.Errorf("marshal entry %s: %w", e.ID, err)
+	if d.Origin == "" {
+		d.Origin = OriginCustom
 	}
-	path := filepath.Join(m.dir, e.ID+".yaml")
+	// Normalize before validation: default an omitted parameter type to "string"
+	// (Timeplus Apps semantics) and canonicalize json.Number defaults to native
+	// scalars, so a typeless param is accepted, numeric defaults survive the YAML
+	// round-trip, and the persisted definition hashes identically to the form
+	// Compile recorded at install time.
+	d = NormalizeDefinition(d)
+	if err := d.Validate(); err != nil {
+		return fmt.Errorf("invalid definition %s: %w", d.ID, err)
+	}
+	if m.SemanticValidator != nil {
+		if err := m.SemanticValidator(d); err != nil {
+			return fmt.Errorf("invalid definition %s: %w", d.ID, err)
+		}
+	}
+	// The cross-rule uniqueness checks below — UDF-name ownership and the
+	// MV-namespace key — are check-then-act across different rule IDs. They are
+	// safe because every catalog mutation runs under saveMu (Save/SaveIfAbsent/
+	// Clone/Delete all hold it), so two writers that would claim the same UDF
+	// name or collapse to the same MV key are serialized: the first commits to
+	// m.local before the second's checks run, and the second then sees the
+	// conflict. saveMu is the catalog-wide validate-then-commit lock; the
+	// per-rule lock in the lifecycle service is keyed by rule_id and would not
+	// cover these cross-rule races.
+	if err := m.ValidateUDFOwnership(d); err != nil {
+		return fmt.Errorf("definition %s: %w", d.ID, err)
+	}
+	// Reject an ID that collapses onto a DIFFERENT existing rule's MV name. The
+	// Timeplus MV namespace strips hyphens (internal/timeplus.MVName), so "rp-042"
+	// and "rp042" would both deploy to mv_rule_rp042 and silently clobber each
+	// other on install/toggle/sync. Exact same-ID re-saves (override, edit
+	// republish, rollback) are unaffected — only a distinct colliding ID is blocked.
+	if other, ok := m.mvKeyConflict(d.ID); ok {
+		return fmt.Errorf("%w: id %q collides with rule %q in the materialized-view namespace (hyphens are not significant there); choose a distinct id", ErrExists, d.ID, other)
+	}
+	// Numeric defaults are already canonicalized to native scalars by the
+	// NormalizeDefinition call above, so they survive the YAML round-trip (a
+	// json.Number would be marshaled as a quoted string and reload as a Go
+	// string, failing numeric validation).
+	data, err := yaml.Marshal(d)
+	if err != nil {
+		return fmt.Errorf("marshal definition %s: %w", d.ID, err)
+	}
+	path := filepath.Join(m.dir, d.ID+".yaml")
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	m.mu.Lock()
-	m.local[e.ID] = e
+	m.local[d.ID] = d
+	m.mu.Unlock()
+	return nil
+}
+
+// Delete removes a local (custom/imported) definition: its catalog-directory
+// file and its in-memory entry. Seed (builtin) definitions are not file-backed
+// and are unaffected; deleting an unknown local ID is a no-op. The create-custom
+// flow uses this to roll back a Save when the subsequent install fails, so an
+// aborted creation does not leave an orphaned definition behind.
+func (m *Manager) Delete(id string) error {
+	if m.dir == "" {
+		return fmt.Errorf("no catalog directory configured")
+	}
+	// Serialize with Save/SaveIfAbsent/Clone so a delete cannot interleave with a
+	// concurrent write of the same ID and leave the file and in-memory map
+	// disagreeing.
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
+	path := filepath.Join(m.dir, id+".yaml")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete %s: %w", path, err)
+	}
+	m.mu.Lock()
+	delete(m.local, id)
 	m.mu.Unlock()
 	return nil
 }
@@ -190,4 +473,57 @@ func (m *Manager) ValidateID(id string) error {
 func isIDChar(c rune) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
 		(c >= '0' && c <= '9') || c == '-' || c == '_'
+}
+
+// IsCustom reports whether id is in the local (writable) catalog and has
+// OriginCustom. Builtin (seed) definitions and unknown IDs both return false.
+func (m *Manager) IsCustom(id string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	d, ok := m.local[id]
+	return ok && d.Origin == OriginCustom
+}
+
+// Clone creates a copy of the definition with srcID, assigns it the new ID and
+// name, rescopes its UDF function names so they do not collide with the source
+// rule in the Timeplus function registry, and saves it as a custom definition.
+//
+// Returns:
+//   - ErrNotFound if srcID is not in the catalog.
+//   - ErrExists  if newID is already in the catalog.
+//   - ErrInvalid if newID is syntactically invalid.
+func (m *Manager) Clone(srcID, newID, newName string) (Definition, error) {
+	// Hold the mutation lock across the existence check and the write so two
+	// concurrent clones to the same newID cannot both pass the ErrExists guard.
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
+
+	src, ok := m.Lookup(srcID)
+	if !ok {
+		return Definition{}, ErrNotFound
+	}
+	if m.Exists(newID) {
+		return Definition{}, ErrExists
+	}
+	// ValidateID checks both syntax and existence; since we've just confirmed the
+	// ID does not exist, only the syntax branch can fail here.
+	if err := m.ValidateID(newID); err != nil {
+		return Definition{}, fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
+
+	// Rescope UDF function names to avoid collision with the source rule.
+	cloned, err := RescopeUDFs(src, newID)
+	if err != nil {
+		return Definition{}, fmt.Errorf("%w: rescope UDFs: %s", ErrInvalid, err)
+	}
+	cloned.ID = newID
+	cloned.Name = newName
+	cloned.Origin = OriginCustom
+
+	// saveLocked, not Save: we already hold saveMu, and the Exists check above
+	// plus this write must be one atomic unit.
+	if err := m.saveLocked(cloned); err != nil {
+		return Definition{}, err
+	}
+	return cloned, nil
 }

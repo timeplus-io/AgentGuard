@@ -53,7 +53,8 @@ export default function App() {
             <Route path="/threats/by-hold/:id" element={<ThreatDetail />} />
             <Route path="/cost" element={<CostGovernance />} />
             <Route path="/rules" element={<RulePacks />} />
-            <Route path="/rules/new" element={<RuleCreate />} />
+            <Route path="/rules/new" element={<RuleCreate mode="create" />} />
+            <Route path="/rules/:id/edit" element={<RuleCreate mode="edit" />} />
             <Route path="/rules/:id" element={<RuleDetail />} />
             <Route path="/investigate" element={<Investigate />} />
             <Route path="/dlp" element={<SemanticDLP />} />

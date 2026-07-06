@@ -29,7 +29,7 @@ tags:
   - owasp-asi05
   - owasp-llm10
   - arxiv-2601.01685
-query_sql: |
+sql_template: |
   -- rp-077 v0.1.0 (2026-04-19)
   -- Generative Montage: Multi-Agent Cognitive Collusion Belief Manipulation
   -- arXiv:2601.01685 (Lying with Truths, Jan 2026): 74.4% ASR proprietary, 70.6% open-weights
@@ -61,8 +61,8 @@ query_sql: |
   -- SQL validated against Timeplus (count=0 on test corpus). 2026-04-19.
   SELECT
     event_time AS detected_at,
-    'rp-077' AS rule_id,
-    'Generative Montage — Multi-Agent Cognitive Collusion Belief Manipulation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

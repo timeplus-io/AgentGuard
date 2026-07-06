@@ -28,7 +28,7 @@ tags:
   - owasp-llm02
   - owasp-asi05
   - arxiv-2603.22751
-query_sql: |
+sql_template: |
   -- rp-070: CIPL Channel-Inversion Privacy Leakage via Tool Retrieval Oracle Detector v0.1.0
   -- arXiv:2603.22751 (CIPL, Mar 2026): observable channel measurement framework
   -- Tool invocation patterns reveal private agent memory state as side-channel oracle.
@@ -37,8 +37,8 @@ query_sql: |
   -- Attacker asks "do you have/know/store" + sensitive term → agent calls retrieval tool
   SELECT
     event_time                              AS detected_at,
-    'rp-070'                                AS rule_id,
-    'CIPL Channel-Inversion Privacy Leakage via Tool Retrieval Oracle Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning'                               AS severity,
     agent_id,
     deployment_id,
@@ -76,8 +76,8 @@ query_sql: |
   -- Agent propagates attacker-controlled query into retrieval call, leaking stored context in tool_input
   SELECT
     event_time                              AS detected_at,
-    'rp-070'                                AS rule_id,
-    'CIPL Channel-Inversion Privacy Leakage via Tool Retrieval Oracle Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning'                               AS severity,
     agent_id,
     deployment_id,
@@ -113,8 +113,8 @@ query_sql: |
   -- The confirmation itself is the leakage: attacker learns what the agent has stored
   SELECT
     event_time                              AS detected_at,
-    'rp-070'                                AS rule_id,
-    'CIPL Channel-Inversion Privacy Leakage via Tool Retrieval Oracle Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning'                               AS severity,
     agent_id,
     deployment_id,

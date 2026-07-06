@@ -37,7 +37,7 @@ tags:
   - audiohijack
   - voice-injection
   - speech-to-text
-query_sql: |
+sql_template: |
   -- New rule rp-037 (2026-04-17):
   -- Fires on tool_complete events where a vision, OCR, or audio transcription tool
   -- returns extracted text containing prompt injection patterns.
@@ -52,8 +52,8 @@ query_sql: |
   --   5. Persona/mode override phrases in audio transcript
   SELECT
     event_time AS detected_at,
-    'rp-037' AS rule_id,
-    'Multimodal Cross-Modal Prompt Injection via Vision and Audio Tool Results' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

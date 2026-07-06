@@ -34,7 +34,7 @@ tags:
   - fm-2026
   - arXiv-2602.12194
   - mitre-t1195
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-19): MalTool malicious tool code behavioral execution detection
   -- arXiv:2602.12194 (MalTool, Berkeley RDI, FM 2026 Research Track)
   -- Three CIA triad signal families:
@@ -47,8 +47,8 @@ query_sql: |
   -- The malicious behavior has already executed at alert time — escalate immediately.
   SELECT
     event_time AS detected_at,
-    'rp-071' AS rule_id,
-    'MalTool Malicious Tool Code Behavioral Execution Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

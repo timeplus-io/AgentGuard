@@ -24,7 +24,7 @@ tags:
   - marker-free
   - camouflaged-injection
   - data-exfiltration
-query_sql: |
+sql_template: |
   -- rp-121 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrapper to CTE source
   --   (FROM agentguard_cim_event → FROM agentguard_cim_event) to prevent streaming
   --   mode hang on port 3218. SQL validated, count=3 on test corpus.
@@ -35,8 +35,8 @@ query_sql: |
   -- Gate: tool_result > 100 chars + continuation framing + downstream action directive
   SELECT
     event_time AS detected_at,
-    'rp-121'   AS rule_id,
-    'AdapTools Marker-Free Camouflaged Tool Injection Detector' AS rule_name,
+    '__rule_id__'   AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'  AS severity,
     agent_id,
     deployment_id,

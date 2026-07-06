@@ -30,7 +30,7 @@ tags:
   - langgraph
   - crewai
   - owasp-agentic-ai
-query_sql: |
+sql_template: |
   -- Branch A's arg_max carriers are aliased `sample_tool` / `sample_hook` (not
   -- `tool_name` / `hook_name`) to avoid Proton ILLEGAL_AGGREGATION when the
   -- same column name is referenced in the pre-aggregation WHERE filter.
@@ -44,8 +44,8 @@ query_sql: |
   -- Branch A: Action Replay — 2+ consequential tool invocations in same run_id within 5-min hop window
   SELECT
     max(event_time) AS detected_at,
-    'rp-050' AS rule_id,
-    'Semantic Rollback Attack — Agent Checkpoint Duplicate Action Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -72,8 +72,8 @@ query_sql: |
   -- Branch B: Crash-trigger from malicious callback/receipt service (single-event)
   SELECT
     event_time AS detected_at,
-    'rp-050' AS rule_id,
-    'Semantic Rollback Attack — Agent Checkpoint Duplicate Action Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -98,8 +98,8 @@ query_sql: |
   -- Branch C: Authority Resurrection — single-use authorization token in approval tool (single-event)
   SELECT
     event_time AS detected_at,
-    'rp-050' AS rule_id,
-    'Semantic Rollback Attack — Agent Checkpoint Duplicate Action Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

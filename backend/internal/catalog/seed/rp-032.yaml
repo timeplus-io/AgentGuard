@@ -30,7 +30,7 @@ tags:
   - owasp-llm05
   - cve-2026-26220
   - cve-2026-27794
-query_sql: |
+sql_template: |
   -- rp-032 v0.1.0 (2026-04-17)
   -- Detects insecure deserialization exploitation in LLM orchestration frameworks.
   -- Three primary attack surfaces:
@@ -45,8 +45,8 @@ query_sql: |
   -- attack class (framework state vs MCP server protocol).
   SELECT
     event_time                                        AS detected_at,
-    'rp-032'                                          AS rule_id,
-    'LLM Framework Deserialization Injection Detector' AS rule_name,
+    '__rule_id__'                                          AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                                        AS severity,
     agent_id,
     deployment_id,

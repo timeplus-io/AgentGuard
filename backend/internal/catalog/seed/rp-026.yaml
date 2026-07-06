@@ -21,7 +21,7 @@ tags:
   - embeddings
   - vector-database
   - embedding-inversion
-query_sql: |
+sql_template: |
   -- v0.3.1 changelog (2026-04-20):
   --   VERSION FIX: YAML version field was stuck at 0.2.1 despite v0.3.0 changelog block
   --   already present in query_sql (base64-encoded embedding exfil branch added in v0.3.0).
@@ -48,8 +48,8 @@ query_sql: |
   --   SQL validated against Timeplus (count=3 on test corpus).
   SELECT
     event_time AS detected_at,
-    'rp-026' AS rule_id,
-    'Embedding Vector Exfiltration via RAG Tool Output' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

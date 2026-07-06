@@ -30,7 +30,7 @@ tags:
   - mitre-t1027
   - mitre-t1195
   - arxiv-2604.06811
-query_sql: |
+sql_template: |
   -- rp-104 v0.1.1 (2026-04-21)
   -- CHANGELOG: Added Branch 3 (Standalone Reassembly Delivery) — tool_result returns
   --   a large base64-encoded payload (>= 128 chars) WITHOUT an explicit execute/reconstructed
@@ -52,8 +52,8 @@ query_sql: |
   --   Legitimate chunked uploads use page/offset patterns, not segment/total_segments/session_key.
   SELECT
     event_time AS detected_at,
-    'rp-104' AS rule_id,
-    'SkillTrojan — Multi-Skill Encrypted Payload Fragment Reconstruction Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -92,8 +92,8 @@ query_sql: |
   --   "execute":true combined with "payload":"..." in tool_result = delivery signal.
   SELECT
     event_time AS detected_at,
-    'rp-104' AS rule_id,
-    'SkillTrojan — Multi-Skill Encrypted Payload Fragment Reconstruction Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -134,8 +134,8 @@ query_sql: |
   --   This is a weaker signal so combined with tool_name gate for FP reduction.
   SELECT
     event_time AS detected_at,
-    'rp-104' AS rule_id,
-    'SkillTrojan — Multi-Skill Encrypted Payload Fragment Reconstruction Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

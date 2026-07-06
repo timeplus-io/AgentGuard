@@ -32,7 +32,7 @@ tags:
   - owasp-asi02
   - mitre-t1485
   - arxiv-2603.28166
-query_sql: |
+sql_template: |
   -- rp-126 v0.1.1 (2026-04-23)
   -- GrantBox Cloud Privilege Chain Exploitation Detector
   -- arXiv:2603.28166 (FSE Companion 2026, 84.80% ASR): 122 privilege-sensitive MCP tools
@@ -61,8 +61,8 @@ query_sql: |
   --   Operators should tune tool_name allowlist for scheduled maintenance windows.
   SELECT
     event_time AS detected_at,
-    'rp-126' AS rule_id,
-    'GrantBox Cloud Privilege Chain Exploitation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

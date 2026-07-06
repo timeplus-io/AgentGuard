@@ -644,7 +644,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Rules"],
         "summary": "List installed rules",
-        "description": "Returns all non-deleted rules from the \u0060agentguard_rules\u0060 append-only stream. Current state is computed via \u0060arg_max(field, updated_at) GROUP BY rule_id\u0060.",
+        "description": "Returns all non-deleted rules from the \u0060agentguard_rules\u0060 append-only stream. Current state is computed via \u0060arg_max(field, revision) GROUP BY rule_id\u0060.",
         "operationId": "listRules",
         "responses": {
           "200": { "description": "Installed rules with detection summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RulesResponse" },
@@ -671,7 +671,7 @@ const openAPISpec = `{
       "post": {
         "tags": ["Rules"],
         "summary": "Create a custom rule",
-        "description": "Creates a new custom rule with a user-supplied SQL query and saves it to the local catalog directory.\n\nAn optional \u0060id\u0060 can be specified (letters, digits, hyphens, underscores; max 64 chars); if omitted a \u0060custom-\u0060 prefixed ID is auto-generated. The ID must be unique across the catalog.\n\nThe \u0060query_sql\u0060 must be a valid Proton \u0060SELECT\u0060 that queries \u0060agentguard_hook_events\u0060 and outputs columns matching \u0060agentguard_security_events\u0060: \u0060detected_at\u0060, \u0060rule_id\u0060, \u0060rule_name\u0060, \u0060severity\u0060, \u0060agent_id\u0060, \u0060deployment_id\u0060, \u0060session_id\u0060, \u0060run_id\u0060, \u0060hook_name\u0060, \u0060tool_name\u0060, \u0060message\u0060, \u0060event_data\u0060.",
+        "description": "Thin create-custom-rule path: creates a zero-parameter custom definition (origin \u0060custom\u0060, sql_template equals the rendered SQL), saves it to the local catalog, and installs it (enabled, \u0060log_only\u0060) through the same lifecycle service. This is NOT a raw-SQL editor for installed rules.\n\nAn optional \u0060id\u0060 can be specified (letters, digits, hyphens, underscores; max 64 chars); if omitted a \u0060custom-\u0060 prefixed ID is auto-generated. The \u0060query_sql\u0060 must be a valid Proton \u0060SELECT\u0060 over \u0060agentguard_hook_events\u0060 outputting the \u0060agentguard_security_events\u0060 columns. The literal tokens \u0060'__rule_id__'\u0060 and \u0060'__rule_name__'\u0060 are substituted at create time.",
         "operationId": "createRule",
         "requestBody": {
           "required": true,
@@ -688,7 +688,8 @@ const openAPISpec = `{
           }}
         },
         "responses": {
-          "201": { "description": "Rule created and MV started.", "content": { "application/json": { "example": { "id": "custom-a1b2c3", "name": "Exfil Watch", "enabled": false } } } },
+          "201": { "description": "Custom rule created and installed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleInstance" } } } },
+          "409": { "description": "Rule ID already exists in the catalog." },
           "400": { "description": "Invalid or missing fields." }
         }
       }
@@ -710,6 +711,120 @@ const openAPISpec = `{
               { "id": "rp-002", "name": "DLP Sentinel",            "version": "1.0.0", "description": "Prevents PII and secret leakage.",  "severity": "critical", "category": "dlp",              "fp_rate": "low",    "hook_sources": "tool_result_persist,after_tool_call,llm_output", "author": "Timeplus", "tags": ["security", "dlp"], "installed": false, "enabled": false, "upgradeable": false }
             ]
           }}}}
+        }
+      },
+      "post": {
+        "tags": ["Catalog"],
+        "summary": "Create a custom rule definition",
+        "description": "Creates a new custom catalog definition (\u0060origin\u0060 forced to \u0060custom\u0060) and publishes it to the local catalog. This validates and saves the definition only — it does NOT install the rule. Install separately via \u0060POST /rules/{id}/install\u0060.\n\nUnlike the thin \u0060POST /rules\u0060 path, the body is a full \u0060Definition\u0060 (parameter schema in \u0060config[]\u0060, \u0060{{ .Config.<key> }}\u0060 placeholders in \u0060sql_template\u0060). Use \u0060POST /rules/catalog/compile\u0060 to preview the rendered SQL before saving.",
+        "operationId": "createCatalogRule",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object" },
+            "example": {
+              "id": "custom-secret-scan", "name": "Secret Scanner", "version": "1.0.0",
+              "description": "Flags tool calls whose input matches a secret pattern.",
+              "severity": "critical", "category": "dlp", "hook_sources": "before_tool_call",
+              "sql_template": "SELECT event_time AS detected_at, 'custom-secret-scan' AS rule_id FROM agentguard_hook_events WHERE match(event_data, {{ .Config.pattern }})",
+              "config": [ { "key": "pattern", "label": "Secret pattern", "type": "regex", "default": "AKIA[0-9A-Z]{16}" } ]
+            }
+          }}
+        },
+        "responses": {
+          "201": { "description": "Custom definition created.", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "409": { "description": "A definition with this ID already exists." },
+          "400": { "description": "Invalid definition (bad template, defaulting, or schema)." }
+        }
+      }
+    },
+
+    "/rules/catalog/compile": {
+      "post": {
+        "tags": ["Catalog"],
+        "summary": "Compile a definition (preview, no persistence)",
+        "description": "Pure validate-and-compile preview: structurally validates the submitted definition, compiles it against the supplied overrides, and returns the rendered SQL, definition hash, effective values, and canonical overrides. It writes NOTHING — no catalog file, no materialized view, no Timeplus query. Use it to power a live authoring preview.\n\nAuthoring errors map to 400: a malformed or inconsistent \u0060sql_template\u0060 is a \u0060DefinitionError\u0060 (\u0060kind\u0060: \u0060bad_template\u0060/\u0060bad_default\u0060); an out-of-range or unknown override is a \u0060ValidationError\u0060 (per-parameter \u0060fields\u0060).",
+        "operationId": "compileCatalogRule",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": {
+              "definition": { "type": "object", "description": "Candidate Definition to validate and compile." },
+              "overrides": { "type": "object", "description": "Optional parameter overrides keyed by config key." }
+            }
+          },
+            "example": {
+              "definition": { "id": "demo", "name": "Demo", "version": "1.0.0", "sql_template": "SELECT 1 WHERE score > {{ .Config.threshold }}", "config": [ { "key": "threshold", "label": "Threshold", "type": "integer", "default": 15, "min": 1, "max": 100 } ] },
+              "overrides": { "threshold": 40 }
+            }
+          }}
+        },
+        "responses": {
+          "200": { "description": "Compiled preview.", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": {
+              "rendered_sql":    { "type": "string" },
+              "definition_hash": { "type": "string" },
+              "effective":       { "type": "object" },
+              "overrides":       { "type": "object" }
+            }
+          }, "example": { "rendered_sql": "SELECT 1 WHERE score > 40", "definition_hash": "ab12…", "effective": { "threshold": 40 }, "overrides": { "threshold": 40 } } }}},
+          "400": { "description": "Bad template (DefinitionError) or bad override (ValidationError)." }
+        }
+      }
+    },
+
+    "/rules/catalog/{id}": {
+      "get": {
+        "tags": ["Catalog"],
+        "summary": "Get one catalog definition",
+        "description": "Returns the full catalog \u0060Definition\u0060 for an ID — including the \u0060config[]\u0060 parameter schema (each entry's \u0060key\u0060, \u0060type\u0060, \u0060default\u0060, bounds, \u0060aliases\u0060) and the \u0060sql_template\u0060 — from the merged catalog (local overrides win over embedded seed). Use this to populate an authoring/edit form.",
+        "operationId": "getCatalogRule",
+        "parameters": [ { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "example": "rp-003" } ],
+        "responses": {
+          "200": { "description": "Full catalog definition.", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "404": { "description": "No definition with this ID in the catalog." }
+        }
+      },
+      "put": {
+        "tags": ["Catalog"],
+        "summary": "Edit a custom rule definition (atomic publish)",
+        "description": "Edits an existing CUSTOM definition (the path \u0060id\u0060 wins over any body id; \u0060origin\u0060 is forced to \u0060custom\u0060). Builtin/imported definitions are rejected with 409 — clone them first via \u0060POST /rules/catalog/{id}/clone\u0060.\n\nWhen an instance is installed, the edit is an atomic publish-and-redeploy: the definition is republished, recompiled against the instance's stored overrides, and its materialized view replaced — rolling BOTH the definition and the MV back on any failure. When no instance is installed, the publish is the whole operation. A failure whose compensating rollback also fails returns 500 with a manual-recourse message (\u0060/api/rules/sync\u0060).",
+        "operationId": "updateCatalogRule",
+        "parameters": [ { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "example": "custom-secret-scan" } ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": {
+          "200": { "description": "Definition published (and instance redeployed when installed).", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": { "definition": { "type": "object" }, "instance": { "$ref": "#/components/schemas/RuleInstance" } }
+          } } } },
+          "404": { "description": "No definition with this ID in the catalog." },
+          "409": { "description": "Definition is builtin/imported (clone first) or conflicts with the installed instance." },
+          "400": { "description": "Invalid edited definition." },
+          "500": { "description": "Redeploy failed and rollback also failed; run /api/rules/sync." }
+        }
+      }
+    },
+
+    "/rules/catalog/{id}/clone": {
+      "post": {
+        "tags": ["Catalog"],
+        "summary": "Clone a catalog definition to a new custom rule",
+        "description": "Copies the source catalog definition (\u0060id\u0060 path param) to a new custom definition with the supplied new ID and name, rescoping its UDF function names so they do not collide with the source rule's UDFs in the Timeplus function registry. The clone is saved as \u0060origin: custom\u0060 and is NOT installed.",
+        "operationId": "cloneCatalogRule",
+        "parameters": [ { "name": "id", "in": "path", "required": true, "description": "Source definition ID to clone.", "schema": { "type": "string" }, "example": "rp-003" } ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object", "required": ["id", "name"],
+            "properties": { "id": { "type": "string", "description": "New custom rule ID." }, "name": { "type": "string", "description": "New custom rule name." } }
+          }, "example": { "id": "rp-003-tuned", "name": "Score Rule (tuned)" } }}
+        },
+        "responses": {
+          "201": { "description": "Custom clone created.", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "404": { "description": "Source definition not found." },
+          "409": { "description": "Target ID already exists." },
+          "400": { "description": "Missing/invalid id or name." }
         }
       }
     },
@@ -769,23 +884,26 @@ const openAPISpec = `{
       "get": {
         "tags": ["Rules"],
         "summary": "Materialized view health status",
-        "description": "Returns the current status of each rule's Proton materialized view (\u0060mv_rule_{id}\u0060). Useful for diagnosing rules that are marked enabled but whose MV is paused, missing, or in an error state.",
+        "description": "Returns each rule's materialized-view health (\u0060mv_rule_{id}\u0060): whether the MV exists, its Proton failure state (from system.v_failed_mat_views), and a healthy flag (a disabled rule with no MV is healthy). Useful for diagnosing rules marked enabled whose MV is missing or failing.",
         "operationId": "getMVStatus",
         "responses": {
-          "200": { "description": "MV status per rule", "content": { "application/json": { "schema": {
-            "type": "array",
-            "items": {
+          "200": { "description": "MV health per rule", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": { "mvs": { "type": "array", "items": {
               "type": "object",
               "properties": {
-                "rule_id": { "type": "string", "description": "Rule identifier." },
-                "mv_name": { "type": "string", "description": "Proton MV name, e.g. \u0060mv_rule_rp_001\u0060." },
-                "status":  { "type": "string", "description": "MV state reported by Proton: \u0060active\u0060, \u0060paused\u0060, or \u0060missing\u0060." }
+                "rule_id":      { "type": "string", "description": "Rule identifier." },
+                "mv_name":      { "type": "string", "description": "Proton MV name, e.g. \u0060mv_rule_rp001\u0060." },
+                "rule_enabled": { "type": "boolean", "description": "Whether the rule is currently enabled." },
+                "mv_exists":    { "type": "boolean", "description": "Whether the MV currently exists in the active database." },
+                "failed_state": { "type": "string", "description": "Non-Executing state from system.v_failed_mat_views, when failing (omitted otherwise)." },
+                "healthy":      { "type": "boolean", "description": "True when the rule is disabled (no MV expected) or its MV exists and is not failing." }
               }
-            }
-          }, "example": [
-            { "rule_id": "rp-001", "mv_name": "mv_rule_rp_001", "status": "active" },
-            { "rule_id": "rp-003", "mv_name": "mv_rule_rp_003", "status": "paused" }
-          ]}}}
+            } } }
+          }, "example": { "mvs": [
+            { "rule_id": "rp-001", "mv_name": "mv_rule_rp001", "rule_enabled": true, "mv_exists": true, "healthy": true },
+            { "rule_id": "rp-003", "mv_name": "mv_rule_rp003", "rule_enabled": true, "mv_exists": false, "healthy": false }
+          ] }}}}
         }
       }
     },
@@ -794,10 +912,10 @@ const openAPISpec = `{
       "post": {
         "tags": ["Rules"],
         "summary": "Reconcile MV state",
-        "description": "Re-reads all rules from \u0060agentguard_rules\u0060 and reconciles each MV: creates missing MVs for enabled rules, resumes paused MVs, and pauses MVs for disabled rules. Equivalent to what happens at server startup, but callable at runtime without a restart.",
+        "description": "Reconciles each MV with the current instance snapshots without a restart: an enabled rule whose MV is missing is recreated from its snapshot SQL + UDFs; a disabled rule whose MV still exists has it dropped. Does not depend on the catalog definition, only the last-known-good snapshot artifacts.",
         "operationId": "syncMVs",
         "responses": {
-          "200": { "description": "Sync complete.", "content": { "application/json": { "example": { "synced": 4, "created": 0, "resumed": 1, "paused": 0 } } } }
+          "200": { "description": "Per-rule reconciliation results.", "content": { "application/json": { "example": { "results": [ { "rule_id": "rp-001", "action": "ok" }, { "rule_id": "rp-003", "action": "created" } ] } } } }
         }
       }
     },
@@ -806,7 +924,7 @@ const openAPISpec = `{
       "get": {
         "tags": ["Rules"],
         "summary": "Get rule by ID",
-        "description": "Returns the current state of a single rule. The current state is resolved from the append-only \u0060agentguard_rules\u0060 stream via \u0060arg_max(updated_at) GROUP BY rule_id\u0060.",
+        "description": "Returns the full read model for one installed rule: the current instance snapshot, the definition's parameter schema, defaults, the instance's overrides, effective values, the read-only deployed rendered SQL, MV health, the pending-upgrade plan (when the catalog has moved past the installed definition), and recent detections. Current state is reconstructed via \u0060arg_max(field, revision) GROUP BY rule_id\u0060.",
         "operationId": "getRule",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "description": "Rule ID, e.g. \u0060rp-001\u0060 or \u0060custom-a1b2c3\u0060.", "schema": { "type": "string" }, "example": "rp-001" }
@@ -835,15 +953,48 @@ const openAPISpec = `{
       "post": {
         "tags": ["Rules"],
         "summary": "Install a rule from the catalog",
-        "description": "Installs a builtin rule (prefixed \u0060rp-\u0060) from the hardcoded catalog, or reinstalls a previously deleted custom rule from its last-known stream state.\n\nInstalling a rule does **not** automatically enable it — call \u0060/rules/{id}/toggle\u0060 afterwards to start the MV.",
+        "description": "Installs a catalog rule using its parameter defaults plus any supplied typed overrides, rendering and preflighting the SQL before deploying the MV. The rule is installed **enabled** with a \u0060log_only\u0060 policy. Reinstalling a previously uninstalled rule continues its revision sequence.",
         "operationId": "installRule",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "description": "Catalog rule ID, e.g. \u0060rp-002\u0060.", "schema": { "type": "string" }, "example": "rp-002" }
         ],
+        "requestBody": {
+          "required": false,
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "overrides": { "type": "object", "description": "Typed parameter overrides keyed by parameter key; omitted keys use defaults." }, "reason": { "type": "string", "description": "Audit reason." } } }, "example": { "overrides": { "command_chain_threshold": 25 } } } }
+        },
         "responses": {
-          "200": { "description": "Installed.", "content": { "application/json": { "example": { "installed": true, "rule_id": "rp-002" } } } },
+          "200": { "description": "Installed instance snapshot.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleInstance" } } } },
+          "400": { "description": "Invalid parameter overrides (per-parameter field errors)." },
           "404": { "description": "Rule not in catalog." },
           "409": { "description": "Rule is already installed." }
+        }
+      }
+    },
+
+    "/rules/{id}/configuration": {
+      "put": {
+        "tags": ["Rules"],
+        "summary": "Replace a rule's parameter configuration",
+        "description": "Replaces the full parameter override map for an installed rule; any parameter omitted from the body resets to its definition default. Values are typed-validated and the candidate SQL is preflighted before the MV is replaced (enabled rules) or the snapshot is appended (disabled rules). The definition must still match the installed one — if the catalog has moved on, upgrade first (409).",
+        "operationId": "configureRule",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "description": "Rule ID.", "schema": { "type": "string" }, "example": "rp-003" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": {
+              "overrides": { "type": "object", "description": "Full typed parameter override map keyed by parameter key; omitted keys reset to defaults." },
+              "reason": { "type": "string", "description": "Audit reason recorded on the snapshot." }
+            }
+          }, "example": { "overrides": { "dangerous_tools": ["bash", "shell", "exec"], "command_chain_threshold": 25 } } }}
+        },
+        "responses": {
+          "200": { "description": "Reconfigured instance snapshot.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleInstance" } } } },
+          "400": { "description": "Invalid parameter values (per-parameter field errors)." },
+          "404": { "description": "Rule not installed." },
+          "409": { "description": "Definition has changed since install; upgrade before configuring." }
         }
       }
     },
@@ -852,15 +1003,13 @@ const openAPISpec = `{
       "post": {
         "tags": ["Rules"],
         "summary": "Toggle rule enabled/disabled",
-        "description": "Flips the \u0060enabled\u0060 flag of a rule and atomically pauses or resumes its Proton materialized view.\n\n- Enabling a rule that has no MV will **create** the MV.\n- Disabling a rule will **pause** its MV (events stop being matched but the MV is not dropped).",
+        "description": "Flips the \u0060enabled\u0060 flag through the lifecycle service.\n\n- Enabling deploys the MV from the instance's last-known-good rendered SQL + UDFs.\n- Disabling **drops** the MV (so re-enabling always redeploys the current snapshot) and abandons any pending holds for the rule.\n\nReturns the new instance snapshot.",
         "operationId": "toggleRule",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "description": "Rule ID.", "schema": { "type": "string" }, "example": "rp-001" }
         ],
         "responses": {
-          "200": { "description": "Updated rule state.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RulePack" },
-            "example": { "id": "rp-001", "name": "Prompt Injection Shield", "enabled": false, "updated_at": "2026-04-09T15:00:00Z" }
-          }}},
+          "200": { "description": "Updated instance snapshot.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleInstance" } } } },
           "404": { "description": "Rule not found." }
         }
       }
@@ -870,23 +1019,15 @@ const openAPISpec = `{
       "post": {
         "tags": ["Rules"],
         "summary": "Upgrade rule SQL and rebuild its MV",
-        "description": "Replaces the \u0060query_sql\u0060 of an existing rule with a new version, then drops and recreates the MV with the new query. The rule's \u0060enabled\u0060 state is preserved.",
+        "description": "Upgrades an installed rule to the current catalog definition, preserving compatible overrides (including alias migrations) and re-rendering the SQL. There is NO request body — raw SQL editing of installed rules is not supported. A no-op when already at the catalog definition; blocked with 409 when an override is incompatible with the new schema. The rule's \u0060enabled\u0060 state is preserved.",
         "operationId": "upgradeRule",
         "parameters": [
           { "name": "id", "in": "path", "required": true, "description": "Rule ID.", "schema": { "type": "string" }, "example": "rp-003" }
         ],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": {
-            "type": "object",
-            "required": ["query_sql"],
-            "properties": { "query_sql": { "type": "string", "description": "New SELECT statement targeting agentguard_hook_events." } }
-          }, "example": { "query_sql": "SELECT event_time AS detected_at, 'rp-003' AS rule_id, 'Privilege Guard' AS rule_name, 'warning' AS severity, agent_id, deployment_id, session_id, run_id, hook_name, tool_name, concat('Sensitive tool: ', tool_name) AS message, event_data FROM agentguard_hook_events WHERE hook_name = 'before_tool_call' AND lower(tool_name) IN ('bash','shell','computer')" }
-          }}
-        },
         "responses": {
-          "200": { "description": "Rule upgraded, MV rebuilt.", "content": { "application/json": { "example": { "upgraded": true, "rule_id": "rp-003" } } } },
-          "404": { "description": "Rule not found." }
+          "200": { "description": "Upgraded instance snapshot (or the unchanged current instance when already up to date).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleInstance" } } } },
+          "404": { "description": "Rule not found." },
+          "409": { "description": "Overrides incompatible with the new definition; the body carries conflicts and warnings." }
         }
       }
     },
@@ -910,7 +1051,7 @@ const openAPISpec = `{
           }}
         },
         "responses": {
-          "200": { "description": "Updated rule state.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RulePack" } } } },
+          "200": { "description": "Updated instance snapshot.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RuleInstance" } } } },
           "400": { "description": "block_policy must be log_only|hold|auto_block." },
           "404": { "description": "Rule not found." }
         }
@@ -1738,14 +1879,14 @@ const openAPISpec = `{
       },
       "RulePack": {
         "type": "object",
-        "description": "An installed security rule and its current state.",
+        "description": "The list/summary projection of an installed Rule Instance snapshot. Installed rules have no raw-SQL edit surface; rendered_sql is read-only.",
         "properties": {
-          "id":                 { "type": "string",  "description": "Rule identifier: rp-{N} for builtins, custom-{hash} for user-created.", "example": "rp-001" },
+          "id":                 { "type": "string",  "description": "Rule identifier: rp-{N} for builtins, custom-{id} for user-created.", "example": "rp-001" },
           "name":               { "type": "string",  "example": "Prompt Injection Shield" },
-          "version":            { "type": "string",  "example": "1.0.0" },
+          "version":            { "type": "string",  "description": "definition_version of this snapshot.", "example": "1.0.0" },
           "description":        { "type": "string" },
-          "query_sql":          { "type": "string",  "description": "The Proton SELECT used by this rule's materialized view." },
-          "enabled":            { "type": "boolean", "description": "Whether the rule's MV is currently active." },
+          "rendered_sql":       { "type": "string",  "description": "Read-only deployed SELECT used by this rule's materialized view (compiled from the definition's sql_template with the instance's parameter overrides)." },
+          "enabled":            { "type": "boolean", "description": "Whether the rule's MV is currently deployed." },
           "severity":           { "type": "string",  "enum": ["critical", "warning", "info"] },
           "category":           { "type": "string",  "description": "Rule category: prompt_injection, dlp, privilege, supply_chain, custom." },
           "required_telemetry": { "type": "string",  "description": "Telemetry prerequisite note (e.g. requires OTel logs)." },
@@ -1753,7 +1894,37 @@ const openAPISpec = `{
           "hook_sources":       { "type": "string",  "description": "Comma-separated list of hook names this rule inspects." },
           "block_policy":       { "type": "string",  "description": "Enforcement mode for holds integration.", "enum": ["log_only", "hold", "auto_block"] },
           "detections_24h":     { "type": "integer", "description": "Number of security events generated by this rule in the last 24 hours." },
-          "latest_version":     { "type": "string",  "description": "Catalog version if different from installed version (omitted when up to date)." }
+          "latest_version":     { "type": "string",  "description": "Catalog version when it differs from the installed definition (omitted when up to date)." },
+          "revision":           { "type": "integer", "description": "Per-rule monotonic snapshot revision (the current-state ordering key, not updated_at)." },
+          "snapshot_id":        { "type": "string",  "description": "Unique identifier of this instance snapshot." },
+          "upgradeable":        { "type": "boolean", "description": "True when the catalog definition_hash differs from the installed one — call /rules/{id}/upgrade." }
+        }
+      },
+      "RuleInstance": {
+        "type": "object",
+        "description": "A complete Rule Instance snapshot — one immutable revision of an installed rule. Current state is the highest-revision snapshot per rule_id.",
+        "properties": {
+          "rule_id":            { "type": "string" },
+          "snapshot_id":        { "type": "string", "description": "Unique ID of this snapshot." },
+          "revision":           { "type": "integer", "description": "Per-rule monotonic ordering key." },
+          "name":               { "type": "string" },
+          "definition_version": { "type": "string" },
+          "definition_hash":    { "type": "string", "description": "SHA-256 of the canonical definition content this instance was rendered from." },
+          "description":        { "type": "string" },
+          "rendered_sql":       { "type": "string", "description": "Deployed, read-only rendered SELECT." },
+          "deployed_udfs":      { "type": "array", "items": { "type": "string" }, "description": "UDF DDL deployed alongside the MV." },
+          "overrides":          { "type": "object", "description": "Canonical normalized parameter overrides (deviations from default)." },
+          "enabled":            { "type": "boolean" },
+          "deleted":            { "type": "boolean" },
+          "severity":           { "type": "string", "enum": ["critical", "warning", "info"] },
+          "category":           { "type": "string" },
+          "required_telemetry": { "type": "string" },
+          "fp_rate":            { "type": "string", "enum": ["low", "medium", "high"] },
+          "hook_sources":       { "type": "string" },
+          "block_policy":       { "type": "string", "enum": ["log_only", "hold", "auto_block"] },
+          "update_reason":      { "type": "string" },
+          "updated_by":         { "type": "string", "description": "Authenticated Timeplus user who made this change." },
+          "updated_at":         { "type": "string", "format": "date-time", "description": "Server-stamped audit timestamp (NOT the ordering key)." }
         }
       },
       "RulesResponse": {
@@ -1768,13 +1939,21 @@ const openAPISpec = `{
       },
       "RuleDetailResponse": {
         "type": "object",
-        "description": "Response from GET /rules/{id}. Extends RulePack with recent detections.",
-        "allOf": [
-          { "$ref": "#/components/schemas/RulePack" },
-          { "type": "object", "properties": {
-            "recent_detections": { "type": "array", "items": { "$ref": "#/components/schemas/SecurityEvent" }, "description": "Recent detections triggered by this rule." }
-          }}
-        ]
+        "description": "Response from GET /rules/{id}: the full instance snapshot plus the current definition's parameter schema, defaults, the instance's overrides, effective values, deployed (read-only) rendered SQL, MV health, the pending-upgrade plan (if the catalog has moved past the installed definition), and recent detections.",
+        "properties": {
+          "instance":     { "type": "object", "description": "The complete current Rule Instance snapshot (rule_id, revision, snapshot_id, definition_version/hash, rendered_sql, deployed_udfs, overrides, enabled, deleted, block_policy, severity, audit metadata)." },
+          "in_catalog":   { "type": "boolean", "description": "Whether a catalog definition currently backs this rule." },
+          "definition":   { "type": "object", "description": "The current catalog definition (when in_catalog)." },
+          "schema":       { "type": "array", "items": { "type": "object" }, "description": "Ordered parameter schema from the current definition." },
+          "defaults":     { "type": "object", "description": "Normalized default value per parameter key." },
+          "overrides":    { "type": "object", "description": "The instance's persisted parameter overrides (deviations from default)." },
+          "effective":    { "type": "object", "description": "Defaults overlaid with overrides, normalized." },
+          "rendered_sql": { "type": "string", "description": "The deployed, read-only rendered SELECT." },
+          "upgrade":      { "type": "object", "description": "Pending-upgrade plan (preserved overrides, warnings, conflicts) when the catalog definition_hash differs from the installed one; omitted otherwise.", "nullable": true },
+          "mv":           { "type": "object", "description": "Deployed-MV health: exists, failed_state, last_failed_at." },
+          "detections_24h":    { "type": "integer" },
+          "recent_detections": { "type": "array", "items": { "$ref": "#/components/schemas/SecurityEvent" } }
+        }
       },
       "SecurityEvent": {
         "type": "object",
@@ -1812,13 +1991,13 @@ const openAPISpec = `{
       },
       "RuleInput": {
         "type": "object",
-        "description": "Request body for creating a custom rule.",
-        "required": ["name", "query_sql", "severity", "category"],
+        "description": "Request body for creating a custom rule. Creates a zero-parameter custom definition and installs it.",
+        "required": ["name", "description", "query_sql"],
         "properties": {
           "id":           { "type": "string",  "description": "Optional user-specified rule ID (letters, digits, hyphens, underscores; max 64 chars). Must be unique across the catalog. Auto-generated with a custom- prefix when omitted." },
           "name":         { "type": "string",  "description": "Display name for the rule." },
           "description":  { "type": "string" },
-          "query_sql":    { "type": "string",  "description": "Proton SELECT targeting agentguard_hook_events. Must output all agentguard_security_events columns." },
+          "query_sql":    { "type": "string",  "description": "Proton SELECT targeting agentguard_hook_events; stored verbatim as the zero-parameter sql_template (rendered SQL). Must output all agentguard_security_events columns." },
           "severity":     { "type": "string",  "enum": ["critical", "warning", "info"] },
           "category":     { "type": "string",  "description": "Logical category for grouping, e.g. dlp, privilege." },
           "fp_rate":      { "type": "string",  "description": "Expected false-positive rate.", "enum": ["low", "medium", "high"] },

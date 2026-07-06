@@ -43,7 +43,7 @@ tags:
   - rlvr-acb
   - arxiv-2603.11949
   - delayed-backdoor-dnd
-query_sql: |
+sql_template: |
   -- Detection covers four backdoor trigger surfaces (arXiv:2601.04566 +
   -- arXiv:2603.03371), plus two windowed legs:
   --   (1) Planning attack: trigger in user_message (event_type=user_input)
@@ -55,8 +55,8 @@ query_sql: |
   -- ShadowLogic (arXiv:2511.00664): computational graph backdoor; trigger at start of prompt.
   SELECT
     event_time AS detected_at,
-    'rp-042' AS rule_id,
-    'BackdoorAgent Trigger Activation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -152,8 +152,8 @@ query_sql: |
   -- (overlapping windows fire spuriously and emit duplicates).
   SELECT
     window_end AS detected_at,
-    'rp-042' AS rule_id,
-    'BackdoorAgent Trigger Activation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -194,8 +194,8 @@ query_sql: |
   -- anomaly. tumble bounds emission to once per window (avoids O(N^2) re-emit).
   SELECT
     window_end AS detected_at,
-    'rp-042' AS rule_id,
-    'BackdoorAgent Trigger Activation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

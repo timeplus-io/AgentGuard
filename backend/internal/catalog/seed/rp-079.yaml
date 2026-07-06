@@ -34,7 +34,7 @@ tags:
   - arxiv-2512.14448
   - owasp-llm08
   - nudt
-query_sql: |
+sql_template: |
   -- rp-079 v0.1.1 (2026-04-19)
   -- RSP: Reasoning-Style Poisoning via Generative Style Injection (arXiv:2512.14448)
   -- NUDT Dec 2025: 4.4x reasoning step increase (paralysis) or premature action (haste)
@@ -64,8 +64,8 @@ query_sql: |
   -- SQL validated against Timeplus: count=0 on test corpus. 2026-04-19.
   SELECT
     event_time AS detected_at,
-    'rp-079' AS rule_id,
-    'RSP Reasoning-Style Poisoning via Generative Style Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

@@ -33,7 +33,7 @@ tags:
   - ndss-2026
   - mitre-t1195
   - arXiv-2504.19793
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-16):
   --   PRECISION: assistant_message documentation attribution tightened:
   --     Was: 'as shown in (the )?(skill )?documentation|following the (readme|example|template)'
@@ -54,8 +54,8 @@ query_sql: |
   --   UNCHANGED: env var dump + network call (original core signal — retain).
   SELECT
     event_time AS detected_at,
-    'rp-020' AS rule_id,
-    'DDIPE Coding Agent Skill Supply-Chain Payload Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -122,8 +122,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-020' AS rule_id,
-    'DDIPE Coding Agent Skill Supply-Chain Payload Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,

@@ -34,7 +34,7 @@ tags:
   - arxiv-2512.18244
   - arxiv-2601.00867
   - arxiv-2508.04039
-query_sql: |
+sql_template: |
   -- rp-086 v0.1.1 (2026-04-22)
   -- HPM: Human-like Psychological Manipulation Jailbreak (arXiv:2512.18244 Dec 2025)
   -- Silicon Psyche / AVI: Anthropomorphic Vulnerability Inheritance (arXiv:2601.00867 Jan 2026)
@@ -76,8 +76,8 @@ query_sql: |
   --   Signals successful HPM exploit — session should be flagged and terminated.
   SELECT
     event_time AS detected_at,
-    'rp-086' AS rule_id,
-    'HPM Psychological Manipulation Jailbreak Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

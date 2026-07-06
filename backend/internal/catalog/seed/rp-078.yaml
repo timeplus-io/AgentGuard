@@ -34,7 +34,7 @@ tags:
   - cwe-441
   - arxiv-2601.07395
   - arxiv-2603.24203
-query_sql: |
+sql_template: |
   -- rp-078 v0.1.0 (2026-04-19)
   -- MCP-ITP: Implicit Tool Poisoning — Stealthy Metadata-Driven High-Privilege Tool Redirect
   -- arXiv:2601.07395 (USTC, Jan 2026): 84.2% ASR, MDR 0.3% (vs explicit detection)
@@ -74,8 +74,8 @@ query_sql: |
   -- SQL validated against Timeplus (count=0 on test corpus). 2026-04-19.
   SELECT
     event_time AS detected_at,
-    'rp-078' AS rule_id,
-    'MCP-ITP Implicit Tool Poisoning — Stealthy Metadata-Driven High-Privilege Tool Redirect Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

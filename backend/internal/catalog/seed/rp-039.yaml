@@ -36,7 +36,7 @@ tags:
   - clinejection
   - christian-schneider-2026
   - context-pivoting
-query_sql: |
+sql_template: |
   -- v0.2.0 changelog (2026-04-17):
   --   ADDED: Cross-tool pivot directive in tool_result (Clinejection-style attack, Christian Schneider Mar 2026).
   --     A support-ticket reader or issue-reader tool result contains a directive to use a
@@ -76,8 +76,8 @@ query_sql: |
   --   correlate with a preceding ticket_read event from external user submission.
   SELECT
     event_time AS detected_at,
-    'rp-039' AS rule_id,
-    'Living off AI — MCP Support Ticket Trust Bridge Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

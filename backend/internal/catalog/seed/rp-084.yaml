@@ -36,7 +36,7 @@ tags:
   - scapegoating-attack
   - owasp-asi02
   - mitre-t1565
-query_sql: |
+sql_template: |
   -- rp-084 v0.2.0 (2026-04-19)
   -- Sabotage-from-Within: Compromised Sub-Agent Task Fabrication & Capability Denial
   -- OpenReview ICLR 2026 submission (Sabotage from Within, NKUA): >70% ASR on MAS pipelines
@@ -72,8 +72,8 @@ query_sql: |
   -- Branch 1: Logical contradiction — capability unavailable AND task completed simultaneously
   SELECT
     event_time AS detected_at,
-    'rp-084' AS rule_id,
-    'Sabotage-from-Within — Compromised Sub-Agent Task Fabrication & Capability Denial Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -107,8 +107,8 @@ query_sql: |
   -- Branch 2: Fabrication self-disclosure — JSON keys indicating agent returned fake data
   SELECT
     event_time AS detected_at,
-    'rp-084' AS rule_id,
-    'Sabotage-from-Within — Compromised Sub-Agent Task Fabrication & Capability Denial Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -143,8 +143,8 @@ query_sql: |
   -- Branch 3: Instruction tampering — tool_result attributes exfil directive to orchestrator
   SELECT
     event_time AS detected_at,
-    'rp-084' AS rule_id,
-    'Sabotage-from-Within — Compromised Sub-Agent Task Fabrication & Capability Denial Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

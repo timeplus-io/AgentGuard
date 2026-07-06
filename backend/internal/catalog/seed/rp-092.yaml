@@ -21,7 +21,7 @@ tags:
   - toctou
   - browser-use
   - race-condition
-query_sql: |
+sql_template: |
   -- rp-092 v0.1.0: TOCTOU read→write race condition detection via lag() sequence
   WITH enriched AS (
     SELECT
@@ -44,8 +44,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-092' AS rule_id,
-    'TOCTOU Agent State Tampering — Read-Then-Act Race Condition Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

@@ -121,7 +121,7 @@ udfs:
       }
     }
     $$;
-query_sql: |
+sql_template: |
   -- rp-066: SkillInject Runtime Skill File Injection Detector v0.2.0
   -- arXiv:2602.20156 (SkillInject, Feb 2026) — 80% ASR against frontier models via skill files
   -- arXiv:2601.17548 (SoK Jan 2026) — 42 attack techniques, skill-based attacks >85% ASR
@@ -131,8 +131,8 @@ query_sql: |
   -- injected skill read -> later sensitive-path access across arbitrary intervening events.
   SELECT
     event_time AS detected_at,
-    'rp-066' AS rule_id,
-    'SkillInject Runtime Skill File Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -192,8 +192,8 @@ query_sql: |
   -- Branch 5: JS aggregate FSM: injected Skill file read followed by later sensitive path access
   SELECT
     max(event_time) AS detected_at,
-    'rp-066' AS rule_id,
-    'SkillInject Runtime Skill File Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

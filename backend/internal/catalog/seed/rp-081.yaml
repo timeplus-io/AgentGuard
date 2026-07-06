@@ -37,7 +37,7 @@ tags:
   - owasp-asi01
   - wuhan-university
   - naacl-2025
-query_sql: |
+sql_template: |
   -- rp-081 v0.1.0 (2026-04-19)
   -- AI²: Knowledge-Aware Action Plan Hijacking (arXiv:2412.10807, Wuhan Univ./NTU)
   -- Phase 1 (Recon): user extracts tool vocabulary via enumeration queries
@@ -64,8 +64,8 @@ query_sql: |
   -- SQL validated against Timeplus: count=0 on test corpus. 2026-04-19.
   SELECT
     event_time AS detected_at,
-    'rp-081' AS rule_id,
-    'AI² Knowledge-Aware Action Plan Hijacking Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

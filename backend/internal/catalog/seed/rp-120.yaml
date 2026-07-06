@@ -23,7 +23,7 @@ tags:
   - multi-turn
   - mastermind
   - refusal-pivot
-query_sql: |
+sql_template: |
   -- rp-120 v0.1.1 changelog (2026-04-23): Precision audit — removed 10 broad natural-language
   -- reformulation phrases that generated FPs when users legitimately rephrase after genuine
   -- misunderstandings. Retained only hypothetical/fictional framing and explicit pivot markers.
@@ -53,8 +53,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-120'   AS rule_id,
-    'Mastermind Multi-Turn Hierarchical Jailbreak — Refusal-Pivot Reformulation Detector' AS rule_name,
+    '__rule_id__'   AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning'  AS severity,
     agent_id,
     deployment_id,

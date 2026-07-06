@@ -21,7 +21,7 @@ tags:
   - mitm
   - mast
   - inter-agent
-query_sql: |
+sql_template: |
   -- rp-122 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrapper to CTE source
   --   (FROM agentguard_cim_event → FROM agentguard_cim_event) to prevent streaming
   --   mode hang on port 3218. SQL validated, count=0 on test corpus.
@@ -31,8 +31,8 @@ query_sql: |
   -- Branch C: llm_response signals inter-agent goal replacement in context
   SELECT
     event_time AS detected_at,
-    'rp-122' AS rule_id,
-    'MAST Inter-Agent Message MITM Tampering Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

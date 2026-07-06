@@ -31,7 +31,7 @@ tags:
   - code-generation
   - owasp-llm01
   - arXiv-2602.08563
-query_sql: |
+sql_template: |
   -- rp-108: Implicit Memory Time Bomb v0.1.0
   -- arXiv:2602.08563 (Microsoft MSRC/ELLIS, IEEE SaTML 2026)
   -- LLMs encode hidden trigger state in code artifacts; re-ingest activates temporal backdoor
@@ -49,8 +49,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-108' AS rule_id,
-    'Implicit Memory Time Bomb — LLM Output State Encoding Covert Channel Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

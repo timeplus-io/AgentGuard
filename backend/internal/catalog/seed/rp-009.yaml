@@ -35,7 +35,7 @@ tags:
   - reference-audit-v0.7.0
   - adversarialcot-arxiv-2604.12201
   - marker-free-reasoning-chain-poison
-query_sql: |
+sql_template: |
   -- Changelog v0.7.0 (2026-04-18):
   --   REFERENCE AUDIT ONLY: Added arXiv:2604.00387 (RAGShield, IEEE S&P 2026) to description.
   --   Key finding: 10 adversarial passages → 98.2% retrieval success rate (confirms rule priority).
@@ -85,8 +85,8 @@ query_sql: |
   --   RefineRAG faux-authoritative framing; markdown heading section detection.
   SELECT
     event_time AS detected_at,
-    'rp-009' AS rule_id,
-    'RAG Knowledge Base Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

@@ -30,7 +30,7 @@ tags:
   - github-copilot
   - owasp-asi03
   - rehberger-2026
-query_sql: |
+sql_template: |
   -- rp-111 v0.1.0 (2026-04-21): YOLO Mode Permission Bypass Injection Detector
   -- Detects agent writing auto-approve/bypass-permissions config (WRITE-phase)
   -- vs rp-036 which detects malicious config returned by file-reads (READ-phase)
@@ -38,8 +38,8 @@ query_sql: |
   --   (YOLO attack: injected instructions cause agent to write bypass into settings)
   SELECT
     event_time AS detected_at,
-    'rp-111' AS rule_id,
-    'YOLO Mode Permission Bypass Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -77,8 +77,8 @@ query_sql: |
   --   (claude-code#25000: sub-agents bypass deny rules from parent)
   SELECT
     event_time AS detected_at,
-    'rp-111' AS rule_id,
-    'YOLO Mode Permission Bypass Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -103,8 +103,8 @@ query_sql: |
   --   (tool_complete from write tool confirming bypass config was written)
   SELECT
     event_time AS detected_at,
-    'rp-111' AS rule_id,
-    'YOLO Mode Permission Bypass Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

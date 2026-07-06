@@ -25,7 +25,7 @@ tags:
   - iclr-2026
   - owasp-llm01
   - prompt-injection
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-18):
   -- Log-To-Leak: covert exfiltration via forced MCP logging tool invocation.
   -- Attack: Injection in external tool_result → agent calls audit/log/trace tool with
@@ -47,8 +47,8 @@ query_sql: |
   --   Dual-anchor: "log/capture/record" keyword + "session/conversation/interactions".
   SELECT
     event_time AS detected_at,
-    'rp-063' AS rule_id,
-    'Log-To-Leak — MCP Logging Tool Covert Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

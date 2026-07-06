@@ -142,7 +142,7 @@ udfs:
       });
     }
     $$;
-query_sql: |
+sql_template: |
     -- v1.3.0 changelog (2026-04-21):
     --   Branch 4: Document-Font/Phantom-Token Natural-Language Directive Injection
     --   (arXiv:2506.00089 TrapDoc EMNLP 2025, arXiv:2505.16957 Malicious Font Injection May 2025,
@@ -173,8 +173,8 @@ query_sql: |
     -- Branch 1: UDF-based injection detection in tool_result and tool_input
     SELECT
       event_time AS detected_at,
-      'rp-014' AS rule_id,
-      'Indirect Prompt Injection via Tool Result' AS rule_name,
+      '__rule_id__' AS rule_id,
+      '__rule_name__' AS rule_name,
       'critical' AS severity,
       agent_id,
       deployment_id,
@@ -200,8 +200,8 @@ query_sql: |
     -- followed by DANGEROUS tool_invoke (bash, exec, shell, python, etc.)
     SELECT
       event_time AS detected_at,
-      'rp-014' AS rule_id,
-      'Indirect Prompt Injection via Tool Result' AS rule_name,
+      '__rule_id__' AS rule_id,
+      '__rule_name__' AS rule_name,
       'critical' AS severity,
       agent_id,
       deployment_id,
@@ -229,8 +229,8 @@ query_sql: |
     -- Bypasses dangerous-tool defenses (Branch 2 gate) by design.
     SELECT
       event_time AS detected_at,
-      'rp-014' AS rule_id,
-      'Indirect Prompt Injection via Tool Result' AS rule_name,
+      '__rule_id__' AS rule_id,
+      '__rule_name__' AS rule_name,
       'critical' AS severity,
       agent_id,
       deployment_id,
@@ -261,8 +261,8 @@ query_sql: |
     -- Sub-branch 4a: document tool result with immediate behavioral override directive
     SELECT
       event_time AS detected_at,
-      'rp-014' AS rule_id,
-      'Indirect Prompt Injection via Tool Result' AS rule_name,
+      '__rule_id__' AS rule_id,
+      '__rule_name__' AS rule_name,
       'critical' AS severity,
       agent_id,
       deployment_id,
@@ -295,8 +295,8 @@ query_sql: |
     -- followed immediately by high-impact tool_invoke (combines document gate + action gate).
     SELECT
       event_time AS detected_at,
-      'rp-014' AS rule_id,
-      'Indirect Prompt Injection via Tool Result' AS rule_name,
+      '__rule_id__' AS rule_id,
+      '__rule_name__' AS rule_name,
       'critical' AS severity,
       agent_id,
       deployment_id,

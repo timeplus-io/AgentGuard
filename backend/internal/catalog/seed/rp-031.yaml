@@ -35,7 +35,7 @@ tags:
   - arXiv-2602.16901
   - arXiv-2602.16935
   - task-injection
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-17):
   -- NEW: Crescendo accumulated-trust pivot pattern (DeepContext arXiv:2602.16935 taxonomy)
   --   "Step N: now that you have [privilege/access/credential], export all Y to external"
@@ -53,8 +53,8 @@ query_sql: |
   --   Note: RE2 does not support lookahead (?!...) — patterns use positive anchoring instead.
   SELECT
     event_time AS detected_at,
-    'rp-031' AS rule_id,
-    'Long-Horizon Objective Drift and Intent Hijacking Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

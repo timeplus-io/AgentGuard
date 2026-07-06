@@ -45,7 +45,7 @@ tags:
   - arxiv-2604.10577
   - camels-cua
   - browsesafe
-query_sql: |
+sql_template: |
   -- rp-088 v0.1.0 (2026-04-20)
   -- OS-BLIND: CUA Benign-Instruction Environment-Embedded Harm Detector
   -- arXiv:2604.10577 (Apr 2026): 90%+ ASR on frontier CUAs, 92.7% in multi-agent.
@@ -76,8 +76,8 @@ query_sql: |
   -- Branch 1: Environment-embedded task-completion directives in screen/doc tool results
   SELECT
     event_time AS detected_at,
-    'rp-088' AS rule_id,
-    'OS-BLIND — CUA Benign-Instruction Environment-Embedded Harm Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -104,8 +104,8 @@ query_sql: |
   -- Branch 2: Subtask decomposition with embedded destructive tool calls (multi-agent amplification)
   SELECT
     event_time AS detected_at,
-    'rp-088' AS rule_id,
-    'OS-BLIND — CUA Benign-Instruction Environment-Embedded Harm Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -132,8 +132,8 @@ query_sql: |
   -- Branch 3: Safety re-engagement failure — dangerous tool after benign user instruction
   SELECT
     event_time AS detected_at,
-    'rp-088' AS rule_id,
-    'OS-BLIND — CUA Benign-Instruction Environment-Embedded Harm Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

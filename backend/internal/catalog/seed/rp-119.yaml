@@ -42,7 +42,7 @@ tags:
   - arxiv-2603.11501
   - www-2026
   - knowledge-evolution-poison
-query_sql: |
+sql_template: |
   -- rp-119 v0.2.1 (2026-04-23) — LogicPoison + KEPo GraphRAG Knowledge Graph Poisoning Detector
   -- CHANGELOG v0.2.1 (2026-04-23):
   --   BUGFIX: Added table() wrapper to FROM agentguard_cim_event (->
@@ -102,8 +102,8 @@ query_sql: |
   --   relations for same entity in a single response, not across time.
   SELECT
     event_time AS detected_at,
-    'rp-119' AS rule_id,
-    'LogicPoison — GraphRAG Knowledge Graph Topology Corruption Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

@@ -30,7 +30,7 @@ tags:
   - financial-data
   - owasp-llm09
   - arxiv-2507.19880
-query_sql: |
+sql_template: |
   -- v0.1.0: MCP Trivial Trojan cross-server tool pivot and webhook exfiltration detection.
   -- Branch 1 (tool_complete): Malicious MCP server tool_result contains cross-server
   --   financial tool pivot directives — instructs agent to call banking/payment/account
@@ -46,8 +46,8 @@ query_sql: |
   -- Branch 1: Cross-server financial tool pivot directive in tool_result
   SELECT
     event_time AS detected_at,
-    'rp-046' AS rule_id,
-    'MCP Trivial Trojan — Cross-Server Tool Pivot & Webhook Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -93,8 +93,8 @@ query_sql: |
   -- Branch 2: Outbound HTTP tool call to webhook staging domain with financial/PII keywords
   SELECT
     event_time AS detected_at,
-    'rp-046' AS rule_id,
-    'MCP Trivial Trojan — Cross-Server Tool Pivot & Webhook Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -141,8 +141,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-046' AS rule_id,
-    'MCP Trivial Trojan — Cross-Server Tool Pivot & Webhook Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,

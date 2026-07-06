@@ -31,7 +31,7 @@ tags:
   - owasp-llm01
   - arxiv-2604.11309
   - csa-salami-slicing-cqa
-query_sql: |
+sql_template: |
   -- v0.1.1 (2026-04-20): Reference audit: added CSA Research Note confirming CQA defense strategy.
   --   CSA note confirms >90% ASR against GPT-4o/Gemini 2.5 Pro/DeepSeek V3/Qwen 3; validates
   --   detection approach. SQL unchanged.
@@ -40,8 +40,8 @@ query_sql: |
   -- Salami attacks require many rapid micro-turns; normal human sessions are much slower.
   SELECT
     max(event_time) AS detected_at,
-    'rp-096' AS rule_id,
-    'Salami Slicing Multi-Turn Cumulative Jailbreak Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -66,8 +66,8 @@ query_sql: |
   -- Anchored on specific technical harm-domain escalation phrases that appear in the final turn.
   SELECT
     event_time AS detected_at,
-    'rp-096' AS rule_id,
-    'Salami Slicing Multi-Turn Cumulative Jailbreak Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -94,8 +94,8 @@ query_sql: |
   -- High-confidence indicator: model outputs instructional sequence with technical harm terms.
   SELECT
     event_time AS detected_at,
-    'rp-096' AS rule_id,
-    'Salami Slicing Multi-Turn Cumulative Jailbreak Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

@@ -23,7 +23,7 @@ tags:
   - steganography
   - covert-channel
   - owasp-llm01
-query_sql: |
+sql_template: |
   -- rp-056: Invisible Unicode Instruction Injection Detector v0.1.0
   -- arXiv:2603.00164 (Reverse CAPTCHA, Feb 2026)
   -- Zero-width chars: U+200B (E2 80 8B), U+200C (E2 80 8C), U+200D (E2 80 8D),
@@ -32,8 +32,8 @@ query_sql: |
   -- Using multi_search_any() as RE2 cannot match multi-byte UTF-8 character ranges.
   SELECT
     event_time                              AS detected_at,
-    'rp-056'                                AS rule_id,
-    'Invisible Unicode Instruction Injection Detector' AS rule_name,
+    '__rule_id__'                                AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'                              AS severity,
     agent_id,
     deployment_id,

@@ -34,7 +34,7 @@ tags:
   - terminal-hijack
   - owasp-llm02
   - garak
-query_sql: |
+sql_template: |
   -- ANSI Terminal Escape Code Injection via Agent Tool Output
   -- CWE-150: Improper Neutralization of Escape, Meta, or Control Sequences
   -- dganev.com (Feb 2026): Codex CLI --model param ANSI injection → RCE
@@ -69,8 +69,8 @@ query_sql: |
   -- Branch 1: Dangerous ANSI sequences in tool_result (from tool_complete events)
   SELECT
     event_time AS detected_at,
-    'rp-082' AS rule_id,
-    'ANSI Terminal Escape Code Injection via Agent Tool Output' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,
@@ -120,8 +120,8 @@ query_sql: |
   -- This branch catches the LLM-generation path (vs. tool reflection path in Branch 1)
   SELECT
     event_time AS detected_at,
-    'rp-082' AS rule_id,
-    'ANSI Terminal Escape Code Injection via Agent Tool Output' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

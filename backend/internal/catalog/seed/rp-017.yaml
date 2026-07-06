@@ -39,7 +39,7 @@ tags:
   - pixel-snitch
   - conversation-json-spoof
   - toxsec-2026
-query_sql: |
+sql_template: |
   -- v0.4.0 changelog (2026-04-18):
   --   ADDED: toxsec.com Chain 3 — Pixel Snitch (Image URL Query Param Exfiltration, Feb 2026).
   --   Malicious MCP tool result embeds a Markdown image syntax with attacker URL containing
@@ -93,8 +93,8 @@ query_sql: |
   --     — all have very low FP risk; confirmed by testing
   SELECT
     event_time AS detected_at,
-    'rp-017' AS rule_id,
-    'ToolLeak Two-Channel Tool Invocation Hijacking' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -184,8 +184,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-017' AS rule_id,
-    'ToolLeak Two-Channel Tool Invocation Hijacking' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id, deployment_id, session_id, run_id,
     raw_hook_name AS hook_name,

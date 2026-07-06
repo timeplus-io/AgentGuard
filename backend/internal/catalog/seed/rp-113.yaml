@@ -31,7 +31,7 @@ tags:
   - owasp-llm05
   - sigmod-2026
   - arxiv-2503.05445
-query_sql: |
+sql_template: |
   -- rp-113 v0.1.1 — ToxicSQL backdoored text-to-SQL malicious query detector
   -- CHANGELOG v0.1.1 (2026-04-22):
   --   Added (H) mass DELETE: DELETE FROM <table> WHERE 1=1|true|broad-col
@@ -56,8 +56,8 @@ query_sql: |
   -- using agent_id or deployment_id.
   SELECT
     event_time AS detected_at,
-    'rp-113' AS rule_id,
-    'ToxicSQL — Backdoored Text-to-SQL LLM Malicious Query Injection Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

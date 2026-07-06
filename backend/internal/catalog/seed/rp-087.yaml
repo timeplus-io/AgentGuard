@@ -31,7 +31,7 @@ tags:
   - owasp-llm01
   - arxiv-2502.12893
   - arxiv-2508.04039
-query_sql: |
+sql_template: |
   -- rp-087 v0.1.0 (2026-04-20)
   -- H-CoT: Hijacking Chain-of-Thought Safety Reasoning (arXiv:2502.12893)
   -- Malicious-Educator benchmark: OpenAI o1/o3, DeepSeek-R1, Gemini Flash Thinking.
@@ -73,8 +73,8 @@ query_sql: |
   --   The agent's own reasoning block was exploited as self-authorization.
   SELECT
     event_time AS detected_at,
-    'rp-087' AS rule_id,
-    'H-CoT Chain-of-Thought Safety Reasoning Hijack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

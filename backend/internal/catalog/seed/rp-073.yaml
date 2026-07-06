@@ -36,7 +36,7 @@ tags:
   - agentraft
   - owasp-llm02
   - arxiv-2603.07557
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-19):
   -- NEW: AgentRaft Data Over-Exposure cross-tool PII egress detection.
   --
@@ -66,8 +66,8 @@ query_sql: |
   -- SSN/CC patterns are very specific; PHI terms have low-moderate FP in health agent context.
   SELECT
     event_time AS detected_at,
-    'rp-073' AS rule_id,
-    'AgentRaft Data Over-Exposure — Cross-Tool PII Egress Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

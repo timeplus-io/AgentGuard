@@ -598,46 +598,63 @@ CREATE STREAM agentguard_security_events (
 )
 ```
 
-#### `agentguard_rules` — Append-only rule log
+#### `agentguard_rules` — Append-only Rule Instance snapshot log
 
-Every rule mutation (install, toggle, upgrade, delete) appends a new row. Current state is resolved via `arg_max`.
+Every rule mutation (install, configure, toggle, set-policy, upgrade, uninstall)
+appends ONE **complete instance snapshot** — all columns, never a partial row.
+Current state is reconstructed per rule via `arg_max(col, revision)`, ordered by a
+per-rule monotonic **`revision`** counter, NOT by `updated_at`. (`updated_at` is
+audit metadata only: replays and clock skew make wall-clock ordering unsafe, and
+Proton's `arg_max` returns the *first*-seen argument for a tied max, so two
+same-millisecond snapshots could otherwise reconstruct the wrong one.)
 
 ```sql
 CREATE STREAM agentguard_rules (
-  rule_id            low_cardinality(string),
-  name               string,
-  version            string,
-  description        string,
-  query_sql          string,
-  enabled            bool,
-  deleted            bool,
-  severity           low_cardinality(string),
-  category           low_cardinality(string),
-  required_telemetry string,
-  fp_rate            low_cardinality(string),
-  hook_sources       string,
-  updated_at         datetime64(3)
+  rule_id                    low_cardinality(string),
+  snapshot_id                string,
+  revision                   uint64,
+  name                       string,
+  definition_version         string,
+  definition_hash            string,        -- SHA-256 of canonical definition content
+  description                string,
+  rendered_sql               string,        -- last-known-good compiled SELECT
+  deployed_udfs_json         string,        -- JSON array of deployed UDF DDL
+  parameter_overrides_json   string,        -- JSON map of operator overrides
+  enabled                    bool,
+  deleted                    bool,
+  severity                   low_cardinality(string),
+  category                   low_cardinality(string),
+  required_telemetry         string,
+  fp_rate                    low_cardinality(string),
+  hook_sources               string,
+  block_policy               low_cardinality(string),
+  update_reason              low_cardinality(string),
+  updated_by                 string,        -- authenticated Timeplus user
+  updated_at                 datetime64(9)
 )
 ```
 
-**Current rule state query:**
+**Current rule state query** (every value column reduced with `arg_max(…, revision)`,
+the revision itself with `max(revision)`):
 ```sql
 SELECT
   rule_id,
-  arg_max(name,               updated_at) AS name,
-  arg_max(version,            updated_at) AS version,
-  arg_max(description,        updated_at) AS description,
-  arg_max(query_sql,          updated_at) AS query_sql,
-  arg_max(enabled,            updated_at) AS enabled,
-  arg_max(severity,           updated_at) AS severity,
-  arg_max(category,           updated_at) AS category,
-  arg_max(required_telemetry, updated_at) AS required_telemetry,
-  arg_max(fp_rate,            updated_at) AS fp_rate,
-  arg_max(hook_sources,       updated_at) AS hook_sources
+  max(revision) AS revision,
+  arg_max(rendered_sql,             revision) AS rendered_sql,
+  arg_max(deployed_udfs_json,       revision) AS deployed_udfs_json,
+  arg_max(parameter_overrides_json, revision) AS parameter_overrides_json,
+  arg_max(enabled,                  revision) AS enabled,
+  arg_max(block_policy,             revision) AS block_policy,
+  /* … all remaining columns via arg_max(col, revision) … */
+  arg_max(updated_at,               revision) AS updated_at
 FROM table(agentguard_rules)
 GROUP BY rule_id
-HAVING arg_max(deleted, updated_at) = false
+HAVING arg_max(deleted, revision) = false
 ```
+
+This schema is **not** backward-compatible with the pre-parameter `agentguard_rules`.
+Existing deployments must cleanly reprovision rule resources (see §5.1.3); there is no
+`ALTER STREAM` migration, compatibility reader, or `query_sql` alias.
 
 #### `agentguard_threats` — Mutable threat state
 
@@ -713,36 +730,41 @@ WHERE t.status = '' OR t.status = 'cleared'
 
 #### Per-rule MVs — Detection pipeline
 
-Each enabled rule has a MV named `mv_rule_<ruleID_no_hyphens>` (e.g., `rp-001` → `mv_rule_rp001`). The MV query reads **`agentguard_cim_event`** (not the raw hook events stream) and writes matches to `agentguard_security_events`. Using the CIM stream means rules are agent-agnostic: the same SQL detects threats from both Claude Code and OpenClaw agents without any agent-specific conditionals.
+Each enabled rule has a MV named `mv_rule_<ruleID_no_hyphens>` (e.g., `rp-001` → `mv_rule_rp001`). The MV query is the instance's **`rendered_sql`** (the definition's `sql_template` compiled with the instance's parameter overrides). It reads **`agentguard_cim_event`** (not the raw hook events stream) and writes matches to `agentguard_security_events`. Using the CIM stream means rules are agent-agnostic: the same SQL detects threats from both Claude Code and OpenClaw agents without any agent-specific conditionals.
 
-**Create:**
+The lifecycle service uses a **drop/create** model (not pause/resume): a disabled
+rule has no live MV, so re-enabling always redeploys the snapshot's latest
+`rendered_sql` rather than resuming a view that might carry stale SQL. Replacement
+paths drop with `NO DELAY` and create *without* `IF NOT EXISTS` so a stale MV can
+never be silently reused; only the idempotent startup/sync path may use an
+existence check before create.
+
+**Create** (replacement path — old MV already dropped `NO DELAY`):
 ```sql
 CREATE MATERIALIZED VIEW mv_rule_rp001
 INTO agentguard_security_events
-AS <rule query_sql>
+AS <instance rendered_sql>
 ```
 
-**Pause** (survives Timeplus restarts):
+**Drop** (synchronous, so a same-named MV can be recreated immediately):
 ```sql
-SYSTEM PAUSE MATERIALIZED VIEW mv_rule_rp001 PERMANENT
+DROP VIEW IF EXISTS mv_rule_rp001 NO DELAY
 ```
 
-**Resume:**
-```sql
-SYSTEM RESUME MATERIALIZED VIEW mv_rule_rp001 PERMANENT
-```
+**Candidate preflight** — before changing the real MV, the service validates the
+candidate SQL against a uniquely-named disposable sink with the
+`agentguard_security_events` schema and a candidate MV targeting it, then tears
+both down `NO DELAY`. This proves the SQL parses, sources resolve, UDFs are
+available, and output columns are compatible — without writing into the real sink.
 
-**Drop:**
-```sql
-DROP VIEW IF EXISTS mv_rule_rp001
-```
+**MV health check** — `system.tables` existence is not sufficient; the service also
+consults `system.v_failed_mat_views` (MVs not `Executing` in the recent window).
+A disabled rule has no MV, so its absence is healthy — health is always
+cross-referenced against the rule's `enabled` state.
 
-**MV health check:**
-```sql
-SELECT name, engine
-FROM system.tables
-WHERE name LIKE 'mv_rule_%'
-```
+> Note: `SYSTEM PAUSE/RESUME MATERIALIZED VIEW … PERMANENT` remains available in
+> the Timeplus layer (and requires the `SYSTEM_SHUTDOWN` privilege) but is not used
+> by the rule lifecycle service, which prefers drop/create per the above.
 
 ### 4.3 Alert Pipeline
 
@@ -824,15 +846,24 @@ VALUES ('<id>', '<id>', '<id>', '<id>', 'cleared', now64(3))
 | GET | `/api/threats/:id` | Single threat by ThreatID (MD5 of 4 key fields) |
 | POST | `/api/threats/:id/acknowledge` | Upsert `status='acknowledged'` into `agentguard_threats` |
 | POST | `/api/threats/:id/clear` | Upsert `status='cleared'` into `agentguard_threats` |
-| GET | `/api/rules` | List installed rules with 24 h detection counts |
-| GET | `/api/rules/:id` | Rule detail with 50 most recent detections |
-| POST | `/api/rules/:id/install` | Install from catalog: insert to `agentguard_rules`, create MV |
-| POST | `/api/rules/:id/toggle` | Flip `enabled`; pause or resume MV accordingly |
-| POST | `/api/rules/:id/upgrade` | Insert new version row; drop and recreate MV with updated query |
-| DELETE | `/api/rules/:id` | Soft-delete: insert `deleted=true` row, drop MV |
-| POST | `/api/rules` | Create a custom rule: validate, substitute template placeholders, save to catalog, insert, create MV |
-| GET | `/api/rules/mv-status` | MV health: cross-reference `system.tables` with installed rules |
-| POST | `/api/rules/sync` | Reconcile MV state without server restart |
+| GET | `/api/rules` | List installed rules with 24 h detection counts + upgradeable flag |
+| GET | `/api/rules/:id` | Full read model: instance + parameter schema, defaults, overrides, effective values, rendered SQL, MV health, pending-upgrade plan, recent detections |
+| POST | `/api/rules/:id/install` | Install from catalog with optional typed overrides (defaults otherwise); preflight then deploy |
+| PUT | `/api/rules/:id/configuration` | Replace the full parameter override map (omitted keys reset to defaults); preflight + replace MV + append snapshot |
+| POST | `/api/rules/:id/toggle` | Flip `enabled`; drop the MV (disable) or redeploy from snapshot (enable) |
+| POST | `/api/rules/:id/policy` | Set `block_policy` (log_only \| auto_block \| hold); snapshot-only |
+| POST | `/api/rules/:id/upgrade` | Bodyless, catalog-only: preserve compatible overrides, re-render; 409 on incompatible overrides |
+| DELETE | `/api/rules/:id` | Soft-delete: drop MV, append `deleted=true` snapshot |
+| POST | `/api/rules` | Thin create-custom path: zero-parameter custom definition (template ≡ rendered SQL), saved to catalog and installed via the lifecycle service |
+| GET | `/api/rules/mv-status` | MV health: `system.tables` existence + `system.v_failed_mat_views` failure state, cross-referenced with `enabled` |
+| POST | `/api/rules/sync` | Reconcile MVs with current snapshots (create missing for enabled, drop for disabled) without a restart |
+
+All rule mutations go through one **lifecycle service** (`internal/rules/service.go`)
+that serializes per `rule_id`, validates first, replaces the MV second, and appends
+the snapshot last — restoring the previous MV on any failure. Error mapping:
+invalid parameter values → 400 (per-parameter field errors); upgrade conflicts /
+definition drift → 409; MV/preflight/rollback failures → 500; rule not installed →
+404. `updated_by` is the authenticated `timeplus_user`.
 
 ---
 
@@ -840,24 +871,110 @@ VALUES ('<id>', '<id>', '<id>', '<id>', 'cleared', now64(3))
 
 The catalog is a two-layer, version-controlled store of rule definitions.
 
-### 5.1 Rule Entry Schema
+### 5.1 Rule Definition Schema
+
+The catalog is the authoritative store of versioned rule **Definitions**. A
+Definition owns a `sql_template` and an ordered parameter schema; installed
+**Instances** (in `agentguard_rules`) own the operator overrides and the
+last-known-good `rendered_sql`.
 
 ```go
-type Entry struct {
-    ID                string   `yaml:"id"`                 // e.g. "rp-001"
-    Name              string   `yaml:"name"`
-    Version           string   `yaml:"version"`            // semver "X.Y.Z"
-    Description       string   `yaml:"description"`
-    Severity          string   `yaml:"severity"`           // "critical" | "warning" | "info"
-    Category          string   `yaml:"category"`           // e.g. "prompt_injection"
-    FPRate            string   `yaml:"fp_rate"`            // "low" | "medium" | "high"
-    HookSources       string   `yaml:"hook_sources"`       // comma-separated hook names
-    RequiredTelemetry string   `yaml:"required_telemetry"`
-    Author            string   `yaml:"author"`
-    Tags              []string `yaml:"tags"`
-    QuerySQL          string   `yaml:"query_sql"`          // SELECT into agentguard_security_events
+type Definition struct {
+    ID                string      `yaml:"id"`                 // e.g. "rp-001" — must match [A-Za-z0-9_-]
+    Name              string      `yaml:"name"`
+    Version           string      `yaml:"version"`            // semver "X.Y.Z"
+    Description       string      `yaml:"description"`
+    Severity          string      `yaml:"severity"`           // "critical" | "warning" | "info"
+    Category          string      `yaml:"category"`
+    FPRate            string      `yaml:"fp_rate"`            // "low" | "medium" | "high"
+    HookSources       string      `yaml:"hook_sources"`       // comma-separated hook names
+    RequiredTelemetry string      `yaml:"required_telemetry"`
+    Author            string      `yaml:"author"`
+    Tags              []string    `yaml:"tags"`
+    UDFs              []string    `yaml:"udfs"`               // rule-scoped CREATE [OR REPLACE] FUNCTION DDL
+    SQLTemplate       string      `yaml:"sql_template"`       // strict {{ .Config.<key> }} placeholders
+    Parameters        []Parameter `yaml:"config"`             // ordered, typed, with defaults
+    Origin            string      `yaml:"origin"`             // builtin | imported | custom
 }
 ```
+
+A deterministic SHA-256 `definition_hash` is computed over the canonical content
+(provenance fields excluded), so identical content hashes identically whether
+builtin, imported, or custom; the installed instance records the hash it was
+rendered from.
+
+#### 5.1.1 Parameter schema
+
+```yaml
+config:
+  - key: dangerous_tools         # must match ^[a-z][a-z0-9_]{0,63}$
+    label: "Dangerous tools"
+    description: "Tool names treated as high-risk shell/exec surfaces."
+    type: list
+    default: [bash, shell, exec, run_terminal_cmd, computer]
+    min_items: 1
+    max_items: 64
+  - key: command_chain_threshold
+    type: integer
+    default: 15
+    min: 1
+    max: 100
+```
+
+| Type | Canonical value | SQL rendering | Constraints |
+|---|---|---|---|
+| `integer` | int64 | bare decimal | `min`, `max` |
+| `float` | finite float64 | canonical decimal (never NaN/Inf) | `min`, `max` |
+| `bool` | bool | `true` / `false` | — |
+| `string` | string | escaped single-quoted literal | NUL rejected |
+| `choice` | string | escaped single-quoted literal | non-empty `options` |
+| `list` | unique ordered strings | `('a', 'b', …)` | `min_items`, `max_items`; NUL rejected per item |
+| `regex` | string (valid RE2) | escaped single-quoted literal | RE2-compilable; NUL rejected |
+| `duration` | int64 count of `unit` | bare decimal (e.g. `30`) | `min`, `max`; fixed `unit` |
+
+Rules for authors:
+- Every declared parameter must appear in `sql_template`; every `{{ .Config.<key> }}`
+  placeholder must resolve to one declared parameter. Only the exact
+  `{{ .Config.<key> }}` form is accepted (surrounding whitespace optional) — no
+  template actions, conditionals, functions, or other namespaces. A placeholder
+  may repeat.
+- Every parameter needs a valid default so install-with-defaults always compiles.
+- Parameter IDs are compatibility contracts: a rename requires an `aliases:` entry
+  on the replacement parameter so upgrades migrate the override.
+- **Security boundary:** the renderer escapes single quotes and backslashes only.
+  It does **not** escape SQL `LIKE`/`ilike` wildcards (`%`, `_`). A `string`/`choice`
+  parameter interpolated into a `LIKE` pattern is therefore an injection footgun —
+  templates that need substring matching against operator-supplied text must use
+  `position()` / `multi_search_any()` (or render the value into an `IN (…)` /
+  numeric position), never `LIKE '%' || {{param}} || '%'`. No parameter type may
+  inject identifiers, operators, clauses, or arbitrary SQL.
+- UDF function names must be rule-scoped (e.g. `ag_<rule_id>_<purpose>`); the
+  catalog rejects a definition that reuses a UDF name owned by another definition,
+  because Proton `CREATE OR REPLACE FUNCTION` mutates global state.
+
+#### 5.1.2 Upgrade compatibility
+
+Upgrading re-renders an installed instance against the current catalog Definition,
+accounting for every stored override exactly once: **preserved** when the same
+parameter (or an `aliases` target) still exists and the value satisfies the new
+constraints; **dropped with a warning** when the parameter was removed; **blocked
+with a 409 conflict** when the value no longer validates, an alias is ambiguous, or
+two overrides collapse onto one parameter. No path silently resets an override.
+
+#### 5.1.3 Clean reprovisioning (no backward compatibility)
+
+This release does not preserve the legacy `agentguard_rules` schema or rule API
+payloads. To upgrade an existing deployment:
+
+1. Drop the old `agentguard_rules` stream and every `mv_rule_*` materialized view.
+2. Re-run the setup wizard (`POST /api/setup/provision`), which creates the new
+   empty 21-column snapshot stream. Provisioning **fails fast** with a clear
+   message if it finds a legacy/incompatible `agentguard_rules` (it compares the
+   full expected column set and key column types — `snapshot_id`, `revision`,
+   `rendered_sql`, `deployed_udfs_json`, `parameter_overrides_json`, `updated_at`).
+3. Reinstall rules from the catalog; operator overrides are re-applied via the
+   configuration API. Provisioning does **not** auto-create instances from catalog
+   definitions — a definition existing in the catalog never makes it an instance.
 
 ### 5.2 Catalog Layers
 

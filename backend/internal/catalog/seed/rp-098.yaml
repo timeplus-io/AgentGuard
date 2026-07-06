@@ -42,7 +42,7 @@ tags:
   - owasp-asi03
   - arxiv-2603.14707
   - lmvd-b3f726b4
-query_sql: |
+sql_template: |
   -- rp-098 v0.1.1 (2026-04-20): Reference audit: added promptfoo LMVD-b3f726b4. SQL unchanged.
   -- rp-098 v0.1.0 (2026-04-20)
   -- Visual Confused Deputy: CUA Click Target Mismatch & Screenshot Manipulation
@@ -82,8 +82,8 @@ query_sql: |
   -- (adversarial label: tool description says "Cancel" but JSON also contains privileged action)
   SELECT
     event_time AS detected_at,
-    'rp-098' AS rule_id,
-    'Visual Confused Deputy — CUA Click Target Mismatch & Screenshot Manipulation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -110,8 +110,8 @@ query_sql: |
   -- Branch 2: 2-step lag — prior CUA click stated benign target, result confirms privileged action
   SELECT
     event_time AS detected_at,
-    'rp-098' AS rule_id,
-    'Visual Confused Deputy — CUA Click Target Mismatch & Screenshot Manipulation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

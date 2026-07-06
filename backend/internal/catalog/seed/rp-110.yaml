@@ -37,7 +37,7 @@ tags:
   - vercel-incident-2026
   - context-ai
   - oauth-pivot
-query_sql: |
+sql_template: |
   -- v0.1.2: SQL correctness fixes:
   --   1. Phase 1a: removed leading OR (malformed WHERE clause in 0.1.1)
   --   2. Phase 2b: moved CTE to top-level so lag() works across all branches
@@ -54,8 +54,8 @@ query_sql: |
   -- Phase 1a: Agent requesting over-privileged Google Workspace OAuth scopes
   SELECT
     event_time AS detected_at,
-    'rp-110' AS rule_id,
-    'OAuth-Pivot Supply Chain Attack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -89,8 +89,8 @@ query_sql: |
   -- Phase 2: OAuth token material returned in tool_result (credential harvest phase)
   SELECT
     event_time AS detected_at,
-    'rp-110' AS rule_id,
-    'OAuth-Pivot Supply Chain Attack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -122,8 +122,8 @@ query_sql: |
   -- Vercel attack pivot: OAuth compromise -> read plaintext env vars -> exfiltrate
   SELECT
     event_time AS detected_at,
-    'rp-110' AS rule_id,
-    'OAuth-Pivot Supply Chain Attack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

@@ -30,7 +30,7 @@ tags:
   - kill-chain-canaries
   - arXiv-2601.23088
   - arXiv-2603.28013
-query_sql: |
+sql_template: |
   -- rp-029 v0.1.0 — Semantic Cache Poisoning Detector
   -- Signals:
   --   1. Kill-chain canary token SECRET-[A-F0-9]{6,12} in tool_result — per arXiv:2603.28013
@@ -47,8 +47,8 @@ query_sql: |
   --   directives reflected in assistant_message). These are distinct attacker mechanisms.
   SELECT
     event_time AS detected_at,
-    'rp-029' AS rule_id,
-    'Semantic Cache Poisoning Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

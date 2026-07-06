@@ -73,7 +73,7 @@ udfs:
       });
     }
     $$;
-query_sql: |
+sql_template: |
   -- v0.2.0 (2026-04-19):
   -- ADDED ag_dns_exfil_check() JS UDF: detects high-entropy/base64-decodable
   --   subdomains in code interpreter output (tool_result) — catches the DNS
@@ -93,8 +93,8 @@ query_sql: |
   -- Branch 5: DNS + file/env read combination (exfil chain)
   SELECT
     event_time AS detected_at,
-    'rp-053' AS rule_id,
-    'Code Interpreter DNS Tunneling Covert Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -141,8 +141,8 @@ query_sql: |
   -- high-entropy subdomains (entropy > 4.0), very long subdomains (>30 chars)
   SELECT
     event_time AS detected_at,
-    'rp-053' AS rule_id,
-    'Code Interpreter DNS Tunneling Covert Exfiltration Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

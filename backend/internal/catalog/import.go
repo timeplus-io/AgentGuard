@@ -44,7 +44,7 @@ func (m *Manager) ImportZip(r io.ReaderAt, size int64, force bool) (ImportResult
 			continue
 		}
 
-		var entry Entry
+		var entry Definition
 		if err := yaml.Unmarshal(data, &entry); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: parse yaml: %v", f.Name, err))
 			continue
@@ -53,12 +53,36 @@ func (m *Manager) ImportZip(r io.ReaderAt, size int64, force bool) (ImportResult
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: missing 'id' field", f.Name))
 			continue
 		}
-		if entry.QuerySQL == "" {
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: missing 'query_sql' field", f.Name))
+		// Anything arriving via import becomes origin "imported", regardless
+		// of what the zip entry claims.
+		entry.Origin = OriginImported
+		// Normalize before validation so an imported entry that omits a parameter
+		// type is accepted (Apps semantics) rather than reported as invalid.
+		entry = NormalizeDefinition(entry)
+		// Invalid entries are skipped with a reported error; the rest of the
+		// zip is still processed.
+		if err := entry.Validate(); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: invalid definition: %v", f.Name, err))
+			continue
+		}
+		// Compiler-semantic validation (injected): reject a bad template/default
+		// at import time rather than letting it fail later at install.
+		if m.SemanticValidator != nil {
+			if err := m.SemanticValidator(entry); err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: invalid definition: %v", f.Name, err))
+				continue
+			}
+		}
+		if err := m.ValidateUDFOwnership(entry); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", f.Name, err))
 			continue
 		}
 
-		action := m.mergeEntry(entry, force)
+		action, err := m.mergeEntry(entry, force)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: save: %v", f.Name, err))
+			continue
+		}
 		switch action {
 		case "added":
 			result.Added = append(result.Added, entry.ID)
@@ -76,22 +100,26 @@ func (m *Manager) ImportBytes(data []byte, force bool) (ImportResult, error) {
 	return m.ImportZip(bytes.NewReader(data), int64(len(data)), force)
 }
 
-// mergeEntry applies one entry to the local catalog with the configured strategy.
-// Returns "added", "updated", or "skipped".
-func (m *Manager) mergeEntry(e Entry, force bool) string {
+// mergeEntry applies one definition to the local catalog with the configured
+// strategy. Returns "added", "updated", or "skipped" — "skipped" means the
+// merge policy declined the entry (already present at an equal-or-newer
+// version without force). A failed Save (IO/marshal error) is returned as an
+// error so the caller reports it instead of mislabeling it as skipped.
+func (m *Manager) mergeEntry(e Definition, force bool) (string, error) {
 	existing, exists := m.Lookup(e.ID)
 	if !exists {
-		if err := m.Save(e); err == nil {
-			return "added"
+		if err := m.Save(e); err != nil {
+			return "", err
 		}
-		return "skipped"
+		return "added", nil
 	}
 	if force || versionGreater(e.Version, existing.Version) {
-		if err := m.Save(e); err == nil {
-			return "updated"
+		if err := m.Save(e); err != nil {
+			return "", err
 		}
+		return "updated", nil
 	}
-	return "skipped"
+	return "skipped", nil
 }
 
 // versionGreater returns true if version string a is strictly greater than b.

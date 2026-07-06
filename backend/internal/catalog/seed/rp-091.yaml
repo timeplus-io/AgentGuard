@@ -29,7 +29,7 @@ tags:
   - arXiv-2604.05549
   - owasp-llm01
   - agentic-ai
-query_sql: |
+sql_template: |
   -- rp-091 v0.1.0 (2026-04-20):
   -- JailAgent-style reasoning trajectory hijacking detection.
   -- Two-step sequence using lag(): environmental pre-commitment trigger in tool_result
@@ -65,8 +65,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-091' AS rule_id,
-    'JailAgent Reasoning Trajectory Hijacking via Environmental Pre-Commitment Trigger' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

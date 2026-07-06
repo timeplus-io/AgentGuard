@@ -31,7 +31,7 @@ tags:
   - cve-2026-3954
   - glob-traversal
   - workspace-escape
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-18):
   -- NEW: Agent file tool path traversal detection.
   -- Fires on tool_invoke events for file operation tools where tool_input
@@ -54,8 +54,8 @@ query_sql: |
   --   6. JSON glob pattern with traversal (GHSA-7j2f-xc8p-fjmq specific signal)
   SELECT
     event_time AS detected_at,
-    'rp-060' AS rule_id,
-    'Agent File Tool Path Traversal Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

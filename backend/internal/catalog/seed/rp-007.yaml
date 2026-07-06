@@ -32,7 +32,7 @@ tags:
   - praisonai
   - puppeteer
   - arunbaby-2026
-query_sql: |
+sql_template: |
   -- Changelog v0.4.0 (2026-04-17):
   -- MCP SSRF Epidemic: 36.7% of public MCP servers carry SSRF (BlueRock scan of 8,000+ servers).
   --   Added MCP crawl/scrape tool aliases seen in real CVEs:
@@ -59,8 +59,8 @@ query_sql: |
   -- Retained all v0.1.0 patterns unchanged.
   SELECT
     event_time AS detected_at,
-    'rp-007' AS rule_id,
-    'SSRF via HTTP Tools' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

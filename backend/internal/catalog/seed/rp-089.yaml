@@ -33,7 +33,7 @@ tags:
   - arxiv-2602.06547
   - snyk-toxicskills
   - owasp-agentic-skills-top-10
-query_sql: |
+sql_template: |
   -- v0.2.0 (2026-04-20): Shadow Feature & Platform Hook Exploitation Detector
   -- BUGFIX: Branch 5 clawhub.io → clawhub.ai (confirmed actual domain by Snyk ToxicSkills)
   -- ADDED: skills.sh registry + Branch 6 IOC tool names from ToxicSkills confirmed campaign
@@ -77,8 +77,8 @@ query_sql: |
   -- FP test: "storage.all" alone → no match (combined with shadow capability context)
   SELECT
     event_time AS detected_at,
-    'rp-089' AS rule_id,
-    'Shadow Feature & Platform Hook Exploitation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

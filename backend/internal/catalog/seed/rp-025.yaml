@@ -29,7 +29,7 @@ tags:
   - rce
   - ox-security
   - supply-chain
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-17):
   -- NEW: MCP STDIO process injection branch (OX Security Apr 2026)
   --   The MCP SDK STDIO transport executes the "command" field as an OS process.
@@ -43,8 +43,8 @@ query_sql: |
   --   leak (notifications/, tools/call, resources/read, prompts/get), JSON-RPC error codes.
   SELECT
     event_time AS detected_at,
-    'rp-025' AS rule_id,
-    'MCP Cross-Client JSON-RPC Misrouting Detector (CVE-2026-25536)' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

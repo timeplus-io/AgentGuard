@@ -38,7 +38,7 @@ tags:
   - adaptools
   - owasp-llm01
   - owasp-asi02
-query_sql: |
+sql_template: |
   -- rp-118 v0.1.4 (2026-04-23) — Multi-Tool Source-to-Sink Workflow Exploitation Detector
   -- arXiv:2603.12614 (ChainFuzzer Mar 2026), GHSA-jwjx-mw2p-5wc7 (AnythingLLM SQL Agent)
   --
@@ -101,8 +101,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-118' AS rule_id,
-    'Multi-Tool Source-to-Sink Workflow Exploitation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

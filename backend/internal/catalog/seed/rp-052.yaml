@@ -28,7 +28,7 @@ tags:
   - praisonai
   - agenta
   - restrictedpython
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-17):
   -- NEW: Code interpreter sandbox escape via Python exception frame traversal.
   -- CVE-2026-39888: __traceback__ / tb_frame / f_back / f_builtins attribute access
@@ -38,8 +38,8 @@ query_sql: |
   -- tool_complete branch: post-execution evidence (uid/gid output, /etc/passwd access).
   SELECT
     event_time AS detected_at,
-    'rp-052' AS rule_id,
-    'Code Interpreter Sandbox Escape via Python Frame Traversal' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

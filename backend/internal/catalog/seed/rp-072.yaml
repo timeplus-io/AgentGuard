@@ -37,7 +37,7 @@ tags:
   - arXiv-2504.03111
   - owasp-asi02
   - chord-scanner
-query_sql: |
+sql_template: |
   -- v0.1.0 (2026-04-19): XTHP cross-tool harvesting and polluting detection
   -- arXiv:2504.03111 (Les Dissonances, NDSS 2026, UIUC)
   -- 75% of 66 real-world LangChain/LlamaIndex tools vulnerable to XTHP.
@@ -52,8 +52,8 @@ query_sql: |
   -- and tool_invoke (agent actually executing the harvested cross-tool pivot call).
   SELECT
     event_time AS detected_at,
-    'rp-072' AS rule_id,
-    'XTHP Cross-Tool Harvesting and Polluting Control Flow Hijack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

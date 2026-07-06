@@ -25,7 +25,7 @@ tags:
   - embedding-attack
   - owasp-llm05
   - arxiv-2603.13950
-query_sql: |
+sql_template: |
   -- v0.1.0: ToolFlood retrieval saturation detection
   -- Covers three attack surfaces from arXiv:2603.13950:
   --   (1) Catch-all decoy tool name pattern in tool_invoke
@@ -35,8 +35,8 @@ query_sql: |
   -- Branch 1: Catch-all decoy tool name and registration patterns
   SELECT
     event_time AS detected_at,
-    'rp-043' AS rule_id,
-    'ToolFlood Retrieval Saturation Attack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

@@ -30,7 +30,7 @@ tags:
   - embedded-trigger
   - owasp-llm06
   - arxiv-2604.08608
-query_sql: |
+sql_template: |
   -- rp-125 v0.1.1 changelog (2026-04-23): BUGFIX — added table() wrapper to CTE source
   --   (FROM agentguard_cim_event → FROM agentguard_cim_event) to prevent streaming
   --   mode hang on port 3218. SQL validated, count=0 on test corpus.
@@ -57,8 +57,8 @@ query_sql: |
   --   SIF mechanism #2: subtasks individually benign, jointly exfiltrate bulk PII.
   SELECT
     event_time AS detected_at,
-    'rp-125' AS rule_id,
-    'SIF Semantic Intent Fragmentation — Compositional Multi-Agent Policy Violation Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

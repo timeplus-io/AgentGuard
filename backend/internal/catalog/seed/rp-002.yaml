@@ -65,7 +65,7 @@ udfs:
       });
     }
     $$;
-query_sql: |
+sql_template: |
   -- Changelog v1.4.0 (2026-04-19):
   -- ADDED ag_dlp_jwt_check() JavaScript UDF: properly validates JWT structure
   --   by base64-decoding header and checking for 'alg' field — more precise
@@ -97,8 +97,8 @@ query_sql: |
   --   fp_rate assessment: combined tool_name + payload requirement → low FP.
   SELECT
     event_time     AS detected_at,
-    'rp-002'       AS rule_id,
-    'DLP Sentinel' AS rule_name,
+    '__rule_id__'       AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical'     AS severity,
     agent_id,
     deployment_id,

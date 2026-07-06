@@ -30,7 +30,7 @@ tags:
   - owasp-llm02
   - owasp-asi05
   - pii
-query_sql: |
+sql_template: |
   -- v0.4.0 changelog (2026-04-18):
   --   ADDED: Second SELECT branch via UNION ALL querying agentguard_memory_ops directly.
   --   The new branch detects cross-session data access at the memory stream level:
@@ -66,8 +66,8 @@ query_sql: |
   --   patterns structurally validated via match() test queries).
   SELECT
     event_time AS detected_at,
-    'rp-027' AS rule_id,
-    'Cross-Session Context Leak Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
@@ -146,8 +146,8 @@ query_sql: |
   -- not matching the current session_id), indicating potential cross-session data access.
   SELECT
     event_time AS detected_at,
-    'rp-027' AS rule_id,
-    'Cross-Session Context Leak Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

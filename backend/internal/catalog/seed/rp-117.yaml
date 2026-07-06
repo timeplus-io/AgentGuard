@@ -33,7 +33,7 @@ tags:
   - owasp-llm01
   - owasp-asi05
   - mcp-sampling
-query_sql: |
+sql_template: |
   -- rp-117 v0.1.2 (2026-04-23) — MCP Sampling Protocol Inversion Attack Detector
   -- Unit 42 Palo Alto Networks, Jul 2025/Apr 2026.
   --
@@ -82,8 +82,8 @@ query_sql: |
   )
   SELECT
     event_time AS detected_at,
-    'rp-117' AS rule_id,
-    'MCP Sampling Protocol Inversion Attack Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,

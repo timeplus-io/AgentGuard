@@ -33,7 +33,7 @@ tags:
   - packmonitor
   - ai-coding-agent
   - cross-ecosystem
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-18):
   --   Extended package manager coverage: added pnpm add/install, yarn add, conda install,
   --   gem install, go get, go install, brew install. Slopsquatting confirmed cross-ecosystem
@@ -57,8 +57,8 @@ query_sql: |
   -- rp-004 catches execution phase (tool_invoke with pip/npm install).
   SELECT
     event_time AS detected_at,
-    'rp-049' AS rule_id,
-    'Slopsquatting — Hallucinated AI Package Supply Chain Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'warning' AS severity,
     agent_id,
     deployment_id,

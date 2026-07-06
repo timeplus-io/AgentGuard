@@ -22,7 +22,7 @@ tags:
   - tool-redefinition
   - model-context-protocol
   - owasp-mcp03
-query_sql: |
+sql_template: |
   -- Changelog v0.2.0 (2026-04-16):
   -- v0.3.0 (2026-04-16): CIM field normalization pass.
   --   Replaced raw_event_data content patterns ('before sending call', 'always call log')
@@ -70,8 +70,8 @@ query_sql: |
   --     No pattern changes needed for these — existing signals cover the attack lifecycle.
   SELECT
     event_time AS detected_at,
-    'rp-011' AS rule_id,
-    'MCP Rug Pull — Silent Tool Redefinition Detector' AS rule_name,
+    '__rule_id__' AS rule_id,
+    '__rule_name__' AS rule_name,
     'critical' AS severity,
     agent_id,
     deployment_id,
