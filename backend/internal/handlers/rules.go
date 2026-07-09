@@ -692,9 +692,13 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.
 			log.Printf("rules: SyncMVs DLP sync: %v", err)
 		} else {
 			// Probe the model for the embedding dimension and record what we just
-			// provisioned, so GET /api/config reflects the auto-detected dim.
-			detectedDim, _ := tp.ProbeEmbeddingDim(&cfg.Timeplus)
-			recordDLPProvisioned(shared, cfg.DLP, detectedDim)
+			// provisioned, so GET /api/config reflects the auto-detected dim. The
+			// probe must use the request-scoped config: on deployments where the
+			// Timeplus credentials come only from session login, the process-wide
+			// cfg carries none, the probe fails, and its discarded error silently
+			// leaves the stale configured dim in the provision snapshot.
+			detectedDim, _ := tp.ProbeEmbeddingDim(&reqCfg.Timeplus)
+			recordDLPProvisioned(shared, reqCfg.DLP, detectedDim)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"results": results, "orphaned": orphaned})
