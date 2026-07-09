@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -1711,5 +1712,99 @@ func TestClone_ConcurrentSameNewIDExactlyOneWins(t *testing.T) {
 	}
 	if wins != 1 || exists != n-1 || other != 0 {
 		t.Fatalf("concurrent Clone: wins=%d exists=%d other=%d, want 1/%d/0", wins, exists, other, n-1)
+	}
+}
+
+// Save must go through temp-file+rename so a crash mid-write can never leave a
+// truncated definition file. loadDir silently skips unparseable files, so a
+// truncated write means the definition — and the byte-for-byte rollback source
+// that internal/rules.Service.UpdateDefinition re-Saves on failure — vanishes on
+// restart, orphaning the installed rule. Crash timing itself is not unit-testable;
+// these pin the observable half: the write is not in-place, no temp litter
+// survives a Save, and a stray temp file from a crashed Save never loads.
+func TestSave_AtomicWriteLeavesNoTempLitter(t *testing.T) {
+	dir := t.TempDir()
+	m, err := New(fstest.MapFS{}, dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	def := Definition{ID: "rp-atomic", Name: "A", Version: "1.0.0",
+		SQLTemplate: "SELECT 1", Origin: OriginCustom}
+	if err := m.Save(def); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	// Overwrite: the UpdateDefinition rollback path re-Saves over an existing file.
+	def.Name = "B"
+	if err := m.Save(def); err != nil {
+		t.Fatalf("re-Save: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, e := range entries {
+		if e.Name() != "rp-atomic.yaml" {
+			t.Errorf("unexpected file left in catalog dir after Save: %s", e.Name())
+		}
+	}
+	m2, err := New(fstest.MapFS{}, dir)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	got, ok := m2.Lookup("rp-atomic")
+	if !ok || got.Name != "B" {
+		t.Errorf("reloaded definition = %+v, ok=%v; want Name=B", got, ok)
+	}
+}
+
+// A temp file left behind by a crash between create and rename must never be
+// loaded as a definition (it may hold a partial YAML document).
+func TestLoadDir_IgnoresAtomicTempFiles(t *testing.T) {
+	dir := t.TempDir()
+	stray := filepath.Join(dir, ".rp-stray.yaml.tmp-12345")
+	if err := os.WriteFile(stray, []byte("id: rp-stray\nname: X\nversion: 1.0.0\nsql_template: SELECT 1\n"), 0o644); err != nil {
+		t.Fatalf("write stray: %v", err)
+	}
+	m, err := New(fstest.MapFS{}, dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if m.Exists("rp-stray") {
+		t.Error("stray atomic-write temp file must not be loaded as a definition")
+	}
+}
+
+// writeFileAtomic must not write through the destination path: the old content
+// stays fully intact until the rename swaps it. Verified by holding the
+// destination's inode open and confirming its bytes are untouched mid-flight.
+func TestWriteFileAtomic_DoesNotTruncateDestinationInPlace(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "f.yaml")
+	if err := os.WriteFile(path, []byte("OLD"), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// Open the original inode; after an atomic replace it must still read "OLD".
+	fh, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer fh.Close()
+
+	if err := writeFileAtomic(path, []byte("NEW"), 0o644); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+	old, err := io.ReadAll(fh)
+	if err != nil {
+		t.Fatalf("read original inode: %v", err)
+	}
+	if string(old) != "OLD" {
+		t.Errorf("destination was written in place (original inode = %q); a crash would truncate it", old)
+	}
+	cur, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read path: %v", err)
+	}
+	if string(cur) != "NEW" {
+		t.Errorf("path content = %q, want NEW", cur)
 	}
 }
