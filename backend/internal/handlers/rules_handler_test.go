@@ -182,6 +182,27 @@ func TestDecodeMutationBody(t *testing.T) {
 			t.Fatal("expected error for malformed JSON")
 		}
 	})
+
+	t.Run("unknown fields are rejected (typo must not become reset-all)", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPut, "/",
+			strings.NewReader(`{"overides":{"threshold":5}}`))
+		if _, err := decodeMutationBody(c); err == nil {
+			t.Fatal("expected error for unknown field; nil Overrides would silently reset every parameter to defaults")
+		}
+	})
+
+	t.Run("empty JSON object stays valid with nil overrides", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
+		body, err := decodeMutationBody(c)
+		if err != nil {
+			t.Fatalf("decode {}: %v", err)
+		}
+		if body.Overrides != nil {
+			t.Errorf("expected nil overrides for {}, got %#v", body.Overrides)
+		}
+	})
 }
 
 func TestInstanceToPack(t *testing.T) {

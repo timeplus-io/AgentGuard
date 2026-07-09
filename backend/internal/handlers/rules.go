@@ -54,11 +54,15 @@ type mutationBody struct {
 // json.Decoder.UseNumber() so large integer override values reach the compiler
 // without float64 rounding (per the rules package's JSON-consumer contract). An
 // empty body is valid and yields a nil override map (install-with-defaults /
-// configure-reset-all).
+// configure-reset-all). Unknown fields are rejected: a nil Overrides map means
+// "reset every parameter to its default", so a typo'd key (e.g. {"overides":…})
+// must fail loudly rather than silently decode into a destructive full reset
+// that redeploys the MV with defaults and returns 200.
 func decodeMutationBody(c *gin.Context) (mutationBody, error) {
 	var body mutationBody
 	dec := json.NewDecoder(c.Request.Body)
 	dec.UseNumber()
+	dec.DisallowUnknownFields()
 	if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 		return mutationBody{}, err
 	}
