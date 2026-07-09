@@ -101,6 +101,10 @@ import re, json
 
 _CACHE = {}
 
+def _s(v):
+    # timeplusd >=3.2.2 marshals string columns to Python as bytes (#11788); 3.2.1 gave str.
+    return v.decode('utf-8', 'replace') if isinstance(v, (bytes, bytearray)) else v
+
 def _mask(v):
     if len(v) <= 8:
         return v[:2] + '***'
@@ -143,6 +147,8 @@ def _compile(cfg_str):
     return spec
 
 def dlp_extract_entities(contents, configs):
+    contents = [_s(v) for v in contents]
+    configs = [_s(v) for v in configs]
     out = []
     for i, text in enumerate(contents):
         ents = {}
@@ -187,6 +193,10 @@ RETURNS string
 LANGUAGE PYTHON AS $$
 import json
 
+def _s(v):
+    # timeplusd >=3.2.2 marshals string columns to Python as bytes (#11788); 3.2.1 gave str.
+    return v.decode('utf-8', 'replace') if isinstance(v, (bytes, bytearray)) else v
+
 def _parse(s):
     if s:
         try:
@@ -218,8 +228,8 @@ def dlp_config_resolve(shareds, configs):
     n = max(len(shareds), len(configs))
     out = []
     for i in range(n):
-        sh = shareds[i] if i < len(shareds) else ''
-        co = configs[i] if i < len(configs) else ''
+        sh = _s(shareds[i]) if i < len(shareds) else ''
+        co = _s(configs[i]) if i < len(configs) else ''
         try:
             out.append(_resolve(sh, co))
         except Exception:
@@ -237,6 +247,10 @@ LANGUAGE PYTHON AS $$
 import json
 import requests
 
+def _s(v):
+    # timeplusd >=3.2.2 marshals string columns to Python as bytes (#11788); 3.2.1 gave str.
+    return v.decode('utf-8', 'replace') if isinstance(v, (bytes, bytearray)) else v
+
 def _cfg(configs):
     # The config is already resolved (dlp_config_resolve) — flat base_url/api_key/
     # model. Take the first non-empty in the batch (one endpoint per invocation).
@@ -249,6 +263,9 @@ def _cfg(configs):
     return {}
 
 def dlp_embed(contents, roles, configs):
+    contents = [_s(v) for v in contents]
+    roles = [_s(v) for v in roles]
+    configs = [_s(v) for v in configs]
     n = len(contents)
     out = [[] for _ in range(n)]
     cfg = _cfg(configs)
@@ -296,6 +313,10 @@ LANGUAGE PYTHON AS $$
 import json
 import re
 import requests
+
+def _s(v):
+    # timeplusd >=3.2.2 marshals string columns to Python as bytes (#11788); 3.2.1 gave str.
+    return v.decode('utf-8', 'replace') if isinstance(v, (bytes, bytearray)) else v
 
 DEFAULT_KEYWORDS = ('password', 'secret', 'api key', 'apikey', 'token', 'credential',
             'customer', 'contact list', 'address book', 'export', 'confidential',
@@ -353,6 +374,9 @@ def _classify(text, ets, base, api_key, model, max_tokens, timeout, tpl):
                        'tags': [str(x) for x in parsed.get('tags', [])]})
 
 def dlp_risk(contents, entity_types_list, configs):
+    contents = [_s(v) for v in contents]
+    entity_types_list = [[_s(x) for x in (ets or [])] for ets in entity_types_list]
+    configs = [_s(v) for v in configs]
     cfg = _cfg(configs)
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''

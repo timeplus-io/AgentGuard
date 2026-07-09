@@ -1,6 +1,11 @@
 package timeplus
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -320,4 +325,193 @@ func TestDLPMVReferencesConfigJoins(t *testing.T) {
 			t.Errorf("MV DDL missing %q", want)
 		}
 	}
+}
+
+// pythonBody extracts the Python source between the $$ delimiters of a UDF DDL.
+func pythonBody(t *testing.T, ddl string) string {
+	t.Helper()
+	start := strings.Index(ddl, "$$")
+	end := strings.LastIndex(ddl, "$$")
+	if start < 0 || end <= start {
+		t.Fatal("DDL has no $$-delimited Python body")
+	}
+	return ddl[start+2 : end]
+}
+
+// bytesArgsDriver executes a UDF body with every string leaf of the argument
+// columns encoded to bytes — the shape timeplusd ≥3.2.2 delivers (str before
+// that). `requests` is stubbed: post returns the canned `resp` payload, or
+// raises when resp is null so the no-network fallback paths run.
+const bytesArgsDriver = `
+import json, sys, types
+
+spec = json.loads(sys.stdin.read())
+
+class _Resp:
+    def __init__(self, payload): self._p = payload
+    def json(self): return self._p
+
+def _post(*a, **k):
+    if spec['resp'] is None:
+        raise RuntimeError('network disabled')
+    # requests would utf-8 encode json= payloads; reject bytes like it does.
+    json.dumps(k.get('json'))
+    return _Resp(spec['resp'])
+
+req = types.ModuleType('requests')
+req.post = _post
+sys.modules['requests'] = req
+
+def _b(v):
+    if isinstance(v, str): return v.encode('utf-8')
+    if isinstance(v, list): return [_b(x) for x in v]
+    return v
+
+g = {}
+exec(compile(spec['body'], '<udf>', 'exec'), g)
+print(json.dumps(g[spec['fn']](*[_b(a) for a in spec['args']])))
+`
+
+// timeplusd ≥3.2.2 marshals string columns (and array(string) elements) to
+// Python UDFs as bytes, not str — proton-enterprise #11788 flipped
+// PyUnicode→PyBytes for binary safety; 3.2.1 delivered str. The bodies must
+// behave identically under both, so every string arg is normalized at entry.
+// These cases run the real bodies under python3 with bytes args and assert
+// str-parity results.
+func TestDLPUDFsDecodeBytesStringArgs(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not on PATH")
+	}
+	driver := filepath.Join(t.TempDir(), "driver.py")
+	if err := os.WriteFile(driver, []byte(bytesArgsDriver), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(t *testing.T, ddl, fn string, args []any, resp any) []any {
+		t.Helper()
+		spec, err := json.Marshal(map[string]any{
+			"body": pythonBody(t, ddl), "fn": fn, "args": args, "resp": resp,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(py, driver)
+		cmd.Stdin = bytes.NewReader(spec)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s raised on bytes args:\n%s", fn, out)
+		}
+		var got []any
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatalf("%s: bad driver output %q: %v", fn, out, err)
+		}
+		return got
+	}
+
+	chatResp := func(content string) any {
+		return map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": content}}}}
+	}
+
+	t.Run("extract_entities matches patterns in bytes content", func(t *testing.T) {
+		cfg := `{"max_per_type":20,"entities":[{"type":"email","kind":"regex","pattern":"[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}","flags":"i"}]}`
+		got := run(t, ddlDLPEntitiesUDF, "dlp_extract_entities",
+			[]any{[]any{"contact bob@example.com today"}, []any{cfg}}, nil)
+		ents, _ := got[0].(map[string]any)
+		emails, _ := ents["email"].([]any)
+		if len(emails) != 1 || emails[0] != "bob@example.com" {
+			t.Errorf("want email [bob@example.com], got %v", got[0])
+		}
+	})
+
+	t.Run("config_resolve resolves bytes rows", func(t *testing.T) {
+		got := run(t, ddlDLPConfigResolveUDF, "dlp_config_resolve",
+			[]any{
+				[]any{`{"base_url":"http://shared/v1","api_key":"k1","models":{"chat":{"model":"m1"}}}`},
+				[]any{`{"model":"chat","max_tokens":64}`},
+			}, nil)
+		var cfg map[string]any
+		if err := json.Unmarshal([]byte(got[0].(string)), &cfg); err != nil {
+			t.Fatalf("resolved config not JSON: %v", err)
+		}
+		if cfg["model"] != "m1" || cfg["base_url"] != "http://shared/v1" {
+			t.Errorf("want model=m1 base_url=http://shared/v1, got %v", cfg)
+		}
+	})
+
+	t.Run("embed gates on bytes role and posts decoded input", func(t *testing.T) {
+		resp := map[string]any{"data": []any{map[string]any{"embedding": []any{0.5, 0.25}}}}
+		got := run(t, ddlDLPEmbedUDF, "dlp_embed",
+			[]any{
+				[]any{"hello world"},
+				[]any{"user"},
+				[]any{`{"base_url":"http://m/v1","model":"e","timeout":5}`},
+			}, resp)
+		emb, _ := got[0].([]any)
+		if len(emb) != 2 || emb[0] != 0.5 {
+			t.Errorf("want embedding [0.5 0.25] for bytes user row, got %v", got[0])
+		}
+	})
+
+	t.Run("risk heuristic handles bytes content and entity types", func(t *testing.T) {
+		got := run(t, ddlDLPRiskUDF, "dlp_risk",
+			[]any{
+				[]any{"my password is hunter2", "attached the customer list"},
+				[]any{[]any{}, []any{"email"}},
+				[]any{"", ""},
+			}, nil)
+		var r0, r1 map[string]any
+		if err := json.Unmarshal([]byte(got[0].(string)), &r0); err != nil {
+			t.Fatalf("row0 not JSON: %v (%v)", err, got[0])
+		}
+		if s, _ := r0["score"].(float64); s <= 0 {
+			t.Errorf("keyword bytes content should score > 0, got %v", got[0])
+		}
+		if err := json.Unmarshal([]byte(got[1].(string)), &r1); err != nil {
+			t.Fatalf("row1 not JSON: %v (%v)", err, got[1])
+		}
+		tags, _ := json.Marshal(r1["tags"])
+		if !strings.Contains(string(tags), "EMAIL") || !strings.Contains(string(tags), "PII") {
+			t.Errorf("bytes entity type should map to EMAIL+PII tags, got %v", got[1])
+		}
+	})
+
+	t.Run("understand fallback parses bytes question", func(t *testing.T) {
+		got := run(t, ddlDLPUnderstandUDF, "dlp_understand_query",
+			[]any{[]any{"Who sent customer email data outside?"}, []any{""}}, nil)
+		var intent map[string]any
+		if err := json.Unmarshal([]byte(got[0].(string)), &intent); err != nil {
+			t.Fatalf("intent not JSON: %v (%v)", err, got[0])
+		}
+		kw, _ := json.Marshal(intent["keywords"])
+		ets, _ := json.Marshal(intent["entity_types"])
+		if !strings.Contains(string(kw), "customer") || !strings.Contains(string(ets), "email") {
+			t.Errorf("fallback should extract keywords/entity types from bytes question, got %v", got[0])
+		}
+	})
+
+	t.Run("rerank scores bytes snippets", func(t *testing.T) {
+		cfg := `{"base_url":"http://m/v1","model":"c","timeout":5}`
+		got := run(t, ddlDLPRerankUDF, "dlp_rerank",
+			[]any{
+				[]any{"who leaked data", "who leaked data"},
+				[]any{"snippet a", "snippet b"},
+				[]any{cfg, cfg},
+			}, chatResp(`{"1": 0.9, "2": 0.1}`))
+		if got[0] != 0.9 || got[1] != 0.1 {
+			t.Errorf("want [0.9 0.1], got %v", got)
+		}
+	})
+
+	t.Run("summarize renders bytes question and evidence", func(t *testing.T) {
+		got := run(t, ddlDLPSummarizeUDF, "dlp_summarize",
+			[]any{
+				[]any{"who leaked?"},
+				[]any{`[{"message_id":"m1"}]`},
+				[]any{`{"base_url":"http://m/v1","model":"c","timeout":5}`},
+			}, chatResp("REPORT [m1]"))
+		if got[0] != "REPORT [m1]" {
+			t.Errorf("want report text, got %v", got)
+		}
+	})
 }
