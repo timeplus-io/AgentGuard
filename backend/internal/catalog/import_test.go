@@ -163,3 +163,104 @@ func TestImportZip_SemanticValidatorSkips(t *testing.T) {
 		t.Errorf("expected a reported semantic error for bad.yaml, got %v", res.Errors)
 	}
 }
+
+// Import must never overwrite a builtin definition — not even with force. A
+// local shadow replaces builtin detection SQL while keeping the builtin's id
+// and name (the exact edit PUT /rules/catalog/:id rejects with 409), and the
+// installed builtin then reports "upgradeable" with the imported SQL one
+// upgrade click away from deployment.
+func TestImportZip_NeverOverwritesBuiltin(t *testing.T) {
+	seed := fstest.MapFS{
+		"rp-b.yaml": &fstest.MapFile{Data: []byte("id: rp-b\nname: Builtin\nversion: 1.0.0\nsql_template: SELECT 1\n")},
+	}
+	m, err := New(seed, t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	zipData := buildZip(t, map[string]string{
+		"rp-b.yaml": "id: rp-b\nname: Shadow\nversion: 99.0.0\nsql_template: SELECT 'evil'\n",
+	})
+	for _, force := range []bool{false, true} {
+		res, err := m.ImportBytes(zipData, force)
+		if err != nil {
+			t.Fatalf("ImportBytes(force=%v): %v", force, err)
+		}
+		if len(res.SkippedBuiltin) != 1 || res.SkippedBuiltin[0] != "rp-b" {
+			t.Errorf("force=%v: SkippedBuiltin = %v, want [rp-b]", force, res.SkippedBuiltin)
+		}
+		if len(res.Updated) != 0 || len(res.Added) != 0 {
+			t.Errorf("force=%v: builtin reported as added/updated: %+v", force, res)
+		}
+		got, _ := m.Lookup("rp-b")
+		if got.Origin != OriginBuiltin || got.Name != "Builtin" || got.SQLTemplate != "SELECT 1" {
+			t.Errorf("force=%v: builtin was shadowed: %+v", force, got)
+		}
+	}
+}
+
+// Import must not silently clobber a user's custom rule on a bare version
+// comparison (which also flips its origin to "imported", locking it out of the
+// editor); force explicitly authorizes the overwrite.
+func TestImportZip_CustomRuleRequiresForce(t *testing.T) {
+	m, err := New(fstest.MapFS{}, t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	custom := Definition{ID: "rp-c", Name: "Mine", Version: "1.0.0",
+		SQLTemplate: "SELECT 1", Origin: OriginCustom}
+	if err := m.Save(custom); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	zipData := buildZip(t, map[string]string{
+		"rp-c.yaml": "id: rp-c\nname: Theirs\nversion: 2.0.0\nsql_template: SELECT 2\n",
+	})
+
+	res, err := m.ImportBytes(zipData, false)
+	if err != nil {
+		t.Fatalf("ImportBytes: %v", err)
+	}
+	if len(res.SkippedCustom) != 1 || res.SkippedCustom[0] != "rp-c" {
+		t.Errorf("SkippedCustom = %v, want [rp-c]", res.SkippedCustom)
+	}
+	if got, _ := m.Lookup("rp-c"); got.Name != "Mine" || got.Origin != OriginCustom {
+		t.Errorf("custom rule clobbered without force: %+v", got)
+	}
+
+	res, err = m.ImportBytes(zipData, true)
+	if err != nil {
+		t.Fatalf("ImportBytes(force): %v", err)
+	}
+	if len(res.Updated) != 1 || res.Updated[0] != "rp-c" {
+		t.Errorf("force: Updated = %v, want [rp-c]", res.Updated)
+	}
+	if got, _ := m.Lookup("rp-c"); got.Name != "Theirs" || got.Origin != OriginImported {
+		t.Errorf("force overwrite did not apply: %+v", got)
+	}
+}
+
+// The imported→imported merge policy is unchanged: newer version updates,
+// equal-or-older skips, force overrides.
+func TestImportZip_ImportedVersionPolicyUnchanged(t *testing.T) {
+	m, err := New(fstest.MapFS{}, t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	v1 := buildZip(t, map[string]string{"r.yaml": "id: rp-i\nname: V1\nversion: 1.0.0\nsql_template: SELECT 1\n"})
+	v2 := buildZip(t, map[string]string{"r.yaml": "id: rp-i\nname: V2\nversion: 2.0.0\nsql_template: SELECT 2\n"})
+
+	if res, _ := m.ImportBytes(v1, false); len(res.Added) != 1 {
+		t.Fatalf("initial import: %+v", res)
+	}
+	if res, _ := m.ImportBytes(v1, false); len(res.Skipped) != 1 {
+		t.Errorf("same-version re-import should skip: %+v", res)
+	}
+	if res, _ := m.ImportBytes(v2, false); len(res.Updated) != 1 {
+		t.Errorf("newer version should update: %+v", res)
+	}
+	if res, _ := m.ImportBytes(v1, true); len(res.Updated) != 1 {
+		t.Errorf("force should overwrite an imported entry with an older version: %+v", res)
+	}
+	if got, _ := m.Lookup("rp-i"); got.Name != "V1" {
+		t.Errorf("force downgrade did not apply: %+v", got)
+	}
+}

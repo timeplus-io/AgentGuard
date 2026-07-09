@@ -306,7 +306,9 @@ func DeleteCatalogRule(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifec
 
 // ImportCatalog handles POST /api/rules/catalog/import.
 // Accepts a multipart form with a "file" field containing a zip archive of YAML rule files.
-// Query param ?force=true overwrites existing entries even when the imported version is not newer.
+// Query param ?force=true overwrites existing imported/custom entries even when the
+// imported version is not newer. Builtin entries are never overwritten (reported as
+// skipped_builtin); custom entries are overwritten only with force (else skipped_custom).
 func ImportCatalog(mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		force := c.Query("force") == "true"

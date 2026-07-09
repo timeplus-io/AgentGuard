@@ -16,11 +16,21 @@ type ImportResult struct {
 	Added   []string `json:"added"`
 	Updated []string `json:"updated"`
 	Skipped []string `json:"skipped"`
-	Errors  []string `json:"errors"`
+	// SkippedBuiltin lists entries whose ID belongs to a builtin rule. Import
+	// never overwrites a builtin — not even with force: a local shadow would
+	// replace builtin detection SQL under the builtin's identity.
+	SkippedBuiltin []string `json:"skipped_builtin"`
+	// SkippedCustom lists entries whose ID belongs to a user-authored custom
+	// rule when force was not set; a version comparison must not silently
+	// clobber user content.
+	SkippedCustom []string `json:"skipped_custom"`
+	Errors        []string `json:"errors"`
 }
 
 // ImportZip reads a zip archive and merges YAML rule files into the local catalog.
-// If force is true, existing entries are overwritten even when the version is not newer.
+// Merge policy, keyed on the EXISTING entry's origin: builtin — never overwritten
+// (even with force); custom — overwritten only with force; imported — overwritten
+// when the zip version is newer, or with force.
 func (m *Manager) ImportZip(r io.ReaderAt, size int64, force bool) (ImportResult, error) {
 	zr, err := zip.NewReader(r, size)
 	if err != nil {
@@ -90,6 +100,10 @@ func (m *Manager) ImportZip(r io.ReaderAt, size int64, force bool) (ImportResult
 			result.Updated = append(result.Updated, entry.ID)
 		case "skipped":
 			result.Skipped = append(result.Skipped, entry.ID)
+		case "skipped_builtin":
+			result.SkippedBuiltin = append(result.SkippedBuiltin, entry.ID)
+		case "skipped_custom":
+			result.SkippedCustom = append(result.SkippedCustom, entry.ID)
 		}
 	}
 	return result, nil
@@ -100,11 +114,26 @@ func (m *Manager) ImportBytes(data []byte, force bool) (ImportResult, error) {
 	return m.ImportZip(bytes.NewReader(data), int64(len(data)), force)
 }
 
-// mergeEntry applies one definition to the local catalog with the configured
-// strategy. Returns "added", "updated", or "skipped" — "skipped" means the
-// merge policy declined the entry (already present at an equal-or-newer
-// version without force). A failed Save (IO/marshal error) is returned as an
-// error so the caller reports it instead of mislabeling it as skipped.
+// mergeEntry applies one definition to the local catalog. The merge policy is
+// keyed on the EXISTING entry's origin, so import can never launder a rule into
+// an identity it does not own. Returns the action taken:
+//
+//   - "added":           no existing entry.
+//   - "updated":         existing imported entry replaced (newer version or
+//     force), or existing custom entry replaced (force only).
+//   - "skipped":         existing imported entry at an equal-or-newer version
+//     and force was not set.
+//   - "skipped_builtin": existing entry is builtin. Never overwritten, even with
+//     force: a local shadow silently replaces builtin detection SQL under the
+//     builtin's id and name — the exact mutation PUT /rules/catalog/:id rejects
+//     with 409 ("clone first") — and the installed builtin would then report
+//     "upgradeable", one click from deploying the imported SQL.
+//   - "skipped_custom":  existing entry is user-authored custom and force was not
+//     set. A bare version comparison must not clobber user content (which would
+//     also flip its origin to "imported", locking it out of the editor).
+//
+// A failed Save (IO/marshal error) is returned as an error so the caller reports
+// it instead of mislabeling it as skipped.
 func (m *Manager) mergeEntry(e Definition, force bool) (string, error) {
 	existing, exists := m.Lookup(e.ID)
 	if !exists {
@@ -112,6 +141,12 @@ func (m *Manager) mergeEntry(e Definition, force bool) (string, error) {
 			return "", err
 		}
 		return "added", nil
+	}
+	if existing.Origin == OriginBuiltin {
+		return "skipped_builtin", nil
+	}
+	if existing.Origin == OriginCustom && !force {
+		return "skipped_custom", nil
 	}
 	if force || versionGreater(e.Version, existing.Version) {
 		if err := m.Save(e); err != nil {
