@@ -62,15 +62,39 @@ func TestCandidateNames(t *testing.T) {
 	}
 }
 
-func TestCandidateSinkDDL(t *testing.T) {
-	ddl := candidateSinkDDL("ag_preflight_sink_x")
-	wantContains(t, ddl, "CREATE STREAM ag_preflight_sink_x")
-	// must NOT create the real stream.
-	wantNotContains(t, ddl, "CREATE STREAM agentguard_security_events")
-	// schema is derived from ddlSecurityEvents, so its columns are present.
-	for _, col := range []string{"detected_at", "rule_id", "rule_name", "severity", "message", "event_data"} {
-		wantContains(t, ddl, col)
-	}
+func TestLiveSinkDDL(t *testing.T) {
+	t.Run("renames the live stream to the throwaway sink", func(t *testing.T) {
+		// Stand in for the real SHOW CREATE output: whatever the live stream is.
+		live := "CREATE STREAM default.agentguard_security_events (`detected_at` datetime64(3), `rule_id` string, `event_data` string)"
+		fake := &fakeRuleExec{rows: []Row{{"statement": live}}}
+		ddl, err := liveSinkDDL(fake, "ag_preflight_sink_x")
+		if err != nil {
+			t.Fatalf("liveSinkDDL: %v", err)
+		}
+		wantContains(t, fake.queries[0], "SHOW CREATE STREAM agentguard_security_events")
+		wantContains(t, ddl, "CREATE STREAM default.ag_preflight_sink_x")
+		// The live columns carry over; the real stream is never a create target.
+		for _, col := range []string{"detected_at", "rule_id", "event_data"} {
+			wantContains(t, ddl, col)
+		}
+		wantNotContains(t, ddl, "agentguard_security_events")
+	})
+
+	t.Run("accepts an alternate result column name", func(t *testing.T) {
+		fake := &fakeRuleExec{rows: []Row{{"create_table_query": "CREATE STREAM agentguard_security_events (rule_id string)"}}}
+		ddl, err := liveSinkDDL(fake, "sink_x")
+		if err != nil {
+			t.Fatalf("liveSinkDDL: %v", err)
+		}
+		wantContains(t, ddl, "CREATE STREAM sink_x")
+	})
+
+	t.Run("non-CREATE values are not mistaken for DDL", func(t *testing.T) {
+		fake := &fakeRuleExec{rows: []Row{{"note": "no such stream"}}}
+		if _, err := liveSinkDDL(fake, "sink_x"); err == nil {
+			t.Fatal("expected error when no CREATE statement is present")
+		}
+	})
 }
 
 func TestCandidateAndReplaceMVDDL(t *testing.T) {
@@ -91,8 +115,15 @@ func TestDropNoDelaySQL(t *testing.T) {
 	wantContains(t, s, "DROP STREAM IF EXISTS ag_preflight_sink_x NO DELAY")
 }
 
+// liveDDLRows is the SHOW CREATE result the preflight reads to build its sink.
+// The column set here is deliberately NOT ddlSecurityEvents: the point of the
+// live read is that the sink mirrors whatever the deployed stream actually is.
+func liveDDLRows() []Row {
+	return []Row{{"statement": "CREATE STREAM default.agentguard_security_events (rule_id string, severity string)"}}
+}
+
 func TestPreflightCandidate_SuccessOrdering(t *testing.T) {
-	fake := &fakeRuleExec{}
+	fake := &fakeRuleExec{rows: liveDDLRows()}
 	if err := preflightCandidate(fake, "rp-001", "SELECT 1", "tok"); err != nil {
 		t.Fatalf("preflight: %v", err)
 	}
@@ -100,16 +131,14 @@ func TestPreflightCandidate_SuccessOrdering(t *testing.T) {
 		t.Fatalf("expected 4 statements, got %d: %v", len(fake.execs), fake.execs)
 	}
 	// create sink → create candidate MV → drop MV → drop sink.
-	wantContains(t, fake.execs[0], "CREATE STREAM ag_preflight_sink_rp001_tok")
+	wantContains(t, fake.execs[0], "CREATE STREAM default.ag_preflight_sink_rp001_tok")
 	wantContains(t, fake.execs[1], "CREATE MATERIALIZED VIEW ag_preflight_mv_rp001_tok INTO ag_preflight_sink_rp001_tok")
 	wantContains(t, fake.execs[2], "DROP VIEW IF EXISTS ag_preflight_mv_rp001_tok NO DELAY")
 	wantContains(t, fake.execs[3], "DROP STREAM IF EXISTS ag_preflight_sink_rp001_tok NO DELAY")
 }
 
 func TestPreflightCandidate_SinkCreateFailsStillCleansUp(t *testing.T) {
-	fake := &fakeRuleExec{execErr: func(sql string) error {
-		// The sink DDL is derived from ddlSecurityEvents (which has a leading
-		// newline), so match by substring rather than prefix.
+	fake := &fakeRuleExec{rows: liveDDLRows(), execErr: func(sql string) error {
 		if strings.Contains(sql, "CREATE STREAM") {
 			return fmt.Errorf("boom sink")
 		}
@@ -128,7 +157,7 @@ func TestPreflightCandidate_SinkCreateFailsStillCleansUp(t *testing.T) {
 }
 
 func TestPreflightCandidate_MVCreateFailsReturnsValidationError(t *testing.T) {
-	fake := &fakeRuleExec{execErr: func(sql string) error {
+	fake := &fakeRuleExec{rows: liveDDLRows(), execErr: func(sql string) error {
 		if strings.HasPrefix(sql, "CREATE MATERIALIZED VIEW") {
 			return fmt.Errorf("syntax error")
 		}
@@ -147,7 +176,7 @@ func TestPreflightCandidate_MVCreateFailsReturnsValidationError(t *testing.T) {
 func TestPreflightCandidate_CleanupFailureSurfacedOnlyOnSuccess(t *testing.T) {
 	// Creates succeed, drops fail: with no validation error to preserve, the
 	// cleanup failure must surface (a leaked sink/MV is worth reporting).
-	fake := &fakeRuleExec{execErr: func(sql string) error {
+	fake := &fakeRuleExec{rows: liveDDLRows(), execErr: func(sql string) error {
 		if strings.HasPrefix(sql, "DROP") {
 			return fmt.Errorf("drop failed")
 		}
@@ -161,7 +190,7 @@ func TestPreflightCandidate_CleanupFailureSurfacedOnlyOnSuccess(t *testing.T) {
 
 func TestPreflightCandidate_ValidationErrorNotMaskedByCleanupFailure(t *testing.T) {
 	// MV create fails AND drops fail: the caller's real signal (validation) wins.
-	fake := &fakeRuleExec{execErr: func(sql string) error {
+	fake := &fakeRuleExec{rows: liveDDLRows(), execErr: func(sql string) error {
 		if strings.HasPrefix(sql, "CREATE MATERIALIZED VIEW") {
 			return fmt.Errorf("syntax error")
 		}
@@ -173,6 +202,50 @@ func TestPreflightCandidate_ValidationErrorNotMaskedByCleanupFailure(t *testing.
 	err := preflightCandidate(fake, "rp-001", "SELECT bad", "tok")
 	if err == nil || !strings.Contains(err.Error(), "validate rule SQL") {
 		t.Fatalf("validation error must not be masked by cleanup failure, got %v", err)
+	}
+}
+
+// The preflight sink must mirror the LIVE agentguard_security_events stream, not
+// this binary's compiled-in ddlSecurityEvents constant. If the live schema drifted
+// (stream created by a different release), a candidate validated against the
+// constant would pass preflight and then deterministically fail the real CREATE —
+// after DROP ... NO DELAY already removed the healthy MV, which the startup/sync
+// path cannot roll back. Reading SHOW CREATE moves that failure to preflight.
+func TestPreflightCandidate_SinkDerivedFromLiveDDL(t *testing.T) {
+	fake := &fakeRuleExec{rows: []Row{{
+		"statement": "CREATE STREAM default.agentguard_security_events (id string, drifted_col uint32)",
+	}}}
+	if err := preflightCandidate(fake, "rp-001", "SELECT 1", "tok"); err != nil {
+		t.Fatalf("preflight: %v", err)
+	}
+	if len(fake.queries) != 1 || !strings.Contains(fake.queries[0], "SHOW CREATE") {
+		t.Fatalf("expected one SHOW CREATE query, got %v", fake.queries)
+	}
+	// The sink create carries the LIVE schema under the throwaway name, and must
+	// not target the real stream.
+	wantContains(t, fake.execs[0], "drifted_col uint32")
+	wantContains(t, fake.execs[0], "ag_preflight_sink_rp001_tok")
+	wantNotContains(t, fake.execs[0], "agentguard_security_events")
+}
+
+// If the live DDL cannot be read (stream missing / Timeplus error), preflight must
+// fail before creating anything: a preflight that guessed the schema could pass and
+// let the replace path drop a healthy MV it cannot recreate.
+func TestPreflightCandidate_LiveDDLUnavailableFailsBeforeCreate(t *testing.T) {
+	for name, fake := range map[string]*fakeRuleExec{
+		"query error": {queryErr: fmt.Errorf("stream not found")},
+		"no rows":     {rows: nil},
+		"empty stmt":  {rows: []Row{{"statement": ""}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := preflightCandidate(fake, "rp-001", "SELECT 1", "tok")
+			if err == nil {
+				t.Fatal("expected error when the live DDL is unavailable")
+			}
+			if len(fake.execs) != 0 {
+				t.Errorf("no DDL may execute when the live schema is unreadable, got %v", fake.execs)
+			}
+		})
 	}
 }
 
