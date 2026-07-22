@@ -58,6 +58,8 @@ class Handler(BaseHTTPRequestHandler):
             resp = {"data": [{"index": i, "embedding": embed(t)} for i, t in enumerate(inputs)]}
         elif self.path.endswith("/chat/completions"):
             msgs = body.get("messages", [])
+            if body.get("stream"):
+                return self._stream_chat(msgs)
             prompt = msgs[-1].get("content", "") if msgs else ""
             if "TASK: QUERY_UNDERSTANDING" in prompt:
                 content = json.dumps({"keywords": ["customer", "phone", "export"],
@@ -80,6 +82,36 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         self._send_json(resp)
+
+    def _sse(self, obj):
+        self.wfile.write(b"data: " + json.dumps(obj).encode() + b"\n\n")
+
+    def _stream_chat(self, msgs):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        base = {"id": "mock", "object": "chat.completion.chunk", "model": "mock-chat"}
+        last_user = next((m["content"] for m in reversed(msgs)
+                          if m.get("role") == "user" and isinstance(m.get("content"), str)), "")
+        tool_results = [m for m in msgs if m.get("role") == "tool"]
+        m = re.search(r"MOCK_TOOL_CALL (\{.*\})", last_user, re.S)
+        if m and not tool_results:
+            call = json.loads(m.group(1))
+            self._sse({**base, "choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [
+                {"index": 0, "id": "call_1", "type": "function",
+                 "function": {"name": call["name"], "arguments": json.dumps(call.get("arguments", {}))}}]},
+                "finish_reason": None}]})
+            self._sse({**base, "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}],
+                       "usage": {"prompt_tokens": 10, "completion_tokens": 5}})
+        else:
+            content = "MOCK_ANSWER"
+            if tool_results:
+                content += " tool said: " + str(tool_results[-1].get("content", ""))[:80]
+            self._sse({**base, "choices": [{"index": 0, "delta": {"role": "assistant", "content": content},
+                                            "finish_reason": None}]})
+            self._sse({**base, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                       "usage": {"prompt_tokens": 10, "completion_tokens": 5}})
+        self.wfile.write(b"data: [DONE]\n\n")
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[mock-model] " + fmt % args + "\n")
