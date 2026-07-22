@@ -32,7 +32,6 @@ func TestSchemaCardStaticContentAllKnownStreams(t *testing.T) {
 		"agentguard_dlp_enriched", "agentguard_hook_events", "agentguard_threats",
 		"agentguard_holds", "agentguard_rules", "agentguard_cost_budgets",
 		"agentguard_sentry_conversations", "agentguard_sentry_messages",
-		"agentguard_sentry_memory", "agentguard_sentry_tasks", "agentguard_sentry_task_runs",
 	} {
 		if !strings.Contains(card, must) {
 			t.Fatalf("schema card missing %s", must)

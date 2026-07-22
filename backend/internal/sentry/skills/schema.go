@@ -47,9 +47,6 @@ var knownStreamDocs = []streamDoc{
 	{"agentguard_holds", "human-in-the-loop hold-and-decide records; key cols: hold_id, deployment_id, agent_id, session_id, run_id, tool_name, rule_id, severity, status, created_at, decided_by, decided_at, decided_reason"},
 	{"agentguard_sentry_conversations", "Sentry chat conversation metadata, scoped per user; key cols: conversation_id, user, title, status, created_at, updated_at"},
 	{"agentguard_sentry_messages", "Sentry chat message log — one row per user/assistant turn or tool call; key cols: event_time, conversation_id, seq, role, content, tool_name, tool_args, tool_result, model, tokens_in, tokens_out"},
-	{"agentguard_sentry_memory", "Sentry durable analyst memory (facts/preferences/findings) with embeddings; key cols: memory_id, scope, kind, content, embedding, created_by, updated_at, deleted"},
-	{"agentguard_sentry_tasks", "Sentry scheduled background audit definitions; key cols: task_id, name, instruction, schedule, enabled, created_by, updated_at, deleted"},
-	{"agentguard_sentry_task_runs", "Sentry scheduled task run history; latest state via arg_max(col, finished_at) GROUP BY run_id; key cols: run_id, task_id, trigger, status, report, error, tokens_in, tokens_out, started_at, finished_at"},
 }
 
 // schemaCardStatic renders the fixed, always-available part of the schema
