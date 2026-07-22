@@ -57,6 +57,12 @@ type DLPConfig struct {
 	MaxOutputTokens int `mapstructure:"max_output_tokens"`
 }
 
+// SentryConfig configures the Sentry conversational agent (spec 2026-07-22).
+type SentryConfig struct {
+	Enabled  bool   `mapstructure:"enabled"`
+	SkillDir string `mapstructure:"skill_dir"` // optional on-disk override for the vendored timeplus-sql-guide skill
+}
+
 // ProvisionedDLP records the DLP model settings that were baked into UDFs and
 // the enriched stream at the last successful provision. Used to detect drift
 // ("re-provision required") when the live DLP config changes afterward.
@@ -81,6 +87,7 @@ type Config struct {
 	Holds         HoldsConfig `mapstructure:"holds"`
 	DLP           DLPConfig   `mapstructure:"dlp"`
 	ProvisionedDLP ProvisionedDLP // loaded from provisioned.dlp.* in config.yaml
+	Sentry        SentryConfig `mapstructure:"sentry"`
 	// ConfigPath is the file path this config was loaded from (or will be written to).
 	// Populated by the caller after Load(); not read from the config file itself.
 	ConfigPath string
@@ -145,6 +152,8 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("provisioned.dlp.summary_model", "")
 	v.SetDefault("provisioned.dlp.request_timeout_seconds", 0)
 	v.SetDefault("provisioned.dlp.max_output_tokens", 0)
+	v.SetDefault("sentry.enabled", false)
+	v.SetDefault("sentry.skill_dir", "")
 
 	if searchPaths {
 		explicitConfigFile := v.ConfigFileUsed()
@@ -208,6 +217,8 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.ProvisionedDLP.SummaryModel = v.GetString("provisioned.dlp.summary_model")
 	cfg.ProvisionedDLP.RequestTimeoutSeconds = v.GetInt("provisioned.dlp.request_timeout_seconds")
 	cfg.ProvisionedDLP.MaxOutputTokens = v.GetInt("provisioned.dlp.max_output_tokens")
+	cfg.Sentry.Enabled = v.GetBool("sentry.enabled")
+	cfg.Sentry.SkillDir = v.GetString("sentry.skill_dir")
 	// TIMEPLUS_USER / TIMEPLUS_PASSWORD: optional canonical service account
 	// for server-to-server endpoints. Never written to the config file.
 	cfg.Timeplus.User = v.GetString("timeplus.user")

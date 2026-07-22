@@ -41,6 +41,7 @@ func Sections() []SectionMeta {
 		{"catalog", "Catalog"},
 		{"holds", "Approval Holds"},
 		{"dlp", "Semantic DLP"},
+		{"sentry", "Sentry Agent"},
 		{"setup", "Setup"},
 	}
 }
@@ -122,6 +123,12 @@ func Registry() []KeyMeta {
 		{Key: "dlp.max_output_tokens", Section: "dlp", Label: "Max output tokens",
 			Description: "Token budget for risk/understand/rerank model calls (summary uses at least 800). Raise for reasoning models. Baked into UDFs — change needs re-provision.",
 			Type:        TypeInt, EnvVar: "DLP_MAX_OUTPUT_TOKENS", Reprovision: true},
+
+		// ── sentry ──
+		{Key: "sentry.enabled", Section: "sentry", Label: "Enable Sentry agent",
+			Description: "Conversational security analyst agent (chat, SQL skills). Runtime model settings live in the sentry_chat config row.", Type: TypeBool},
+		{Key: "sentry.skill_dir", Section: "sentry", Label: "SQL skill directory override",
+			Description: "Optional path to an updated timeplus-sql-guide skill directory; empty uses the embedded copy.", Type: TypeString},
 
 		// ── setup ──
 		{Key: "setup.complete", Section: "setup", Label: "Setup complete",
