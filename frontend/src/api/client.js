@@ -241,6 +241,29 @@ export const api = {
     yield* ndjsonStreamParser(res.body.getReader())
   },
 
+  // ── Sentry (agent chat) ────────────────────────────────────────────────────
+  sentryStatus: () => get('/sentry/status'),
+  sentryConversations: () => get('/sentry/conversations'),
+  sentryConversation: (id) => get(`/sentry/conversations/${encodeURIComponent(id)}`),
+  sentryArchive: (id) => del(`/sentry/conversations/${encodeURIComponent(id)}`),
+
+  // sentryChat streams NDJSON events from the agent loop:
+  // {event:"meta"} → {event:"token"|"tool_call"|"tool_result"}* → {event:"done"} | {event:"error"}
+  async *sentryChat(message, { conversationId, signal } = {}) {
+    const res = await fetch(`${BASE}/sentry/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(conversationId ? { conversation_id: conversationId, message } : { message }),
+      signal,
+      credentials: 'include',
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || `HTTP ${res.status}`)
+    }
+    yield* ndjsonStreamParser(res.body.getReader())
+  },
+
   async *protonQuery(sql, { signal } = {}) {
     const res = await fetch(`${BASE}/proton/query`, {
       method: 'POST',
