@@ -105,7 +105,7 @@ func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 			Password:   body.Password,
 		}
 
-		if err := tp.Init(timeplusCfg, agentGuardURL, cfg.DLP, sendEvent); err != nil {
+		if err := tp.Init(timeplusCfg, agentGuardURL, cfg.DLP, cfg.Sentry, sendEvent); err != nil {
 			sendEvent("error", "Setup failed: "+err.Error())
 			return
 		}

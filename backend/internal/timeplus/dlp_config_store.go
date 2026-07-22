@@ -21,6 +21,7 @@ func DLPConfigKeys() []string {
 	return []string{
 		DLPCfgKeyShared, DLPCfgKeyEntities, DLPCfgKeyEmbed, DLPCfgKeyRisk,
 		DLPCfgKeyUnderstand, DLPCfgKeyRerank, DLPCfgKeySummarize,
+		SentryCfgKeyChat,
 	}
 }
 
@@ -115,6 +116,18 @@ func ValidateDLPConfigValue(key, value string) error {
 		if row.Prompt != nil {
 			if _, ok := row.Prompt.(string); !ok {
 				return fmt.Errorf("%s: prompt must be a string", key)
+			}
+		}
+	case SentryCfgKeyChat:
+		var row struct {
+			SystemPrompt any `json:"system_prompt"`
+		}
+		if err := json.Unmarshal([]byte(value), &row); err != nil {
+			return fmt.Errorf("%s config: %w", key, err)
+		}
+		if row.SystemPrompt != nil {
+			if _, ok := row.SystemPrompt.(string); !ok {
+				return fmt.Errorf("%s: system_prompt must be a string", key)
 			}
 		}
 	}
