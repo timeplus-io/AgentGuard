@@ -228,6 +228,7 @@ func SentryStatus(cfg *config.Config) gin.HandlerFunc {
 			  AND database = current_database()`)
 		if err != nil {
 			log.Printf("sentry: status system.tables: %v", err)
+			resp["tables_check_error"] = err.Error()
 		} else {
 			found := map[string]bool{}
 			for _, row := range rows {
