@@ -418,13 +418,54 @@ func (m *Manager) saveLocked(d Definition) error {
 		return fmt.Errorf("marshal definition %s: %w", d.ID, err)
 	}
 	path := filepath.Join(m.dir, d.ID+".yaml")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeFileAtomic(path, data, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	m.mu.Lock()
 	m.local[d.ID] = d
 	m.mu.Unlock()
 	return nil
+}
+
+// writeFileAtomic writes data to path via a same-directory temp file, fsync, and
+// rename, so a crash mid-write can never leave a truncated file at path: a reader
+// sees either the complete old content or the complete new content.
+//
+// This backs the rollback contract in internal/rules.Service.UpdateDefinition —
+// "re-Saving the previous definition restores it byte-for-byte" — which only
+// holds if a Save can never destroy the on-disk copy it replaces. A plain
+// truncate-then-write would leave a partial YAML that loadDir silently skips,
+// vanishing the definition and orphaning its installed rule.
+//
+// The temp name starts with '.' and never ends in ".yaml", so loadDir ignores
+// any stray left by a crash between create and rename. The directory entry is
+// not fsynced: on power loss the rename itself may be lost, but whichever file
+// survives at path is complete, which is all the contract needs.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	// Best-effort cleanup of the temp file; a no-op once the rename below succeeds
+	// (and a leftover is harmless — loadDir ignores it).
+	defer func() { _ = os.Remove(tmpPath) }()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 // Delete removes a local (custom/imported) definition: its catalog-directory

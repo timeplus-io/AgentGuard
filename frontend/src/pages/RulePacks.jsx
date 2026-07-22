@@ -298,8 +298,12 @@ export default function RulePacks() {
                 {(importResult.added?.length > 0) && <p>Added: <span className="font-mono">{importResult.added.join(', ')}</span></p>}
                 {(importResult.updated?.length > 0) && <p>Updated: <span className="font-mono">{importResult.updated.join(', ')}</span></p>}
                 {(importResult.skipped?.length > 0) && <p className="text-gray-400">Skipped: <span className="font-mono">{importResult.skipped.join(', ')}</span></p>}
+                {(importResult.skipped_builtin?.length > 0) && <p className="text-gray-400">Skipped — builtin rules are never overwritten by import (clone instead): <span className="font-mono">{importResult.skipped_builtin.join(', ')}</span></p>}
+                {(importResult.skipped_custom?.length > 0) && <p className="text-gray-400">Skipped — your custom rule was kept (re-import with force to overwrite): <span className="font-mono">{importResult.skipped_custom.join(', ')}</span></p>}
                 {(importResult.errors?.length > 0) && importResult.errors.map((e, i) => <p key={i}>{e}</p>)}
-                {!importResult.errors?.length && !importResult.added?.length && !importResult.updated?.length && <p>No changes — all entries already up to date.</p>}
+                {!importResult.errors?.length && !importResult.added?.length && !importResult.updated?.length
+                  && !importResult.skipped_builtin?.length && !importResult.skipped_custom?.length
+                  && <p>No changes — all entries already up to date.</p>}
               </div>
               <button onClick={() => setImportResult(null)} className="ml-auto text-gray-400 hover:text-white shrink-0">
                 <span className="material-symbols-outlined text-[14px]">close</span>

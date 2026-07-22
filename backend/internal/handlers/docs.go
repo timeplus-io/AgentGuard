@@ -833,10 +833,10 @@ const openAPISpec = `{
       "post": {
         "tags": ["Catalog"],
         "summary": "Import catalog rules from a zip archive",
-        "description": "Uploads a zip file containing YAML rule definition files and merges them into the local catalog directory.\n\nMerge strategy (per rule ID):\n- **New ID** — always added.\n- **Newer version** — overwrites the existing entry.\n- **Same or older version** — skipped (pass \u0060?force=true\u0060 to overwrite regardless).\n\nNo rules are auto-installed after import — call \u0060/rules/{id}/install\u0060 explicitly.",
+        "description": "Uploads a zip file containing YAML rule definition files and merges them into the local catalog directory.\n\nMerge strategy (per rule ID, keyed on the **existing** entry's origin):\n- **New ID** — always added.\n- **Builtin** — never overwritten, not even with \u0060?force=true\u0060 (reported as \u0060skipped_builtin\u0060). A local shadow would replace builtin detection SQL under the builtin's identity; clone it instead.\n- **Custom** — overwritten only with \u0060?force=true\u0060 (otherwise \u0060skipped_custom\u0060).\n- **Imported** — overwritten when the imported version is newer, or with \u0060?force=true\u0060; otherwise skipped.\n\nNo rules are auto-installed after import — call \u0060/rules/{id}/install\u0060 explicitly.",
         "operationId": "importCatalog",
         "parameters": [
-          { "name": "force", "in": "query", "description": "If true, overwrite existing entries even when the imported version is not newer.", "schema": { "type": "boolean", "default": false } }
+          { "name": "force", "in": "query", "description": "If true, overwrite existing imported/custom entries even when the imported version is not newer. Builtin entries are never overwritten.", "schema": { "type": "boolean", "default": false } }
         ],
         "requestBody": {
           "required": true,
@@ -854,7 +854,7 @@ const openAPISpec = `{
         },
         "responses": {
           "200": { "description": "Import summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ImportResult" },
-            "example": { "added": ["custom-my-rule"], "updated": ["rp-001"], "skipped": ["rp-002"], "errors": [] }
+            "example": { "added": ["custom-my-rule"], "updated": ["rp-imported-pack"], "skipped": ["rp-002"], "skipped_builtin": ["rp-001"], "skipped_custom": ["custom-mine"], "errors": [] }
           }}},
           "400": { "description": "Missing file field, invalid zip format, or YAML parse error." }
         }
@@ -2010,7 +2010,9 @@ const openAPISpec = `{
         "properties": {
           "added":   { "type": "array", "items": { "type": "string" }, "description": "Rule IDs that were newly added to the catalog." },
           "updated": { "type": "array", "items": { "type": "string" }, "description": "Rule IDs whose catalog entry was overwritten (newer version or force=true)." },
-          "skipped": { "type": "array", "items": { "type": "string" }, "description": "Rule IDs that were skipped because the imported version was not newer than the existing entry." },
+          "skipped": { "type": "array", "items": { "type": "string" }, "description": "Rule IDs skipped because the imported version was not newer than the existing imported entry." },
+          "skipped_builtin": { "type": "array", "items": { "type": "string" }, "description": "Rule IDs skipped because the existing entry is builtin. Import never overwrites a builtin, even with force=true: a local shadow would replace builtin detection SQL under the builtin's identity. Clone the rule instead." },
+          "skipped_custom": { "type": "array", "items": { "type": "string" }, "description": "Rule IDs skipped because the existing entry is a user-authored custom rule and force was not set." },
           "errors":  { "type": "array", "items": { "type": "string" }, "description": "Parse or write errors encountered per file (non-fatal — other files are still processed)." }
         }
       },

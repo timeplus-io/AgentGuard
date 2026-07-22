@@ -120,11 +120,44 @@ func candidateNames(ruleID, token string) (sink, mv string) {
 	return sink, mv
 }
 
-// candidateSinkDDL builds the DDL for a disposable validation sink that has the
-// exact agentguard_security_events schema. It is derived from that stream's own
-// DDL (substituting the throwaway name) so the columns can never drift apart.
-func candidateSinkDDL(sink string) string {
-	return strings.Replace(ddlSecurityEvents, "agentguard_security_events", sink, 1)
+// liveSinkDDL derives the disposable validation sink's DDL from the LIVE
+// agentguard_security_events stream (SHOW CREATE), substituting the throwaway
+// name.
+//
+// It must read the live stream rather than reuse this binary's compiled-in
+// ddlSecurityEvents constant. The constant only describes the stream this
+// release WOULD create; the deployed stream is created once with IF NOT EXISTS
+// and never schema-checked, so an older release's stream survives an upgrade. If
+// the two drift, a rule whose SELECT matches the constant passes preflight, and
+// the replacement path then runs DROP VIEW ... NO DELAY followed by a CREATE that
+// fails deterministically against the real stream — turning a healthy MV into no
+// MV, and repeating on every /api/rules/sync (the startup/sync path has no
+// rollback). Validating against the real target moves that failure to preflight,
+// before anything is dropped. ddlSecurityEvents remains the creation template
+// used by provisioning.
+func liveSinkDDL(ex ruleExecutor, sink string) (string, error) {
+	rows, err := ex.Query("SHOW CREATE STREAM agentguard_security_events")
+	if err != nil {
+		return "", fmt.Errorf("preflight read live agentguard_security_events DDL: %w", err)
+	}
+	var stmt string
+	if len(rows) > 0 {
+		stmt, _ = rows[0]["statement"].(string)
+		if stmt == "" {
+			// The result column name has varied across engine versions; accept any
+			// string value that is a CREATE statement.
+			for _, v := range rows[0] {
+				if s, ok := v.(string); ok && strings.HasPrefix(strings.ToUpper(strings.TrimSpace(s)), "CREATE") {
+					stmt = s
+					break
+				}
+			}
+		}
+	}
+	if stmt == "" {
+		return "", fmt.Errorf("preflight: live agentguard_security_events DDL unavailable (stream missing? run provisioning via POST /api/setup/provision)")
+	}
+	return strings.Replace(stmt, "agentguard_security_events", sink, 1), nil
 }
 
 // candidateMVDDL builds the candidate MV that targets the disposable sink. No
@@ -165,6 +198,12 @@ func PreflightCandidate(cfg *config.TimeplusConfig, ruleID, renderedSQL string) 
 
 func preflightCandidate(ex ruleExecutor, ruleID, renderedSQL, token string) (err error) {
 	sink, mv := candidateNames(ruleID, token)
+	// Read the live sink schema BEFORE installing the cleanup defer: nothing has
+	// been created yet, so an unreadable schema must fail without any DDL.
+	sinkDDL, err := liveSinkDDL(ex, sink)
+	if err != nil {
+		return err
+	}
 	// Always tear both down, NO DELAY, regardless of outcome. A cleanup failure
 	// is logged and only surfaced when validation itself succeeded — it must not
 	// mask the validation error that is the caller's real signal.
@@ -183,7 +222,7 @@ func preflightCandidate(ex ruleExecutor, ruleID, renderedSQL, token string) (err
 		}
 	}()
 
-	if cErr := ex.Exec(candidateSinkDDL(sink)); cErr != nil {
+	if cErr := ex.Exec(sinkDDL); cErr != nil {
 		return fmt.Errorf("preflight create sink %s: %w", sink, cErr)
 	}
 	if cErr := ex.Exec(candidateMVDDL(mv, sink, renderedSQL)); cErr != nil {

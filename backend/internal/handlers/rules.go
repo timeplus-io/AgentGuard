@@ -54,11 +54,15 @@ type mutationBody struct {
 // json.Decoder.UseNumber() so large integer override values reach the compiler
 // without float64 rounding (per the rules package's JSON-consumer contract). An
 // empty body is valid and yields a nil override map (install-with-defaults /
-// configure-reset-all).
+// configure-reset-all). Unknown fields are rejected: a nil Overrides map means
+// "reset every parameter to its default", so a typo'd key (e.g. {"overides":…})
+// must fail loudly rather than silently decode into a destructive full reset
+// that redeploys the MV with defaults and returns 200.
 func decodeMutationBody(c *gin.Context) (mutationBody, error) {
 	var body mutationBody
 	dec := json.NewDecoder(c.Request.Body)
 	dec.UseNumber()
+	dec.DisallowUnknownFields()
 	if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 		return mutationBody{}, err
 	}
@@ -688,9 +692,13 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.
 			log.Printf("rules: SyncMVs DLP sync: %v", err)
 		} else {
 			// Probe the model for the embedding dimension and record what we just
-			// provisioned, so GET /api/config reflects the auto-detected dim.
-			detectedDim, _ := tp.ProbeEmbeddingDim(&cfg.Timeplus)
-			recordDLPProvisioned(shared, cfg.DLP, detectedDim)
+			// provisioned, so GET /api/config reflects the auto-detected dim. The
+			// probe must use the request-scoped config: on deployments where the
+			// Timeplus credentials come only from session login, the process-wide
+			// cfg carries none, the probe fails, and its discarded error silently
+			// leaves the stale configured dim in the provision snapshot.
+			detectedDim, _ := tp.ProbeEmbeddingDim(&reqCfg.Timeplus)
+			recordDLPProvisioned(shared, reqCfg.DLP, detectedDim)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"results": results, "orphaned": orphaned})
@@ -712,6 +720,25 @@ func orphanedInstalledRuleIDs(results []rules.SyncResult, mgr *catalog.Manager) 
 	return orphaned
 }
 
+// threatOpenCheckSQL builds the open-threat dedup query for the alert webhook.
+// The three identifiers arrive on the UNAUTHENTICATED /api/alerts/webhook
+// endpoint, so they must go through escapeSQLStr (backslash-aware): with the
+// quote-only escapeSQL, a value like `\' OR (...) --` terminates the literal,
+// because Proton reads \' as an escaped single quote. Extracted from
+// isThreatAlreadyOpen so the escaping is pinned by a unit test.
+func threatOpenCheckSQL(agentID, deploymentID, ruleID string) string {
+	if deploymentID != "" {
+		return fmt.Sprintf(
+			`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND deployment_id = '%s' AND rule_id = '%s' AND (status = '' OR status = 'open')`,
+			escapeSQLStr(agentID), escapeSQLStr(deploymentID), escapeSQLStr(ruleID),
+		)
+	}
+	return fmt.Sprintf(
+		`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND rule_id = '%s' AND (status = '' OR status = 'open')`,
+		escapeSQLStr(agentID), escapeSQLStr(ruleID),
+	)
+}
+
 // isThreatAlreadyOpen queries agentguard_threats to check whether an open
 // threat already exists for the given (agent_id, deployment_id, rule_id)
 // combination. When deployment_id is empty the check is by (agent_id, rule_id)
@@ -720,19 +747,7 @@ func isThreatAlreadyOpen(cfg *config.Config, agentID, deploymentID, ruleID strin
 	if agentID == "" || ruleID == "" {
 		return false
 	}
-	var sql string
-	if deploymentID != "" {
-		sql = fmt.Sprintf(
-			`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND deployment_id = '%s' AND rule_id = '%s' AND (status = '' OR status = 'open')`,
-			escapeSQL(agentID), escapeSQL(deploymentID), escapeSQL(ruleID),
-		)
-	} else {
-		sql = fmt.Sprintf(
-			`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND rule_id = '%s' AND (status = '' OR status = 'open')`,
-			escapeSQL(agentID), escapeSQL(ruleID),
-		)
-	}
-	rows, err := tp.Query(&cfg.Timeplus, sql)
+	rows, err := tp.Query(&cfg.Timeplus, threatOpenCheckSQL(agentID, deploymentID, ruleID))
 	if err != nil || len(rows) == 0 {
 		return false
 	}

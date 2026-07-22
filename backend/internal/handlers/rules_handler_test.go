@@ -182,6 +182,27 @@ func TestDecodeMutationBody(t *testing.T) {
 			t.Fatal("expected error for malformed JSON")
 		}
 	})
+
+	t.Run("unknown fields are rejected (typo must not become reset-all)", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPut, "/",
+			strings.NewReader(`{"overides":{"threshold":5}}`))
+		if _, err := decodeMutationBody(c); err == nil {
+			t.Fatal("expected error for unknown field; nil Overrides would silently reset every parameter to defaults")
+		}
+	})
+
+	t.Run("empty JSON object stays valid with nil overrides", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
+		body, err := decodeMutationBody(c)
+		if err != nil {
+			t.Fatalf("decode {}: %v", err)
+		}
+		if body.Overrides != nil {
+			t.Errorf("expected nil overrides for {}, got %#v", body.Overrides)
+		}
+	})
 }
 
 func TestInstanceToPack(t *testing.T) {
@@ -244,4 +265,34 @@ func TestOrphanedInstalledRuleIDs(t *testing.T) {
 			t.Fatalf("orphaned = %v, want empty", got)
 		}
 	})
+}
+
+// The alert webhook is unauthenticated, so the dedup query's identifiers are
+// attacker-controllable. Proton interprets \' as an escaped quote inside a
+// string literal, so quote-only doubling ('' escaping) is bypassable with a
+// preceding backslash; the query must use the backslash-aware escaper.
+func TestThreatOpenCheckSQL_EscapesBackslashQuoteBypass(t *testing.T) {
+	payload := `\' OR 1=1 --`
+
+	sql := threatOpenCheckSQL(payload, payload, payload)
+	// escapeSQLStr doubles backslashes first, then quotes: \' → \\''.
+	if !strings.Contains(sql, `\\''`) {
+		t.Fatalf("payload not backslash-escaped: %s", sql)
+	}
+	// The raw breakout sequence must not survive into the SQL.
+	if strings.Contains(sql, `\' OR`) {
+		t.Fatalf("raw \\' escape sequence survived into SQL: %s", sql)
+	}
+
+	// The no-deployment query shape must escape identically.
+	sql2 := threatOpenCheckSQL(payload, "", payload)
+	if strings.Contains(sql2, `\' OR`) {
+		t.Fatalf("raw \\' survived in no-deployment shape: %s", sql2)
+	}
+	if !strings.Contains(sql2, `\\''`) {
+		t.Fatalf("no-deployment shape not backslash-escaped: %s", sql2)
+	}
+	if strings.Contains(sql2, "deployment_id") {
+		t.Errorf("empty deployment must not add a deployment_id predicate: %s", sql2)
+	}
 }
