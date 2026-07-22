@@ -96,6 +96,63 @@ func TestValidateReadOnlySQLHardening(t *testing.T) {
 	}
 }
 
+// TestValidateReadOnlySQLTask7Fixes covers the adversarial-review findings
+// fixed after task 6 shipped: comma-joined FROM sources that bypass the
+// immediate-source-only bare-stream check, trusted table(...) interiors,
+// LIMIT clamping for the OFFSET/comma forms, and OUTFILE/INFILE.
+func TestValidateReadOnlySQLTask7Fixes(t *testing.T) {
+	cases := []struct {
+		name, sql string
+		wantErr   string
+		wantIn    string
+	}{
+		// Finding 1: comma-joined bare streams must still be caught.
+		{"comma joined bare stream after table()", "SELECT * FROM table(a), agentguard_cim_event", "table(", ""},
+		{"comma joined bare stream after subquery+alias", "SELECT * FROM (SELECT 1) x, agentguard_rules", "table(", ""},
+		{"comma joined bare stream after system table", "SELECT * FROM system.tables, agentguard_cim_event", "table(", ""},
+		// Finding 2: table(...) interior must be a single plain identifier.
+		{"table() wrapping url() rejected", "SELECT * FROM table(url('http://evil'))", "table() must wrap a plain stream name", ""},
+		{"table() wrapping file() rejected", "SELECT * FROM table(file('/etc/passwd'))", "table() must wrap a plain stream name", ""},
+		// Finding 3: LIMIT clamp must cover OFFSET and comma forms, and
+		// never append a duplicate LIMIT when one already exists.
+		{"limit offset clamped", "SELECT 1 LIMIT 999999 OFFSET 5", "", "LIMIT 1000 OFFSET 5"},
+		{"limit comma clamped", "SELECT 1 LIMIT 10, 999999", "", "LIMIT 10, 1000"},
+		{"limit offset within bound stays intact, no duplicate limit", "SELECT 1 LIMIT 5 OFFSET 2", "", "LIMIT 5 OFFSET 2"},
+		// Finding 4: OUTFILE/INFILE are forbidden client directives.
+		{"into outfile rejected", "SELECT * FROM table(a) INTO OUTFILE '/tmp/x'", "forbidden keyword", ""},
+		{"infile rejected", "SELECT * FROM table(a) INTO INFILE '/tmp/x'", "forbidden keyword", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out, err := ValidateReadOnlySQL(c.sql, 1000)
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected reject: %v", err)
+				}
+				if !strings.Contains(out, c.wantIn) {
+					t.Fatalf("rewritten %q missing %q", out, c.wantIn)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("want error containing %q, got %v", c.wantErr, err)
+			}
+		})
+	}
+}
+
+// TestValidateReadOnlySQLTask7NoDuplicateLimitAppend guards the "leave
+// unchanged, don't append a second LIMIT" branch for a LIMIT form the
+// clamp regexes don't recognize (LIMIT present but not end-anchored in a
+// clampable shape) — the presence check must still suppress the append.
+func TestValidateReadOnlySQLTask7NoDuplicateLimitAppend(t *testing.T) {
+	out, err := ValidateReadOnlySQL("SELECT 1 LIMIT 5 OFFSET 2", 1000)
+	if err != nil {
+		t.Fatalf("unexpected reject: %v", err)
+	}
+	if strings.Count(strings.ToUpper(out), "LIMIT") != 1 {
+		t.Fatalf("expected exactly one LIMIT clause, got %q", out)
+	}
+}
+
 func TestRunSQLSkillMetadata(t *testing.T) {
 	s := NewRunSQL()
 	if s.Name() != "run_sql" {
