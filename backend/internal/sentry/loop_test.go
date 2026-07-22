@@ -426,6 +426,79 @@ func TestAssembleContextDropsOrphanedToolRow(t *testing.T) {
 	}
 }
 
+// TestAssembleContextDropsUnansweredToolCall defends against a
+// partially-persisted turn: an assistant row requested a tool_call but a
+// crash (or best-effort persist failure) meant the answering tool row never
+// made it to the store. Replaying the assistant row as-is would emit a
+// tool_call with no answer -- an OpenAI-400-inducing sequence on every
+// subsequent turn of the conversation. The fix must prune the unanswered
+// call; since that empties the assistant's ToolCalls and its Content is also
+// empty, the whole assistant row is useless and must be dropped.
+func TestAssembleContextDropsUnansweredToolCall(t *testing.T) {
+	history := []models.SentryMessage{
+		{Seq: 1, Role: "assistant", Content: "",
+			ToolArgs: marshalCalls([]ToolCall{{ID: "tc-lost", Name: "run_sql", Args: "{}"}})},
+		// no answering tool row: best-effort persist dropped it after a crash
+	}
+	got := assembleContext("SYS", history, "hi", 100000)
+
+	assertToolPairingInvariant(t, got)
+
+	for _, m := range got {
+		if m.Role == "assistant" {
+			t.Errorf("expected the unanswered-tool_call assistant row dropped entirely, got %+v", m)
+		}
+		if m.Role == "tool" {
+			t.Errorf("expected no tool row (nothing to answer), got %+v", m)
+		}
+	}
+	if len(got) != 2 { // system + fresh user msg only
+		t.Fatalf("got %d msgs, want 2 (system + fresh user msg): %+v", len(got), got)
+	}
+}
+
+// TestAssembleContextPartialAnswers defends the partial-persist case where
+// some, but not all, of an assistant's tool_calls have a surviving answer:
+// only the answered call (and its tool row) may be replayed; the unanswered
+// one must be pruned from the assistant's ToolCalls rather than emitted
+// unanswered.
+func TestAssembleContextPartialAnswers(t *testing.T) {
+	history := []models.SentryMessage{
+		{Seq: 1, Role: "assistant", Content: "",
+			ToolArgs: marshalCalls([]ToolCall{
+				{ID: "a", Name: "run_sql", Args: "{}"},
+				{ID: "b", Name: "run_sql", Args: "{}"},
+			})},
+		{Seq: 2, Role: "tool", ToolName: "run_sql",
+			ToolArgs:   `{"id":"a","name":"run_sql","args":"{}"}`,
+			ToolResult: "answer-a"},
+		// "b"'s answer was never persisted (crash/best-effort persist gap)
+	}
+	got := assembleContext("SYS", history, "hi", 100000)
+
+	assertToolPairingInvariant(t, got)
+
+	var assistantMsg *Msg
+	var toolIDs []string
+	for i := range got {
+		if got[i].Role == "assistant" && len(got[i].ToolCalls) > 0 {
+			assistantMsg = &got[i]
+		}
+		if got[i].Role == "tool" {
+			toolIDs = append(toolIDs, got[i].ToolCallID)
+		}
+	}
+	if assistantMsg == nil {
+		t.Fatal("expected an assistant msg with the surviving tool_call")
+	}
+	if len(assistantMsg.ToolCalls) != 1 || assistantMsg.ToolCalls[0].ID != "a" {
+		t.Fatalf("assistant.ToolCalls = %+v, want exactly [{ID: a}]", assistantMsg.ToolCalls)
+	}
+	if !reflect.DeepEqual(toolIDs, []string{"a"}) {
+		t.Fatalf("tool msg ToolCallIDs = %v, want [a] (b's unanswered call must not surface a tool row)", toolIDs)
+	}
+}
+
 func containsMsg(msgs []Msg, role, content string) bool {
 	for _, m := range msgs {
 		if m.Role == role && m.Content == content {

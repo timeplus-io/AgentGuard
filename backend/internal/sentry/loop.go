@@ -241,6 +241,20 @@ type historyUnit struct {
 // (e.g. a truncated/corrupt store) cannot satisfy the pairing invariant on
 // its own and is dropped entirely rather than ever being emitted as an
 // orphan.
+//
+// Within each assistant+tools unit, the assistant's reconstructed ToolCalls
+// are then reconciled against the tool rows actually consumed: a turn can be
+// best-effort persisted, so a crash between the assistant row and one (or
+// all) of its tool answers can leave a tool_call with no answering tool
+// message in history. Replaying that as-is would emit an OpenAI-invalid
+// sequence (an unanswered tool_call) on every subsequent turn of the
+// conversation, permanently. So ToolCalls are filtered down to only those
+// with a surviving answer (and, defensively, any tool row not matching a
+// surviving call is dropped too). If nothing survives and the assistant row
+// also has no Content, the whole row is useless/invalid and is dropped; if
+// it has Content, it's kept as a plain assistant message (no ToolCalls,
+// toolGroup false); otherwise it's kept as a toolGroup with exactly its
+// answered ToolCalls and their matching tool rows.
 func buildHistoryUnits(history []models.SentryMessage) []historyUnit {
 	var units []historyUnit
 	for i := 0; i < len(history); i++ {
@@ -248,17 +262,57 @@ func buildHistoryUnits(history []models.SentryMessage) []historyUnit {
 		switch m.Role {
 		case "assistant":
 			calls := unmarshalCalls(m.ToolArgs)
-			u := historyUnit{msgs: []Msg{{Role: "assistant", Content: m.Content, ToolCalls: calls}}}
+			var toolMsgs []Msg
 			if len(calls) > 0 {
-				u.toolGroup = true
 				j := i + 1
 				for j < len(history) && history[j].Role == "tool" {
 					var meta toolCallMeta
 					_ = json.Unmarshal([]byte(history[j].ToolArgs), &meta)
-					u.msgs = append(u.msgs, Msg{Role: "tool", Content: history[j].ToolResult, ToolCallID: meta.ID})
+					toolMsgs = append(toolMsgs, Msg{Role: "tool", Content: history[j].ToolResult, ToolCallID: meta.ID})
 					j++
 				}
 				i = j - 1 // resume the outer loop after the consumed tool rows
+
+				// Reconcile: a partially/never-persisted turn (best-effort
+				// persist can drop tool rows after a crash) must not replay
+				// an assistant tool_call with no answering tool message --
+				// that makes OpenAI 400 every subsequent turn of the
+				// conversation. Keep only calls with a surviving answer, and
+				// (defensively, the reverse direction) drop any tool row
+				// whose id doesn't match a surviving call.
+				answered := make(map[string]bool, len(toolMsgs))
+				for _, tm := range toolMsgs {
+					answered[tm.ToolCallID] = true
+				}
+				var keptCalls []ToolCall
+				for _, c := range calls {
+					if answered[c.ID] {
+						keptCalls = append(keptCalls, c)
+					}
+				}
+				calls = keptCalls
+
+				keptIDs := make(map[string]bool, len(calls))
+				for _, c := range calls {
+					keptIDs[c.ID] = true
+				}
+				var keptToolMsgs []Msg
+				for _, tm := range toolMsgs {
+					if keptIDs[tm.ToolCallID] {
+						keptToolMsgs = append(keptToolMsgs, tm)
+					}
+				}
+				toolMsgs = keptToolMsgs
+			}
+
+			if len(calls) == 0 && m.Content == "" {
+				continue // no surviving tool_calls and no content: useless/invalid assistant row, drop the whole unit
+			}
+
+			u := historyUnit{msgs: []Msg{{Role: "assistant", Content: m.Content, ToolCalls: calls}}}
+			if len(calls) > 0 {
+				u.toolGroup = true
+				u.msgs = append(u.msgs, toolMsgs...)
 			}
 			units = append(units, u)
 		case "tool":
