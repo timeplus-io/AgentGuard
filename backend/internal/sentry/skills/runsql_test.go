@@ -201,6 +201,61 @@ func TestValidateReadOnlySQLFromWalkFailClosed(t *testing.T) {
 	}
 }
 
+// TestValidateReadOnlySQLJoinPredicateCommaBypass covers a bypass found by
+// AST-diffing against real Timeplus: a comma-joined bare stream AFTER a
+// JOIN's ON/USING predicate was accepted because the FROM-walk stopped
+// cleanly the moment it saw ON/USING, never resuming source-list validation
+// past the predicate to notice the trailing ", bare_stream". The fix makes
+// ON/USING a "consume the predicate, then keep walking the source list"
+// step instead of a walk-terminating one, so a comma (or a chained JOIN)
+// after the predicate is still reached and validated.
+func TestValidateReadOnlySQLJoinPredicateCommaBypass(t *testing.T) {
+	cases := []struct {
+		name, sql string
+		wantErr   string
+		wantIn    string
+	}{
+		// Bypasses that must become rejects.
+		{"comma after ON predicate", "SELECT * FROM table(a) JOIN table(b) ON a.id=b.id, bare_stream", "table(", ""},
+		{"comma after USING predicate", "SELECT * FROM table(a) JOIN table(b) USING (id), bare_stream", "table(", ""},
+		{"comma after RIGHT JOIN ON predicate", "SELECT * FROM table(a) RIGHT JOIN table(b) ON a.id=b.id, bare_stream", "table(", ""},
+		{"comma after ASOF JOIN ON predicate", "SELECT * FROM table(a) ASOF JOIN table(b) ON a.t<b.t, bare_stream", "table(", ""},
+		{"comma after chained JOIN ON predicates", "SELECT * FROM table(a) JOIN table(b) ON a.id=b.id JOIN table(c) ON b.id=c.id, bare_stream", "table(", ""},
+
+		// Legit joins that must keep working (regression guard).
+		{"plain join on", "SELECT * FROM table(a) JOIN table(b) ON a.id=b.id", "", "LIMIT 100"},
+		{"join using", "SELECT * FROM table(a) JOIN table(b) USING (id)", "", "LIMIT 100"},
+		{"left join on", "SELECT * FROM table(a) LEFT JOIN table(b) ON a.id=b.id", "", "LIMIT 100"},
+		{"right join on", "SELECT * FROM table(a) RIGHT JOIN table(b) ON a.id=b.id", "", "LIMIT 100"},
+		{"inner join on", "SELECT * FROM table(a) INNER JOIN table(b) ON a.id=b.id", "", "LIMIT 100"},
+		{"cross join", "SELECT * FROM table(a) CROSS JOIN table(b)", "", "LIMIT 100"},
+		{"asof join on", "SELECT * FROM table(a) ASOF JOIN table(b) ON a.t<b.t", "", "LIMIT 100"},
+		{"chained joins no trailing comma", "SELECT * FROM table(a) JOIN table(b) ON a.id=b.id JOIN table(c) ON b.id=c.id", "", "LIMIT 100"},
+		{"aliased join", "SELECT * FROM table(a) t1 JOIN table(b) t2 ON t1.id=t2.id", "", "LIMIT 100"},
+		{"where after join", "SELECT * FROM table(a) JOIN table(b) ON a.id=b.id WHERE a.id > 0", "", "LIMIT 100"},
+		{"group order limit after join", "SELECT * FROM table(a) JOIN table(b) ON a.id=b.id GROUP BY a.id ORDER BY a.id LIMIT 5", "", "LIMIT 5"},
+		{"having after join", "SELECT * FROM table(a) JOIN table(b) ON a.id=b.id GROUP BY a.id HAVING count(*) > 1", "", "LIMIT 100"},
+		{"system table joined", "SELECT * FROM system.tables t JOIN table(a) ON t.name=a.name", "", "LIMIT 100"},
+		{"cte with join", "WITH t AS (SELECT 1) SELECT * FROM t", "", "LIMIT 100"},
+		{"nested subquery with join", "SELECT * FROM (SELECT * FROM table(a) JOIN table(b) ON a.id=b.id)", "", "LIMIT 100"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out, err := ValidateReadOnlySQL(c.sql, 1000)
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected reject: %v", err)
+				}
+				if !strings.Contains(out, c.wantIn) {
+					t.Fatalf("rewritten %q missing %q", out, c.wantIn)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("want error containing %q, got %v", c.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestRunSQLSkillMetadata(t *testing.T) {
 	s := NewRunSQL()
 	if s.Name() != "run_sql" {

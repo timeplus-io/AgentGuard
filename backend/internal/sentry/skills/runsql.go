@@ -48,6 +48,14 @@ var (
 	asKeywordRe           = regexp.MustCompile(`(?i)^AS\b`)
 	reservedAfterSourceRe = regexp.MustCompile(`(?i)^(JOIN|INNER|LEFT|RIGHT|FULL|CROSS|OUTER|SEMI|ANTI|ANY|ALL|ASOF|WHERE|GROUP|ORDER|HAVING|LIMIT|UNION|EXCEPT|INTERSECT|ON|USING|SETTINGS|ARRAY|WITH|PREWHERE|QUALIFY|FORMAT|INTO)$`)
 
+	// joinLeadKeywordRe/joinModifierRe identify the subset of
+	// reservedAfterSourceRe that introduces a joined source (a bare "JOIN",
+	// or a modifier that precedes one, e.g. "LEFT"/"ASOF"). joinModifierRe
+	// excludes JOIN itself — it is used by skipJoinKeyword to walk past zero
+	// or more modifiers before the mandatory literal JOIN token.
+	joinLeadKeywordRe = regexp.MustCompile(`(?i)^(JOIN|INNER|LEFT|RIGHT|FULL|CROSS|OUTER|SEMI|ANTI|ANY|ALL|ASOF)$`)
+	joinModifierRe    = regexp.MustCompile(`(?i)^(INNER|LEFT|RIGHT|FULL|CROSS|OUTER|SEMI|ANTI|ANY|ALL|ASOF)$`)
+
 	// CTE name collection: the first "WITH <name> AS" and any subsequent
 	// ", <name> AS (" in a comma-separated WITH list.
 	cteFirstRe = regexp.MustCompile(`(?i)\bWITH\s+(\w+)\s+AS\b`)
@@ -216,6 +224,111 @@ func skipAlias(s string) string {
 	return t[len(name):]
 }
 
+// skipJoinKeyword skips a join-lead sequence at the start of s — zero or
+// more modifiers (LEFT/RIGHT/INNER/FULL/CROSS/OUTER/SEMI/ANTI/ANY/ALL/ASOF)
+// followed by the mandatory literal "JOIN" — and returns what follows the
+// "JOIN" token (the joined source, still to be validated by the caller). s
+// must start with a token matching joinLeadKeywordRe (the caller checks
+// this before calling). Every iteration consumes a token, so this always
+// terminates; an unrecognized token before a "JOIN" is reached is rejected
+// rather than silently skipped.
+func skipJoinKeyword(s string) (string, error) {
+	for {
+		s = strings.TrimLeft(s, " \t\n\r")
+		tok := identRe.FindString(s)
+		if tok == "" {
+			return "", fmt.Errorf("expected JOIN keyword near %q — rejected for safety", errSnippet(s))
+		}
+		if strings.EqualFold(tok, "JOIN") {
+			return s[len(tok):], nil
+		}
+		if !joinModifierRe.MatchString(tok) {
+			return "", fmt.Errorf("expected JOIN keyword near %q — rejected for safety", errSnippet(s))
+		}
+		s = s[len(tok):]
+	}
+}
+
+// consumeUntilTopLevelStop scans s — the text immediately after an ON/USING
+// keyword — for the end of that clause's predicate expression, tracking
+// parenthesis depth so a comma or keyword nested inside the predicate's own
+// parens (a function call, a sub-expression) doesn't end it prematurely. It
+// stops at, and does NOT consume:
+//   - a depth-0 comma (the predicate is done; a comma-joined source follows);
+//   - a depth-0 occurrence of any reservedAfterSourceRe keyword (this covers
+//     both a chained JOIN — "... ON a=b JOIN c ON ..." — and every
+//     FROM-terminating clause keyword: WHERE/GROUP/ORDER/HAVING/LIMIT/
+//     SETTINGS/UNION/EXCEPT/INTERSECT/WITH/PREWHERE/QUALIFY/ARRAY/FORMAT/
+//     INTO, plus a bare ON/USING which would indicate malformed SQL);
+//   - a depth-0 ")" that has no matching "(" within s itself — this closes a
+//     paren opened before the clause started (an enclosing subquery/CTE/
+//     function-arg scope), so it isn't part of the predicate.
+//
+// It returns len(s) (consuming everything) at end of string. The returned
+// value is always the number of bytes to consume, so the caller resumes
+// scanning exactly at the stop token.
+func consumeUntilTopLevelStop(s string) int {
+	depth := 0
+	i := 0
+	for i < len(s) {
+		c := s[i]
+		switch {
+		case c == '(':
+			depth++
+			i++
+		case c == ')':
+			if depth == 0 {
+				return i
+			}
+			depth--
+			i++
+		case depth == 0 && c == ',':
+			return i
+		case depth == 0 && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'):
+			tok := identRe.FindString(s[i:])
+			if reservedAfterSourceRe.MatchString(tok) {
+				return i
+			}
+			i += len(tok)
+		default:
+			i++
+		}
+	}
+	return len(s)
+}
+
+// consumeOnClause consumes an "ON <predicate>" clause at the start of
+// trimmed (trimmed must start with the "ON" token) and returns what follows
+// the predicate — a depth-0 comma, a depth-0 clause/JOIN keyword, a
+// depth-0 ")" belonging to an enclosing scope, or "" at end of string — so
+// the caller can resume its FROM-list continuation check right there.
+func consumeOnClause(trimmed string) string {
+	tok := identRe.FindString(trimmed) // "ON"
+	rest := strings.TrimLeft(trimmed[len(tok):], " \t\n\r")
+	n := consumeUntilTopLevelStop(rest)
+	return rest[n:]
+}
+
+// consumeUsingClause consumes a "USING (<cols>)" or "USING <col>" clause at
+// the start of trimmed (trimmed must start with the "USING" token) and
+// returns what follows it, on the same terms as consumeOnClause. The
+// parenthesized column-list form is the common one and is skipped via the
+// existing matching-close helper; a non-paren column-ref form falls back to
+// the generic predicate scanner.
+func consumeUsingClause(trimmed string) (string, error) {
+	tok := identRe.FindString(trimmed) // "USING"
+	rest := strings.TrimLeft(trimmed[len(tok):], " \t\n\r")
+	if strings.HasPrefix(rest, "(") {
+		idx := findMatchingClose(rest[1:])
+		if idx == -1 {
+			return "", fmt.Errorf("unbalanced parentheses in USING clause — rejected for safety")
+		}
+		return rest[idx+2:], nil
+	}
+	n := consumeUntilTopLevelStop(rest)
+	return rest[n:], nil
+}
+
 // maxErrSnippetLen bounds how much of the offending FROM-clause tail is
 // echoed back in the "unrecognized token" error below.
 const maxErrSnippetLen = 40
@@ -254,15 +367,27 @@ func parenDepthBefore(scan string, idx int) int {
 // Timeplus; historical reads must go through table(...).
 //
 // Each FROM/JOIN source can itself be followed by further comma-separated
-// relations (e.g. "FROM table(a), agentguard_cim_event"); after validating
-// one source and skipping at most one optional "[AS] alias" token,
-// checkBareStreams inspects the next non-whitespace token and continues or
-// stops ONLY when that token is recognized:
+// relations (e.g. "FROM table(a), agentguard_cim_event"), or by a JOIN
+// whose ON/USING predicate is in turn followed by further comma-separated
+// relations (e.g. "FROM table(a) JOIN table(b) ON a.id=b.id, bare_stream").
+// After validating one source and skipping at most one optional
+// "[AS] alias" token, checkBareStreams inspects the next non-whitespace
+// token and continues or stops ONLY when that token is recognized:
 //   - a comma -> validate the next source;
-//   - a recognized clause keyword (reservedAfterSourceRe: WHERE, GROUP,
-//     ORDER, HAVING, LIMIT, JOIN and its LEFT/RIGHT/INNER/OUTER/CROSS/
-//     ANY/ALL/ASOF variants, ON, USING, UNION, WITH, FORMAT, INTO, ...) ->
-//     the FROM-list ends here, cleanly;
+//   - a JOIN keyword (joinLeadKeywordRe: JOIN itself, or a modifier that
+//     precedes it — LEFT/RIGHT/INNER/FULL/CROSS/OUTER/SEMI/ANTI/ANY/ALL/
+//     ASOF) -> skip the modifier(s) and the "JOIN" token, then validate the
+//     next source (the joined table) exactly as above — chained joins
+//     ("A JOIN B ON .. JOIN C ON ..") recurse through this same step;
+//   - ON/USING -> consume that clause's predicate (paren-depth-aware, via
+//     consumeOnClause/consumeUsingClause) and resume this same check on
+//     whatever follows the predicate, rather than stopping — this is what
+//     lets a comma-joined source (or a further chained JOIN) after the
+//     predicate still be reached and validated;
+//   - any other recognized clause keyword (the remainder of
+//     reservedAfterSourceRe: WHERE, GROUP, ORDER, HAVING, LIMIT, UNION,
+//     EXCEPT, INTERSECT, SETTINGS, ARRAY, WITH, PREWHERE, QUALIFY, FORMAT,
+//     INTO) -> the FROM-list ends here, cleanly;
 //   - end of string -> the FROM-list ends here, cleanly;
 //   - a ")" that closes a paren opened before this FROM/JOIN's own source
 //     list started (parenDepthBefore > 0, i.e. this FROM lives inside an
@@ -281,6 +406,8 @@ func checkBareStreams(scan string) error {
 	for _, loc := range fromJoinRe.FindAllStringIndex(scan, -1) {
 		startDepth := parenDepthBefore(scan, loc[1])
 		cursor := scan[loc[1]:]
+
+	sourceLoop:
 		for {
 			cursor = strings.TrimLeft(cursor, " \t\n\r")
 			if cursor == "" {
@@ -292,21 +419,52 @@ func checkBareStreams(scan string) error {
 			}
 			cursor = cursor[consumed:]
 			cursor = skipAlias(cursor)
-			trimmed := strings.TrimLeft(cursor, " \t\n\r")
-			if trimmed == "" {
-				break // end of string — FROM-list ends here
+
+			// Resolve whatever follows the validated source: a comma-joined
+			// sibling, a JOIN (possibly chained through more ON/USING
+			// clauses), or a clean stop. ON/USING clauses are consumed and
+			// re-checked in place rather than ending the walk, so a source
+			// after the predicate is never skipped over unvalidated.
+			for {
+				trimmed := strings.TrimLeft(cursor, " \t\n\r")
+				if trimmed == "" {
+					break sourceLoop // end of string — FROM-list ends here
+				}
+				if strings.HasPrefix(trimmed, ",") {
+					cursor = trimmed[1:] // consume the comma
+					continue sourceLoop  // validate the next source
+				}
+				if strings.HasPrefix(trimmed, ")") && startDepth > 0 {
+					break sourceLoop // closes an enclosing subquery/CTE/function-arg scope
+				}
+				next := identRe.FindString(trimmed)
+				if next == "" {
+					return fmt.Errorf("unrecognized token in FROM clause near %q — only table(), sub-selects, system.* and CTE names are allowed", errSnippet(trimmed))
+				}
+				switch {
+				case joinLeadKeywordRe.MatchString(next):
+					rest, err := skipJoinKeyword(trimmed)
+					if err != nil {
+						return err
+					}
+					cursor = rest
+					continue sourceLoop // validate the joined source
+				case strings.EqualFold(next, "ON"):
+					cursor = consumeOnClause(trimmed)
+					continue // re-check what follows the predicate
+				case strings.EqualFold(next, "USING"):
+					rest, err := consumeUsingClause(trimmed)
+					if err != nil {
+						return err
+					}
+					cursor = rest
+					continue // re-check what follows the predicate
+				case reservedAfterSourceRe.MatchString(next):
+					break sourceLoop // WHERE/GROUP/ORDER/... clause keyword ends the FROM-list cleanly
+				default:
+					return fmt.Errorf("unrecognized token in FROM clause near %q — only table(), sub-selects, system.* and CTE names are allowed", errSnippet(trimmed))
+				}
 			}
-			if strings.HasPrefix(trimmed, ",") {
-				cursor = trimmed[1:] // consume the comma, loop to the next source
-				continue
-			}
-			if strings.HasPrefix(trimmed, ")") && startDepth > 0 {
-				break // closes an enclosing subquery/CTE/function-arg scope
-			}
-			if next := identRe.FindString(trimmed); next != "" && reservedAfterSourceRe.MatchString(next) {
-				break // recognized clause keyword ends the FROM-list cleanly
-			}
-			return fmt.Errorf("unrecognized token in FROM clause near %q — only table(), sub-selects, system.* and CTE names are allowed", errSnippet(trimmed))
 		}
 	}
 	return nil
