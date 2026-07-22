@@ -186,3 +186,67 @@ func TestGetHoldsDefaultsToPending(t *testing.T) {
 		t.Fatalf("expected a query error against an unreachable host, got %q", out)
 	}
 }
+
+// TestBuildTimelineWhereCompoundAgentID checks that a compound
+// "deploymentId__agentId" agent_id (the shape get_threats/get_holds return)
+// scopes the query by BOTH deployment_id and agent_id, matching
+// GetSessionTimeline's handler behavior (internal/handlers/session_timeline.go),
+// which treats agent identity as (deployment_id, agent_id) since agent_id is
+// not globally unique across deployments.
+func TestBuildTimelineWhereCompoundAgentID(t *testing.T) {
+	where := buildTimelineWhere("dep1__agentX", "", "sess1")
+	if !strings.Contains(where, "deployment_id = 'dep1'") {
+		t.Errorf("where clause missing deployment_id scoping: %q", where)
+	}
+	if !strings.Contains(where, "agent_id = 'agentX'") {
+		t.Errorf("where clause missing split agent_id: %q", where)
+	}
+	if !strings.Contains(where, "session_id = 'sess1'") {
+		t.Errorf("where clause missing session_id: %q", where)
+	}
+	if strings.Contains(where, "agentX__") || strings.Contains(where, "'dep1__agentX'") {
+		t.Errorf("where clause should not contain the unsplit compound id: %q", where)
+	}
+}
+
+// TestBuildTimelineWhereExplicitDeploymentID checks the explicit
+// deployment_id param is honored when the agent_id is bare.
+func TestBuildTimelineWhereExplicitDeploymentID(t *testing.T) {
+	where := buildTimelineWhere("agentX", "dep2", "sess1")
+	if !strings.Contains(where, "deployment_id = 'dep2'") {
+		t.Errorf("where clause missing explicit deployment_id: %q", where)
+	}
+	if !strings.Contains(where, "agent_id = 'agentX'") {
+		t.Errorf("where clause missing agent_id: %q", where)
+	}
+}
+
+// TestBuildTimelineWhereBareAgentID checks a bare agent_id (no compound
+// separator, no explicit deployment_id) still works, filtering on agent_id
+// alone — the documented fallback for callers without a deployment_id.
+func TestBuildTimelineWhereBareAgentID(t *testing.T) {
+	where := buildTimelineWhere("agentX", "", "sess1")
+	if strings.Contains(where, "deployment_id") {
+		t.Errorf("where clause should have no deployment_id predicate for a bare agent_id: %q", where)
+	}
+	if !strings.Contains(where, "agent_id = 'agentX'") {
+		t.Errorf("where clause missing agent_id: %q", where)
+	}
+	if !strings.Contains(where, "session_id = 'sess1'") {
+		t.Errorf("where clause missing session_id: %q", where)
+	}
+}
+
+// TestBuildTimelineWhereExplicitDeploymentIDWinsOverCompound checks that an
+// explicit deployment_id param takes precedence even if agent_id happens to
+// look compound — explicit input should never be silently overridden by a
+// heuristic split.
+func TestBuildTimelineWhereExplicitDeploymentIDWinsOverCompound(t *testing.T) {
+	where := buildTimelineWhere("dep1__agentX", "dep2", "sess1")
+	if !strings.Contains(where, "deployment_id = 'dep2'") {
+		t.Errorf("explicit deployment_id should win: %q", where)
+	}
+	if strings.Contains(where, "dep1") {
+		t.Errorf("compound deployment half should be ignored when explicit deployment_id is set: %q", where)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/timeplus/agentguard/internal/dlpquery"
@@ -390,23 +391,30 @@ type getSessionTimeline struct{}
 // (not tp.Query) for the same reason the handler does: arbitrary
 // conversation content can break the HTTP+JSON serializer.
 //
-// Unlike the handler, this skill filters on a bare agent_id (not the
-// handler's compound "deploymentId__agentId" path param split via
-// splitAgentID) since the brief's params are {agent_id, session_id, limit}
-// with no deployment_id — a caveat noted in the task report.
+// Like the handler, this skill scopes by BOTH deployment_id AND agent_id —
+// agent_id alone is not globally unique across deployments. Callers can
+// supply either a compound "deploymentId__agentId" agent_id (the shape
+// get_threats/get_holds already return) or a bare agent_id plus an explicit
+// deployment_id param; see buildTimelineWhere.
 func NewGetSessionTimeline() Skill { return getSessionTimeline{} }
 
 func (getSessionTimeline) Name() string { return "get_session_timeline" }
 func (getSessionTimeline) Description() string {
 	return "Ordered timeline of CIM events (user_input/llm_response/tool_invoke/tool_complete/session_start/session_end) for one " +
 		"agent+session, from agentguard_cim_event — the same rows the session timeline page renders. Message/tool content is " +
-		"truncated to 200 chars. Both agent_id and session_id are required."
+		"truncated to 200 chars. Both agent_id and session_id are required. agent_id may be a compound " +
+		"\"deployment_id__agent_id\" id, as returned by other tools (e.g. get_threats/get_holds); alternatively pass a bare " +
+		"agent_id along with the optional deployment_id param. A bare agent_id with no deployment_id falls back to " +
+		"agent_id-only filtering, which can commingle rows across deployments that happen to share an agent_id."
 }
 func (getSessionTimeline) Params() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"agent_id":   map[string]any{"type": "string", "description": "Agent id to scope the timeline to."},
+			"agent_id": map[string]any{"type": "string", "description": "Agent id to scope the timeline to. May be a compound " +
+				"\"deployment_id__agent_id\" id (as returned by other tools); the deployment half is then used to scope the query."},
+			"deployment_id": map[string]any{"type": "string", "description": "Optional deployment id to scope the timeline to. " +
+				"Use this alongside a bare agent_id. Takes precedence over any deployment half embedded in a compound agent_id."},
 			"session_id": map[string]any{"type": "string", "description": "Session id to scope the timeline to."},
 			"limit":      map[string]any{"type": "integer", "description": "Max events to return (default 200, max 1000)."},
 		},
@@ -415,11 +423,77 @@ func (getSessionTimeline) Params() map[string]any {
 }
 func (getSessionTimeline) Access() AccessClass { return ReadOnly }
 
+// timelineIDPartRe replicates handlers.idPartRe
+// (internal/handlers/agents.go), which constrains each half of a compound
+// "deploymentId__agentId" id. Duplicated here — like curatedHoldsLatestSubquery
+// above — because internal/sentry/skills cannot import internal/handlers.
+var timelineIDPartRe = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// splitCompoundAgentID replicates splitAgentID from
+// internal/handlers/agent_sessions.go verbatim (SplitN on "__", both halves
+// must match timelineIDPartRe) — it's unexported there, and this package
+// cannot import internal/handlers, so the logic is duplicated rather than
+// shared.
+func splitCompoundAgentID(compoundID string) (deploymentID, agentID string, ok bool) {
+	parts := strings.SplitN(compoundID, "__", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	if !timelineIDPartRe.MatchString(parts[0]) || !timelineIDPartRe.MatchString(parts[1]) {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+// buildTimelineWhere builds the get_session_timeline WHERE clause (without
+// the leading "WHERE " keyword and without the event_type/LIMIT terms),
+// mirroring GetSessionTimeline's deployment_id+agent_id scoping in
+// internal/handlers/session_timeline.go — this codebase treats agent
+// identity as the compound (deployment_id, agent_id) since agent_id is not
+// globally unique across deployments.
+//
+// rawAgentID is always parsed via splitCompoundAgentID first: when it splits,
+// agentID becomes the agent half regardless of explicitDeploymentID (parsing
+// the compound shape is independent of which deployment_id ends up used).
+//
+// Deployment resolution order:
+//  1. explicitDeploymentID, if non-empty, wins outright — it is never
+//     silently overridden by a compound rawAgentID's deployment half.
+//  2. else, the compound split's deployment half (if rawAgentID split).
+//  3. else, no deployment_id predicate is added: bare agent_id filtering
+//     only, a documented fallback for callers that don't have a
+//     deployment_id (this can commingle rows across deployments that share
+//     an agent_id — see the skill Description).
+//
+// All string components are escaped via dlpquery.EscapeSQLStr.
+func buildTimelineWhere(rawAgentID, explicitDeploymentID, sessionID string) string {
+	agentID := rawAgentID
+	splitDeploymentID, splitAgentID, split := splitCompoundAgentID(rawAgentID)
+	if split {
+		agentID = splitAgentID
+	}
+
+	deploymentID := strings.TrimSpace(explicitDeploymentID)
+	if deploymentID == "" && split {
+		deploymentID = splitDeploymentID
+	}
+
+	where := make([]string, 0, 3)
+	if deploymentID != "" {
+		where = append(where, fmt.Sprintf("deployment_id = '%s'", dlpquery.EscapeSQLStr(deploymentID)))
+	}
+	where = append(where, fmt.Sprintf("agent_id = '%s'", dlpquery.EscapeSQLStr(agentID)))
+	where = append(where, fmt.Sprintf("session_id = '%s'", dlpquery.EscapeSQLStr(sessionID)))
+
+	return strings.Join(where, " AND ")
+}
+
 func (getSessionTimeline) Execute(_ context.Context, rc *RunContext, args json.RawMessage) (string, error) {
 	var a struct {
-		AgentID   string `json:"agent_id"`
-		SessionID string `json:"session_id"`
-		Limit     int    `json:"limit"`
+		AgentID      string `json:"agent_id"`
+		DeploymentID string `json:"deployment_id"`
+		SessionID    string `json:"session_id"`
+		Limit        int    `json:"limit"`
 	}
 	if err := json.Unmarshal(args, &a); err != nil {
 		return "error: get_session_timeline needs {\"agent_id\": \"...\", \"session_id\": \"...\"} arguments", nil
@@ -440,11 +514,11 @@ SELECT event_time, event_type, run_id, tool_name,
        left(assistant_message, 200) AS assistant_message,
        model, provider, hook_decision, block_reason
 FROM table(agentguard_cim_event)
-WHERE agent_id = '%s' AND session_id = '%s'
+WHERE %s
   AND event_type IN (%s)
 ORDER BY event_time ASC
 LIMIT %d`,
-		dlpquery.EscapeSQLStr(agentID), dlpquery.EscapeSQLStr(sessionID),
+		buildTimelineWhere(agentID, strings.TrimSpace(a.DeploymentID), sessionID),
 		timelineEventTypesCurated, limit)
 
 	rows, err := tp.QueryNative(&rc.Cfg.Timeplus, sql)
