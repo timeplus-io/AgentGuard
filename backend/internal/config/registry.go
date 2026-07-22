@@ -126,9 +126,11 @@ func Registry() []KeyMeta {
 
 		// ── sentry ──
 		{Key: "sentry.enabled", Section: "sentry", Label: "Enable Sentry agent",
-			Description: "Conversational security analyst agent (chat, SQL skills). Runtime model settings live in the sentry_chat config row.", Type: TypeBool},
+			Description: "Conversational security analyst agent (chat, SQL skills). Runtime model settings live in the sentry_chat config row.",
+			Type:        TypeBool, EnvVar: "SENTRY_ENABLED"},
 		{Key: "sentry.skill_dir", Section: "sentry", Label: "SQL skill directory override",
-			Description: "Optional path to an updated timeplus-sql-guide skill directory; empty uses the embedded copy.", Type: TypeString},
+			Description: "Optional path to an updated timeplus-sql-guide skill directory; empty uses the embedded copy.",
+			Type:        TypeString, EnvVar: "SENTRY_SKILL_DIR"},
 
 		// ── setup ──
 		{Key: "setup.complete", Section: "setup", Label: "Setup complete",

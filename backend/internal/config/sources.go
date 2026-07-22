@@ -192,6 +192,10 @@ func EffectiveValue(cfg *Config, key string) any {
 		return cfg.DLP.RequestTimeoutSeconds
 	case "dlp.max_output_tokens":
 		return cfg.DLP.MaxOutputTokens
+	case "sentry.enabled":
+		return cfg.Sentry.Enabled
+	case "sentry.skill_dir":
+		return cfg.Sentry.SkillDir
 	case "setup.complete":
 		return cfg.SetupComplete
 	}
@@ -240,6 +244,10 @@ func ApplyChange(cfg *Config, key string, value any) error {
 		return setInt(&cfg.DLP.RequestTimeoutSeconds, value)
 	case "dlp.max_output_tokens":
 		return setInt(&cfg.DLP.MaxOutputTokens, value)
+	case "sentry.enabled":
+		return setBool(&cfg.Sentry.Enabled, value)
+	case "sentry.skill_dir":
+		return setString(&cfg.Sentry.SkillDir, value)
 	}
 	return fmt.Errorf("key %q cannot be applied", key)
 }

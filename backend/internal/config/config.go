@@ -79,15 +79,15 @@ type ProvisionedDLP struct {
 }
 
 type Config struct {
-	Server        ServerConfig
-	Timeplus      TimeplusConfig
-	CatalogDir    string
-	AgentGuardURL string
-	SetupComplete bool
-	Holds         HoldsConfig `mapstructure:"holds"`
-	DLP           DLPConfig   `mapstructure:"dlp"`
+	Server         ServerConfig
+	Timeplus       TimeplusConfig
+	CatalogDir     string
+	AgentGuardURL  string
+	SetupComplete  bool
+	Holds          HoldsConfig    `mapstructure:"holds"`
+	DLP            DLPConfig      `mapstructure:"dlp"`
 	ProvisionedDLP ProvisionedDLP // loaded from provisioned.dlp.* in config.yaml
-	Sentry        SentryConfig `mapstructure:"sentry"`
+	Sentry         SentryConfig   `mapstructure:"sentry"`
 	// ConfigPath is the file path this config was loaded from (or will be written to).
 	// Populated by the caller after Load(); not read from the config file itself.
 	ConfigPath string
@@ -268,6 +268,8 @@ func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("dlp.summary_model", "DLP_SUMMARY_MODEL")
 	_ = v.BindEnv("dlp.request_timeout_seconds", "DLP_REQUEST_TIMEOUT_SECONDS")
 	_ = v.BindEnv("dlp.max_output_tokens", "DLP_MAX_OUTPUT_TOKENS")
+	_ = v.BindEnv("sentry.enabled", "SENTRY_ENABLED")
+	_ = v.BindEnv("sentry.skill_dir", "SENTRY_SKILL_DIR")
 }
 
 // Save writes non-sensitive config fields to the specified path (typically "config.yaml").
