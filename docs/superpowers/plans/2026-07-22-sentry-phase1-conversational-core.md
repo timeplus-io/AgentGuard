@@ -1314,7 +1314,7 @@ func (f *fakeLLM) ChatStream(_ context.Context, _ ChatCfg, msgs []Msg, _ []ToolD
 
 Tests (use a `Store` with a nil TP guarded by a `persist bool` field — add `Store.Disabled bool` that turns Append/Touch/NextSeq into no-ops returning seq counters from memory, so loop tests need no Timeplus):
 
-1. `TestLoopToolRoundTrip`: script = [{ToolCalls: [{ID:"1", Name:"echo", Args:`{}`}]}, {Content:"final"}]; registry has a fake `echo` skill returning `"pong"`. Assert emitted event sequence types = `[meta tool_call tool_result token done]`, second LLM call's messages end with role=tool содержimo "pong" — assert `f.gotMsgs[1]` last Msg has Role "tool", Content "pong", ToolCallID "1".
+1. `TestLoopToolRoundTrip`: script = [{ToolCalls: [{ID:"1", Name:"echo", Args:`{}`}]}, {Content:"final"}]; registry has a fake `echo` skill returning `"pong"`. Assert emitted event sequence types = `[meta tool_call tool_result token done]`, second LLM call's messages end with a tool message containing "pong" — assert `f.gotMsgs[1]` last Msg has Role "tool", Content "pong", ToolCallID "1".
 2. `TestLoopIterationBudget`: script returns a tool call every time; `cc.MaxIterations=3`. Assert the loop stops, the final LLM call is made with tools **omitted** (forced answer — assert via a fake that records the tools arg length), and a `done` event is emitted.
 3. `TestLoopUnknownTool`: model calls a non-registered tool → tool_result contains `"unknown tool"`, loop continues to the scripted final answer.
 4. `TestLoopSystemPromptCard`: `cc.SystemPrompt = "X {schema_card} Y"` → first call's msgs[0].Content contains "agentguard_cim_event" (schema card substituted).
