@@ -153,6 +153,54 @@ func TestValidateReadOnlySQLTask7NoDuplicateLimitAppend(t *testing.T) {
 	}
 }
 
+// TestValidateReadOnlySQLFromWalkFailClosed covers a bypass found in the
+// FROM-list comma-walk: the alias-skip consumed at most one pseudo-alias
+// token, then silently stopped (returned nil) if the next non-whitespace
+// token wasn't a comma — so an extra/unrecognized token (SAMPLE, a second
+// alias-shaped word, ...) between a validated source and a comma-joined
+// bare stream let that bare stream slip through unvalidated. The fix makes
+// the walk fail-closed: after a source + optional alias, the next token
+// must be a comma, a recognized clause keyword, end-of-string, or a ")"
+// closing an enclosing scope — anything else is rejected.
+func TestValidateReadOnlySQLFromWalkFailClosed(t *testing.T) {
+	cases := []struct {
+		name, sql string
+		wantErr   string
+		wantIn    string
+	}{
+		// Bypasses that must become rejects.
+		{"sample before comma bypass", "SELECT * FROM table(a) SAMPLE 0.1, bare_stream", "unrecognized token in FROM clause", ""},
+		{"sample offset before comma bypass", "SELECT * FROM table(a) SAMPLE 0.1 OFFSET 0.5, bare_stream", "unrecognized token in FROM clause", ""},
+		{"extra alias token bypass", "SELECT * FROM table(a) x y, bare_stream", "unrecognized token in FROM clause", ""},
+		// Accepts that must keep working (regression guard).
+		{"table call no alias", "SELECT * FROM table(a)", "", "LIMIT 100"},
+		{"table call bare alias", "SELECT * FROM table(a) t1", "", "LIMIT 100"},
+		{"table call as alias", "SELECT * FROM table(a) AS t1", "", "LIMIT 100"},
+		{"two table sources", "SELECT * FROM table(a), table(b)", "", "LIMIT 100"},
+		{"two table sources with aliases", "SELECT * FROM table(a) t1, table(b) t2", "", "LIMIT 100"},
+		{"clause keywords after source", "SELECT * FROM table(a) WHERE x > 0 GROUP BY y ORDER BY z LIMIT 5", "", "LIMIT 5"},
+		{"join two table sources", "SELECT * FROM table(a) JOIN table(b) ON a.id=b.id", "", "LIMIT 100"},
+		{"cte reference", "WITH t AS (SELECT 1) SELECT * FROM t", "", "LIMIT 100"},
+		{"system tables", "SELECT name FROM system.tables", "", "LIMIT 100"},
+		{"subquery wrapping table", "SELECT * FROM (SELECT a, b FROM table(x))", "", "LIMIT 100"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out, err := ValidateReadOnlySQL(c.sql, 1000)
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected reject: %v", err)
+				}
+				if !strings.Contains(out, c.wantIn) {
+					t.Fatalf("rewritten %q missing %q", out, c.wantIn)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("want error containing %q, got %v", c.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestRunSQLSkillMetadata(t *testing.T) {
 	s := NewRunSQL()
 	if s.Name() != "run_sql" {

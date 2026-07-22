@@ -46,7 +46,7 @@ var (
 	// reservedAfterSourceRe stops the alias-skip from swallowing the next
 	// clause keyword (JOIN, WHERE, GROUP BY, ...) as if it were an alias.
 	asKeywordRe           = regexp.MustCompile(`(?i)^AS\b`)
-	reservedAfterSourceRe = regexp.MustCompile(`(?i)^(JOIN|INNER|LEFT|RIGHT|FULL|CROSS|OUTER|SEMI|ANTI|ASOF|WHERE|GROUP|ORDER|HAVING|LIMIT|UNION|EXCEPT|INTERSECT|ON|USING|SETTINGS|ARRAY|WITH|PREWHERE|QUALIFY)$`)
+	reservedAfterSourceRe = regexp.MustCompile(`(?i)^(JOIN|INNER|LEFT|RIGHT|FULL|CROSS|OUTER|SEMI|ANTI|ANY|ALL|ASOF|WHERE|GROUP|ORDER|HAVING|LIMIT|UNION|EXCEPT|INTERSECT|ON|USING|SETTINGS|ARRAY|WITH|PREWHERE|QUALIFY|FORMAT|INTO)$`)
 
 	// CTE name collection: the first "WITH <name> AS" and any subsequent
 	// ", <name> AS (" in a comma-separated WITH list.
@@ -216,6 +216,37 @@ func skipAlias(s string) string {
 	return t[len(name):]
 }
 
+// maxErrSnippetLen bounds how much of the offending FROM-clause tail is
+// echoed back in the "unrecognized token" error below.
+const maxErrSnippetLen = 40
+
+func errSnippet(s string) string {
+	if len(s) <= maxErrSnippetLen {
+		return s
+	}
+	return s[:maxErrSnippetLen] + "..."
+}
+
+// parenDepthBefore returns the net paren-nesting depth of scan[:idx] (count
+// of unmatched "(" before idx). checkBareStreams uses this to tell whether
+// a ")" encountered while walking a FROM-list closes a scope (subquery, CTE
+// body, function argument) that was opened before this FROM/JOIN keyword —
+// in which case it's the legitimate end of this nested FROM-list — versus
+// an unbalanced/injected ")" with no corresponding open paren at this
+// FROM's own level, which must be rejected instead.
+func parenDepthBefore(scan string, idx int) int {
+	depth := 0
+	for i := 0; i < idx; i++ {
+		switch scan[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		}
+	}
+	return depth
+}
+
 // checkBareStreams rejects any FROM/JOIN source that is a bare stream
 // identifier — i.e. not a subquery "(", not "table(...)", not a
 // "system.<table>" reference, and not a name defined by a preceding WITH
@@ -224,12 +255,31 @@ func skipAlias(s string) string {
 //
 // Each FROM/JOIN source can itself be followed by further comma-separated
 // relations (e.g. "FROM table(a), agentguard_cim_event"); after validating
-// one source, checkBareStreams skips its optional alias and, if a
-// top-level comma follows, validates the next source the same way — so a
-// bare stream can't hide behind an earlier, legitimate first source.
+// one source and skipping at most one optional "[AS] alias" token,
+// checkBareStreams inspects the next non-whitespace token and continues or
+// stops ONLY when that token is recognized:
+//   - a comma -> validate the next source;
+//   - a recognized clause keyword (reservedAfterSourceRe: WHERE, GROUP,
+//     ORDER, HAVING, LIMIT, JOIN and its LEFT/RIGHT/INNER/OUTER/CROSS/
+//     ANY/ALL/ASOF variants, ON, USING, UNION, WITH, FORMAT, INTO, ...) ->
+//     the FROM-list ends here, cleanly;
+//   - end of string -> the FROM-list ends here, cleanly;
+//   - a ")" that closes a paren opened before this FROM/JOIN's own source
+//     list started (parenDepthBefore > 0, i.e. this FROM lives inside an
+//     enclosing subquery/CTE-body/function-arg) -> that enclosing scope is
+//     closing, so this FROM-list ends here, cleanly;
+//   - anything else -> REJECT.
+//
+// This is deliberately fail-closed: an unrecognized token (SAMPLE, FINAL, a
+// second alias-shaped word, ...) between a validated source and whatever
+// follows must never be silently treated as "end of FROM-list", because
+// that would let a comma-joined bare stream hide behind it unvalidated.
+// Some legitimate modifiers we don't parse (SAMPLE/FINAL) are rejected as
+// an acceptable Phase 1 false-reject — the caller can rephrase.
 func checkBareStreams(scan string) error {
 	ctes := collectCTENames(scan)
 	for _, loc := range fromJoinRe.FindAllStringIndex(scan, -1) {
+		startDepth := parenDepthBefore(scan, loc[1])
 		cursor := scan[loc[1]:]
 		for {
 			cursor = strings.TrimLeft(cursor, " \t\n\r")
@@ -243,10 +293,20 @@ func checkBareStreams(scan string) error {
 			cursor = cursor[consumed:]
 			cursor = skipAlias(cursor)
 			trimmed := strings.TrimLeft(cursor, " \t\n\r")
-			if !strings.HasPrefix(trimmed, ",") {
-				break
+			if trimmed == "" {
+				break // end of string — FROM-list ends here
 			}
-			cursor = trimmed[1:] // consume the comma, loop to the next source
+			if strings.HasPrefix(trimmed, ",") {
+				cursor = trimmed[1:] // consume the comma, loop to the next source
+				continue
+			}
+			if strings.HasPrefix(trimmed, ")") && startDepth > 0 {
+				break // closes an enclosing subquery/CTE/function-arg scope
+			}
+			if next := identRe.FindString(trimmed); next != "" && reservedAfterSourceRe.MatchString(next) {
+				break // recognized clause keyword ends the FROM-list cleanly
+			}
+			return fmt.Errorf("unrecognized token in FROM clause near %q — only table(), sub-selects, system.* and CTE names are allowed", errSnippet(trimmed))
 		}
 	}
 	return nil
