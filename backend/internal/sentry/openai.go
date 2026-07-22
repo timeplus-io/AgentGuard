@@ -61,7 +61,11 @@ func (openaiLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools [
 		Messages:            oaMsgs,
 		Tools:               oaTools,
 		MaxCompletionTokens: openai.Int(int64(cc.MaxTokens)),
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{
+			IncludeUsage: openai.Bool(true),
+		},
 	})
+	defer stream.Close()
 
 	acc := openai.ChatCompletionAccumulator{}
 	for stream.Next() {
