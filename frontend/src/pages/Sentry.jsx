@@ -192,6 +192,17 @@ export default function Sentry() {
     }
   }
 
+  // finalizeOpenBubble clears pending:false on the currently-open assistant
+  // bubble (if any) and nulls the ref. Call this everywhere the open
+  // assistant bubble is being closed/abandoned -- otherwise its pending
+  // cursor is left dangling (permanent pulsing cursor).
+  function finalizeOpenBubble() {
+    const openId = openAssistantIdRef.current
+    if (!openId) return
+    setMessages(prev => prev.map(m => m.id === openId ? { ...m, pending: false } : m))
+    openAssistantIdRef.current = null
+  }
+
   async function send() {
     const text = input.trim()
     if (!text || streaming) return
@@ -224,7 +235,7 @@ export default function Sentry() {
             break
 
           case 'tool_call':
-            openAssistantIdRef.current = null // a fresh assistant bubble starts after this
+            finalizeOpenBubble() // a fresh assistant bubble starts after this
             setMessages(prev => prev.some(m => m.id === ev.id)
               ? prev
               : [...prev, { id: ev.id, role: 'tool', name: ev.name, args: ev.args, result: null, truncated: false, pending: true }])
@@ -237,12 +248,11 @@ export default function Sentry() {
             break
 
           case 'done':
-            setMessages(prev => prev.map(m => m.id === openAssistantIdRef.current ? { ...m, pending: false } : m))
-            openAssistantIdRef.current = null
+            finalizeOpenBubble()
             break
 
           case 'error':
-            openAssistantIdRef.current = null
+            finalizeOpenBubble()
             setMessages(prev => [...prev, { id: localId('error'), role: 'error', content: ev.message || 'Sentry error' }])
             break
 
@@ -251,6 +261,7 @@ export default function Sentry() {
         }
       }
     } catch (err) {
+      finalizeOpenBubble()
       if (err?.name !== 'AbortError') {
         setMessages(prev => [...prev, { id: localId('error'), role: 'error', content: err?.message || 'Chat request failed' }])
       }

@@ -56,6 +56,18 @@ var (
 	joinLeadKeywordRe = regexp.MustCompile(`(?i)^(JOIN|INNER|LEFT|RIGHT|FULL|CROSS|OUTER|SEMI|ANTI|ANY|ALL|ASOF)$`)
 	joinModifierRe    = regexp.MustCompile(`(?i)^(INNER|LEFT|RIGHT|FULL|CROSS|OUTER|SEMI|ANTI|ANY|ALL|ASOF)$`)
 
+	// allowedSystemTables is the exact set of "system.<table>" reads the
+	// skills legitimately need for diagnostics (MV health, schema
+	// discovery). Any other system.* identifier (system.users,
+	// system.settings, system.processes, ...) is rejected — these can leak
+	// credentials/config or other operator-sensitive state.
+	allowedSystemTables = map[string]bool{
+		"tables":             true,
+		"columns":            true,
+		"functions":          true,
+		"v_failed_mat_views": true,
+	}
+
 	// CTE name collection: the first "WITH <name> AS" and any subsequent
 	// ", <name> AS (" in a comma-separated WITH list.
 	cteFirstRe = regexp.MustCompile(`(?i)\bWITH\s+(\w+)\s+AS\b`)
@@ -188,7 +200,11 @@ func validateSource(rest string, ctes map[string]bool) (int, error) {
 		if name == "" {
 			return 0, fmt.Errorf("could not parse source after FROM/JOIN — rejected for safety")
 		}
-		return len(name), nil // system.<table>
+		table := name[7:]
+		if !allowedSystemTables[strings.ToLower(table)] {
+			return 0, fmt.Errorf("only system.tables/columns/functions/v_failed_mat_views are readable — rejected for safety")
+		}
+		return len(name), nil // allowlisted system.<table>
 	}
 	name := identRe.FindString(rest)
 	if name == "" {

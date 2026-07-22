@@ -256,6 +256,45 @@ func TestValidateReadOnlySQLJoinPredicateCommaBypass(t *testing.T) {
 	}
 }
 
+// TestValidateReadOnlySQLSystemAllowlist covers the fix restricting
+// "system.*" reads to an explicit allowlist of diagnostic tables
+// (system.tables/columns/functions/v_failed_mat_views) instead of any
+// system.* identifier — system.users/settings/processes etc. must now be
+// rejected.
+func TestValidateReadOnlySQLSystemAllowlist(t *testing.T) {
+	cases := []struct {
+		name, sql string
+		wantErr   string
+		wantIn    string
+	}{
+		{"system.tables allowed", "SELECT name FROM system.tables", "", "LIMIT 100"},
+		{"system.columns allowed", "SELECT * FROM system.columns", "", "LIMIT 100"},
+		{"system.functions allowed", "SELECT * FROM system.functions", "", "LIMIT 100"},
+		{"system.v_failed_mat_views allowed", "SELECT * FROM system.v_failed_mat_views", "", "LIMIT 100"},
+		{"system.tables in join allowed", "SELECT * FROM system.tables t JOIN table(a) ON t.name=a.name", "", "LIMIT 100"},
+		{"system.users rejected", "SELECT * FROM system.users", "only system.tables/columns/functions/v_failed_mat_views are readable", ""},
+		// "settings" also collides with the forbidden SETTINGS keyword, so
+		// this is rejected earlier in the pipeline (still a reject either way).
+		{"system.settings rejected", "SELECT * FROM system.settings", "forbidden keyword", ""},
+		{"system.processes rejected", "SELECT * FROM system.processes", "only system.tables/columns/functions/v_failed_mat_views are readable", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out, err := ValidateReadOnlySQL(c.sql, 1000)
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected reject: %v", err)
+				}
+				if !strings.Contains(out, c.wantIn) {
+					t.Fatalf("rewritten %q missing %q", out, c.wantIn)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("want error containing %q, got %v", c.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestRunSQLSkillMetadata(t *testing.T) {
 	s := NewRunSQL()
 	if s.Name() != "run_sql" {

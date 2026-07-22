@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -41,6 +42,10 @@ func TestNextSeqFromRows(t *testing.T) {
 		{"single row float64 max_seq", []tp.Row{{"max_seq": float64(5)}}, 6},
 		{"single row int max_seq", []tp.Row{{"max_seq": 41}}, 42},
 		{"single row uint32 max_seq", []tp.Row{{"max_seq": uint32(0)}}, 1},
+		// tp.Query decodes numeric JSON fields via dec.UseNumber() (see
+		// client.go), so the actual type nextSeqFromRows sees in production
+		// is json.Number, not a native Go numeric type — cover that shape.
+		{"single row json.Number max_seq", []tp.Row{{"max_seq": json.Number("41")}}, 42},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
