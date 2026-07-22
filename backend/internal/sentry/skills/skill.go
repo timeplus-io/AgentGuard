@@ -72,6 +72,9 @@ const truncMarker = "... [truncated]"
 
 // Truncate caps s at max bytes on a rune boundary, marking the cut.
 func Truncate(s string, max int) (string, bool) {
+	if max < 0 {
+		max = 0
+	}
 	if len(s) <= max {
 		return s, false
 	}

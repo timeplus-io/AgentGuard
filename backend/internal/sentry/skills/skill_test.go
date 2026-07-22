@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 type fake struct {
@@ -41,4 +42,36 @@ func TestTruncate(t *testing.T) {
 	if s2, cut2 := Truncate("short", 100); cut2 || s2 != "short" {
 		t.Fatalf("short string must pass through, got %q", s2)
 	}
+}
+
+func TestTruncateRuneBoundary(t *testing.T) {
+	// Test case (a): max lands mid-rune (é is 2 bytes)
+	s, cut := Truncate("héllo", 2)
+	if !cut {
+		t.Fatalf("expected cut=true for mid-rune truncation, got cut=%v", cut)
+	}
+	if !strings.HasSuffix(s, "... [truncated]") {
+		t.Fatalf("expected truncation marker, got %q", s)
+	}
+	if !isValidUTF8(s) {
+		t.Fatalf("result is not valid UTF-8: %q", s)
+	}
+}
+
+func TestTruncateNegativeMax(t *testing.T) {
+	// Test case (b): negative max should not panic
+	s, cut := Truncate("hello", -5)
+	if !cut {
+		t.Fatalf("expected cut=true for negative max, got cut=%v", cut)
+	}
+	if !strings.HasSuffix(s, "... [truncated]") {
+		t.Fatalf("expected truncation marker, got %q", s)
+	}
+	if !isValidUTF8(s) {
+		t.Fatalf("result is not valid UTF-8: %q", s)
+	}
+}
+
+func isValidUTF8(s string) bool {
+	return len(s) == 0 || utf8.ValidString(s)
 }
