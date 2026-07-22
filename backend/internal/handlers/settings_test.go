@@ -431,6 +431,85 @@ func TestTestDLPConfig(t *testing.T) {
 	}
 }
 
+func TestDLPConfigMultipleChatModels(t *testing.T) {
+	srv := stubModelServer(t, 1024, false)
+	defer srv.Close()
+	cfg := &config.Config{DLP: config.DLPConfig{
+		BaseURL: srv.URL, EmbeddingModel: "e", EmbeddingDim: 1024,
+		RiskModel: "r", MaxOutputTokens: 512,
+	}}
+	// Duplicate "a" must be deduped to a single chat check.
+	out := postTestDLP(t, cfg, `{"base_url":"`+srv.URL+`","chat_models":["a","b","a"]}`)
+	if out["ok"] != true {
+		t.Fatalf("ok = %v, want true (out=%v)", out["ok"], out)
+	}
+	checks := out["checks"].(map[string]any)
+	chats, ok := checks["chats"].([]any)
+	if !ok {
+		t.Fatalf("checks.chats missing or wrong type: %v", checks["chats"])
+	}
+	if len(chats) != 2 {
+		t.Fatalf("len(chats) = %d, want 2 (deduped)", len(chats))
+	}
+	models := map[string]bool{}
+	for _, ch := range chats {
+		m := ch.(map[string]any)
+		if m["ok"] != true {
+			t.Errorf("chat %v not ok", m)
+		}
+		models[m["model"].(string)] = true
+	}
+	if !models["a"] || !models["b"] {
+		t.Errorf("chats models = %v, want a and b", models)
+	}
+	// Back-compat: single checks.chat still present.
+	if _, has := checks["chat"]; !has {
+		t.Error("checks.chat must remain present for back-compat")
+	}
+}
+
+func TestDLPConfigChatModelsFallback(t *testing.T) {
+	// No chat_models → falls back to [risk_model]; checks.chats has 1 entry.
+	srv := stubModelServer(t, 1024, false)
+	defer srv.Close()
+	cfg := &config.Config{DLP: config.DLPConfig{
+		BaseURL: srv.URL, EmbeddingModel: "e", EmbeddingDim: 1024,
+		RiskModel: "r", MaxOutputTokens: 512,
+	}}
+	out := postTestDLP(t, cfg, `{"base_url":"`+srv.URL+`"}`)
+	checks := out["checks"].(map[string]any)
+	chats := checks["chats"].([]any)
+	if len(chats) != 1 {
+		t.Fatalf("len(chats) = %d, want 1", len(chats))
+	}
+	if chats[0].(map[string]any)["model"] != "r" {
+		t.Errorf("fallback chat model = %v, want r", chats[0])
+	}
+}
+
+func TestDLPConfigEmbeddingUnknownDim(t *testing.T) {
+	// embedding_dim:-1 → require a non-empty vector, not an exact match.
+	// Server returns dim 768 while config says 1024; must still pass.
+	srv := stubModelServer(t, 768, false)
+	defer srv.Close()
+	cfg := &config.Config{DLP: config.DLPConfig{
+		BaseURL: srv.URL, EmbeddingModel: "e", EmbeddingDim: 1024,
+		RiskModel: "r", MaxOutputTokens: 512,
+	}}
+	out := postTestDLP(t, cfg, `{"base_url":"`+srv.URL+`","embedding_dim":-1}`)
+	if out["ok"] != true {
+		t.Fatalf("ok = %v, want true for unknown-dim (out=%v)", out["ok"], out)
+	}
+	checks := out["checks"].(map[string]any)
+	emb := checks["embedding"].(map[string]any)
+	if emb["ok"] != true {
+		t.Errorf("embedding.ok = %v, want true when dim>0 and expected<=0", emb["ok"])
+	}
+	if emb["dim"].(float64) != 768 {
+		t.Errorf("embedding.dim = %v, want 768 (detected reported)", emb["dim"])
+	}
+}
+
 // embedding_dim is now auto-detected from the model at provision, and every other
 // DLP setting is hot via the config mutable stream, so nothing flags a config
 // re-provision anymore — reprovisionRequired is always false.
