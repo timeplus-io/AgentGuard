@@ -203,23 +203,80 @@ func TestLoopSystemPromptCard(t *testing.T) {
 	}
 }
 
-// TestAssembleContextTrimsToolRowsFirst builds a small history where the
-// newest row is a large tool row that alone blows the budget, and an older
-// row is small user/assistant content that fits. assembleContext walks
-// newest-first: it must SKIP (not stop on) the oversized tool row and keep
-// walking to older rows, while still dropping oldest-first among
-// user/assistant rows once the budget is genuinely exhausted. This proves
-// tool rows are trimmed before user/assistant rows, not just "whatever
-// doesn't fit".
+// assertToolPairingInvariant enforces the OpenAI chat-completions
+// requirement that assembleContext's output must never violate: (a) every
+// assistant Msg with non-empty ToolCalls has EACH of its ToolCall IDs
+// answered by a later role=tool Msg with a matching ToolCallID, and (b)
+// every role=tool Msg's ToolCallID matches a ToolCall on an assistant Msg
+// that appears earlier in the slice. Violating either direction is exactly
+// the bug this fix closes: an orphaned tool_call (no answer) or an orphaned
+// tool answer (no parent) both make OpenAI 400 the whole conversation.
+func assertToolPairingInvariant(t *testing.T, msgs []Msg) {
+	t.Helper()
+
+	// answered[i] tracks, for assistant msgs[i], which of its ToolCall IDs
+	// have been matched by a later tool msg.
+	answered := make([]map[string]bool, len(msgs))
+	for i, m := range msgs {
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			answered[i] = map[string]bool{}
+		}
+	}
+
+	for i, m := range msgs {
+		if m.Role != "tool" {
+			continue
+		}
+		found := false
+		for j := 0; j < i; j++ {
+			if msgs[j].Role != "assistant" {
+				continue
+			}
+			for _, tc := range msgs[j].ToolCalls {
+				if tc.ID == m.ToolCallID {
+					answered[j][tc.ID] = true
+					found = true
+				}
+			}
+		}
+		if !found {
+			t.Errorf("msgs[%d] role=tool ToolCallID=%q has no preceding assistant ToolCall with that id", i, m.ToolCallID)
+		}
+	}
+
+	for i, m := range msgs {
+		if m.Role != "assistant" || len(m.ToolCalls) == 0 {
+			continue
+		}
+		for _, tc := range m.ToolCalls {
+			if !answered[i][tc.ID] {
+				t.Errorf("msgs[%d] role=assistant ToolCall id=%q has no following role=tool answer", i, tc.ID)
+			}
+		}
+	}
+}
+
+// TestAssembleContextTrimsToolRowsFirst builds a history containing an
+// assistant-with-tool_call row immediately followed by its (bulky) tool
+// answer, bracketed by an older and a newer plain turn. The budget is sized
+// so the tool_call/answer pair alone blows it. The pre-fix, per-row
+// algorithm evaluated the assistant row (tiny — no Content) and the tool row
+// (huge — the ToolResult) independently: the assistant row fit and was kept,
+// the tool row didn't and was skipped, producing an assistant ToolCall with
+// no answering tool message (an OpenAI-400-inducing sequence). The fix must
+// treat the assistant+tool-answer(s) as one atomic unit: keep the whole
+// pair, or drop the whole pair.
 func TestAssembleContextTrimsToolRowsFirst(t *testing.T) {
 	history := []models.SentryMessage{
 		{Seq: 1, Role: "user", Content: "old-user-msg"}, // ~3 tokens
-		{Seq: 2, Role: "tool", ToolName: "run_sql",
+		{Seq: 2, Role: "assistant", Content: "",
+			ToolArgs: marshalCalls([]ToolCall{{ID: "tc-old", Name: "run_sql", Args: "{}"}})}, // ~0 tokens alone
+		{Seq: 3, Role: "tool", ToolName: "run_sql",
 			ToolArgs:   `{"id":"tc-old","name":"run_sql","args":"{}"}`,
 			ToolResult: strings.Repeat("x", 400)}, // ~100 tokens: too big for budget
-		{Seq: 3, Role: "assistant", Content: "recent-final-msg"}, // ~4 tokens
+		{Seq: 4, Role: "assistant", Content: "recent-final-msg"}, // ~4 tokens
 	}
-	const budget = 10 // fits both small rows (~7 tokens) but not the huge tool row alone
+	const budget = 10 // fits both small plain rows (~7 tokens) but not the tool_call/answer pair (~100)
 
 	got := assembleContext("SYS", history, "new-user-msg", budget)
 
@@ -231,13 +288,18 @@ func TestAssembleContextTrimsToolRowsFirst(t *testing.T) {
 	}
 	t.Logf("assembled: roles=%v contents=%v", roles, contents)
 
-	for _, c := range contents {
-		if strings.Contains(c, "xxxxxxxx") {
-			t.Fatalf("expected the oversized tool row dropped, but found its content: %v", contents)
+	assertToolPairingInvariant(t, got)
+
+	for _, m := range got {
+		if strings.Contains(m.Content, "xxxxxxxx") {
+			t.Fatalf("expected the oversized tool answer dropped, but found its content: %v", contents)
+		}
+		if len(m.ToolCalls) > 0 {
+			t.Fatalf("expected the orphaned assistant tool_call (tc-old) dropped along with its answer, but it was kept: %+v", m)
 		}
 	}
 	if !containsMsg(got, "user", "old-user-msg") {
-		t.Errorf("expected old-user-msg kept (walk continues past the skipped tool row), got %v", contents)
+		t.Errorf("expected old-user-msg kept (walk continues past the skipped tool_call/answer pair), got %v", contents)
 	}
 	if !containsMsg(got, "assistant", "recent-final-msg") {
 		t.Errorf("expected recent-final-msg kept, got %v", contents)
@@ -265,18 +327,69 @@ func TestAssembleContextTrimsToolRowsFirst(t *testing.T) {
 	}
 }
 
+// TestAssembleContextRetainsNewestTurn verifies that when trimming must
+// happen, the newest complete turn — including an assistant tool_call and
+// its answer, kept as one atomic pair — always survives, and that
+// assembleContext always prepends the system prompt and appends the fresh
+// user message.
+func TestAssembleContextRetainsNewestTurn(t *testing.T) {
+	history := []models.SentryMessage{
+		{Seq: 1, Role: "user", Content: strings.Repeat("a", 4000)}, // ~1000 tokens: must not fit
+		{Seq: 2, Role: "user", Content: "recent question"},         // ~4 tokens
+		{Seq: 3, Role: "assistant", Content: "",
+			ToolArgs: marshalCalls([]ToolCall{{ID: "tc-new", Name: "run_sql", Args: "{}"}})}, // ~0 tokens
+		{Seq: 4, Role: "tool", ToolName: "run_sql",
+			ToolArgs:   `{"id":"tc-new","name":"run_sql","args":"{}"}`,
+			ToolResult: "small result"}, // ~3 tokens
+	}
+	const budget = 20 // fits the newest turn (question + tool_call/answer pair) but not the old huge user row
+
+	got := assembleContext("SYS", history, "new-user-msg", budget)
+
+	assertToolPairingInvariant(t, got)
+
+	if got[0].Role != "system" || got[0].Content != "SYS" {
+		t.Fatalf("got[0] = %+v, want system/SYS", got[0])
+	}
+	last := got[len(got)-1]
+	if last.Role != "user" || last.Content != "new-user-msg" {
+		t.Fatalf("last msg = %+v, want the fresh user msg appended", last)
+	}
+	if !containsMsg(got, "user", "recent question") {
+		t.Errorf("expected the newest turn's user msg retained, got %+v", got)
+	}
+	foundAnswer := false
+	for _, m := range got {
+		if m.Role == "tool" && m.ToolCallID == "tc-new" {
+			foundAnswer = true
+		}
+		if strings.Contains(m.Content, "aaaa") {
+			t.Errorf("expected the old huge user row dropped, but found it: %+v", got)
+		}
+	}
+	if !foundAnswer {
+		t.Errorf("expected the newest tool_call/answer pair retained, got %+v", got)
+	}
+}
+
 // TestAssembleContextReconstructsToolCallID verifies the tool-pair replay
 // scheme: a persisted role=tool row's ToolArgs carries
 // {"id":...,"name":...,"args":...} so a later turn's assembleContext can
 // rebuild Msg.ToolCallID from history alone (SentryMessage has no
-// tool_call_id column of its own).
+// tool_call_id column of its own). The history includes the preceding
+// assistant tool_call row too, since a lone tool row with no parent is an
+// invalid (and now deliberately dropped) sequence.
 func TestAssembleContextReconstructsToolCallID(t *testing.T) {
 	history := []models.SentryMessage{
-		{Seq: 1, Role: "tool", ToolName: "echo",
+		{Seq: 1, Role: "assistant", Content: "",
+			ToolArgs: marshalCalls([]ToolCall{{ID: "call-42", Name: "echo", Args: "{}"}})},
+		{Seq: 2, Role: "tool", ToolName: "echo",
 			ToolArgs:   `{"id":"call-42","name":"echo","args":"{}"}`,
 			ToolResult: "pong"},
 	}
 	got := assembleContext("SYS", history, "hi", 100000)
+
+	assertToolPairingInvariant(t, got)
 
 	var toolMsg *Msg
 	for i := range got {
@@ -289,6 +402,27 @@ func TestAssembleContextReconstructsToolCallID(t *testing.T) {
 	}
 	if toolMsg.ToolCallID != "call-42" || toolMsg.Content != "pong" {
 		t.Fatalf("tool msg = %+v, want ToolCallID=call-42 Content=pong", toolMsg)
+	}
+}
+
+// TestAssembleContextDropsOrphanedToolRow defends the new orphan-safety
+// behavior: a role=tool row with no preceding assistant tool_call in history
+// (e.g. a truncated/corrupt store) can never satisfy the pairing invariant on
+// its own, so it must be dropped rather than ever surfacing as a lone tool
+// message.
+func TestAssembleContextDropsOrphanedToolRow(t *testing.T) {
+	history := []models.SentryMessage{
+		{Seq: 1, Role: "tool", ToolName: "echo",
+			ToolArgs:   `{"id":"call-orphan","name":"echo","args":"{}"}`,
+			ToolResult: "pong"},
+	}
+	got := assembleContext("SYS", history, "hi", 100000)
+
+	assertToolPairingInvariant(t, got)
+	for _, m := range got {
+		if m.Role == "tool" {
+			t.Errorf("expected the orphaned tool row dropped, got %+v", got)
+		}
 	}
 }
 

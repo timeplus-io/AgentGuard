@@ -209,53 +209,113 @@ func approxTokens(s string) int {
 	return len(s) / 4
 }
 
+// historyUnit is one atomically-kept-or-dropped piece of history built by
+// buildHistoryUnits: either a single plain row (role=user, or role=assistant
+// with no tool_calls), or an assistant-with-tool_calls row bundled together
+// with all of its immediately-following role=tool answer rows. Grouping at
+// this granularity -- rather than per-row -- is what lets assembleContext
+// enforce the OpenAI invariant that every assistant tool_call is answered by
+// a following tool message, and every tool message answers a preceding
+// assistant tool_call: the whole unit is kept, or the whole unit is dropped,
+// never split.
+type historyUnit struct {
+	msgs []Msg
+	// toolGroup is true for an assistant-with-tool_calls + its tool
+	// answers. Such a unit is typically the bulkiest, least reusable
+	// content (raw SQL/tool results), so while walking newest-first it is
+	// SKIPPED when it doesn't fit (the walk continues to older units)
+	// rather than stopping the walk outright -- preserving the prior
+	// "trim tool content before user/assistant text" preference, just at
+	// pair granularity instead of per-row.
+	toolGroup bool
+}
+
+// buildHistoryUnits groups history (oldest-first, as returned by
+// Store.Messages) into historyUnits. An assistant row's tool_calls are
+// reconstructed via unmarshalCalls; when present, every contiguous
+// role=tool row immediately following it in history is consumed into the
+// same unit and its ToolCallID reconstructed from ToolArgs (see
+// toolCallMeta), mirroring how Loop.Run persists them (each tool_call is
+// answered immediately, before the next assistant turn is appended). A
+// role=tool row that is NOT immediately preceded by such an assistant row
+// (e.g. a truncated/corrupt store) cannot satisfy the pairing invariant on
+// its own and is dropped entirely rather than ever being emitted as an
+// orphan.
+func buildHistoryUnits(history []models.SentryMessage) []historyUnit {
+	var units []historyUnit
+	for i := 0; i < len(history); i++ {
+		m := history[i]
+		switch m.Role {
+		case "assistant":
+			calls := unmarshalCalls(m.ToolArgs)
+			u := historyUnit{msgs: []Msg{{Role: "assistant", Content: m.Content, ToolCalls: calls}}}
+			if len(calls) > 0 {
+				u.toolGroup = true
+				j := i + 1
+				for j < len(history) && history[j].Role == "tool" {
+					var meta toolCallMeta
+					_ = json.Unmarshal([]byte(history[j].ToolArgs), &meta)
+					u.msgs = append(u.msgs, Msg{Role: "tool", Content: history[j].ToolResult, ToolCallID: meta.ID})
+					j++
+				}
+				i = j - 1 // resume the outer loop after the consumed tool rows
+			}
+			units = append(units, u)
+		case "tool":
+			continue // orphaned tool row: unpairable, drop
+		default: // "user" (and defensively, any other plain role)
+			units = append(units, historyUnit{msgs: []Msg{{Role: m.Role, Content: m.Content}}})
+		}
+	}
+	return units
+}
+
+// unitCost sums approxTokens over every Msg's Content in the unit (an
+// assistant's own content plus each of its tool answers' content, for a
+// toolGroup), matching the per-row cost the old algorithm used.
+func unitCost(u historyUnit) int {
+	cost := 0
+	for _, m := range u.msgs {
+		cost += approxTokens(m.Content)
+	}
+	return cost
+}
+
 // assembleContext builds the message list sent to the LLM for one turn: a
 // system prompt, a token-budget-trimmed slice of history, and the new user
 // message. Pure function of its arguments -- no I/O, no clock -- so it is
 // fully unit-testable (TestAssembleContextTrimsToolRowsFirst).
 //
-// History (oldest-first, as returned by Store.Messages) is walked
-// newest-first so the most recent turns are prioritized. Once adding a row
-// would exceed budget: a role=tool row is SKIPPED (dropped, but the walk
-// continues to older rows), while a role=user/assistant row STOPS the walk
-// entirely (dropping it and everything older). The net effect is that tool
-// rows -- typically the bulkiest, least reusable content (raw SQL/tool
-// results) -- are trimmed before user/assistant turns, and among
-// user/assistant rows the oldest are dropped first.
+// History is first grouped into historyUnits (see buildHistoryUnits) so an
+// assistant tool_call and its answering tool row(s) are always kept or
+// dropped together -- never split, which is what let the old per-row walk
+// emit an OpenAI-invalid sequence (an assistant tool_call with no answer, or
+// vice versa) whenever the trim boundary landed between them.
 //
-// A role=tool row's ToolCallID is reconstructed from its ToolArgs column,
-// which the loop persists as {"id":...,"name":...,"args":...} (see
-// toolCallMeta) specifically so this replay can rebuild the pairing a bare
-// SentryMessage row can't otherwise carry.
+// Units are then walked newest-first so the most recent turns are
+// prioritized. Once adding a unit would exceed budget: a toolGroup unit is
+// SKIPPED (dropped, but the walk continues to older units), while a plain
+// unit STOPS the walk entirely (dropping it and everything older). The net
+// effect is the same trimming preference as before -- bulky tool content is
+// dropped before user/assistant text, and among plain units the oldest are
+// dropped first -- just enforced at pair granularity so the invariant can
+// never be violated.
 func assembleContext(system string, history []models.SentryMessage, userMsg string, budget int) []Msg {
-	var kept []Msg
+	units := buildHistoryUnits(history)
+
+	var kept []historyUnit
 	used := 0
-
-	for i := len(history) - 1; i >= 0; i-- {
-		m := history[i]
-
-		if m.Role == "tool" {
-			cost := approxTokens(m.ToolResult)
-			if used+cost > budget {
-				continue // drop this tool row only; keep walking older rows
-			}
-			used += cost
-			var meta toolCallMeta
-			_ = json.Unmarshal([]byte(m.ToolArgs), &meta)
-			kept = append(kept, Msg{Role: "tool", Content: m.ToolResult, ToolCallID: meta.ID})
-			continue
-		}
-
-		cost := approxTokens(m.Content)
+	for i := len(units) - 1; i >= 0; i-- {
+		u := units[i]
+		cost := unitCost(u)
 		if used+cost > budget {
-			break // budget exhausted on a user/assistant row: stop (drops it + everything older)
+			if u.toolGroup {
+				continue // drop this tool_call/answer pair only; keep walking older units
+			}
+			break // budget exhausted on a plain user/assistant unit: stop (drops it + everything older)
 		}
 		used += cost
-		var calls []ToolCall
-		if m.Role == "assistant" {
-			calls = unmarshalCalls(m.ToolArgs)
-		}
-		kept = append(kept, Msg{Role: m.Role, Content: m.Content, ToolCalls: calls})
+		kept = append(kept, u)
 	}
 
 	for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
@@ -264,7 +324,9 @@ func assembleContext(system string, history []models.SentryMessage, userMsg stri
 
 	out := make([]Msg, 0, len(kept)+2)
 	out = append(out, Msg{Role: "system", Content: system})
-	out = append(out, kept...)
+	for _, u := range kept {
+		out = append(out, u.msgs...)
+	}
 	out = append(out, Msg{Role: "user", Content: userMsg})
 	return out
 }
