@@ -28,6 +28,10 @@ import json
 import re
 import requests
 
+def _s(v):
+    # timeplusd >=3.2.2 marshals string columns to Python as bytes (#11788); 3.2.1 gave str.
+    return v.decode('utf-8', 'replace') if isinstance(v, (bytes, bytearray)) else v
+
 ENTITY_TYPES = ('phone', 'email', 'ip', 'domain', 'person', 'company', 'secret')
 RISK_TAGS = ('PII', 'PHONE', 'EMAIL', 'CREDENTIAL', 'SOURCE_CODE',
              'CUSTOMER_DATA', 'FINANCIAL', 'EXFILTRATION')
@@ -80,6 +84,8 @@ def _understand(question, base, api_key, model, max_tokens, timeout, tpl):
     })
 
 def dlp_understand_query(questions, configs):
+    questions = [_s(v) for v in questions]
+    configs = [_s(v) for v in configs]
     cfg = _cfg(configs)
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
@@ -115,6 +121,10 @@ LANGUAGE PYTHON AS $$
 import json
 import re
 import requests
+
+def _s(v):
+    # timeplusd >=3.2.2 marshals string columns to Python as bytes (#11788); 3.2.1 gave str.
+    return v.decode('utf-8', 'replace') if isinstance(v, (bytes, bytearray)) else v
 
 CHUNK = 8
 # Fallback when config carries no prompt; kept byte-identical to the Go seed
@@ -171,6 +181,9 @@ def _score_chunk(question, snippets, base, api_key, model, max_tokens, timeout, 
     return out
 
 def dlp_rerank(questions, contents, configs):
+    questions = [_s(v) for v in questions]
+    contents = [_s(v) for v in contents]
+    configs = [_s(v) for v in configs]
     cfg = _cfg(configs)
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
@@ -214,6 +227,10 @@ import json
 import re
 import requests
 
+def _s(v):
+    # timeplusd >=3.2.2 marshals string columns to Python as bytes (#11788); 3.2.1 gave str.
+    return v.decode('utf-8', 'replace') if isinstance(v, (bytes, bytearray)) else v
+
 # Fallback when config carries no prompt; kept byte-identical to the Go seed
 # (dlpDefaultSummarizePrompt) by TestDLPDefaultPromptsMatchUDFs. The TASK marker
 # (mock-model dispatch) is load-bearing for the integration test.
@@ -250,6 +267,9 @@ def _summarize(question, evidence, base, api_key, model, max_tokens, timeout, tp
     return _msg_content(resp)
 
 def dlp_summarize(questions, evidences, configs):
+    questions = [_s(v) for v in questions]
+    evidences = [_s(v) for v in evidences]
+    configs = [_s(v) for v in configs]
     cfg = _cfg(configs)
     base = cfg.get('base_url') or ''
     api_key = cfg.get('api_key') or ''
