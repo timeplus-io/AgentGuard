@@ -16,6 +16,7 @@ func TestSave_RoundTrip(t *testing.T) {
 		Timeplus:      config.TimeplusConfig{Host: "myhost", Port: 3218, NativePort: 8463},
 		AgentGuardURL: "http://example.com:8080",
 		SetupComplete: true,
+		Sentry:        config.SentryConfig{Enabled: true, SkillDir: "/custom/skills"},
 	}
 	if err := config.Save(cfg, path); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -45,5 +46,11 @@ func TestSave_RoundTrip(t *testing.T) {
 	}
 	if loaded.AgentGuardURL != "http://example.com:8080" {
 		t.Errorf("agentguard_url: want http://example.com:8080, got %s", loaded.AgentGuardURL)
+	}
+	if !loaded.Sentry.Enabled {
+		t.Error("want sentry.enabled=true")
+	}
+	if loaded.Sentry.SkillDir != "/custom/skills" {
+		t.Errorf("sentry.skill_dir: want /custom/skills, got %s", loaded.Sentry.SkillDir)
 	}
 }

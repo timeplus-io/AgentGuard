@@ -303,5 +303,7 @@ func Save(cfg *Config, path string) error {
 	v.Set("provisioned.dlp.summary_model", cfg.ProvisionedDLP.SummaryModel)
 	v.Set("provisioned.dlp.request_timeout_seconds", cfg.ProvisionedDLP.RequestTimeoutSeconds)
 	v.Set("provisioned.dlp.max_output_tokens", cfg.ProvisionedDLP.MaxOutputTokens)
+	v.Set("sentry.enabled", cfg.Sentry.Enabled)
+	v.Set("sentry.skill_dir", cfg.Sentry.SkillDir)
 	return v.WriteConfigAs(path)
 }
