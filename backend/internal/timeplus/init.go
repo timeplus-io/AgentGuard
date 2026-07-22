@@ -13,6 +13,17 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 )
 
+// Connect opens a single native-protocol connection to Timeplus and returns
+// it to the caller (who is responsible for closing it). It is the exported
+// door into connectOnce for packages outside internal/timeplus (e.g.
+// internal/sentry's conversation store) that need conn.PrepareBatch for
+// native, quote-safe inserts of arbitrary user content — the same reason
+// WriteDLPConfig uses the native batch path instead of an HTTP INSERT … VALUES
+// literal.
+func Connect(cfg *config.TimeplusConfig) (proton.Conn, error) {
+	return connectOnce(cfg)
+}
+
 // connectOnce makes a single connection attempt to Timeplus. It does not retry.
 // The caller is responsible for retrying or reporting the error.
 func connectOnce(cfg *config.TimeplusConfig) (proton.Conn, error) {
