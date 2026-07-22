@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/timeplus/agentguard/internal/config"
@@ -30,6 +31,16 @@ const sentryTimeLayout = "2006-01-02 15:04:05.999999999"
 // escaping, mirroring WriteDLPConfig.
 type Store struct {
 	TP *config.TimeplusConfig
+
+	// Disabled turns Messages/Append/NextSeq/TouchConversation into no-ops
+	// backed by an in-memory per-conversation message list instead of
+	// Timeplus, so the agent loop is unit-testable with a scripted fake LLM
+	// and no live Timeplus (see loop_test.go). CreateConversation/Conversation/
+	// List/Archive are unaffected — the loop never calls them mid-turn.
+	Disabled bool
+
+	mu      sync.Mutex
+	memMsgs map[string][]models.SentryMessage
 }
 
 // newConversationID generates a 32-hex-char id from 16 crypto/rand bytes.
@@ -239,7 +250,11 @@ func (s *Store) CreateConversation(user, title string) (models.SentryConversatio
 
 // TouchConversation bumps updated_at to now, re-inserting the full row
 // (mutable-stream upsert) so the conversation surfaces at the top of List.
+// When Disabled this is a no-op (see Store.Disabled).
 func (s *Store) TouchConversation(id string) error {
+	if s.Disabled {
+		return nil
+	}
 	c, ok, err := s.Conversation(id)
 	if err != nil {
 		return err
@@ -304,8 +319,17 @@ LIMIT %d`, dlpquery.EscapeSQLStr(user), limit)
 	return out, nil
 }
 
-// Messages returns all messages for a conversation, ordered by seq.
+// Messages returns all messages for a conversation, ordered by seq. When
+// Disabled it reads back the in-memory list built by Append instead of
+// querying Timeplus (see Store.Disabled).
 func (s *Store) Messages(id string) ([]models.SentryMessage, error) {
+	if s.Disabled {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		out := make([]models.SentryMessage, len(s.memMsgs[id]))
+		copy(out, s.memMsgs[id])
+		return out, nil
+	}
 	sql := fmt.Sprintf(`SELECT event_time, conversation_id, seq, role, content, tool_name, tool_args, tool_result, model, tokens_in, tokens_out
 FROM table(agentguard_sentry_messages)
 WHERE conversation_id = '%s'
@@ -322,8 +346,14 @@ ORDER BY seq`, dlpquery.EscapeSQLStr(id))
 }
 
 // NextSeq returns the next message sequence number for a conversation: 1 if
-// it has no messages yet, else max(seq)+1.
+// it has no messages yet, else max(seq)+1. When Disabled this is derived
+// from the length of the in-memory list (see Store.Disabled).
 func (s *Store) NextSeq(id string) (uint32, error) {
+	if s.Disabled {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return uint32(len(s.memMsgs[id])) + 1, nil
+	}
 	sql := fmt.Sprintf(`SELECT max(seq) AS max_seq
 FROM table(agentguard_sentry_messages)
 WHERE conversation_id = '%s'`, dlpquery.EscapeSQLStr(id))
@@ -336,8 +366,19 @@ WHERE conversation_id = '%s'`, dlpquery.EscapeSQLStr(id))
 
 // Append inserts one message via the native batch path (content/tool_args/
 // tool_result may contain arbitrary JSON/quotes). If m.EventTime is empty or
-// unparseable, event_time is written as now (UTC).
+// unparseable, event_time is written as now (UTC). When Disabled it appends
+// to an in-memory per-conversation list instead of writing to Timeplus (see
+// Store.Disabled).
 func (s *Store) Append(m models.SentryMessage) error {
+	if s.Disabled {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.memMsgs == nil {
+			s.memMsgs = map[string][]models.SentryMessage{}
+		}
+		s.memMsgs[m.ConversationID] = append(s.memMsgs[m.ConversationID], m)
+		return nil
+	}
 	conn, err := tp.Connect(s.TP)
 	if err != nil {
 		return fmt.Errorf("sentry store: connect: %w", err)
