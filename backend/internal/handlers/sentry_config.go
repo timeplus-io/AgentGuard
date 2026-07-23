@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -40,6 +41,16 @@ func GetSentryConfig(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
+// dbReadError wraps an error from a Timeplus config read, signaling that it's
+// an infrastructure failure (503) not a client error (400).
+type dbReadError struct {
+	err error
+}
+
+func (e *dbReadError) Error() string {
+	return e.err.Error()
+}
+
 // mergeSentryValue marshals the posted value and, for the `shared` row,
 // preserves the stored api_key (top-level and any per-model one under
 // "models") when the incoming value leaves it blank/absent — mirroring how
@@ -61,7 +72,7 @@ func mergeSentryValue(cfg *config.Config, c *gin.Context, key string, bodyValue 
 	rc := auth.RequestCfg(c, cfg)
 	existing, err := tp.ReadSentryConfigValue(&rc.Timeplus, key)
 	if err != nil {
-		return "", err
+		return "", &dbReadError{err} // wrap to signal infrastructure error → 503
 	}
 	if existing == "" {
 		return string(b), nil
@@ -111,7 +122,13 @@ func UpsertSentryConfig(cfg *config.Config) gin.HandlerFunc {
 		}
 		value, err := mergeSentryValue(cfg, c, key, body.Value) // preserves stored api_key when blank
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			// Distinguish infra failures (DB read) from client errors (bad input/validation)
+			var dbe *dbReadError
+			if errors.As(err, &dbe) {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			}
 			return
 		}
 		if err := tp.ValidateSentryConfigValue(key, value); err != nil {
