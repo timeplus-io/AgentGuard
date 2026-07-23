@@ -10,86 +10,61 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 )
 
-// TestResolveSentryTestCreds_BodyWins asserts a non-blank request body field
-// always wins over boot config and the stored shared row.
-func TestResolveSentryTestCreds_BodyWins(t *testing.T) {
-	body := sentryTestBody{
-		BaseURL: "https://body.example/v1", APIKey: "body-key",
-		ChatModel: "body-chat", EmbeddingModel: "body-embed", EmbeddingDim: 42,
+// TestResolveSentryChatCreds_Precedence asserts the chat-endpoint resolver's
+// precedence: request body (non-blank) → boot cfg.Sentry defaults (non-blank)
+// → the runtime-stored `chat` row of agentguard_sentry_config.
+func TestResolveSentryChatCreds_Precedence(t *testing.T) {
+	// body → boot → stored chat row.
+	got := resolveSentryChatCreds(
+		sentryTestBody{}, // empty body
+		config.SentryConfig{ChatBaseURL: "", ChatAPIKey: "", ChatModel: ""},
+		`{"base_url":"http://stored/v1","api_key":"stored-key","model":"stored-model"}`,
+	)
+	if got.BaseURL != "http://stored/v1" || got.APIKey != "stored-key" || got.Model != "stored-model" {
+		t.Fatalf("stored-row fallback failed: %+v", got)
 	}
-	boot := config.SentryConfig{
-		BaseURL: "https://boot.example/v1", APIKey: "boot-key",
-		ChatModel: "boot-chat", EmbeddingModel: "boot-embed", EmbeddingDim: 99,
-	}
-	stored := `{"base_url":"https://stored.example/v1","api_key":"stored-key",
-		"models":{"chat":{"model":"stored-chat"},"embedding":{"model":"stored-embed"}}}`
-
-	got := resolveSentryTestCreds(body, boot, stored)
-
-	want := resolvedSentryTestCreds{
-		BaseURL: "https://body.example/v1", APIKey: "body-key",
-		ChatModel: "body-chat", EmbeddingModel: "body-embed", EmbeddingDim: 42,
-	}
-	if got != want {
-		t.Fatalf("resolveSentryTestCreds() = %+v, want %+v", got, want)
+	got2 := resolveSentryChatCreds(
+		sentryTestBody{BaseURL: "http://body/v1"},
+		config.SentryConfig{ChatBaseURL: "http://boot/v1"},
+		`{"base_url":"http://stored/v1"}`,
+	)
+	if got2.BaseURL != "http://body/v1" {
+		t.Fatalf("body should win: %+v", got2)
 	}
 }
 
-// TestResolveSentryTestCreds_BootFallback asserts a blank body field falls
-// back to the boot cfg.Sentry defaults when the body doesn't supply it.
-func TestResolveSentryTestCreds_BootFallback(t *testing.T) {
-	body := sentryTestBody{}
-	boot := config.SentryConfig{
-		BaseURL: "https://boot.example/v1", APIKey: "boot-key",
-		ChatModel: "boot-chat", EmbeddingModel: "boot-embed", EmbeddingDim: 99,
-	}
-	stored := `{"base_url":"https://stored.example/v1","api_key":"stored-key",
-		"models":{"chat":{"model":"stored-chat"},"embedding":{"model":"stored-embed"}}}`
-
-	got := resolveSentryTestCreds(body, boot, stored)
-
-	want := resolvedSentryTestCreds{
-		BaseURL: "https://boot.example/v1", APIKey: "boot-key",
-		ChatModel: "boot-chat", EmbeddingModel: "boot-embed", EmbeddingDim: 99,
-	}
-	if got != want {
-		t.Fatalf("resolveSentryTestCreds() = %+v, want %+v", got, want)
+// TestResolveSentryEmbedCreds_Precedence asserts the embedding-endpoint
+// resolver's precedence: body → boot → the runtime-stored `memory` row, with
+// per-field fallback (a field left blank at one tier falls through to the
+// next tier independently of its siblings).
+func TestResolveSentryEmbedCreds_Precedence(t *testing.T) {
+	got := resolveSentryEmbedCreds(
+		sentryTestBody{},
+		config.SentryConfig{EmbeddingBaseURL: "http://boot-emb/v1", EmbeddingModel: "boot-emb"},
+		`{"base_url":"http://stored-emb/v1","api_key":"emb-key","model":"stored-emb","embedding_dim":768}`,
+	)
+	// boot wins over stored for base_url/model here; stored fills api_key/dim.
+	if got.BaseURL != "http://boot-emb/v1" || got.Model != "boot-emb" ||
+		got.APIKey != "emb-key" || got.EmbeddingDim != 768 {
+		t.Fatalf("embed resolve wrong: %+v", got)
 	}
 }
 
-// TestResolveSentryTestCreds_StoredRowFallback is the regression test for the
-// bug: when both body and boot config leave api_key (and base_url/models)
-// blank — the state after "configured entirely via the runtime Settings
-// editor, then server restarted" — resolution must fall back to the
-// runtime-stored `shared` row of agentguard_sentry_config rather than
-// resolving to "" and false-failing the probe.
-func TestResolveSentryTestCreds_StoredRowFallback(t *testing.T) {
-	body := sentryTestBody{}
-	boot := config.SentryConfig{} // nothing durable after restart
-	stored := `{"base_url":"https://stored.example/v1","api_key":"stored-key",
-		"models":{"chat":{"model":"stored-chat"},"embedding":{"model":"stored-embed"}}}`
+// TestMergeSentryValue_PreservesAPIKeyOnBlank is the regression test for the
+// data-loss bug: PUTting the `chat` row with a blank/absent api_key (the
+// Settings editor never echoes a redacted key back) must retain the stored
+// key, mirroring UpsertDLPConfig's preserveAPIKey behavior.
+func TestMergeSentryValue_PreservesAPIKeyOnBlank(t *testing.T) {
+	m := map[string]any{"base_url": "http://new/v1", "api_key": "", "model": "gpt-x"}
+	existing := map[string]any{"base_url": "http://old/v1", "api_key": "kept", "model": "gpt-old"}
 
-	got := resolveSentryTestCreds(body, boot, stored)
+	fillAPIKey(m, existing)
 
-	want := resolvedSentryTestCreds{
-		BaseURL: "https://stored.example/v1", APIKey: "stored-key",
-		ChatModel: "stored-chat", EmbeddingModel: "stored-embed", EmbeddingDim: 0,
+	if m["api_key"] != "kept" {
+		t.Fatalf("api_key = %v, want %q (preserved)", m["api_key"], "kept")
 	}
-	if got != want {
-		t.Fatalf("resolveSentryTestCreds() = %+v, want %+v", got, want)
-	}
-}
-
-// TestResolveSentryTestCreds_AllEmpty asserts that when body, boot, and the
-// stored row are all empty/absent, resolution degrades to the zero value
-// (empty base_url — the handler then 400s the "invalid base_url" check)
-// rather than panicking on a missing stored row.
-func TestResolveSentryTestCreds_AllEmpty(t *testing.T) {
-	got := resolveSentryTestCreds(sentryTestBody{}, config.SentryConfig{}, "")
-
-	want := resolvedSentryTestCreds{}
-	if got != want {
-		t.Fatalf("resolveSentryTestCreds() = %+v, want %+v", got, want)
+	if m["base_url"] != "http://new/v1" {
+		t.Fatalf("base_url = %v, want new value untouched", m["base_url"])
 	}
 }
 

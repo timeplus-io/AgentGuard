@@ -133,37 +133,34 @@ func UpsertSentryConfig(cfg *config.Config) gin.HandlerFunc {
 
 // sentryTestBody is the request body for POST /api/sentry/config/test.
 type sentryTestBody struct {
-	BaseURL        string `json:"base_url"`
-	APIKey         string `json:"api_key"`
-	ChatModel      string `json:"chat_model"`
-	EmbeddingModel string `json:"embedding_model"`
-	EmbeddingDim   int    `json:"embedding_dim"`
+	BaseURL          string `json:"base_url"`
+	APIKey           string `json:"api_key"`
+	ChatModel        string `json:"chat_model"`
+	EmbeddingBaseURL string `json:"embedding_base_url"`
+	EmbeddingAPIKey  string `json:"embedding_api_key"`
+	EmbeddingModel   string `json:"embedding_model"`
+	EmbeddingDim     int    `json:"embedding_dim"`
+	// MemoryEnabled overrides whether the embedding endpoint is probed at
+	// all. Pointer so "absent" (use stored/boot state) is distinguishable
+	// from an explicit false.
+	MemoryEnabled *bool `json:"memory_enabled"`
 }
 
-// resolvedSentryTestCreds is the fully-resolved candidate a test-connection
-// probe runs against.
-type resolvedSentryTestCreds struct {
-	BaseURL        string
-	APIKey         string
-	ChatModel      string
-	EmbeddingModel string
-	EmbeddingDim   int
+// resolvedChatCreds is the fully-resolved chat-endpoint candidate a
+// test-connection probe runs against.
+type resolvedChatCreds struct{ BaseURL, APIKey, Model string }
+
+// resolvedEmbedCreds is the fully-resolved embedding-endpoint candidate a
+// test-connection probe runs against.
+type resolvedEmbedCreds struct {
+	BaseURL, APIKey, Model string
+	EmbeddingDim           int
 }
 
-// storedSentryChatRow is the subset of the `chat` row's JSON this resolution
-// cares about. The row is now a flat, self-contained endpoint — no "models"
-// catalog.
-type storedSentryChatRow struct {
-	BaseURL string `json:"base_url"`
-	APIKey  string `json:"api_key"`
-	Model   string `json:"model"`
-}
-
-// resolveSentryTestCreds resolves the effective base_url/api_key/chat_model/
-// embedding_model for a test-connection probe. Precedence per field: request
-// body (non-blank) → boot cfg.Sentry defaults (non-blank) → the
-// runtime-stored `chat` row of agentguard_sentry_config (non-blank) for the
-// chat endpoint fields.
+// resolveSentryChatCreds resolves the effective base_url/api_key/model for
+// the chat endpoint. Precedence per field: request body (non-blank) → boot
+// cfg.Sentry defaults (non-blank) → the runtime-stored `chat` row of
+// agentguard_sentry_config (non-blank).
 //
 // The stored-row fallback exists because the Settings editor never echoes
 // the api_key back (it's redacted in GetSentryConfig), so testConnection()
@@ -174,36 +171,59 @@ type storedSentryChatRow struct {
 // connection" would falsely fail against any auth-requiring endpoint in that
 // (common) setup. storedChatJSON may be "" (row absent, or the caller chose
 // not to fetch it) — resolution degrades to body → boot in that case.
-//
-// NOTE: embedding resolution here still only falls back to boot config, not
-// the `memory` row — per-endpoint resolution (including a memory-row
-// fallback and the memory-enabled gate) is reworked in the config-reshape
-// plan's next task.
-func resolveSentryTestCreds(body sentryTestBody, boot config.SentryConfig, storedChatJSON string) resolvedSentryTestCreds {
-	var stored storedSentryChatRow
+func resolveSentryChatCreds(body sentryTestBody, boot config.SentryConfig, storedChatJSON string) resolvedChatCreds {
+	var stored struct {
+		BaseURL string `json:"base_url"`
+		APIKey  string `json:"api_key"`
+		Model   string `json:"model"`
+	}
 	if storedChatJSON != "" {
 		_ = json.Unmarshal([]byte(storedChatJSON), &stored)
+	}
+	return resolvedChatCreds{
+		BaseURL: orStr(body.BaseURL, orStr(boot.ChatBaseURL, stored.BaseURL)),
+		APIKey:  orStr(body.APIKey, orStr(boot.ChatAPIKey, stored.APIKey)),
+		Model:   orStr(body.ChatModel, orStr(boot.ChatModel, stored.Model)),
+	}
+}
+
+// resolveSentryEmbedCreds resolves the effective base_url/api_key/model/
+// embedding_dim for the memory (embedding) endpoint. Same precedence as
+// resolveSentryChatCreds, but reading the `memory` row instead of `chat` —
+// each endpoint is now a fully independent, self-contained row.
+func resolveSentryEmbedCreds(body sentryTestBody, boot config.SentryConfig, storedMemoryJSON string) resolvedEmbedCreds {
+	var stored struct {
+		BaseURL string `json:"base_url"`
+		APIKey  string `json:"api_key"`
+		Model   string `json:"model"`
+		Dim     int    `json:"embedding_dim"`
+	}
+	if storedMemoryJSON != "" {
+		_ = json.Unmarshal([]byte(storedMemoryJSON), &stored)
 	}
 	dim := body.EmbeddingDim
 	if dim == 0 {
 		dim = boot.EmbeddingDim
 	}
-	return resolvedSentryTestCreds{
-		BaseURL:        orStr(body.BaseURL, orStr(boot.ChatBaseURL, stored.BaseURL)),
-		APIKey:         orStr(body.APIKey, orStr(boot.ChatAPIKey, stored.APIKey)),
-		ChatModel:      orStr(body.ChatModel, orStr(boot.ChatModel, stored.Model)),
-		EmbeddingModel: orStr(body.EmbeddingModel, boot.EmbeddingModel),
-		EmbeddingDim:   dim,
+	if dim == 0 {
+		dim = stored.Dim
+	}
+	return resolvedEmbedCreds{
+		BaseURL:      orStr(body.EmbeddingBaseURL, orStr(boot.EmbeddingBaseURL, stored.BaseURL)),
+		APIKey:       orStr(body.EmbeddingAPIKey, orStr(boot.EmbeddingAPIKey, stored.APIKey)),
+		Model:        orStr(body.EmbeddingModel, orStr(boot.EmbeddingModel, stored.Model)),
+		EmbeddingDim: dim,
 	}
 }
 
-// TestSentryConfig handles POST /api/sentry/config/test — validates a
-// candidate Sentry model endpoint: reachability, a chat completion WITH a
-// tool defined (asserting the model actually returns tool_calls — Sentry's
-// chat loop is useless without tool calling), and a real embedding call.
-// Resolves the candidate endpoint from the posted body, falling back to the
-// live cfg.Sentry boot defaults and then the runtime-stored `chat` row (see
-// resolveSentryTestCreds). Always HTTP 200; failures reported in-band.
+// TestSentryConfig handles POST /api/sentry/config/test — validates the
+// candidate Sentry model endpoints. The chat endpoint (reachability + a chat
+// completion WITH a tool defined, asserting the model actually returns
+// tool_calls — Sentry's chat loop is useless without tool calling) is always
+// probed. The embedding endpoint is probed only when memory is enabled
+// (body override → stored `memory` row → boot cfg.Sentry.MemoryEnabled);
+// when disabled, checks.embedding reports {"skipped": true} and is excluded
+// from the ok roll-up. Always HTTP 200; failures reported in-band.
 func TestSentryConfig(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body sentryTestBody
@@ -213,56 +233,62 @@ func TestSentryConfig(cfg *config.Config) gin.HandlerFunc {
 		s := cfg.Sentry
 		config.Mu.RUnlock()
 
-		// Only hit Timeplus for the stored `chat` row if body+boot leave
-		// something we'd otherwise need it for — avoids an extra query for
-		// deployments that are fully configured via body/config.yaml.
-		needsStored := (body.APIKey == "" && s.ChatAPIKey == "") ||
-			(body.BaseURL == "" && s.ChatBaseURL == "") ||
-			(body.ChatModel == "" && s.ChatModel == "") ||
-			(body.EmbeddingModel == "" && s.EmbeddingModel == "")
-		var storedChat string
-		if needsStored {
-			rc := auth.RequestCfg(c, cfg)
-			if v, err := tp.ReadSentryConfigValue(&rc.Timeplus, tp.SentryCfgKeyChat); err != nil {
-				log.Printf("[sentry] TestSentryConfig: stored chat-row fallback read failed: %v", err)
-			} else {
-				storedChat = v
-			}
-		}
+		rc := auth.RequestCfg(c, cfg)
 
-		creds := resolveSentryTestCreds(body, s, storedChat)
-		baseURL := strings.TrimRight(creds.BaseURL, "/")
-		key := creds.APIKey
-		chatModel := creds.ChatModel
-		embModel := creds.EmbeddingModel
-		expectedDim := creds.EmbeddingDim
+		// Chat creds: body → boot → stored `chat` row.
+		storedChat, err := tp.ReadSentryConfigValue(&rc.Timeplus, tp.SentryCfgKeyChat)
+		if err != nil {
+			log.Printf("[sentry] TestSentryConfig: read chat row: %v", err)
+		}
+		chat := resolveSentryChatCreds(body, s, storedChat)
+
 		maxTokens := s.MaxOutputTokens
 		if maxTokens <= 0 {
 			maxTokens = 1024
 		}
-
-		if _, err := url.ParseRequestURI(baseURL + "/models"); err != nil {
+		chatBase := strings.TrimRight(chat.BaseURL, "/")
+		if _, err := url.ParseRequestURI(chatBase + "/models"); err != nil {
 			c.JSON(http.StatusOK, gin.H{"ok": false, "checks": gin.H{
 				"reachable": gin.H{"ok": false, "error": "invalid base_url"}}})
 			return
 		}
-		client := &http.Client{Timeout: 10 * time.Second}
 
-		reach := dlpCheckReachable(c, client, baseURL, key)
-		checks := gin.H{"reachable": reach}
+		client := &http.Client{Timeout: 10 * time.Second}
+		checks := gin.H{}
+		reach := dlpCheckReachable(c, client, chatBase, chat.APIKey)
+		checks["reachable"] = reach
 		ok := reach["ok"] == true
 		if ok {
-			chat := sentryCheckChatToolCalling(c, client, baseURL, key, chatModel, maxTokens)
-			checks["chat"] = chat
-			if chat["ok"] != true {
-				ok = false
-			}
+			chatCheck := sentryCheckChatToolCalling(c, client, chatBase, chat.APIKey, chat.Model, maxTokens)
+			checks["chat"] = chatCheck
+			ok = chatCheck["ok"] == true
+		}
 
-			emb := dlpCheckEmbedding(c, client, baseURL, key, embModel, expectedDim)
-			checks["embedding"] = emb
-			if emb["ok"] != true {
-				ok = false
+		// Embedding: only when memory is enabled (body override → stored
+		// memory row → boot default).
+		storedMem, err := tp.ReadSentryConfigValue(&rc.Timeplus, tp.SentryCfgKeyMemory)
+		if err != nil {
+			log.Printf("[sentry] TestSentryConfig: read memory row: %v", err)
+		}
+		memEnabled := s.MemoryEnabled
+		if body.MemoryEnabled != nil {
+			memEnabled = *body.MemoryEnabled
+		} else if storedMem != "" {
+			var m struct {
+				Enabled bool `json:"enabled"`
 			}
+			_ = json.Unmarshal([]byte(storedMem), &m)
+			memEnabled = m.Enabled
+		}
+		if memEnabled {
+			emb := resolveSentryEmbedCreds(body, s, storedMem)
+			embCheck := dlpCheckEmbedding(c, client, strings.TrimRight(emb.BaseURL, "/"), emb.APIKey, emb.Model, emb.EmbeddingDim)
+			checks["embedding"] = embCheck
+			if ok {
+				ok = embCheck["ok"] == true
+			}
+		} else {
+			checks["embedding"] = gin.H{"skipped": true}
 		}
 		c.JSON(http.StatusOK, gin.H{"ok": ok, "checks": checks})
 	}
