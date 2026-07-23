@@ -46,7 +46,7 @@ type ChatCfg struct {
 	BaseURL            string `json:"base_url"`
 	APIKey             string `json:"api_key"`
 	Model              string `json:"model"`
-	SystemPrompt       string `json:"system_prompt"`
+	SystemPrompt       string `json:"-"`
 	MaxTokens          int    `json:"max_tokens"`
 	MaxIterations      int    `json:"max_iterations"`
 	TurnTokenBudget    int    `json:"turn_token_budget"`
@@ -91,7 +91,7 @@ func chatCfgResolveSQL() string {
 		tp.SentryCfgKeyChat)
 }
 
-// LoadChatCfg reads the `chat` row live from agentguard_sentry_config.
+// LoadChatCfg reads the `chat` row of agentguard_sentry_config live.
 func LoadChatCfg(tpCfg *config.TimeplusConfig) (ChatCfg, error) {
 	rows, err := tp.Query(tpCfg, chatCfgResolveSQL())
 	if err != nil {

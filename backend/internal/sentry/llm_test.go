@@ -1,8 +1,11 @@
 package sentry
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
 func TestChatCfgDefaultsApplied(t *testing.T) {
@@ -27,13 +30,20 @@ func TestChatCfgClamps(t *testing.T) {
 
 func TestLoadChatCfgSQLTargetsSentryStream(t *testing.T) {
 	sql := chatCfgResolveSQL()
-	if !strings.Contains(sql, "agentguard_sentry_config") {
-		t.Fatalf("expected sentry config stream, got: %s", sql)
+	if !strings.Contains(sql, "agentguard_sentry_config") || !strings.Contains(sql, "key='chat'") {
+		t.Fatalf("expected chat row read, got: %s", sql)
 	}
-	if strings.Contains(sql, "agentguard_dlp_config") {
-		t.Fatal("must not read DLP config")
+	if strings.Contains(sql, "dlp_config_resolve") || strings.Contains(sql, "agentguard_dlp_config") {
+		t.Fatalf("must not use the DLP resolver/stream: %s", sql)
 	}
-	if !strings.Contains(sql, "key='shared'") || !strings.Contains(sql, "key='chat'") {
-		t.Fatalf("expected shared+chat keys: %s", sql)
+}
+
+func TestChatCfgIgnoresConfigSystemPrompt(t *testing.T) {
+	// A system_prompt in the row JSON must NOT override the built-in constant.
+	var cc ChatCfg
+	_ = json.Unmarshal([]byte(`{"base_url":"x","model":"y","system_prompt":"HACKED"}`), &cc)
+	cc.applyDefaults()
+	if cc.SystemPrompt != tp.DefaultSentrySystemPrompt {
+		t.Fatalf("system prompt must be the built-in constant, got %q", cc.SystemPrompt)
 	}
 }
