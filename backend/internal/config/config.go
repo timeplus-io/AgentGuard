@@ -337,7 +337,6 @@ func Save(cfg *Config, path string) error {
 	v.Set("sentry.enabled", cfg.Sentry.Enabled)
 	v.Set("sentry.skill_dir", cfg.Sentry.SkillDir)
 	v.Set("sentry.base_url", cfg.Sentry.BaseURL)
-	v.Set("sentry.api_key", cfg.Sentry.APIKey)
 	v.Set("sentry.chat_model", cfg.Sentry.ChatModel)
 	v.Set("sentry.embedding_model", cfg.Sentry.EmbeddingModel)
 	v.Set("sentry.embedding_dim", cfg.Sentry.EmbeddingDim)

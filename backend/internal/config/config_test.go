@@ -66,9 +66,9 @@ func TestSave_RoundTrip(t *testing.T) {
 	if loaded.Sentry.BaseURL != "http://x/v1" {
 		t.Errorf("sentry.base_url: want http://x/v1, got %s", loaded.Sentry.BaseURL)
 	}
-	if loaded.Sentry.APIKey != "sk-test" {
-		t.Errorf("sentry.api_key: want sk-test, got %s", loaded.Sentry.APIKey)
-	}
+	if loaded.Sentry.APIKey != "" {
+		t.Errorf("sentry.api_key: want empty, got %s", loaded.Sentry.APIKey)
+	} // api_key is a secret — never written to config.yaml by Save() (matches dlp.api_key)
 	if loaded.Sentry.ChatModel != "gpt-4o" {
 		t.Errorf("sentry.chat_model: want gpt-4o, got %s", loaded.Sentry.ChatModel)
 	}
