@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
@@ -282,6 +283,11 @@ export default function Sentry() {
     ? (status.config_error || status.tables_check_error || 'Sentry streams are not provisioned yet.')
     : null
 
+  // needsChatModelHint: Sentry is enabled but has no usable chat endpoint yet
+  // (no base_url configured, or the config row failed to load) — point the
+  // operator at the runtime editor rather than leaving a silent empty chat.
+  const needsChatModelHint = status?.enabled && (status.base_url_set === false || !!status.config_error)
+
   return (
     <div className="min-h-screen bg-surface text-gray-100">
       <Sidebar />
@@ -372,7 +378,15 @@ export default function Sentry() {
                   ) : convError ? (
                     <p className="text-xs text-error">{convError}</p>
                   ) : messages.length === 0 ? (
-                    <p className="text-xs text-gray-400">{EMPTY_STATE_TEXT}</p>
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-xs text-gray-400">{EMPTY_STATE_TEXT}</p>
+                      {needsChatModelHint && (
+                        <p className="text-[11px] text-amber-400">
+                          Sentry has no chat model configured — set it in{' '}
+                          <Link to="/settings" className="underline hover:text-amber-300">Settings → Sentry Agent</Link>.
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     messages.map(item => item.role === 'tool'
                       ? <ToolCard key={item.id} item={item} />

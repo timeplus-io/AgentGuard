@@ -247,6 +247,11 @@ export const api = {
   sentryConversation: (id) => get(`/sentry/conversations/${encodeURIComponent(id)}`),
   sentryArchive: (id) => del(`/sentry/conversations/${encodeURIComponent(id)}`),
 
+  // Runtime Sentry config stream (agentguard_sentry_config): shared/chat/embed rows.
+  getSentryConfig: () => get('/sentry/config'),
+  putSentryConfig: (key, value) => put(`/sentry/config/${encodeURIComponent(key)}`, { value }),
+  testSentryConfig: (payload) => post('/sentry/config/test', payload),
+
   // sentryChat streams NDJSON events from the agent loop:
   // {event:"meta"} → {event:"token"|"tool_call"|"tool_result"}* → {event:"done"} | {event:"error"}
   async *sentryChat(message, { conversationId, signal } = {}) {
