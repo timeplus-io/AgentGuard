@@ -9,10 +9,14 @@ import SentryConfigEditor from '../SentryConfigEditor'
 const DLP_SERVER_KEYS = new Set(['dlp.enabled', 'dlp.embedding_dim'])
 
 // Sentry keys that remain server-config (config.yaml): the enable switch and
-// the SQL skill directory override. Everything else — endpoint, models,
-// prompt, budgets — is edited live below via the agentguard_sentry_config
-// stream, so it's hidden from the flat key list (see registry.go's
-// descriptions, which already point operators at Settings → Sentry Agent).
+// the SQL skill directory override. Everything else — chat_base_url,
+// chat_api_key, chat_model, memory_enabled, embedding_base_url,
+// embedding_api_key, embedding_model, embedding_dim,
+// request_timeout_seconds, max_output_tokens — is a boot default only; the
+// live value is edited below via the agentguard_sentry_config stream's
+// `chat`/`memory` rows, so those keys are hidden from the flat key list to
+// avoid two sources of truth (see registry.go's descriptions, which already
+// point operators at Settings → Sentry Agent).
 const SENTRY_SERVER_KEYS = new Set(['sentry.enabled', 'sentry.skill_dir'])
 
 const SOURCE_LABEL = {
