@@ -18,8 +18,8 @@ import (
 )
 
 // GetSentryConfig handles GET /api/sentry/config — returns the live Sentry
-// config rows (shared/chat/embed) with api keys redacted. Reachable
-// regardless of dlp.enabled: Sentry's config stream is independent of DLP's.
+// config rows (chat/memory) with api keys redacted. Reachable regardless of
+// dlp.enabled: Sentry's config stream is independent of DLP's.
 func GetSentryConfig(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rc := auth.RequestCfg(c, cfg)
@@ -51,17 +51,18 @@ func (e *dbReadError) Error() string {
 	return e.err.Error()
 }
 
-// mergeSentryValue marshals the posted value and, for the `shared` row,
-// preserves the stored api_key (top-level and any per-model one under
-// "models") when the incoming value leaves it blank/absent — mirroring how
-// UpsertDLPConfig's preserveAPIKey keeps a GET→edit→PUT round-trip from
-// wiping a stored key, reusing the same fillAPIKey primitive.
+// mergeSentryValue marshals the posted value and, for the `chat`/`memory`
+// rows, preserves the stored top-level api_key when the incoming value
+// leaves it blank/absent — mirroring how UpsertDLPConfig's preserveAPIKey
+// keeps a GET→edit→PUT round-trip from wiping a stored key, reusing the same
+// fillAPIKey primitive. Each row is now a flat, self-contained endpoint (no
+// "models" catalog), so there is nothing nested left to preserve.
 func mergeSentryValue(cfg *config.Config, c *gin.Context, key string, bodyValue any) (string, error) {
 	b, err := json.Marshal(bodyValue)
 	if err != nil {
 		return "", fmt.Errorf("invalid value: %w", err)
 	}
-	if key != tp.SentryCfgKeyShared {
+	if key != tp.SentryCfgKeyChat && key != tp.SentryCfgKeyMemory {
 		return string(b), nil
 	}
 	var m map[string]any
@@ -83,20 +84,6 @@ func mergeSentryValue(cfg *config.Config, c *gin.Context, key string, bodyValue 
 	}
 
 	fillAPIKey(m, em)
-	if models, ok := m["models"].(map[string]any); ok {
-		emodels, _ := em["models"].(map[string]any)
-		for name, mv := range models {
-			entry, ok := mv.(map[string]any)
-			if !ok {
-				continue
-			}
-			var eentry map[string]any
-			if emodels != nil {
-				eentry, _ = emodels[name].(map[string]any)
-			}
-			fillAPIKey(entry, eentry)
-		}
-	}
 	out, err := json.Marshal(m)
 	if err != nil {
 		return string(b), nil
@@ -163,44 +150,49 @@ type resolvedSentryTestCreds struct {
 	EmbeddingDim   int
 }
 
-// storedSentrySharedRow is the subset of the `shared` row's JSON this
-// resolution cares about.
-type storedSentrySharedRow struct {
+// storedSentryChatRow is the subset of the `chat` row's JSON this resolution
+// cares about. The row is now a flat, self-contained endpoint — no "models"
+// catalog.
+type storedSentryChatRow struct {
 	BaseURL string `json:"base_url"`
 	APIKey  string `json:"api_key"`
-	Models  map[string]struct {
-		Model string `json:"model"`
-	} `json:"models"`
+	Model   string `json:"model"`
 }
 
 // resolveSentryTestCreds resolves the effective base_url/api_key/chat_model/
 // embedding_model for a test-connection probe. Precedence per field: request
 // body (non-blank) → boot cfg.Sentry defaults (non-blank) → the
-// runtime-stored `shared` row of agentguard_sentry_config (non-blank).
+// runtime-stored `chat` row of agentguard_sentry_config (non-blank) for the
+// chat endpoint fields.
 //
 // The stored-row fallback exists because the Settings editor never echoes
 // the api_key back (it's redacted in GetSentryConfig), so testConnection()
 // always posts api_key:"". And UpsertSentryConfig never writes back to
-// config.yaml, so after a restart cfg.Sentry.APIKey is empty whenever Sentry
-// was configured entirely through the runtime editor — the ONLY durable copy
-// of the key is the `shared` row. Without this fallback, "Test connection"
-// would falsely fail against any auth-requiring endpoint in that (common)
-// setup. storedSharedJSON may be "" (row absent, or the caller chose not to
-// fetch it) — resolution degrades to body → boot in that case.
-func resolveSentryTestCreds(body sentryTestBody, boot config.SentryConfig, storedSharedJSON string) resolvedSentryTestCreds {
-	var stored storedSentrySharedRow
-	if storedSharedJSON != "" {
-		_ = json.Unmarshal([]byte(storedSharedJSON), &stored)
+// config.yaml, so after a restart cfg.Sentry.ChatAPIKey is empty whenever
+// Sentry was configured entirely through the runtime editor — the ONLY
+// durable copy of the key is the `chat` row. Without this fallback, "Test
+// connection" would falsely fail against any auth-requiring endpoint in that
+// (common) setup. storedChatJSON may be "" (row absent, or the caller chose
+// not to fetch it) — resolution degrades to body → boot in that case.
+//
+// NOTE: embedding resolution here still only falls back to boot config, not
+// the `memory` row — per-endpoint resolution (including a memory-row
+// fallback and the memory-enabled gate) is reworked in the config-reshape
+// plan's next task.
+func resolveSentryTestCreds(body sentryTestBody, boot config.SentryConfig, storedChatJSON string) resolvedSentryTestCreds {
+	var stored storedSentryChatRow
+	if storedChatJSON != "" {
+		_ = json.Unmarshal([]byte(storedChatJSON), &stored)
 	}
 	dim := body.EmbeddingDim
 	if dim == 0 {
 		dim = boot.EmbeddingDim
 	}
 	return resolvedSentryTestCreds{
-		BaseURL:        orStr(body.BaseURL, orStr(boot.BaseURL, stored.BaseURL)),
-		APIKey:         orStr(body.APIKey, orStr(boot.APIKey, stored.APIKey)),
-		ChatModel:      orStr(body.ChatModel, orStr(boot.ChatModel, stored.Models["chat"].Model)),
-		EmbeddingModel: orStr(body.EmbeddingModel, orStr(boot.EmbeddingModel, stored.Models["embedding"].Model)),
+		BaseURL:        orStr(body.BaseURL, orStr(boot.ChatBaseURL, stored.BaseURL)),
+		APIKey:         orStr(body.APIKey, orStr(boot.ChatAPIKey, stored.APIKey)),
+		ChatModel:      orStr(body.ChatModel, orStr(boot.ChatModel, stored.Model)),
+		EmbeddingModel: orStr(body.EmbeddingModel, boot.EmbeddingModel),
 		EmbeddingDim:   dim,
 	}
 }
@@ -210,7 +202,7 @@ func resolveSentryTestCreds(body sentryTestBody, boot config.SentryConfig, store
 // tool defined (asserting the model actually returns tool_calls — Sentry's
 // chat loop is useless without tool calling), and a real embedding call.
 // Resolves the candidate endpoint from the posted body, falling back to the
-// live cfg.Sentry boot defaults and then the runtime-stored `shared` row (see
+// live cfg.Sentry boot defaults and then the runtime-stored `chat` row (see
 // resolveSentryTestCreds). Always HTTP 200; failures reported in-band.
 func TestSentryConfig(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -221,24 +213,24 @@ func TestSentryConfig(cfg *config.Config) gin.HandlerFunc {
 		s := cfg.Sentry
 		config.Mu.RUnlock()
 
-		// Only hit Timeplus for the stored `shared` row if body+boot leave
+		// Only hit Timeplus for the stored `chat` row if body+boot leave
 		// something we'd otherwise need it for — avoids an extra query for
 		// deployments that are fully configured via body/config.yaml.
-		needsStored := (body.APIKey == "" && s.APIKey == "") ||
-			(body.BaseURL == "" && s.BaseURL == "") ||
+		needsStored := (body.APIKey == "" && s.ChatAPIKey == "") ||
+			(body.BaseURL == "" && s.ChatBaseURL == "") ||
 			(body.ChatModel == "" && s.ChatModel == "") ||
 			(body.EmbeddingModel == "" && s.EmbeddingModel == "")
-		var storedShared string
+		var storedChat string
 		if needsStored {
 			rc := auth.RequestCfg(c, cfg)
-			if v, err := tp.ReadSentryConfigValue(&rc.Timeplus, tp.SentryCfgKeyShared); err != nil {
-				log.Printf("[sentry] TestSentryConfig: stored shared-row fallback read failed: %v", err)
+			if v, err := tp.ReadSentryConfigValue(&rc.Timeplus, tp.SentryCfgKeyChat); err != nil {
+				log.Printf("[sentry] TestSentryConfig: stored chat-row fallback read failed: %v", err)
 			} else {
-				storedShared = v
+				storedChat = v
 			}
 		}
 
-		creds := resolveSentryTestCreds(body, s, storedShared)
+		creds := resolveSentryTestCreds(body, s, storedChat)
 		baseURL := strings.TrimRight(creds.BaseURL, "/")
 		key := creds.APIKey
 		chatModel := creds.ChatModel

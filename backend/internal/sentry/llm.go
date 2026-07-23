@@ -40,8 +40,8 @@ type ChatResult struct {
 	TokensOut int
 }
 
-// ChatCfg is parsed from dlp_config_resolve(shared, chat) — the `shared` and
-// `chat` rows of agentguard_sentry_config.
+// ChatCfg is parsed directly from the self-contained `chat` row of
+// agentguard_sentry_config (own base_url/api_key/model + budgets).
 type ChatCfg struct {
 	BaseURL            string `json:"base_url"`
 	APIKey             string `json:"api_key"`
@@ -82,18 +82,16 @@ type LLM interface {
 	ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onToken func(string)) (ChatResult, error)
 }
 
-// chatCfgResolveSQL builds the SQL to resolve Sentry chat config from the
-// `shared` and `chat` rows of agentguard_sentry_config using dlp_config_resolve.
+// chatCfgResolveSQL reads the self-contained `chat` row directly — the row is
+// a concrete endpoint (base_url/api_key/model/budgets), so no
+// dlp_config_resolve fold/catalog resolution is needed (unlike DLP).
 func chatCfgResolveSQL() string {
-	sub := func(key string) string {
-		return fmt.Sprintf("coalesce((SELECT value FROM table(agentguard_sentry_config) WHERE key='%s'), '')", key)
-	}
-	return fmt.Sprintf("SELECT dlp_config_resolve(%s, %s) AS cfg",
-		sub(tp.SentryCfgKeyShared), sub(tp.SentryCfgKeyChat))
+	return fmt.Sprintf(
+		"SELECT coalesce((SELECT value FROM table(agentguard_sentry_config) WHERE key='%s'), '') AS cfg",
+		tp.SentryCfgKeyChat)
 }
 
-// LoadChatCfg reads the `shared` + `chat` rows live from agentguard_sentry_config
-// and folds them with the dlp_config_resolve UDF.
+// LoadChatCfg reads the `chat` row live from agentguard_sentry_config.
 func LoadChatCfg(tpCfg *config.TimeplusConfig) (ChatCfg, error) {
 	rows, err := tp.Query(tpCfg, chatCfgResolveSQL())
 	if err != nil {

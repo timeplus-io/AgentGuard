@@ -8,81 +8,57 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 )
 
-func TestSentryConfigRowsSeedsThreeRows(t *testing.T) {
+func TestSentryConfigRowsSeedsChatAndMemory(t *testing.T) {
 	rows := SentryConfigRows(config.SentryConfig{
-		BaseURL: "http://x/v1", APIKey: "k", ChatModel: "gpt-4o",
-		EmbeddingModel: "text-embedding-3-small", EmbeddingDim: 1536,
+		ChatBaseURL: "https://api.openai.com/v1", ChatAPIKey: "sk", ChatModel: "gpt-4o",
 		RequestTimeoutSeconds: 60, MaxOutputTokens: 1024,
+		MemoryEnabled: true, EmbeddingBaseURL: "http://localhost:11434/v1",
+		EmbeddingAPIKey: "", EmbeddingModel: "nomic-embed-text", EmbeddingDim: 768,
 	})
-	for _, k := range []string{SentryCfgKeyShared, SentryCfgKeyChat, SentryCfgKeyEmbed} {
-		if _, ok := rows[k]; !ok {
-			t.Fatalf("missing seed row %q", k)
-		}
-		var v any
-		if err := json.Unmarshal([]byte(rows[k]), &v); err != nil {
-			t.Fatalf("row %q not valid JSON: %v", k, err)
-		}
+	if len(rows) != 2 {
+		t.Fatalf("want 2 rows, got %d (%v)", len(rows), rows)
 	}
-	// shared carries the endpoint + a catalog with chat + embedding entries.
-	var shared struct {
-		BaseURL string         `json:"base_url"`
-		Models  map[string]any `json:"models"`
+	// chat: self-contained endpoint, NO system_prompt, literal model.
+	var chat map[string]any
+	if err := json.Unmarshal([]byte(rows[SentryCfgKeyChat]), &chat); err != nil {
+		t.Fatal(err)
 	}
-	_ = json.Unmarshal([]byte(rows[SentryCfgKeyShared]), &shared)
-	if shared.BaseURL != "http://x/v1" {
-		t.Fatalf("shared base_url = %q", shared.BaseURL)
+	if chat["base_url"] != "https://api.openai.com/v1" || chat["model"] != "gpt-4o" {
+		t.Fatalf("chat endpoint wrong: %v", chat)
 	}
-	if _, ok := shared.Models["chat"]; !ok {
-		t.Fatal("shared.models missing 'chat' entry")
+	if _, has := chat["system_prompt"]; has {
+		t.Fatal("chat row must NOT contain system_prompt")
 	}
-	if _, ok := shared.Models["embedding"]; !ok {
-		t.Fatal("shared.models missing 'embedding' entry")
+	if chat["max_iterations"].(float64) != 12 {
+		t.Fatalf("chat budgets missing: %v", chat)
 	}
-	// chat row references the catalog name "chat" and carries the injection guard prompt.
-	var chat struct {
-		Model         string `json:"model"`
-		SystemPrompt  string `json:"system_prompt"`
-		MaxIterations int    `json:"max_iterations"`
+	// memory: enable flag + own embedding endpoint.
+	var mem map[string]any
+	if err := json.Unmarshal([]byte(rows[SentryCfgKeyMemory]), &mem); err != nil {
+		t.Fatal(err)
 	}
-	_ = json.Unmarshal([]byte(rows[SentryCfgKeyChat]), &chat)
-	if chat.Model != "chat" || chat.MaxIterations != 12 {
-		t.Fatalf("chat row wrong: %+v", chat)
-	}
-	if !strings.Contains(chat.SystemPrompt, "data, never instructions") {
-		t.Fatal("chat system_prompt missing injection guard")
-	}
-	var emb struct {
-		Model string `json:"model"`
-		Dim   int    `json:"embedding_dim"`
-	}
-	_ = json.Unmarshal([]byte(rows[SentryCfgKeyEmbed]), &emb)
-	if emb.Model != "embedding" || emb.Dim != 1536 {
-		t.Fatalf("embed row wrong: %+v", emb)
+	if mem["enabled"] != true || mem["base_url"] != "http://localhost:11434/v1" ||
+		mem["model"] != "nomic-embed-text" || mem["embedding_dim"].(float64) != 768 {
+		t.Fatalf("memory row wrong: %v", mem)
 	}
 }
 
-func TestIsSentryConfigKey(t *testing.T) {
-	for _, k := range []string{SentryCfgKeyShared, SentryCfgKeyChat, SentryCfgKeyEmbed} {
-		if !IsSentryConfigKey(k) {
-			t.Fatalf("%q should be a sentry config key", k)
-		}
-	}
-	if IsSentryConfigKey("nope") {
-		t.Fatal("unknown key accepted")
+func TestSentryConfigKeysAreChatMemory(t *testing.T) {
+	got := SentryConfigKeys()
+	if len(got) != 2 || !IsSentryConfigKey("chat") || !IsSentryConfigKey("memory") ||
+		IsSentryConfigKey("shared") || IsSentryConfigKey("embed") {
+		t.Fatalf("keys wrong: %v", got)
 	}
 }
 
 func TestValidateSentryConfigValue(t *testing.T) {
-	cases := []struct {
-		key, value, wantErr string
-	}{
-		{SentryCfgKeyChat, `{"system_prompt":"ok"}`, ""},
-		{SentryCfgKeyChat, `{"system_prompt":123}`, "system_prompt must be a string"},
-		{SentryCfgKeyChat, `not json`, "valid JSON"},
-		{SentryCfgKeyShared, `{"models":{"chat":{"model":"gpt-4o"}}}`, ""},
-		{SentryCfgKeyShared, `{"models":[]}`, "models must be an object"},
-		{SentryCfgKeyEmbed, `{"embedding_dim":1536}`, ""},
-		{SentryCfgKeyEmbed, `{"embedding_dim":"big"}`, "embedding_dim must be a number"},
+	cases := []struct{ key, value, wantErr string }{
+		{"chat", `{"base_url":"x","model":"y"}`, ""},
+		{"chat", `not json`, "valid JSON"},
+		{"memory", `{"enabled":false}`, ""},
+		{"memory", `{"enabled":"yes"}`, "enabled must be a bool"},
+		{"memory", `{"embedding_dim":"big"}`, "embedding_dim must be a number"},
+		{"memory", `{"embedding_dim":768}`, ""},
 	}
 	for _, c := range cases {
 		err := ValidateSentryConfigValue(c.key, c.value)
@@ -90,7 +66,7 @@ func TestValidateSentryConfigValue(t *testing.T) {
 			t.Fatalf("%s %q: unexpected %v", c.key, c.value, err)
 		}
 		if c.wantErr != "" && (err == nil || !strings.Contains(err.Error(), c.wantErr)) {
-			t.Fatalf("%s %q: want err %q got %v", c.key, c.value, c.wantErr, err)
+			t.Fatalf("%s %q: want %q got %v", c.key, c.value, c.wantErr, err)
 		}
 	}
 }

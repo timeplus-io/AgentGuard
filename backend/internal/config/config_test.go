@@ -19,13 +19,16 @@ func TestSave_RoundTrip(t *testing.T) {
 		Sentry: config.SentryConfig{
 			Enabled:               true,
 			SkillDir:              "/custom/skills",
-			BaseURL:               "http://x/v1",
-			APIKey:                "sk-test",
+			ChatBaseURL:           "http://c/v1",
+			ChatAPIKey:            "sk-c",
 			ChatModel:             "gpt-4o",
-			EmbeddingModel:        "text-embedding-3-small",
-			EmbeddingDim:          1536,
 			RequestTimeoutSeconds: 45,
 			MaxOutputTokens:       2048,
+			MemoryEnabled:         true,
+			EmbeddingBaseURL:      "http://e/v1",
+			EmbeddingAPIKey:       "sk-e",
+			EmbeddingModel:        "nomic",
+			EmbeddingDim:          768,
 		},
 	}
 	if err := config.Save(cfg, path); err != nil {
@@ -63,20 +66,29 @@ func TestSave_RoundTrip(t *testing.T) {
 	if loaded.Sentry.SkillDir != "/custom/skills" {
 		t.Errorf("sentry.skill_dir: want /custom/skills, got %s", loaded.Sentry.SkillDir)
 	}
-	if loaded.Sentry.BaseURL != "http://x/v1" {
-		t.Errorf("sentry.base_url: want http://x/v1, got %s", loaded.Sentry.BaseURL)
+	if loaded.Sentry.ChatBaseURL != "http://c/v1" {
+		t.Errorf("sentry.chat_base_url: want http://c/v1, got %s", loaded.Sentry.ChatBaseURL)
 	}
-	if loaded.Sentry.APIKey != "" {
-		t.Errorf("sentry.api_key: want empty, got %s", loaded.Sentry.APIKey)
-	} // api_key is a secret — never written to config.yaml by Save() (matches dlp.api_key)
+	if loaded.Sentry.ChatAPIKey != "" {
+		t.Errorf("sentry.chat_api_key: want empty, got %s", loaded.Sentry.ChatAPIKey)
+	} // chat_api_key is a secret — never written to config.yaml by Save() (matches dlp.api_key)
 	if loaded.Sentry.ChatModel != "gpt-4o" {
 		t.Errorf("sentry.chat_model: want gpt-4o, got %s", loaded.Sentry.ChatModel)
 	}
-	if loaded.Sentry.EmbeddingModel != "text-embedding-3-small" {
-		t.Errorf("sentry.embedding_model: want text-embedding-3-small, got %s", loaded.Sentry.EmbeddingModel)
+	if !loaded.Sentry.MemoryEnabled {
+		t.Error("want sentry.memory_enabled=true")
 	}
-	if loaded.Sentry.EmbeddingDim != 1536 {
-		t.Errorf("sentry.embedding_dim: want 1536, got %d", loaded.Sentry.EmbeddingDim)
+	if loaded.Sentry.EmbeddingBaseURL != "http://e/v1" {
+		t.Errorf("sentry.embedding_base_url: want http://e/v1, got %s", loaded.Sentry.EmbeddingBaseURL)
+	}
+	if loaded.Sentry.EmbeddingAPIKey != "" {
+		t.Errorf("sentry.embedding_api_key: want empty, got %s", loaded.Sentry.EmbeddingAPIKey)
+	} // embedding_api_key is a secret — never written to config.yaml by Save()
+	if loaded.Sentry.EmbeddingModel != "nomic" {
+		t.Errorf("sentry.embedding_model: want nomic, got %s", loaded.Sentry.EmbeddingModel)
+	}
+	if loaded.Sentry.EmbeddingDim != 768 {
+		t.Errorf("sentry.embedding_dim: want 768, got %d", loaded.Sentry.EmbeddingDim)
 	}
 	if loaded.Sentry.RequestTimeoutSeconds != 45 {
 		t.Errorf("sentry.request_timeout_seconds: want 45, got %d", loaded.Sentry.RequestTimeoutSeconds)

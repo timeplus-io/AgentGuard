@@ -139,9 +139,11 @@ func TestEffectiveAndApplySentry(t *testing.T) {
 		key string
 		dst *string
 	}{
-		{"sentry.base_url", &cfg.Sentry.BaseURL},
-		{"sentry.api_key", &cfg.Sentry.APIKey},
+		{"sentry.chat_base_url", &cfg.Sentry.ChatBaseURL},
+		{"sentry.chat_api_key", &cfg.Sentry.ChatAPIKey},
 		{"sentry.chat_model", &cfg.Sentry.ChatModel},
+		{"sentry.embedding_base_url", &cfg.Sentry.EmbeddingBaseURL},
+		{"sentry.embedding_api_key", &cfg.Sentry.EmbeddingAPIKey},
 		{"sentry.embedding_model", &cfg.Sentry.EmbeddingModel},
 	}
 	for _, tc := range stringCases {
@@ -155,6 +157,16 @@ func TestEffectiveAndApplySentry(t *testing.T) {
 		if got := EffectiveValue(cfg, tc.key); got != want {
 			t.Errorf("EffectiveValue %s after apply: got %v, want %v", tc.key, got, want)
 		}
+	}
+
+	if err := ApplyChange(cfg, "sentry.memory_enabled", true); err != nil {
+		t.Fatalf("ApplyChange sentry.memory_enabled: %v", err)
+	}
+	if !cfg.Sentry.MemoryEnabled {
+		t.Error("ApplyChange sentry.memory_enabled: cfg still false")
+	}
+	if got := EffectiveValue(cfg, "sentry.memory_enabled"); got != true {
+		t.Errorf("EffectiveValue sentry.memory_enabled after apply: got %v", got)
 	}
 
 	intCases := []struct {

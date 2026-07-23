@@ -196,12 +196,18 @@ func EffectiveValue(cfg *Config, key string) any {
 		return cfg.Sentry.Enabled
 	case "sentry.skill_dir":
 		return cfg.Sentry.SkillDir
-	case "sentry.base_url":
-		return cfg.Sentry.BaseURL
-	case "sentry.api_key":
-		return cfg.Sentry.APIKey
+	case "sentry.chat_base_url":
+		return cfg.Sentry.ChatBaseURL
+	case "sentry.chat_api_key":
+		return cfg.Sentry.ChatAPIKey
 	case "sentry.chat_model":
 		return cfg.Sentry.ChatModel
+	case "sentry.memory_enabled":
+		return cfg.Sentry.MemoryEnabled
+	case "sentry.embedding_base_url":
+		return cfg.Sentry.EmbeddingBaseURL
+	case "sentry.embedding_api_key":
+		return cfg.Sentry.EmbeddingAPIKey
 	case "sentry.embedding_model":
 		return cfg.Sentry.EmbeddingModel
 	case "sentry.embedding_dim":
@@ -262,12 +268,18 @@ func ApplyChange(cfg *Config, key string, value any) error {
 		return setBool(&cfg.Sentry.Enabled, value)
 	case "sentry.skill_dir":
 		return setString(&cfg.Sentry.SkillDir, value)
-	case "sentry.base_url":
-		return setString(&cfg.Sentry.BaseURL, value)
-	case "sentry.api_key":
-		return setString(&cfg.Sentry.APIKey, value)
+	case "sentry.chat_base_url":
+		return setString(&cfg.Sentry.ChatBaseURL, value)
+	case "sentry.chat_api_key":
+		return setString(&cfg.Sentry.ChatAPIKey, value)
 	case "sentry.chat_model":
 		return setString(&cfg.Sentry.ChatModel, value)
+	case "sentry.memory_enabled":
+		return setBool(&cfg.Sentry.MemoryEnabled, value)
+	case "sentry.embedding_base_url":
+		return setString(&cfg.Sentry.EmbeddingBaseURL, value)
+	case "sentry.embedding_api_key":
+		return setString(&cfg.Sentry.EmbeddingAPIKey, value)
 	case "sentry.embedding_model":
 		return setString(&cfg.Sentry.EmbeddingModel, value)
 	case "sentry.embedding_dim":

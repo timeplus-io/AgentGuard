@@ -81,8 +81,8 @@ func InitSentry(ctx context.Context, conn proton.Conn, sCfg config.SentryConfig,
 	return nil
 }
 
-// seedSentryConfig seeds the three agentguard_sentry_config rows (shared/chat/
-// embed) from boot config, seed-if-absent per key so runtime edits are never
+// seedSentryConfig seeds the two agentguard_sentry_config rows (chat/memory)
+// from boot config, seed-if-absent per key so runtime edits are never
 // clobbered.
 func seedSentryConfig(ctx context.Context, conn proton.Conn, sCfg config.SentryConfig, emit func(status, msg string)) error {
 	rows := SentryConfigRows(sCfg)

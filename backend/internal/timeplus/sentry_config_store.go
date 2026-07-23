@@ -9,10 +9,12 @@ import (
 )
 
 // agentguard_sentry_config holds Sentry's dedicated model configuration as
-// key→JSON rows, independent of the DLP config stream. Rows: `shared` (endpoint
-// + model catalog), `chat` (LLM model/prompt/budgets), `embed` (embedding model
-// for Phase 2 memory). Resolved with the pure dlp_config_resolve UDF, same as
-// DLP. Mutable: an operator upserts a row to change models at runtime.
+// key→JSON rows, independent of the DLP config stream. Rows: `chat` (the
+// agent loop's own endpoint + budgets, no system_prompt) and `memory` (an
+// enable toggle + its own embedding endpoint for Phase-2 memory). Each row is
+// a self-contained, literal endpoint — no shared catalog, no
+// dlp_config_resolve indirection. Mutable: an operator upserts a row to
+// change a model/endpoint at runtime.
 const ddlSentryConfig = `
 CREATE MUTABLE STREAM IF NOT EXISTS agentguard_sentry_config
 (
@@ -24,9 +26,8 @@ CREATE MUTABLE STREAM IF NOT EXISTS agentguard_sentry_config
 PRIMARY KEY (key)`
 
 const (
-	SentryCfgKeyShared = "shared"
 	SentryCfgKeyChat   = "chat"
-	SentryCfgKeyEmbed  = "embed"
+	SentryCfgKeyMemory = "memory"
 )
 
 type SentryConfigRow struct {
@@ -36,9 +37,7 @@ type SentryConfigRow struct {
 	UpdatedBy string `json:"updated_by"`
 }
 
-func SentryConfigKeys() []string {
-	return []string{SentryCfgKeyShared, SentryCfgKeyChat, SentryCfgKeyEmbed}
-}
+func SentryConfigKeys() []string { return []string{SentryCfgKeyChat, SentryCfgKeyMemory} }
 
 func IsSentryConfigKey(key string) bool {
 	for _, k := range SentryConfigKeys() {
@@ -104,30 +103,22 @@ func ValidateSentryConfigValue(key, value string) error {
 	}
 	switch key {
 	case SentryCfgKeyChat:
+		// self-contained endpoint + budgets; no field is mandatory here (empty
+		// base_url surfaces at LoadChatCfg), but the JSON must be an object.
+		if _, ok := generic.(map[string]any); !ok {
+			return fmt.Errorf("%s: value must be a JSON object", key)
+		}
+	case SentryCfgKeyMemory:
 		var row struct {
-			SystemPrompt any `json:"system_prompt"`
+			Enabled any `json:"enabled"`
+			Dim     any `json:"embedding_dim"`
 		}
 		_ = json.Unmarshal([]byte(value), &row)
-		if row.SystemPrompt != nil {
-			if _, ok := row.SystemPrompt.(string); !ok {
-				return fmt.Errorf("%s: system_prompt must be a string", key)
+		if row.Enabled != nil {
+			if _, ok := row.Enabled.(bool); !ok {
+				return fmt.Errorf("%s: enabled must be a bool", key)
 			}
 		}
-	case SentryCfgKeyShared:
-		var row struct {
-			Models any `json:"models"`
-		}
-		_ = json.Unmarshal([]byte(value), &row)
-		if row.Models != nil {
-			if _, ok := row.Models.(map[string]any); !ok {
-				return fmt.Errorf("%s: models must be an object of name→{model,...}", key)
-			}
-		}
-	case SentryCfgKeyEmbed:
-		var row struct {
-			Dim any `json:"embedding_dim"`
-		}
-		_ = json.Unmarshal([]byte(value), &row)
 		if row.Dim != nil {
 			if _, ok := row.Dim.(float64); !ok {
 				return fmt.Errorf("%s: embedding_dim must be a number", key)
@@ -137,59 +128,59 @@ func ValidateSentryConfigValue(key, value string) error {
 	return nil
 }
 
-// SentryConfigRows renders the three seed rows from boot config. A model NAME
-// ("chat"/"embedding") in the chat/embed rows resolves against shared.models.
+// SentryConfigRows renders the two seed rows from boot config. Each row is a
+// self-contained endpoint (literal base_url/api_key/model) — no shared catalog.
 func SentryConfigRows(sCfg config.SentryConfig) map[string]string {
+	return map[string]string{
+		SentryCfgKeyChat:   DefaultSentryChatRow(sCfg),
+		SentryCfgKeyMemory: DefaultSentryMemoryRow(sCfg),
+	}
+}
+
+// DefaultSentryChatRow renders the `chat` row: the loop's endpoint + budgets.
+// No system_prompt — the loop uses the built-in DefaultSentrySystemPrompt.
+func DefaultSentryChatRow(sCfg config.SentryConfig) string {
 	timeout := sCfg.RequestTimeoutSeconds
 	if timeout <= 0 {
 		timeout = 60
 	}
-	models := map[string]any{}
-	if sCfg.ChatModel != "" {
-		models["chat"] = map[string]any{"model": sCfg.ChatModel}
-	} else {
-		models["chat"] = map[string]any{"model": ""}
-	}
-	if sCfg.EmbeddingModel != "" {
-		models["embedding"] = map[string]any{"model": sCfg.EmbeddingModel}
-	} else {
-		models["embedding"] = map[string]any{"model": ""}
-	}
-	shared, _ := json.Marshal(map[string]any{
-		"base_url": sCfg.BaseURL, "api_key": sCfg.APIKey,
-		"timeout": timeout, "models": models,
-	})
-	maxTokens := sCfg.MaxOutputTokens
-	if maxTokens <= 0 {
-		maxTokens = 1024
-	}
-	dim := sCfg.EmbeddingDim
-	if dim <= 0 {
-		dim = 1536
-	}
-	embed, _ := json.Marshal(map[string]any{"model": "embedding", "embedding_dim": dim})
-	return map[string]string{
-		SentryCfgKeyShared: string(shared),
-		SentryCfgKeyChat:   DefaultSentryChatRow(sCfg),
-		SentryCfgKeyEmbed:  string(embed),
-	}
-}
-
-// DefaultSentryChatRow renders the `chat` row (model name + prompt + budgets).
-func DefaultSentryChatRow(sCfg config.SentryConfig) string {
 	maxTokens := sCfg.MaxOutputTokens
 	if maxTokens <= 0 {
 		maxTokens = 1024
 	}
 	b, _ := json.Marshal(map[string]any{
-		"model":                 "chat",
-		"system_prompt":         DefaultSentrySystemPrompt,
+		"base_url":              sCfg.ChatBaseURL,
+		"api_key":               sCfg.ChatAPIKey,
+		"model":                 sCfg.ChatModel,
+		"timeout":               timeout,
 		"max_tokens":            maxTokens,
 		"max_iterations":        12,
 		"turn_token_budget":     32000,
 		"sql_timeout_ms":        30000,
 		"sql_max_rows":          1000,
 		"tool_result_max_bytes": 16384,
+	})
+	return string(b)
+}
+
+// DefaultSentryMemoryRow renders the `memory` row: enable flag + the embedding
+// endpoint. Consumed by Sentry memory in Phase 2; config-only today.
+func DefaultSentryMemoryRow(sCfg config.SentryConfig) string {
+	timeout := sCfg.RequestTimeoutSeconds
+	if timeout <= 0 {
+		timeout = 60
+	}
+	dim := sCfg.EmbeddingDim
+	if dim <= 0 {
+		dim = 1536
+	}
+	b, _ := json.Marshal(map[string]any{
+		"enabled":       sCfg.MemoryEnabled,
+		"base_url":      sCfg.EmbeddingBaseURL,
+		"api_key":       sCfg.EmbeddingAPIKey,
+		"model":         sCfg.EmbeddingModel,
+		"embedding_dim": dim,
+		"timeout":       timeout,
 	})
 	return string(b)
 }
