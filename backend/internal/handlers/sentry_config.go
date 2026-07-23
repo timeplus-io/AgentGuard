@@ -144,35 +144,106 @@ func UpsertSentryConfig(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
+// sentryTestBody is the request body for POST /api/sentry/config/test.
+type sentryTestBody struct {
+	BaseURL        string `json:"base_url"`
+	APIKey         string `json:"api_key"`
+	ChatModel      string `json:"chat_model"`
+	EmbeddingModel string `json:"embedding_model"`
+	EmbeddingDim   int    `json:"embedding_dim"`
+}
+
+// resolvedSentryTestCreds is the fully-resolved candidate a test-connection
+// probe runs against.
+type resolvedSentryTestCreds struct {
+	BaseURL        string
+	APIKey         string
+	ChatModel      string
+	EmbeddingModel string
+	EmbeddingDim   int
+}
+
+// storedSentrySharedRow is the subset of the `shared` row's JSON this
+// resolution cares about.
+type storedSentrySharedRow struct {
+	BaseURL string `json:"base_url"`
+	APIKey  string `json:"api_key"`
+	Models  map[string]struct {
+		Model string `json:"model"`
+	} `json:"models"`
+}
+
+// resolveSentryTestCreds resolves the effective base_url/api_key/chat_model/
+// embedding_model for a test-connection probe. Precedence per field: request
+// body (non-blank) → boot cfg.Sentry defaults (non-blank) → the
+// runtime-stored `shared` row of agentguard_sentry_config (non-blank).
+//
+// The stored-row fallback exists because the Settings editor never echoes
+// the api_key back (it's redacted in GetSentryConfig), so testConnection()
+// always posts api_key:"". And UpsertSentryConfig never writes back to
+// config.yaml, so after a restart cfg.Sentry.APIKey is empty whenever Sentry
+// was configured entirely through the runtime editor — the ONLY durable copy
+// of the key is the `shared` row. Without this fallback, "Test connection"
+// would falsely fail against any auth-requiring endpoint in that (common)
+// setup. storedSharedJSON may be "" (row absent, or the caller chose not to
+// fetch it) — resolution degrades to body → boot in that case.
+func resolveSentryTestCreds(body sentryTestBody, boot config.SentryConfig, storedSharedJSON string) resolvedSentryTestCreds {
+	var stored storedSentrySharedRow
+	if storedSharedJSON != "" {
+		_ = json.Unmarshal([]byte(storedSharedJSON), &stored)
+	}
+	dim := body.EmbeddingDim
+	if dim == 0 {
+		dim = boot.EmbeddingDim
+	}
+	return resolvedSentryTestCreds{
+		BaseURL:        orStr(body.BaseURL, orStr(boot.BaseURL, stored.BaseURL)),
+		APIKey:         orStr(body.APIKey, orStr(boot.APIKey, stored.APIKey)),
+		ChatModel:      orStr(body.ChatModel, orStr(boot.ChatModel, stored.Models["chat"].Model)),
+		EmbeddingModel: orStr(body.EmbeddingModel, orStr(boot.EmbeddingModel, stored.Models["embedding"].Model)),
+		EmbeddingDim:   dim,
+	}
+}
+
 // TestSentryConfig handles POST /api/sentry/config/test — validates a
 // candidate Sentry model endpoint: reachability, a chat completion WITH a
 // tool defined (asserting the model actually returns tool_calls — Sentry's
 // chat loop is useless without tool calling), and a real embedding call.
 // Resolves the candidate endpoint from the posted body, falling back to the
-// live cfg.Sentry boot defaults. Always HTTP 200; failures reported in-band.
+// live cfg.Sentry boot defaults and then the runtime-stored `shared` row (see
+// resolveSentryTestCreds). Always HTTP 200; failures reported in-band.
 func TestSentryConfig(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var body struct {
-			BaseURL        string `json:"base_url"`
-			APIKey         string `json:"api_key"`
-			ChatModel      string `json:"chat_model"`
-			EmbeddingModel string `json:"embedding_model"`
-			EmbeddingDim   int    `json:"embedding_dim"`
-		}
+		var body sentryTestBody
 		_ = c.ShouldBindJSON(&body)
 
 		config.Mu.RLock()
 		s := cfg.Sentry
 		config.Mu.RUnlock()
 
-		baseURL := strings.TrimRight(orStr(body.BaseURL, s.BaseURL), "/")
-		key := orStr(body.APIKey, s.APIKey)
-		chatModel := orStr(body.ChatModel, s.ChatModel)
-		embModel := orStr(body.EmbeddingModel, s.EmbeddingModel)
-		expectedDim := body.EmbeddingDim
-		if expectedDim == 0 {
-			expectedDim = s.EmbeddingDim
+		// Only hit Timeplus for the stored `shared` row if body+boot leave
+		// something we'd otherwise need it for — avoids an extra query for
+		// deployments that are fully configured via body/config.yaml.
+		needsStored := (body.APIKey == "" && s.APIKey == "") ||
+			(body.BaseURL == "" && s.BaseURL == "") ||
+			(body.ChatModel == "" && s.ChatModel == "") ||
+			(body.EmbeddingModel == "" && s.EmbeddingModel == "")
+		var storedShared string
+		if needsStored {
+			rc := auth.RequestCfg(c, cfg)
+			if v, err := tp.ReadSentryConfigValue(&rc.Timeplus, tp.SentryCfgKeyShared); err != nil {
+				log.Printf("[sentry] TestSentryConfig: stored shared-row fallback read failed: %v", err)
+			} else {
+				storedShared = v
+			}
 		}
+
+		creds := resolveSentryTestCreds(body, s, storedShared)
+		baseURL := strings.TrimRight(creds.BaseURL, "/")
+		key := creds.APIKey
+		chatModel := creds.ChatModel
+		embModel := creds.EmbeddingModel
+		expectedDim := creds.EmbeddingDim
 		maxTokens := s.MaxOutputTokens
 		if maxTokens <= 0 {
 			maxTokens = 1024

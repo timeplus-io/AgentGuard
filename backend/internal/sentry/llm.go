@@ -40,7 +40,8 @@ type ChatResult struct {
 	TokensOut int
 }
 
-// ChatCfg is parsed from dlp_config_resolve(shared, sentry_chat).
+// ChatCfg is parsed from dlp_config_resolve(shared, chat) — the `shared` and
+// `chat` rows of agentguard_sentry_config.
 type ChatCfg struct {
 	BaseURL            string `json:"base_url"`
 	APIKey             string `json:"api_key"`
@@ -82,7 +83,7 @@ type LLM interface {
 }
 
 // chatCfgResolveSQL builds the SQL to resolve Sentry chat config from the
-// sentry config stream using dlp_config_resolve.
+// `shared` and `chat` rows of agentguard_sentry_config using dlp_config_resolve.
 func chatCfgResolveSQL() string {
 	sub := func(key string) string {
 		return fmt.Sprintf("coalesce((SELECT value FROM table(agentguard_sentry_config) WHERE key='%s'), '')", key)
@@ -91,7 +92,7 @@ func chatCfgResolveSQL() string {
 		sub(tp.SentryCfgKeyShared), sub(tp.SentryCfgKeyChat))
 }
 
-// LoadChatCfg reads shared + sentry_chat live from agentguard_sentry_config
+// LoadChatCfg reads the `shared` + `chat` rows live from agentguard_sentry_config
 // and folds them with the dlp_config_resolve UDF.
 func LoadChatCfg(tpCfg *config.TimeplusConfig) (ChatCfg, error) {
 	rows, err := tp.Query(tpCfg, chatCfgResolveSQL())

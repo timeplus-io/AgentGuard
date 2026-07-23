@@ -94,11 +94,16 @@ PUT /api/sentry/config/shared
 `POST /api/sentry/config/test` checks reachability (`GET /models`), a chat
 completion **with a tool forced** (`tool_choice: "required"`) asserting the
 response actually carries `tool_calls` — the ReAct loop is non-functional
-without a tool-calling-capable model — and a real embedding call. It accepts
-an optional body (`base_url`/`api_key`/`chat_model`/`embedding_model`/
-`embedding_dim`) to test a candidate before saving; omitted fields fall back
-to the live `sentry.*` boot config, not the stored `agentguard_sentry_config`
-rows.
+without a tool-calling-capable model — and a real embedding call. Some
+OpenAI-compatible endpoints/gateways reject `tool_choice: "required"` outright
+and will false-fail this check even when the model supports tool calling
+under `"auto"` — in that case, verify tool calling with an actual Sentry chat
+turn instead. It accepts an optional body (`base_url`/`api_key`/`chat_model`/
+`embedding_model`/`embedding_dim`) to test a candidate before saving; omitted
+fields fall back first to the live `sentry.*` boot config, then to the
+runtime-stored `shared` row of `agentguard_sentry_config` — the Settings
+editor never echoes a saved `api_key` back, so this is what makes "Test
+connection" work for a deployment configured entirely at runtime.
 
 Resolution rules (`dlp_config_resolve`, same as DLP):
 - `chat.model` (default `"chat"`) is looked up in `shared.models`. A match
