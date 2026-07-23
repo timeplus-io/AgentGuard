@@ -702,7 +702,7 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.
 		}
 		// Best-effort Sentry re-provision, same rationale as DLP above.
 		if reqCfg.Sentry.Enabled {
-			if err := tp.SyncSentry(reqCfg.Timeplus, reqCfg.Sentry, reqCfg.DLP); err != nil {
+			if err := tp.SyncSentry(reqCfg.Timeplus, reqCfg.Sentry); err != nil {
 				log.Printf("rules: SyncMVs Sentry sync: %v", err)
 			}
 		}

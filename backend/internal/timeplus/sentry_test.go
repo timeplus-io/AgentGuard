@@ -8,8 +8,8 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 )
 
-func TestSentryChatDefaultsIsValidJSON(t *testing.T) {
-	raw := SentryChatDefaults(config.DLPConfig{RiskModel: "mock-risk"})
+func TestDefaultSentryChatRowIsValidJSON(t *testing.T) {
+	raw := DefaultSentryChatRow(config.SentryConfig{MaxOutputTokens: 1024})
 	var v struct {
 		Model           string `json:"model"`
 		SystemPrompt    string `json:"system_prompt"`
@@ -21,7 +21,7 @@ func TestSentryChatDefaultsIsValidJSON(t *testing.T) {
 		ToolResultMax   int    `json:"tool_result_max_bytes"`
 	}
 	if err := json.Unmarshal([]byte(raw), &v); err != nil {
-		t.Fatalf("defaults not valid JSON: %v", err)
+		t.Fatalf("chat row not valid JSON: %v", err)
 	}
 	if v.Model != "chat" {
 		t.Fatalf("model = %q, want catalog name \"chat\"", v.Model)
@@ -38,8 +38,8 @@ func TestSentryChatDefaultsIsValidJSON(t *testing.T) {
 }
 
 func TestSentryConfigKeyRegistered(t *testing.T) {
-	if !IsDLPConfigKey(SentryCfgKeyChat) {
-		t.Fatal("sentry_chat must be a recognised config key (PUT /api/dlp/config/sentry_chat)")
+	if !IsSentryConfigKey(SentryCfgKeyChat) {
+		t.Fatal("chat must be a recognised Sentry config key (agentguard_sentry_config)")
 	}
 }
 

@@ -163,7 +163,7 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, dlpCfg config
 	}
 
 	emit("running", "$ Provisioning Sentry conversational core…")
-	if err := InitSentry(ctx, conn, sentryCfg, dlpCfg, emit); err != nil {
+	if err := InitSentry(ctx, conn, sentryCfg, emit); err != nil {
 		log.Printf("timeplus init: warning provisioning Sentry: %v (continuing)", err)
 		emit("ok", "  - Sentry provisioning failed (non-fatal): "+err.Error())
 	}
