@@ -224,7 +224,7 @@ func SentryStatus(cfg *config.Config) gin.HandlerFunc {
 
 		rows, err := tp.Query(&rcfg.Timeplus, `
 			SELECT name FROM system.tables
-			WHERE name IN ('agentguard_sentry_conversations', 'agentguard_sentry_messages')
+			WHERE name IN ('agentguard_sentry_conversations', 'agentguard_sentry_messages', 'agentguard_sentry_config')
 			  AND database = current_database()`)
 		if err != nil {
 			log.Printf("sentry: status system.tables: %v", err)
@@ -236,7 +236,8 @@ func SentryStatus(cfg *config.Config) gin.HandlerFunc {
 					found[name] = true
 				}
 			}
-			resp["provisioned"] = found["agentguard_sentry_conversations"] && found["agentguard_sentry_messages"]
+			resp["provisioned"] = found["agentguard_sentry_conversations"] &&
+				found["agentguard_sentry_messages"] && found["agentguard_sentry_config"]
 		}
 
 		cc, err := sentry.LoadChatCfg(&rcfg.Timeplus)
