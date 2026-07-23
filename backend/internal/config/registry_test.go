@@ -13,7 +13,10 @@ func TestRegistryCoversAllKeys(t *testing.T) {
 		"timeplus.user", "timeplus.password", "agentguard.url",
 		"catalog.dir", "holds.fail_policy", "dlp.enabled",
 		"dlp.api_key", "dlp.embedding_dim", "sentry.enabled",
-		"sentry.skill_dir", "setup.complete",
+		"sentry.skill_dir", "sentry.base_url", "sentry.api_key",
+		"sentry.chat_model", "sentry.embedding_model", "sentry.embedding_dim",
+		"sentry.request_timeout_seconds", "sentry.max_output_tokens",
+		"setup.complete",
 	}
 	for _, k := range want {
 		if _, ok := MetaFor(k); !ok {

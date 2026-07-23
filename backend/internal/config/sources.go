@@ -196,6 +196,20 @@ func EffectiveValue(cfg *Config, key string) any {
 		return cfg.Sentry.Enabled
 	case "sentry.skill_dir":
 		return cfg.Sentry.SkillDir
+	case "sentry.base_url":
+		return cfg.Sentry.BaseURL
+	case "sentry.api_key":
+		return cfg.Sentry.APIKey
+	case "sentry.chat_model":
+		return cfg.Sentry.ChatModel
+	case "sentry.embedding_model":
+		return cfg.Sentry.EmbeddingModel
+	case "sentry.embedding_dim":
+		return cfg.Sentry.EmbeddingDim
+	case "sentry.request_timeout_seconds":
+		return cfg.Sentry.RequestTimeoutSeconds
+	case "sentry.max_output_tokens":
+		return cfg.Sentry.MaxOutputTokens
 	case "setup.complete":
 		return cfg.SetupComplete
 	}
@@ -248,6 +262,20 @@ func ApplyChange(cfg *Config, key string, value any) error {
 		return setBool(&cfg.Sentry.Enabled, value)
 	case "sentry.skill_dir":
 		return setString(&cfg.Sentry.SkillDir, value)
+	case "sentry.base_url":
+		return setString(&cfg.Sentry.BaseURL, value)
+	case "sentry.api_key":
+		return setString(&cfg.Sentry.APIKey, value)
+	case "sentry.chat_model":
+		return setString(&cfg.Sentry.ChatModel, value)
+	case "sentry.embedding_model":
+		return setString(&cfg.Sentry.EmbeddingModel, value)
+	case "sentry.embedding_dim":
+		return setInt(&cfg.Sentry.EmbeddingDim, value)
+	case "sentry.request_timeout_seconds":
+		return setInt(&cfg.Sentry.RequestTimeoutSeconds, value)
+	case "sentry.max_output_tokens":
+		return setInt(&cfg.Sentry.MaxOutputTokens, value)
 	}
 	return fmt.Errorf("key %q cannot be applied", key)
 }

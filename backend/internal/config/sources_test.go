@@ -134,6 +134,49 @@ func TestEffectiveAndApplySentry(t *testing.T) {
 	if got := EffectiveValue(cfg, "sentry.skill_dir"); got != "/opt/skills/timeplus-sql-guide" {
 		t.Errorf("EffectiveValue sentry.skill_dir after apply: got %v", got)
 	}
+
+	stringCases := []struct {
+		key string
+		dst *string
+	}{
+		{"sentry.base_url", &cfg.Sentry.BaseURL},
+		{"sentry.api_key", &cfg.Sentry.APIKey},
+		{"sentry.chat_model", &cfg.Sentry.ChatModel},
+		{"sentry.embedding_model", &cfg.Sentry.EmbeddingModel},
+	}
+	for _, tc := range stringCases {
+		want := "value-for-" + tc.key
+		if err := ApplyChange(cfg, tc.key, want); err != nil {
+			t.Fatalf("ApplyChange %s: %v", tc.key, err)
+		}
+		if *tc.dst != want {
+			t.Errorf("ApplyChange %s: cfg field not updated, got %q", tc.key, *tc.dst)
+		}
+		if got := EffectiveValue(cfg, tc.key); got != want {
+			t.Errorf("EffectiveValue %s after apply: got %v, want %v", tc.key, got, want)
+		}
+	}
+
+	intCases := []struct {
+		key string
+		dst *int
+	}{
+		{"sentry.embedding_dim", &cfg.Sentry.EmbeddingDim},
+		{"sentry.request_timeout_seconds", &cfg.Sentry.RequestTimeoutSeconds},
+		{"sentry.max_output_tokens", &cfg.Sentry.MaxOutputTokens},
+	}
+	for i, tc := range intCases {
+		want := 100 + i
+		if err := ApplyChange(cfg, tc.key, want); err != nil {
+			t.Fatalf("ApplyChange %s: %v", tc.key, err)
+		}
+		if *tc.dst != want {
+			t.Errorf("ApplyChange %s: cfg field not updated, got %d", tc.key, *tc.dst)
+		}
+		if got := EffectiveValue(cfg, tc.key); got != want {
+			t.Errorf("EffectiveValue %s after apply: got %v, want %v", tc.key, got, want)
+		}
+	}
 }
 
 func TestCoerceDLPTimeoutTokens(t *testing.T) {

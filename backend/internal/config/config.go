@@ -57,10 +57,20 @@ type DLPConfig struct {
 	MaxOutputTokens int `mapstructure:"max_output_tokens"`
 }
 
-// SentryConfig configures the Sentry conversational agent (spec 2026-07-22).
+// SentryConfig configures the Sentry conversational agent and its dedicated
+// chat + embedding models (spec 2026-07-22-sentry-dedicated-model-config).
 type SentryConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`
 	SkillDir string `mapstructure:"skill_dir"` // optional on-disk override for the vendored timeplus-sql-guide skill
+	// Boot defaults seeded seed-if-absent into agentguard_sentry_config; the
+	// stream is authoritative after first provision.
+	BaseURL               string `mapstructure:"base_url"`
+	APIKey                string `mapstructure:"api_key"`
+	ChatModel             string `mapstructure:"chat_model"`
+	EmbeddingModel        string `mapstructure:"embedding_model"`
+	EmbeddingDim          int    `mapstructure:"embedding_dim"`
+	RequestTimeoutSeconds int    `mapstructure:"request_timeout_seconds"`
+	MaxOutputTokens       int    `mapstructure:"max_output_tokens"`
 }
 
 // ProvisionedDLP records the DLP model settings that were baked into UDFs and
@@ -154,6 +164,13 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("provisioned.dlp.max_output_tokens", 0)
 	v.SetDefault("sentry.enabled", false)
 	v.SetDefault("sentry.skill_dir", "")
+	v.SetDefault("sentry.base_url", "")
+	v.SetDefault("sentry.api_key", "")
+	v.SetDefault("sentry.chat_model", "")
+	v.SetDefault("sentry.embedding_model", "")
+	v.SetDefault("sentry.embedding_dim", 1536)
+	v.SetDefault("sentry.request_timeout_seconds", 60)
+	v.SetDefault("sentry.max_output_tokens", 1024)
 
 	if searchPaths {
 		explicitConfigFile := v.ConfigFileUsed()
@@ -219,6 +236,13 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.ProvisionedDLP.MaxOutputTokens = v.GetInt("provisioned.dlp.max_output_tokens")
 	cfg.Sentry.Enabled = v.GetBool("sentry.enabled")
 	cfg.Sentry.SkillDir = v.GetString("sentry.skill_dir")
+	cfg.Sentry.BaseURL = v.GetString("sentry.base_url")
+	cfg.Sentry.APIKey = v.GetString("sentry.api_key")
+	cfg.Sentry.ChatModel = v.GetString("sentry.chat_model")
+	cfg.Sentry.EmbeddingModel = v.GetString("sentry.embedding_model")
+	cfg.Sentry.EmbeddingDim = v.GetInt("sentry.embedding_dim")
+	cfg.Sentry.RequestTimeoutSeconds = v.GetInt("sentry.request_timeout_seconds")
+	cfg.Sentry.MaxOutputTokens = v.GetInt("sentry.max_output_tokens")
 	// TIMEPLUS_USER / TIMEPLUS_PASSWORD: optional canonical service account
 	// for server-to-server endpoints. Never written to the config file.
 	cfg.Timeplus.User = v.GetString("timeplus.user")
@@ -270,6 +294,13 @@ func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("dlp.max_output_tokens", "DLP_MAX_OUTPUT_TOKENS")
 	_ = v.BindEnv("sentry.enabled", "SENTRY_ENABLED")
 	_ = v.BindEnv("sentry.skill_dir", "SENTRY_SKILL_DIR")
+	_ = v.BindEnv("sentry.base_url", "SENTRY_BASE_URL")
+	_ = v.BindEnv("sentry.api_key", "SENTRY_API_KEY")
+	_ = v.BindEnv("sentry.chat_model", "SENTRY_CHAT_MODEL")
+	_ = v.BindEnv("sentry.embedding_model", "SENTRY_EMBEDDING_MODEL")
+	_ = v.BindEnv("sentry.embedding_dim", "SENTRY_EMBEDDING_DIM")
+	_ = v.BindEnv("sentry.request_timeout_seconds", "SENTRY_REQUEST_TIMEOUT_SECONDS")
+	_ = v.BindEnv("sentry.max_output_tokens", "SENTRY_MAX_OUTPUT_TOKENS")
 }
 
 // Save writes non-sensitive config fields to the specified path (typically "config.yaml").
@@ -305,5 +336,12 @@ func Save(cfg *Config, path string) error {
 	v.Set("provisioned.dlp.max_output_tokens", cfg.ProvisionedDLP.MaxOutputTokens)
 	v.Set("sentry.enabled", cfg.Sentry.Enabled)
 	v.Set("sentry.skill_dir", cfg.Sentry.SkillDir)
+	v.Set("sentry.base_url", cfg.Sentry.BaseURL)
+	v.Set("sentry.api_key", cfg.Sentry.APIKey)
+	v.Set("sentry.chat_model", cfg.Sentry.ChatModel)
+	v.Set("sentry.embedding_model", cfg.Sentry.EmbeddingModel)
+	v.Set("sentry.embedding_dim", cfg.Sentry.EmbeddingDim)
+	v.Set("sentry.request_timeout_seconds", cfg.Sentry.RequestTimeoutSeconds)
+	v.Set("sentry.max_output_tokens", cfg.Sentry.MaxOutputTokens)
 	return v.WriteConfigAs(path)
 }
