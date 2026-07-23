@@ -1,6 +1,9 @@
 package sentry
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestChatCfgDefaultsApplied(t *testing.T) {
 	cc := ChatCfg{}
@@ -19,5 +22,18 @@ func TestChatCfgClamps(t *testing.T) {
 	cc.applyDefaults()
 	if cc.MaxIterations != 32 || cc.SQLMaxRows != 5000 || cc.SQLTimeoutMs != 55000 {
 		t.Fatalf("clamps not applied: %+v", cc)
+	}
+}
+
+func TestLoadChatCfgSQLTargetsSentryStream(t *testing.T) {
+	sql := chatCfgResolveSQL()
+	if !strings.Contains(sql, "agentguard_sentry_config") {
+		t.Fatalf("expected sentry config stream, got: %s", sql)
+	}
+	if strings.Contains(sql, "agentguard_dlp_config") {
+		t.Fatal("must not read DLP config")
+	}
+	if !strings.Contains(sql, "key='shared'") || !strings.Contains(sql, "key='chat'") {
+		t.Fatalf("expected shared+chat keys: %s", sql)
 	}
 }

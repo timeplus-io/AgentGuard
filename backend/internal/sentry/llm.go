@@ -81,14 +81,20 @@ type LLM interface {
 	ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onToken func(string)) (ChatResult, error)
 }
 
-// LoadChatCfg reads shared + sentry_chat live and folds them with the
-// dlp_config_resolve UDF (same expression the DLP funnel uses).
-func LoadChatCfg(tpCfg *config.TimeplusConfig) (ChatCfg, error) {
+// chatCfgResolveSQL builds the SQL to resolve Sentry chat config from the
+// sentry config stream using dlp_config_resolve.
+func chatCfgResolveSQL() string {
 	sub := func(key string) string {
-		return fmt.Sprintf("coalesce((SELECT value FROM table(agentguard_dlp_config) WHERE key='%s'), '')", key)
+		return fmt.Sprintf("coalesce((SELECT value FROM table(agentguard_sentry_config) WHERE key='%s'), '')", key)
 	}
-	rows, err := tp.Query(tpCfg, fmt.Sprintf("SELECT dlp_config_resolve(%s, %s) AS cfg",
-		sub(tp.DLPCfgKeyShared), sub(tp.SentryCfgKeyChat)))
+	return fmt.Sprintf("SELECT dlp_config_resolve(%s, %s) AS cfg",
+		sub(tp.SentryCfgKeyShared), sub(tp.SentryCfgKeyChat))
+}
+
+// LoadChatCfg reads shared + sentry_chat live from agentguard_sentry_config
+// and folds them with the dlp_config_resolve UDF.
+func LoadChatCfg(tpCfg *config.TimeplusConfig) (ChatCfg, error) {
+	rows, err := tp.Query(tpCfg, chatCfgResolveSQL())
 	if err != nil {
 		return ChatCfg{}, fmt.Errorf("sentry: load chat config: %w", err)
 	}
@@ -100,7 +106,7 @@ func LoadChatCfg(tpCfg *config.TimeplusConfig) (ChatCfg, error) {
 	}
 	cc.applyDefaults()
 	if cc.BaseURL == "" {
-		return cc, fmt.Errorf("sentry: no base_url in resolved config — set the shared config row")
+		return cc, fmt.Errorf("sentry: no base_url in resolved config — configure Settings → Sentry Agent")
 	}
 	return cc, nil
 }
