@@ -54,8 +54,8 @@ AgentGuard data reference:
 
 // InitSentry provisions the Sentry conversational core: conversation streams,
 // its own dedicated config stream (agentguard_sentry_config), and the
-// dlp_config_resolve UDF (pure; shared with DLP) so Sentry's config rows can be
-// folded the same way DLP's are. Idempotent; seed-if-absent for config.
+// dlp_config_resolve UDF (pure; provisioned for DLP's use). Sentry reads its
+// `chat` row directly and does not use the resolver. Idempotent; seed-if-absent for config.
 func InitSentry(ctx context.Context, conn proton.Conn, sCfg config.SentryConfig, emit func(status, msg string)) error {
 	if emit == nil {
 		emit = func(string, string) {}

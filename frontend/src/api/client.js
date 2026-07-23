@@ -247,7 +247,7 @@ export const api = {
   sentryConversation: (id) => get(`/sentry/conversations/${encodeURIComponent(id)}`),
   sentryArchive: (id) => del(`/sentry/conversations/${encodeURIComponent(id)}`),
 
-  // Runtime Sentry config stream (agentguard_sentry_config): shared/chat/embed rows.
+  // Runtime Sentry config stream (agentguard_sentry_config): chat/memory rows.
   getSentryConfig: () => get('/sentry/config'),
   putSentryConfig: (key, value) => put(`/sentry/config/${encodeURIComponent(key)}`, { value }),
   testSentryConfig: (payload) => post('/sentry/config/test', payload),

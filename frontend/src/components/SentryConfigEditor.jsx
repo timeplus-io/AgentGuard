@@ -99,9 +99,9 @@ export default function SentryConfigEditor() {
       }
     }
     const m = draft.memory
-    if (!m.enabled) return { enabled: false }
+    // Always include endpoint config to preserve when toggling memory off.
     return {
-      enabled: true,
+      enabled: m.enabled,
       base_url: m.base_url,
       api_key: m.api_key, // blank → server preserves the stored key
       model: m.model,
