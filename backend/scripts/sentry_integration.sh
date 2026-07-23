@@ -6,8 +6,10 @@
 # and a deterministic mock OpenAI-compatible model endpoint:
 #
 #   mock model server  →  build + run AgentGuard backend  →  login  →  POST /setup/provision
-#   →  point the shared DLP/Sentry config catalog at the mock  →  POST /api/sentry/chat
-#      with a forced tool call  →  assert the NDJSON stream carries tool_call + done + MOCK_ANSWER
+#   →  point Sentry's dedicated config stream (agentguard_sentry_config, `shared` row) at the mock
+#   →  POST /api/sentry/config/test and assert reachable+chat.tool_calling
+#   →  POST /api/sentry/chat with a forced tool call  →  assert the NDJSON stream carries
+#      tool_call + done + MOCK_ANSWER
 #   →  replay the conversation via GET /api/sentry/conversations/:id and assert a role="tool" row
 #
 # Mirrors backend/scripts/dlp_integration.sh's harness conventions (env
@@ -142,20 +144,52 @@ if echo "$prov" | grep -q '"status":"error"'; then
   fail "provisioning reported an error:"; echo "$prov" | grep '"status":"error"'
   exit 1
 fi
-pass "provisioned (agentguard_sentry_conversations/messages + sentry_chat config seed)"
+pass "provisioned (agentguard_sentry_conversations/messages + agentguard_sentry_config seed)"
 
-# ── 5. Point the shared config catalog at the mock model ────────────────────
-info "pointing the shared DLP/Sentry config catalog at the mock…"
+# ── 5. Point Sentry's dedicated config stream at the mock model ─────────────
+# Sentry no longer reads agentguard_dlp_config — it has its own
+# agentguard_sentry_config stream (shared/chat/embed rows). The `chat` row's
+# default model name ("chat") already matches the shared.models entry seeded
+# below, so only the `shared` row needs a PUT.
+info "pointing agentguard_sentry_config's shared row at the mock…"
 shared_cfg=$(cat <<JSON
-{"value":{"base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","models":{"chat":{"model":"mock-chat"},"embedding":{"model":"mock-embed"}}}}
+{"value":{"base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","timeout":60,"models":{"chat":{"model":"mock-chat"},"embedding":{"model":"mock-embed"}}}}
 JSON
 )
-curl -sf -m 10 -b "$COOKIES" -X PUT "${BACKEND_URL}/api/dlp/config/shared" \
+curl -sf -m 10 -b "$COOKIES" -X PUT "${BACKEND_URL}/api/sentry/config/shared" \
   -H 'Content-Type: application/json' -d "$shared_cfg" >/dev/null \
-  && pass "shared config points at mock (${BACKEND_URL} -> localhost:${MOCK_PORT})" \
-  || { fail "failed to update shared config"; exit 1; }
+  && pass "sentry shared config points at mock (${BACKEND_URL} -> localhost:${MOCK_PORT})" \
+  || { fail "failed to update sentry shared config"; exit 1; }
 
-# ── 6. Chat round-trip: force a tool call, assert the NDJSON stream ─────────
+# ── 6. Test-connection: assert the resolved endpoint is reachable and the
+#      chat model is tool-calling-capable. POST /api/sentry/config/test hits
+#      the candidate endpoint directly (no catalog-name resolution — unlike
+#      the `shared` row's `models.chat.model`, this is a literal model id), so
+#      pass the mock's literal model ids rather than relying on cfg.Sentry
+#      boot defaults (which the test config.yaml above leaves unset). ────────
+info "testing sentry config connection…"
+test_body=$(cat <<JSON
+{"base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","chat_model":"mock-chat","embedding_model":"mock-embed","embedding_dim":${EMBED_DIM}}
+JSON
+)
+test_out="$(curl -sf -m 20 -b "$COOKIES" -X POST "${BACKEND_URL}/api/sentry/config/test" \
+  -H 'Content-Type: application/json' -d "$test_body")"
+echo "$test_out" >"$WORKDIR/config_test.json"
+python3 - "$WORKDIR/config_test.json" <<'PY' || FAILED=1
+import json, sys
+d = json.load(open(sys.argv[1]))
+ok = True
+def check(cond, label):
+    global ok
+    print(("\033[32m✓\033[0m " if cond else "\033[31m✗\033[0m ") + label)
+    ok = ok and cond
+check(d.get("ok") is True, "config test overall ok:true")
+check(d.get("checks", {}).get("reachable", {}).get("ok") is True, "reachable.ok:true")
+check(d.get("checks", {}).get("chat", {}).get("tool_calling") is True, "chat.tool_calling:true")
+sys.exit(0 if ok else 1)
+PY
+
+# ── 7. Chat round-trip: force a tool call, assert the NDJSON stream ─────────
 info "running chat round-trip with a forced tool call…"
 OUT="$(curl -sf -m 60 -b "$COOKIES" -X POST "${BACKEND_URL}/api/sentry/chat" \
   -H 'Content-Type: application/json' \
@@ -191,7 +225,7 @@ PY
 CID="$(cat "$WORKDIR/chat.ndjson.cid" 2>/dev/null || true)"
 [ -n "$CID" ] || { fail "could not extract conversation_id from chat stream"; cat "$WORKDIR/chat.ndjson"; exit 1; }
 
-# ── 7. Conversation replay round-trip ────────────────────────────────────────
+# ── 8. Conversation replay round-trip ────────────────────────────────────────
 # The chat turn's messages are written via native-batch inserts into an
 # append-only stream; table(...) reads can lag the write by a beat, so poll
 # briefly (mirrors dlp_integration.sh §6's enrichment-pipeline wait) instead

@@ -61,6 +61,17 @@ class Handler(BaseHTTPRequestHandler):
             if body.get("stream"):
                 return self._stream_chat(msgs)
             prompt = msgs[-1].get("content", "") if msgs else ""
+            tools = body.get("tools") or []
+            if tools and body.get("tool_choice") in ("required", "auto") or (
+                    tools and isinstance(body.get("tool_choice"), dict)):
+                # Non-stream tool-calling probe (POST /api/sentry/config/test):
+                # deterministically call the first offered tool with empty args.
+                fn = tools[0].get("function", {})
+                resp = {"choices": [{"message": {"content": None, "tool_calls": [
+                    {"id": "call_1", "type": "function",
+                     "function": {"name": fn.get("name", ""), "arguments": "{}"}}]}}]}
+                self._send_json(resp)
+                return
             if "TASK: QUERY_UNDERSTANDING" in prompt:
                 content = json.dumps({"keywords": ["customer", "phone", "export"],
                                       "entity_types": ["phone"],
