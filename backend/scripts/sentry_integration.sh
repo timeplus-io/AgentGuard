@@ -6,8 +6,9 @@
 # and a deterministic mock OpenAI-compatible model endpoint:
 #
 #   mock model server  →  build + run AgentGuard backend  →  login  →  POST /setup/provision
-#   →  point Sentry's dedicated config stream (agentguard_sentry_config, `shared` row) at the mock
-#   →  POST /api/sentry/config/test and assert reachable+chat.tool_calling
+#   →  point Sentry's dedicated config stream (agentguard_sentry_config, `chat` row) at the mock
+#   →  POST /api/sentry/config/test (memory off) and assert chat.tool_calling + embedding skipped
+#   →  enable memory, point its `memory` row at the mock, re-test and assert embedding.ok
 #   →  POST /api/sentry/chat with a forced tool call  →  assert the NDJSON stream carries
 #      tool_call + done + MOCK_ANSWER
 #   →  replay the conversation via GET /api/sentry/conversations/:id and assert a role="tool" row
@@ -25,7 +26,7 @@
 #   TIMEPLUS_PORT         3218    (Timeplus HTTP query port, used by the backend)
 #   TIMEPLUS_NATIVE_PORT  8463    (native TCP, used by the backend for provisioning)
 #   MOCK_PORT             4000    (host port the mock binds)
-#   EMBED_DIM             8       (mock embedding dimension; unused by Sentry but shared with the DLP mock)
+#   EMBED_DIM             8       (mock embedding dimension; used by the memory-on embedding check)
 #   BACKEND_PORT          18081   (test backend port; distinct from dlp_integration.sh's 18080
 #                                  so both scripts can run concurrently)
 #   SENTRY_BASE_URL       http://host.docker.internal:MOCK_PORT/v1
@@ -148,28 +149,29 @@ pass "provisioned (agentguard_sentry_conversations/messages + agentguard_sentry_
 
 # ── 5. Point Sentry's dedicated config stream at the mock model ─────────────
 # Sentry no longer reads agentguard_dlp_config — it has its own
-# agentguard_sentry_config stream (shared/chat/embed rows). The `chat` row's
-# default model name ("chat") already matches the shared.models entry seeded
-# below, so only the `shared` row needs a PUT.
-info "pointing agentguard_sentry_config's shared row at the mock…"
-shared_cfg=$(cat <<JSON
-{"value":{"base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","timeout":60,"models":{"chat":{"model":"mock-chat"},"embedding":{"model":"mock-embed"}}}}
+# agentguard_sentry_config stream, now just TWO self-contained rows: `chat`
+# (the loop's own literal endpoint + budgets) and `memory` (an enable toggle +
+# its own embedding endpoint). No shared row, no model catalog, no
+# dlp_config_resolve indirection — each row carries a literal base_url + model.
+info "pointing agentguard_sentry_config's chat row at the mock…"
+chat_cfg=$(cat <<JSON
+{"value":{"base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","model":"mock-chat","timeout":60}}
 JSON
 )
-curl -sf -m 10 -b "$COOKIES" -X PUT "${BACKEND_URL}/api/sentry/config/shared" \
-  -H 'Content-Type: application/json' -d "$shared_cfg" >/dev/null \
-  && pass "sentry shared config points at mock (${BACKEND_URL} -> localhost:${MOCK_PORT})" \
-  || { fail "failed to update sentry shared config"; exit 1; }
+curl -sf -m 10 -b "$COOKIES" -X PUT "${BACKEND_URL}/api/sentry/config/chat" \
+  -H 'Content-Type: application/json' -d "$chat_cfg" >/dev/null \
+  && pass "sentry chat config points at mock (${BACKEND_URL} -> localhost:${MOCK_PORT})" \
+  || { fail "failed to update sentry chat config"; exit 1; }
 
-# ── 6. Test-connection: assert the resolved endpoint is reachable and the
-#      chat model is tool-calling-capable. POST /api/sentry/config/test hits
-#      the candidate endpoint directly (no catalog-name resolution — unlike
-#      the `shared` row's `models.chat.model`, this is a literal model id), so
-#      pass the mock's literal model ids rather than relying on cfg.Sentry
-#      boot defaults (which the test config.yaml above leaves unset). ────────
-info "testing sentry config connection…"
+# ── 6. Test-connection (memory OFF): assert the chat endpoint is reachable and
+#      tool-calling-capable, and that the embedding check is SKIPPED (memory is
+#      disabled by default). POST /api/sentry/config/test hits the candidate
+#      endpoint directly with a literal model id — pass the mock's literal
+#      model ids rather than relying on cfg.Sentry boot defaults (which the
+#      test config.yaml above leaves unset). ─────────────────────────────────
+info "testing sentry config connection (memory off → embedding skipped)…"
 test_body=$(cat <<JSON
-{"base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","chat_model":"mock-chat","embedding_model":"mock-embed","embedding_dim":${EMBED_DIM}}
+{"base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","chat_model":"mock-chat","memory_enabled":false}
 JSON
 )
 test_out="$(curl -sf -m 20 -b "$COOKIES" -X POST "${BACKEND_URL}/api/sentry/config/test" \
@@ -186,6 +188,42 @@ def check(cond, label):
 check(d.get("ok") is True, "config test overall ok:true")
 check(d.get("checks", {}).get("reachable", {}).get("ok") is True, "reachable.ok:true")
 check(d.get("checks", {}).get("chat", {}).get("tool_calling") is True, "chat.tool_calling:true")
+check(d.get("checks", {}).get("embedding", {}).get("skipped") is True, "embedding.skipped:true (memory off)")
+sys.exit(0 if ok else 1)
+PY
+
+# ── 6b. Enable memory and re-test: point the `memory` row at the mock's
+#       embedding endpoint, then assert the embedding check now runs and
+#       passes (the mock serves /embeddings at EMBED_DIM). ──────────────────
+info "enabling sentry memory + pointing its memory row at the mock…"
+memory_cfg=$(cat <<JSON
+{"value":{"enabled":true,"base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","model":"mock-embed","embedding_dim":${EMBED_DIM},"timeout":60}}
+JSON
+)
+curl -sf -m 10 -b "$COOKIES" -X PUT "${BACKEND_URL}/api/sentry/config/memory" \
+  -H 'Content-Type: application/json' -d "$memory_cfg" >/dev/null \
+  && pass "sentry memory config points at mock (embedding enabled)" \
+  || { fail "failed to update sentry memory config"; exit 1; }
+
+info "testing sentry config connection (memory on → embedding probed)…"
+test_body_mem=$(cat <<JSON
+{"base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","chat_model":"mock-chat","memory_enabled":true,"embedding_base_url":"http://localhost:${MOCK_PORT}/v1","embedding_model":"mock-embed","embedding_dim":${EMBED_DIM}}
+JSON
+)
+test_out_mem="$(curl -sf -m 20 -b "$COOKIES" -X POST "${BACKEND_URL}/api/sentry/config/test" \
+  -H 'Content-Type: application/json' -d "$test_body_mem")"
+echo "$test_out_mem" >"$WORKDIR/config_test_mem.json"
+python3 - "$WORKDIR/config_test_mem.json" <<'PY' || FAILED=1
+import json, sys
+d = json.load(open(sys.argv[1]))
+ok = True
+def check(cond, label):
+    global ok
+    print(("\033[32m✓\033[0m " if cond else "\033[31m✗\033[0m ") + label)
+    ok = ok and cond
+check(d.get("ok") is True, "config test overall ok:true")
+check(d.get("checks", {}).get("chat", {}).get("tool_calling") is True, "chat.tool_calling:true")
+check(d.get("checks", {}).get("embedding", {}).get("ok") is True, "embedding.ok:true (memory on)")
 sys.exit(0 if ok else 1)
 PY
 
