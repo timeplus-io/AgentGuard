@@ -111,7 +111,7 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 			outStr, cut := skills.Truncate(out, cc.ToolResultMaxBytes)
 			emit(Event{Type: "tool_result", ID: tc.ID, Name: tc.Name, Result: outStr, Truncated: cut})
 
-			metaJSON, err := json.Marshal(toolCallMeta{ID: tc.ID, Name: tc.Name, Args: tc.Args})
+			metaJSON, err := json.Marshal(toolCallMeta(tc))
 			if err != nil {
 				log.Printf("sentry: marshal tool_call metadata for %s failed: %v", tc.ID, err)
 				metaJSON = nil
