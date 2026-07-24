@@ -182,9 +182,10 @@ export default function SentryConfigEditor() {
         {draft.chat.api_type === 'anthropic' && (
           <p className="text-[11px] text-gray-500 mb-3">
             For AWS Bedrock: base URL <code>https://bedrock-mantle.&lt;region&gt;.api.aws/anthropic</code>{' '}
-            (note the <code>/anthropic</code> path, not <code>/v1</code>; region <code>us-east-1</code>/<code>us-west-2</code>),
-            API key = your Bedrock API key, model = a Bedrock Claude id
-            (e.g. <code>anthropic.claude-sonnet-4-6-v1</code>). Tool calling is required.
+            (note the <code>/anthropic</code> path, not <code>/v1</code>), API key = your Bedrock API key,
+            model = a bare Bedrock Claude id (e.g. <code>anthropic.claude-opus-4-8</code>). Pick a region where the
+            model is in-region available and access-enabled (<code>us-east-1</code> is a safe default; Mantle
+            doesn't do <code>us.</code>/<code>global.</code> cross-region ids). Tool calling is required.
           </p>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">

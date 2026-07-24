@@ -175,9 +175,9 @@ To point Sentry at Claude on Bedrock, under **Settings → Sentry Agent** (or
 | Field | Value |
 |-------|-------|
 | API type | `anthropic` |
-| Base URL | `https://bedrock-mantle.<region>.api.aws/anthropic` — note the `/anthropic` path prefix, **not** `/v1`. Region-gated to `us-east-1` or `us-west-2` (**not** `us-west-1`). |
+| Base URL | `https://bedrock-mantle.<region>.api.aws/anthropic` — note the `/anthropic` path prefix, **not** `/v1`. Pick a region where your model is **in-region** available (see caveat below); `us-east-1` is the safe default. |
 | API key | A Bedrock API key (sent as the `x-api-key` header) |
-| Model | A Bedrock Claude model id, e.g. `anthropic.claude-sonnet-4-6-v1` |
+| Model | A Bedrock Claude model id, **bare** (no `us.`/`global.` prefix, which are for `bedrock-runtime` only), e.g. `anthropic.claude-opus-4-8` or `anthropic.claude-sonnet-5` |
 
 ```
 PUT /api/sentry/config/chat
@@ -185,10 +185,23 @@ PUT /api/sentry/config/chat
   "api_type": "anthropic",
   "base_url": "https://bedrock-mantle.us-east-1.api.aws/anthropic",
   "api_key":  "<bedrock-api-key>",
-  "model":    "anthropic.claude-sonnet-4-6-v1",
+  "model":    "anthropic.claude-opus-4-8",
   "timeout":  60
 }}
 ```
+
+> **Region + model access caveat.** Mantle's Anthropic Messages endpoint
+> serves the **in-region** model only — it does **not** offer the
+> cross-region Geo/Global inference profiles (`us.`/`global.`) that
+> `bedrock-runtime` does. So the model must be *in-region available* in the
+> region in your base URL **and** access-enabled for your account (Bedrock
+> console → **Model access**). A model that works in the Bedrock playground
+> (which uses `bedrock-runtime` cross-region routing) can still 404 on Mantle
+> in a region where it has no in-region presence — e.g. Claude Opus 4.8 and
+> Sonnet 5 are in-region in `us-east-1` but **not** in `us-west-1`/`us-west-2`.
+> A `404 "model … does not exist"` means wrong region/not in-region; a
+> `403 "Provide an Agreement token"` means the id is right but you haven't
+> subscribed to that model in that region yet.
 
 Run **Test connection** (`POST /api/sentry/config/test` with
 `chat_api_type: "anthropic"`) afterward and confirm `checks.chat.tool_calling`
