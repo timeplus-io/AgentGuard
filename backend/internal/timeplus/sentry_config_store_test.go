@@ -26,6 +26,9 @@ func TestSentryConfigRowsSeedsChatAndMemory(t *testing.T) {
 	if chat["base_url"] != "https://api.openai.com/v1" || chat["model"] != "gpt-4o" {
 		t.Fatalf("chat endpoint wrong: %v", chat)
 	}
+	if chat["api_type"] != "openai" {
+		t.Fatalf("chat api_type default: want openai, got %v", chat["api_type"])
+	}
 	if _, has := chat["system_prompt"]; has {
 		t.Fatal("chat row must NOT contain system_prompt")
 	}
@@ -40,6 +43,16 @@ func TestSentryConfigRowsSeedsChatAndMemory(t *testing.T) {
 	if mem["enabled"] != true || mem["base_url"] != "http://localhost:11434/v1" ||
 		mem["model"] != "nomic-embed-text" || mem["embedding_dim"].(float64) != 768 {
 		t.Fatalf("memory row wrong: %v", mem)
+	}
+}
+
+func TestDefaultSentryChatRowAPIType(t *testing.T) {
+	var chat map[string]any
+	if err := json.Unmarshal([]byte(DefaultSentryChatRow(config.SentryConfig{ChatAPIType: "anthropic"})), &chat); err != nil {
+		t.Fatal(err)
+	}
+	if chat["api_type"] != "anthropic" {
+		t.Fatalf("chat api_type: want anthropic, got %v", chat["api_type"])
 	}
 }
 

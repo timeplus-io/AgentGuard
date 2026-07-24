@@ -202,6 +202,8 @@ func EffectiveValue(cfg *Config, key string) any {
 		return cfg.Sentry.ChatAPIKey
 	case "sentry.chat_model":
 		return cfg.Sentry.ChatModel
+	case "sentry.chat_api_type":
+		return cfg.Sentry.ChatAPIType
 	case "sentry.memory_enabled":
 		return cfg.Sentry.MemoryEnabled
 	case "sentry.embedding_base_url":
@@ -274,6 +276,8 @@ func ApplyChange(cfg *Config, key string, value any) error {
 		return setString(&cfg.Sentry.ChatAPIKey, value)
 	case "sentry.chat_model":
 		return setString(&cfg.Sentry.ChatModel, value)
+	case "sentry.chat_api_type":
+		return setString(&cfg.Sentry.ChatAPIType, value)
 	case "sentry.memory_enabled":
 		return setBool(&cfg.Sentry.MemoryEnabled, value)
 	case "sentry.embedding_base_url":

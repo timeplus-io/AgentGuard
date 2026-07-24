@@ -20,6 +20,19 @@ func TestChatCfgDefaultsApplied(t *testing.T) {
 	}
 }
 
+func TestChatCfgAPITypeDefaultsOpenAI(t *testing.T) {
+	cc := ChatCfg{}
+	cc.applyDefaults()
+	if cc.APIType != "openai" {
+		t.Fatalf("api_type default = %q, want openai", cc.APIType)
+	}
+	cc2 := ChatCfg{APIType: "anthropic"}
+	cc2.applyDefaults()
+	if cc2.APIType != "anthropic" {
+		t.Fatal("api_type must be preserved")
+	}
+}
+
 func TestChatCfgClamps(t *testing.T) {
 	cc := ChatCfg{MaxIterations: 500, SQLMaxRows: 100000, SQLTimeoutMs: 600000}
 	cc.applyDefaults()

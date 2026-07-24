@@ -148,7 +148,12 @@ func DefaultSentryChatRow(sCfg config.SentryConfig) string {
 	if maxTokens <= 0 {
 		maxTokens = 1024
 	}
+	apiType := sCfg.ChatAPIType
+	if apiType == "" {
+		apiType = "openai"
+	}
 	b, _ := json.Marshal(map[string]any{
+		"api_type":              apiType,
 		"base_url":              sCfg.ChatBaseURL,
 		"api_key":               sCfg.ChatAPIKey,
 		"model":                 sCfg.ChatModel,

@@ -46,6 +46,7 @@ type ChatCfg struct {
 	BaseURL            string `json:"base_url"`
 	APIKey             string `json:"api_key"`
 	Model              string `json:"model"`
+	APIType            string `json:"api_type"`
 	SystemPrompt       string `json:"-"`
 	MaxTokens          int    `json:"max_tokens"`
 	MaxIterations      int    `json:"max_iterations"`
@@ -72,6 +73,9 @@ func (c *ChatCfg) applyDefaults() {
 	def(&c.SQLTimeoutMs, 30000, 55000)
 	def(&c.SQLMaxRows, 1000, 5000)
 	def(&c.ToolResultMaxBytes, 16384, 131072)
+	if c.APIType == "" {
+		c.APIType = "openai"
+	}
 	if c.SystemPrompt == "" {
 		c.SystemPrompt = tp.DefaultSentrySystemPrompt
 	}

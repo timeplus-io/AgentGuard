@@ -69,6 +69,7 @@ type SentryConfig struct {
 	ChatBaseURL           string `mapstructure:"chat_base_url"`
 	ChatAPIKey            string `mapstructure:"chat_api_key"`
 	ChatModel             string `mapstructure:"chat_model"`
+	ChatAPIType           string `mapstructure:"chat_api_type"` // "openai" | "anthropic"
 	RequestTimeoutSeconds int    `mapstructure:"request_timeout_seconds"`
 	MaxOutputTokens       int    `mapstructure:"max_output_tokens"`
 	// memory(embedding) endpoint boot defaults → `memory` row (Phase-2 feature)
@@ -173,6 +174,7 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("sentry.chat_base_url", "")
 	v.SetDefault("sentry.chat_api_key", "")
 	v.SetDefault("sentry.chat_model", "")
+	v.SetDefault("sentry.chat_api_type", "openai")
 	v.SetDefault("sentry.request_timeout_seconds", 60)
 	v.SetDefault("sentry.max_output_tokens", 1024)
 	v.SetDefault("sentry.memory_enabled", false)
@@ -248,6 +250,7 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.Sentry.ChatBaseURL = v.GetString("sentry.chat_base_url")
 	cfg.Sentry.ChatAPIKey = v.GetString("sentry.chat_api_key")
 	cfg.Sentry.ChatModel = v.GetString("sentry.chat_model")
+	cfg.Sentry.ChatAPIType = v.GetString("sentry.chat_api_type")
 	cfg.Sentry.RequestTimeoutSeconds = v.GetInt("sentry.request_timeout_seconds")
 	cfg.Sentry.MaxOutputTokens = v.GetInt("sentry.max_output_tokens")
 	cfg.Sentry.MemoryEnabled = v.GetBool("sentry.memory_enabled")
@@ -309,6 +312,7 @@ func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("sentry.chat_base_url", "SENTRY_CHAT_BASE_URL")
 	_ = v.BindEnv("sentry.chat_api_key", "SENTRY_CHAT_API_KEY")
 	_ = v.BindEnv("sentry.chat_model", "SENTRY_CHAT_MODEL")
+	_ = v.BindEnv("sentry.chat_api_type", "SENTRY_CHAT_API_TYPE")
 	_ = v.BindEnv("sentry.request_timeout_seconds", "SENTRY_REQUEST_TIMEOUT_SECONDS")
 	_ = v.BindEnv("sentry.max_output_tokens", "SENTRY_MAX_OUTPUT_TOKENS")
 	_ = v.BindEnv("sentry.memory_enabled", "SENTRY_MEMORY_ENABLED")
@@ -353,6 +357,7 @@ func Save(cfg *Config, path string) error {
 	v.Set("sentry.skill_dir", cfg.Sentry.SkillDir)
 	v.Set("sentry.chat_base_url", cfg.Sentry.ChatBaseURL)
 	v.Set("sentry.chat_model", cfg.Sentry.ChatModel)
+	v.Set("sentry.chat_api_type", cfg.Sentry.ChatAPIType)
 	v.Set("sentry.request_timeout_seconds", cfg.Sentry.RequestTimeoutSeconds)
 	v.Set("sentry.max_output_tokens", cfg.Sentry.MaxOutputTokens)
 	v.Set("sentry.memory_enabled", cfg.Sentry.MemoryEnabled)

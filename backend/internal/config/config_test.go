@@ -22,6 +22,7 @@ func TestSave_RoundTrip(t *testing.T) {
 			ChatBaseURL:           "http://c/v1",
 			ChatAPIKey:            "sk-c",
 			ChatModel:             "gpt-4o",
+			ChatAPIType:           "anthropic",
 			RequestTimeoutSeconds: 45,
 			MaxOutputTokens:       2048,
 			MemoryEnabled:         true,
@@ -74,6 +75,9 @@ func TestSave_RoundTrip(t *testing.T) {
 	} // chat_api_key is a secret — never written to config.yaml by Save() (matches dlp.api_key)
 	if loaded.Sentry.ChatModel != "gpt-4o" {
 		t.Errorf("sentry.chat_model: want gpt-4o, got %s", loaded.Sentry.ChatModel)
+	}
+	if loaded.Sentry.ChatAPIType != "anthropic" {
+		t.Errorf("sentry.chat_api_type: want anthropic, got %s", loaded.Sentry.ChatAPIType)
 	}
 	if !loaded.Sentry.MemoryEnabled {
 		t.Error("want sentry.memory_enabled=true")
