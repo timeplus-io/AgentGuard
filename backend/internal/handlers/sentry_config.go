@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/sentry"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
@@ -136,6 +137,7 @@ type sentryTestBody struct {
 	BaseURL          string `json:"base_url"`
 	APIKey           string `json:"api_key"`
 	ChatModel        string `json:"chat_model"`
+	ChatAPIType      string `json:"chat_api_type"`
 	EmbeddingBaseURL string `json:"embedding_base_url"`
 	EmbeddingAPIKey  string `json:"embedding_api_key"`
 	EmbeddingModel   string `json:"embedding_model"`
@@ -148,7 +150,7 @@ type sentryTestBody struct {
 
 // resolvedChatCreds is the fully-resolved chat-endpoint candidate a
 // test-connection probe runs against.
-type resolvedChatCreds struct{ BaseURL, APIKey, Model string }
+type resolvedChatCreds struct{ BaseURL, APIKey, Model, APIType string }
 
 // resolvedEmbedCreds is the fully-resolved embedding-endpoint candidate a
 // test-connection probe runs against.
@@ -176,6 +178,7 @@ func resolveSentryChatCreds(body sentryTestBody, boot config.SentryConfig, store
 		BaseURL string `json:"base_url"`
 		APIKey  string `json:"api_key"`
 		Model   string `json:"model"`
+		APIType string `json:"api_type"`
 	}
 	if storedChatJSON != "" {
 		_ = json.Unmarshal([]byte(storedChatJSON), &stored)
@@ -184,6 +187,7 @@ func resolveSentryChatCreds(body sentryTestBody, boot config.SentryConfig, store
 		BaseURL: orStr(body.BaseURL, orStr(boot.ChatBaseURL, stored.BaseURL)),
 		APIKey:  orStr(body.APIKey, orStr(boot.ChatAPIKey, stored.APIKey)),
 		Model:   orStr(body.ChatModel, orStr(boot.ChatModel, stored.Model)),
+		APIType: orStr(body.ChatAPIType, orStr(boot.ChatAPIType, stored.APIType)),
 	}
 }
 
@@ -259,7 +263,7 @@ func TestSentryConfig(cfg *config.Config) gin.HandlerFunc {
 		checks["reachable"] = reach
 		ok := reach["ok"] == true
 		if ok {
-			chatCheck := sentryCheckChatToolCalling(c, client, chatBase, chat.APIKey, chat.Model, maxTokens)
+			chatCheck := sentryProbeChat(c.Request.Context(), chat, maxTokens)
 			checks["chat"] = chatCheck
 			ok = chatCheck["ok"] == true
 		}
@@ -294,60 +298,27 @@ func TestSentryConfig(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// sentryCheckChatToolCalling posts a chat completion that defines a trivial
-// tool and forces the model to use it (tool_choice=required), asserting the
-// response actually carries tool_calls — the property Sentry's chat loop
-// depends on, distinct from plain chat capability.
-func sentryCheckChatToolCalling(c *gin.Context, client *http.Client, baseURL, key, model string, maxTokens int) gin.H {
-	tool := gin.H{
-		"type": "function",
-		"function": gin.H{
-			"name":        "get_current_time",
-			"description": "Returns the current UTC time. Call this to answer the user's question.",
-			"parameters": gin.H{
-				"type":       "object",
-				"properties": gin.H{},
-			},
-		},
+// sentryProbeChat runs a minimal tool-forcing turn through the configured
+// provider and reports whether a tool_call came back. Never returns an error
+// to the caller — failures become {ok:false, error:...} for the checks
+// payload. Uses the sentry.NewLLM factory so the probe validates whichever
+// provider api_type selects (openai-compatible or anthropic).
+func sentryProbeChat(ctx context.Context, chat resolvedChatCreds, maxTokens int) gin.H {
+	cc := sentry.ChatCfg{
+		APIType: chat.APIType, BaseURL: chat.BaseURL, APIKey: chat.APIKey,
+		Model: chat.Model, MaxTokens: maxTokens,
 	}
-	payload, _ := json.Marshal(gin.H{
-		"model":       model,
-		"messages":    []gin.H{{"role": "user", "content": "What is the current time? You must call the get_current_time tool to answer."}},
-		"tools":       []gin.H{tool},
-		"tool_choice": "required",
-		"temperature": 0,
-		"max_tokens":  maxTokens,
-	})
-	req, _ := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	if key != "" {
-		req.Header.Set("Authorization", "Bearer "+key)
-	}
-	resp, err := client.Do(req)
+	llm := sentry.NewLLM(cc)
+	res, err := llm.ChatStream(ctx, cc,
+		[]sentry.Msg{{Role: "user", Content: "What is the current time? You must call the get_current_time tool to answer."}},
+		[]sentry.ToolDef{{Name: "get_current_time", Description: "Returns the current UTC time.",
+			Params: map[string]any{"type": "object", "properties": map[string]any{}}}},
+		nil)
 	if err != nil {
 		return gin.H{"ok": false, "tool_calling": false, "error": err.Error()}
 	}
-	defer resp.Body.Close()
-	var parsed struct {
-		Choices []struct {
-			Message struct {
-				Content   string `json:"content"`
-				ToolCalls []struct {
-					ID       string `json:"id"`
-					Function struct {
-						Name      string `json:"name"`
-						Arguments string `json:"arguments"`
-					} `json:"function"`
-				} `json:"tool_calls"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil || len(parsed.Choices) == 0 {
-		return gin.H{"ok": false, "tool_calling": false, "error": "no chat response"}
-	}
-	toolCalls := parsed.Choices[0].Message.ToolCalls
-	if len(toolCalls) == 0 {
+	if len(res.ToolCalls) == 0 {
 		return gin.H{"ok": false, "tool_calling": false, "error": "model did not return tool_calls"}
 	}
-	return gin.H{"ok": true, "tool_calling": true, "tool_call_name": toolCalls[0].Function.Name}
+	return gin.H{"ok": true, "tool_calling": true, "tool_call_name": res.ToolCalls[0].Name}
 }

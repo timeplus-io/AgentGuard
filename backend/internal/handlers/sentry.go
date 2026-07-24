@@ -93,6 +93,7 @@ func SentryChat(cfg *config.Config) gin.HandlerFunc {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
+		llm := sentry.NewLLM(cc)
 		conv, err := resolveConversation(store, user, body.ConversationID, body.Message)
 		if err != nil {
 			switch {
@@ -125,7 +126,7 @@ func SentryChat(cfg *config.Config) gin.HandlerFunc {
 			}
 		}
 
-		loop := &sentry.Loop{LLM: sentry.NewOpenAILLM(), Reg: sentryRegistry(rcfg), Store: store, Cfg: rcfg}
+		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg), Store: store, Cfg: rcfg}
 		if err := loop.Run(c.Request.Context(), cc, conv, strings.TrimSpace(body.Message), emit); err != nil {
 			log.Printf("sentry: chat: %v", err)
 			// The loop emits its own "error" event for in-stream failures

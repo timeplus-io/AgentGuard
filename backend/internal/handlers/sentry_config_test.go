@@ -33,6 +33,22 @@ func TestResolveSentryChatCreds_Precedence(t *testing.T) {
 	}
 }
 
+// TestResolveSentryChatCredsAPIType asserts the chat-endpoint resolver's
+// api_type precedence: request body (non-blank) → boot cfg.Sentry.ChatAPIType
+// (non-blank) → the runtime-stored `chat` row's api_type.
+func TestResolveSentryChatCredsAPIType(t *testing.T) {
+	got := resolveSentryChatCreds(sentryTestBody{}, config.SentryConfig{ChatAPIType: ""},
+		`{"api_type":"anthropic","base_url":"http://x/v1","model":"m"}`)
+	if got.APIType != "anthropic" {
+		t.Fatalf("stored api_type fallback failed: %+v", got)
+	}
+	got2 := resolveSentryChatCreds(sentryTestBody{ChatAPIType: "openai"},
+		config.SentryConfig{ChatAPIType: "anthropic"}, `{"api_type":"anthropic"}`)
+	if got2.APIType != "openai" {
+		t.Fatal("body api_type should win")
+	}
+}
+
 // TestResolveSentryEmbedCreds_Precedence asserts the embedding-endpoint
 // resolver's precedence: body → boot → the runtime-stored `memory` row, with
 // per-field fallback (a field left blank at one tier falls through to the
