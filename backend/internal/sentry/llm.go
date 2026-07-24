@@ -86,6 +86,15 @@ type LLM interface {
 	ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onToken func(string)) (ChatResult, error)
 }
 
+// NewLLM returns the LLM implementation for the configured api_type.
+// Unknown/empty api_type defaults to the OpenAI-compatible client.
+func NewLLM(cc ChatCfg) LLM {
+	if cc.APIType == "anthropic" {
+		return anthropicLLM{}
+	}
+	return openaiLLM{}
+}
+
 // chatCfgResolveSQL reads the self-contained `chat` row directly — the row is
 // a concrete endpoint (base_url/api_key/model/budgets), so no
 // dlp_config_resolve fold/catalog resolution is needed (unlike DLP).
