@@ -67,22 +67,27 @@ func requiredStrings(v any) []string {
 	}
 }
 
-func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onToken func(string)) (ChatResult, error) {
-	client := anthropic.NewClient(
-		option.WithBaseURL(normalizeAnthropicBaseURL(cc.BaseURL)),
-		option.WithAuthToken(cc.APIKey), // Authorization: Bearer <key>
-	)
-
-	// Build system + messages. System is a top-level param, not a message.
-	var system string
-	var amsgs []anthropic.MessageParam
+// anthropicMessagesFromMsgs translates the loop's OpenAI-shaped messages into
+// the Anthropic system string + message list. Consecutive role:"tool" messages
+// are coalesced into ONE user message carrying all their tool_result blocks, as
+// the Anthropic Messages API requires for (parallel) tool use.
+func anthropicMessagesFromMsgs(msgs []Msg) (system string, amsgs []anthropic.MessageParam) {
+	var toolResults []anthropic.ContentBlockParamUnion
+	flush := func() {
+		if len(toolResults) > 0 {
+			amsgs = append(amsgs, anthropic.NewUserMessage(toolResults...))
+			toolResults = nil
+		}
+	}
 	for _, m := range msgs {
 		switch m.Role {
 		case "system":
 			system = m.Content
 		case "user":
+			flush()
 			amsgs = append(amsgs, anthropic.NewUserMessage(anthropic.NewTextBlock(m.Content)))
 		case "assistant":
+			flush()
 			var blocks []anthropic.ContentBlockParamUnion
 			if m.Content != "" {
 				blocks = append(blocks, anthropic.NewTextBlock(m.Content))
@@ -92,11 +97,21 @@ func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tool
 			}
 			amsgs = append(amsgs, anthropic.NewAssistantMessage(blocks...))
 		case "tool":
-			// tool_result blocks ride in a USER message.
-			amsgs = append(amsgs, anthropic.NewUserMessage(
-				anthropic.NewToolResultBlock(m.ToolCallID, m.Content, false)))
+			toolResults = append(toolResults, anthropic.NewToolResultBlock(m.ToolCallID, m.Content, false))
 		}
 	}
+	flush()
+	return system, amsgs
+}
+
+func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onToken func(string)) (ChatResult, error) {
+	client := anthropic.NewClient(
+		option.WithBaseURL(normalizeAnthropicBaseURL(cc.BaseURL)),
+		option.WithAuthToken(cc.APIKey), // Authorization: Bearer <key>
+	)
+
+	// Build system + messages. System is a top-level param, not a message.
+	system, amsgs := anthropicMessagesFromMsgs(msgs)
 
 	var atools []anthropic.ToolUnionParam
 	for _, t := range tools {
@@ -148,9 +163,9 @@ func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tool
 			// b.Input is json.RawMessage (already a JSON object); it
 			// implements json.Marshaler so anthropicInputToArgs re-emits
 			// it verbatim without a decode/re-encode round trip. An
-			// empty/absent input must still come back as "{}", not "null".
+			// empty/absent/null input must still come back as "{}", not "null".
 			args := "{}"
-			if len(b.Input) > 0 {
+			if len(b.Input) > 0 && string(b.Input) != "null" {
 				args = anthropicInputToArgs(b.Input)
 			}
 			res.ToolCalls = append(res.ToolCalls, ToolCall{

@@ -3,6 +3,8 @@ package sentry
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/anthropics/anthropic-sdk-go"
 )
 
 func TestNormalizeAnthropicBaseURL(t *testing.T) {
@@ -45,6 +47,33 @@ func TestArgsToAnthropicInputParsesJSONString(t *testing.T) {
 	// Malformed JSON must also yield an empty object, not panic.
 	if m := argsToAnthropicInput("{invalid"); len(m) != 0 {
 		t.Fatalf("malformed JSON should be empty object, got %v", m)
+	}
+}
+
+func TestAnthropicMessagesGroupsConsecutiveToolResults(t *testing.T) {
+	msgs := []Msg{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "hi"},
+		{Role: "assistant", ToolCalls: []ToolCall{{ID: "a", Name: "t1", Args: `{}`}, {ID: "b", Name: "t2", Args: `{}`}}},
+		{Role: "tool", ToolCallID: "a", Content: "r1"},
+		{Role: "tool", ToolCallID: "b", Content: "r2"},
+		{Role: "user", Content: "next"},
+	}
+	system, amsgs := anthropicMessagesFromMsgs(msgs)
+	if system != "sys" {
+		t.Fatalf("system = %q, want sys", system)
+	}
+	// Expect: user(hi), assistant(2 tool_use), user(2 tool_result), user(next) = 4 messages.
+	if len(amsgs) != 4 {
+		t.Fatalf("got %d messages, want 4: %+v", len(amsgs), amsgs)
+	}
+	// The 3rd message must be a single user turn carrying BOTH tool_result blocks.
+	grouped := amsgs[2]
+	if grouped.Role != anthropic.MessageParamRoleUser {
+		t.Fatalf("grouped tool-results message role = %v, want user", grouped.Role)
+	}
+	if len(grouped.Content) != 2 {
+		t.Fatalf("grouped tool-results block count = %d, want 2 (both results in ONE user message)", len(grouped.Content))
 	}
 }
 
