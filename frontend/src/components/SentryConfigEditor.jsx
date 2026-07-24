@@ -26,6 +26,7 @@ function buildDraft(byKey) {
   const memory = byKey.memory?.value || {}
   return {
     chat: {
+      api_type: chat.api_type || 'openai',
       base_url: chat.base_url || '',
       api_key: '',
       model: chat.model || '',
@@ -86,6 +87,7 @@ export default function SentryConfigEditor() {
     if (key === 'chat') {
       const c = draft.chat
       return {
+        api_type: c.api_type,
         base_url: c.base_url,
         api_key: c.api_key, // blank → server preserves the stored key
         model: c.model,
@@ -132,6 +134,7 @@ export default function SentryConfigEditor() {
     setTest({ pending: true })
     try {
       const r = await api.testSentryConfig({
+        chat_api_type: draft.chat.api_type,
         base_url: draft.chat.base_url,
         api_key: draft.chat.api_key,
         chat_model: draft.chat.model,
@@ -166,6 +169,23 @@ export default function SentryConfigEditor() {
       {/* Chat model */}
       <div>
         <h4 className="text-sm font-medium text-gray-100 mb-2">Chat model</h4>
+        <label className="space-y-1 block mb-3"><span className={labelCls}>API type</span>
+          <select
+            className={inputCls}
+            value={draft.chat.api_type}
+            onChange={(e) => setChat({ api_type: e.target.value })}
+          >
+            <option value="openai">OpenAI-compatible (Chat Completions)</option>
+            <option value="anthropic">Anthropic (Claude, incl. Bedrock)</option>
+          </select>
+        </label>
+        {draft.chat.api_type === 'anthropic' && (
+          <p className="text-[11px] text-gray-500 mb-3">
+            For AWS Bedrock: base URL <code>https://bedrock-mantle.&lt;region&gt;.api.aws/v1</code>,
+            API key = your Bedrock API key, model = a Claude inference-profile id
+            (e.g. <code>us.anthropic.claude-…</code>). Tool calling is required.
+          </p>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
           <label className="space-y-1"><span className={labelCls}>Base URL</span>
             <input className={inputCls} value={draft.chat.base_url} onChange={(e) => setChat({ base_url: e.target.value })} placeholder="http://localhost:4000/v1" />
