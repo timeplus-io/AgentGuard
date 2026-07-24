@@ -42,6 +42,10 @@ func TestArgsToAnthropicInputParsesJSONString(t *testing.T) {
 	if m := argsToAnthropicInput(""); len(m) != 0 {
 		t.Fatalf("empty args should be empty object, got %v", m)
 	}
+	// Malformed JSON must also yield an empty object, not panic.
+	if m := argsToAnthropicInput("{invalid"); len(m) != 0 {
+		t.Fatalf("malformed JSON should be empty object, got %v", m)
+	}
 }
 
 func TestNewLLMFactory(t *testing.T) {

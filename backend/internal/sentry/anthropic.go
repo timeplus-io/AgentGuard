@@ -121,6 +121,7 @@ func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tool
 	}
 
 	stream := client.Messages.NewStreaming(ctx, params)
+	defer stream.Close()
 	msg := anthropic.Message{}
 	for stream.Next() {
 		event := stream.Current()
