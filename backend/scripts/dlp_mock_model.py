@@ -62,7 +62,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path.endswith("/chat/completions"):
             msgs = body.get("messages", [])
             if body.get("stream"):
-                return self._stream_chat(msgs)
+                return self._stream_chat(msgs, body.get("tools") or [])
             prompt = msgs[-1].get("content", "") if msgs else ""
             tools = body.get("tools") or []
             if tools and body.get("tool_choice") in ("required", "auto") or (
@@ -152,7 +152,7 @@ class Handler(BaseHTTPRequestHandler):
                 "usage": {"output_tokens": 5}})
         self._sse_anthropic("message_stop", {"type": "message_stop"})
 
-    def _stream_chat(self, msgs):
+    def _stream_chat(self, msgs, tools):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
@@ -166,6 +166,19 @@ class Handler(BaseHTTPRequestHandler):
             self._sse({**base, "choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [
                 {"index": 0, "id": "call_1", "type": "function",
                  "function": {"name": call["name"], "arguments": json.dumps(call.get("arguments", {}))}}]},
+                "finish_reason": None}]})
+            self._sse({**base, "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}],
+                       "usage": {"prompt_tokens": 10, "completion_tokens": 5}})
+        elif tools and not tool_results:
+            # Streaming tool-forcing probe (POST /api/sentry/config/test via the
+            # unified sentryProbeChat -> openaiLLM.ChatStream, which streams): no
+            # MOCK_TOOL_CALL sentinel, just a natural-language "you must call X"
+            # prompt. Emit a deterministic call to the first offered tool,
+            # mirroring the non-stream tool branch and the /v1/messages handler.
+            fn = tools[0].get("function", {})
+            self._sse({**base, "choices": [{"index": 0, "delta": {"role": "assistant", "tool_calls": [
+                {"index": 0, "id": "call_1", "type": "function",
+                 "function": {"name": fn.get("name", ""), "arguments": "{}"}}]},
                 "finish_reason": None}]})
             self._sse({**base, "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}],
                        "usage": {"prompt_tokens": 10, "completion_tokens": 5}})
