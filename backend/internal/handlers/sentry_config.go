@@ -251,7 +251,7 @@ func TestSentryConfig(cfg *config.Config) gin.HandlerFunc {
 			maxTokens = 1024
 		}
 		chatBase := strings.TrimRight(chat.BaseURL, "/")
-		if _, err := url.ParseRequestURI(chatBase + "/models"); err != nil {
+		if _, err := url.ParseRequestURI(chatBase); err != nil {
 			c.JSON(http.StatusOK, gin.H{"ok": false, "checks": gin.H{
 				"reachable": gin.H{"ok": false, "error": "invalid base_url"}}})
 			return
@@ -259,13 +259,27 @@ func TestSentryConfig(cfg *config.Config) gin.HandlerFunc {
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		checks := gin.H{}
-		reach := dlpCheckReachable(c, client, chatBase, chat.APIKey)
-		checks["reachable"] = reach
-		ok := reach["ok"] == true
-		if ok {
+		var ok bool
+		if chat.APIType == "anthropic" {
+			// The OpenAI-shaped GET <base>/models reachability pre-check does not
+			// apply to the Anthropic Messages endpoint: on Bedrock Mantle the base
+			// is .../anthropic and models live at .../anthropic/v1/models, not
+			// .../anthropic/models. The chat probe issues a real Messages request,
+			// so it alone is authoritative — a transport failure surfaces as
+			// chat.error (never a 5xx).
+			checks["reachable"] = gin.H{"skipped": true}
 			chatCheck := sentryProbeChat(c.Request.Context(), chat, maxTokens)
 			checks["chat"] = chatCheck
 			ok = chatCheck["ok"] == true
+		} else {
+			reach := dlpCheckReachable(c, client, chatBase, chat.APIKey)
+			checks["reachable"] = reach
+			ok = reach["ok"] == true
+			if ok {
+				chatCheck := sentryProbeChat(c.Request.Context(), chat, maxTokens)
+				checks["chat"] = chatCheck
+				ok = chatCheck["ok"] == true
+			}
 		}
 
 		// Embedding: only when memory is enabled (body override → stored

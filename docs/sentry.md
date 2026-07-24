@@ -50,7 +50,7 @@ chat model (e.g. chat on OpenAI, embeddings on a local Ollama).
 | Field | Default | Notes |
 |-------|---------|-------|
 | `api_type` | `sentry.chat_api_type` (fallback `openai`) | `"openai"` (OpenAI-compatible chat/completions) or `"anthropic"` (Anthropic Messages API, e.g. Claude on Bedrock Mantle). Selects the LLM provider (`sentry.NewLLM`, `backend/internal/sentry/llm.go`). Not a secret — persisted to `config.yaml` like any other boot key. |
-| `base_url` | `sentry.chat_base_url` | The chat endpoint. For `api_type:"openai"` this is the OpenAI-compatible `/v1` base; for `api_type:"anthropic"` the SDK strips a trailing `/v1` and appends `/v1/messages` itself, so the **same configured URL works for both** api types. |
+| `base_url` | `sentry.chat_base_url` | The chat endpoint. For `api_type:"openai"` this is the OpenAI-compatible `/v1` base (`/chat/completions` is appended); for `api_type:"anthropic"` the SDK appends `/v1/messages` (so on Bedrock Mantle the base is `.../anthropic`). See **Claude on AWS Bedrock** below — the base URL differs per provider. |
 | `api_key` | `sentry.chat_api_key` | Secret; redacted on GET, preserved on a blank PUT |
 | `model` | `sentry.chat_model` | A **literal** model id — point it at a tool-calling-capable model (for `anthropic`, a Claude inference-profile id) |
 | `timeout` | `sentry.request_timeout_seconds` (fallback `60`) | Per-request timeout (seconds) |
@@ -163,10 +163,11 @@ Sentry's chat LLM has two providers, selected by the `chat` row's `api_type`
 
 - `"openai"` — the default; any OpenAI-compatible `/v1/chat/completions`
   endpoint (OpenAI itself, most gateways/proxies, local model servers).
-- `"anthropic"` — the Anthropic Messages API over a Bearer-token endpoint,
-  implemented with `anthropic-sdk-go`
+- `"anthropic"` — the Anthropic Messages API, authenticated with an
+  `x-api-key` header, implemented with `anthropic-sdk-go`
   (`backend/internal/sentry/anthropic.go`). This is how Sentry talks to
-  **Claude on AWS Bedrock** via Bedrock Mantle.
+  **Claude on AWS Bedrock** via Bedrock Mantle (and it also works against
+  native `api.anthropic.com`, which uses the same `x-api-key` auth).
 
 To point Sentry at Claude on Bedrock, under **Settings → Sentry Agent** (or
 `PUT /api/sentry/config/chat`) set the `chat` row to:
@@ -174,17 +175,17 @@ To point Sentry at Claude on Bedrock, under **Settings → Sentry Agent** (or
 | Field | Value |
 |-------|-------|
 | API type | `anthropic` |
-| Base URL | `https://bedrock-mantle.<region>.api.aws/v1` — region-gated to `us-east-1` or `us-west-2` (**not** `us-west-1`) |
-| API key | A long-term Bedrock API key |
-| Model | A Claude inference-profile id, e.g. `us.anthropic.claude-sonnet-4-20250514-v1:0` |
+| Base URL | `https://bedrock-mantle.<region>.api.aws/anthropic` — note the `/anthropic` path prefix, **not** `/v1`. Region-gated to `us-east-1` or `us-west-2` (**not** `us-west-1`). |
+| API key | A Bedrock API key (sent as the `x-api-key` header) |
+| Model | A Bedrock Claude model id, e.g. `anthropic.claude-sonnet-4-6-v1` |
 
 ```
 PUT /api/sentry/config/chat
 {"value": {
   "api_type": "anthropic",
-  "base_url": "https://bedrock-mantle.us-east-1.api.aws/v1",
+  "base_url": "https://bedrock-mantle.us-east-1.api.aws/anthropic",
   "api_key":  "<bedrock-api-key>",
-  "model":    "us.anthropic.claude-sonnet-4-20250514-v1:0",
+  "model":    "anthropic.claude-sonnet-4-6-v1",
   "timeout":  60
 }}
 ```
@@ -194,10 +195,15 @@ Run **Test connection** (`POST /api/sentry/config/test` with
 is `true` — Sentry's ReAct loop requires tool calling, and this is the same
 requirement as the `openai` path.
 
-The **same `base_url` works for both api types** — `normalizeAnthropicBaseURL`
-strips a trailing `/v1` and the SDK re-appends `/v1/messages` itself, while
-the `openai` client keeps the `/v1` and appends `/chat/completions`. You do
-not need a different URL per provider, only a different `api_type`.
+**The base URL differs per provider on Bedrock Mantle.** The SDK appends
+`/v1/messages` to the configured base URL, and Mantle serves the Anthropic
+Messages API at `/anthropic/v1/messages` — so the `anthropic` base URL is
+`https://bedrock-mantle.<region>.api.aws/anthropic`. The OpenAI-compatible
+Chat Completions surface lives at a different prefix
+(`https://bedrock-mantle.<region>.api.aws/openai/v1`, used with
+`api_type: "openai"`). `normalizeAnthropicBaseURL` strips a trailing `/v1` if
+you include one (so `.../anthropic/v1` also works), but you cannot point both
+api types at the same URL on Bedrock.
 
 ## Skills (tool surface)
 

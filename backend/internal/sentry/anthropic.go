@@ -107,7 +107,11 @@ func anthropicMessagesFromMsgs(msgs []Msg) (system string, amsgs []anthropic.Mes
 func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onToken func(string)) (ChatResult, error) {
 	client := anthropic.NewClient(
 		option.WithBaseURL(normalizeAnthropicBaseURL(cc.BaseURL)),
-		option.WithAuthToken(cc.APIKey), // Authorization: Bearer <key>
+		// x-api-key header — the auth style used by both AWS Bedrock Mantle's
+		// Anthropic Messages surface (base_url .../anthropic, key = a Bedrock
+		// API key) and native api.anthropic.com. The SDK also sets the required
+		// anthropic-version header automatically.
+		option.WithAPIKey(cc.APIKey),
 	)
 
 	// Build system + messages. System is a top-level param, not a message.
