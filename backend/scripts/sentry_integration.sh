@@ -192,6 +192,48 @@ check(d.get("checks", {}).get("embedding", {}).get("skipped") is True, "embeddin
 sys.exit(0 if ok else 1)
 PY
 
+# ── 6a. Anthropic provider: point the chat row at the mock's Anthropic
+#       Messages endpoint (Task 5 added POST /v1/messages to dlp_mock_model.py,
+#       an SSE stream shaped for anthropic-sdk-go's Messages.NewStreaming) and
+#       assert the tool-forcing probe still reports tool_calling:true. Mirrors
+#       §5/§6 above but with api_type:"anthropic" everywhere it matters. ─────
+info "switching sentry chat config to the anthropic provider (mock /v1/messages)…"
+chat_cfg_anthropic=$(cat <<JSON
+{"value":{"api_type":"anthropic","base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","model":"mock-claude","timeout":60}}
+JSON
+)
+curl -sf -m 10 -b "$COOKIES" -X PUT "${BACKEND_URL}/api/sentry/config/chat" \
+  -H 'Content-Type: application/json' -d "$chat_cfg_anthropic" >/dev/null \
+  && pass "sentry chat config switched to anthropic api_type (mock /v1/messages)" \
+  || { fail "failed to update sentry chat config (anthropic)"; exit 1; }
+
+info "testing sentry config connection (anthropic provider)…"
+test_body_anthropic=$(cat <<JSON
+{"base_url":"http://localhost:${MOCK_PORT}/v1","api_key":"x","chat_model":"mock-claude","chat_api_type":"anthropic","memory_enabled":false}
+JSON
+)
+test_out_anthropic="$(curl -sf -m 20 -b "$COOKIES" -X POST "${BACKEND_URL}/api/sentry/config/test" \
+  -H 'Content-Type: application/json' -d "$test_body_anthropic")"
+echo "$test_out_anthropic" >"$WORKDIR/config_test_anthropic.json"
+python3 - "$WORKDIR/config_test_anthropic.json" <<'PY' || FAILED=1
+import json, sys
+d = json.load(open(sys.argv[1]))
+ok = True
+def check(cond, label):
+    global ok
+    print(("\033[32m✓\033[0m " if cond else "\033[31m✗\033[0m ") + label)
+    ok = ok and cond
+check(d.get("ok") is True, "config test overall ok:true (anthropic)")
+check(d.get("checks", {}).get("chat", {}).get("tool_calling") is True, "chat.tool_calling:true (anthropic)")
+sys.exit(0 if ok else 1)
+PY
+
+info "reverting sentry chat config to the openai provider (mock /v1/chat/completions)…"
+curl -sf -m 10 -b "$COOKIES" -X PUT "${BACKEND_URL}/api/sentry/config/chat" \
+  -H 'Content-Type: application/json' -d "$chat_cfg" >/dev/null \
+  && pass "sentry chat config reverted to openai api_type" \
+  || { fail "failed to revert sentry chat config to openai"; exit 1; }
+
 # ── 6b. Enable memory and re-test: point the `memory` row at the mock's
 #       embedding endpoint, then assert the embedding check now runs and
 #       passes (the mock serves /embeddings at EMBED_DIM). ──────────────────

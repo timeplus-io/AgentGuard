@@ -4,6 +4,9 @@
 Serves deterministic responses with no dependencies:
   POST /v1/embeddings        -> DIM-dim vectors derived from input hash
   POST /v1/chat/completions  -> fixed risk JSON / canned completion
+  POST /v1/messages          -> Anthropic Messages API SSE stream (Sentry's
+                                 anthropic-sdk-go provider; tool_use block
+                                 when body.tools is non-empty, else text)
   GET  /v1/models, /models   -> model list (used by POST /api/config/test-dlp)
   GET  /, /health            -> liveness probe ("ok") for the integration scripts
 
@@ -88,6 +91,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 content = '{"score": 0.9, "tags": ["PII", "CUSTOMER_DATA"]}'
             resp = {"choices": [{"message": {"content": content}}]}
+        elif self.path.endswith("/messages"):
+            return self._stream_messages(body)
         else:
             self.send_response(404)
             self.end_headers()
@@ -96,6 +101,56 @@ class Handler(BaseHTTPRequestHandler):
 
     def _sse(self, obj):
         self.wfile.write(b"data: " + json.dumps(obj).encode() + b"\n\n")
+
+    def _sse_anthropic(self, event_type, obj):
+        # Anthropic Messages streaming frames are TWO lines: "event: <type>"
+        # then "data: <json>", blank-line terminated. The plain "_sse" helper
+        # above only emits "data:" (OpenAI chat/completions.chunk shape) —
+        # do not reuse it here.
+        self.wfile.write(b"event: " + event_type.encode() + b"\n")
+        self.wfile.write(b"data: " + json.dumps(obj, separators=(",", ":")).encode() + b"\n\n")
+
+    def _stream_messages(self, body):
+        # Anthropic Messages API (POST /v1/messages), streamed SSE — backs
+        # Sentry's anthropic-sdk-go provider (backend/internal/sentry/anthropic.go),
+        # which always calls Messages.NewStreaming and drives msg.Accumulate
+        # over the event sequence below. Anthropic tool schema is flat
+        # (body.tools[i].name), NOT nested under "function" like OpenAI.
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        tools = body.get("tools") or []
+        self._sse_anthropic("message_start", {
+            "type": "message_start", "message": {
+                "id": "msg_mock", "type": "message", "role": "assistant", "model": "mock-claude",
+                "content": [], "stop_reason": None, "stop_sequence": None,
+                "usage": {"input_tokens": 10, "output_tokens": 0}}})
+        if tools:
+            name = tools[0].get("name", "")
+            self._sse_anthropic("content_block_start", {
+                "type": "content_block_start", "index": 0,
+                "content_block": {"type": "tool_use", "id": "toolu_mock1", "name": name, "input": {}}})
+            self._sse_anthropic("content_block_delta", {
+                "type": "content_block_delta", "index": 0,
+                "delta": {"type": "input_json_delta", "partial_json": "{}"}})
+            self._sse_anthropic("content_block_stop", {"type": "content_block_stop", "index": 0})
+            self._sse_anthropic("message_delta", {
+                "type": "message_delta",
+                "delta": {"stop_reason": "tool_use", "stop_sequence": None},
+                "usage": {"output_tokens": 5}})
+        else:
+            self._sse_anthropic("content_block_start", {
+                "type": "content_block_start", "index": 0,
+                "content_block": {"type": "text", "text": ""}})
+            self._sse_anthropic("content_block_delta", {
+                "type": "content_block_delta", "index": 0,
+                "delta": {"type": "text_delta", "text": "MOCK_ANSWER"}})
+            self._sse_anthropic("content_block_stop", {"type": "content_block_stop", "index": 0})
+            self._sse_anthropic("message_delta", {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+                "usage": {"output_tokens": 5}})
+        self._sse_anthropic("message_stop", {"type": "message_stop"})
 
     def _stream_chat(self, msgs):
         self.send_response(200)

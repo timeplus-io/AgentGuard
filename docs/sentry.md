@@ -49,9 +49,10 @@ chat model (e.g. chat on OpenAI, embeddings on a local Ollama).
 
 | Field | Default | Notes |
 |-------|---------|-------|
-| `base_url` | `sentry.chat_base_url` | The chat endpoint (OpenAI-compatible `/v1`) |
+| `api_type` | `sentry.chat_api_type` (fallback `openai`) | `"openai"` (OpenAI-compatible chat/completions) or `"anthropic"` (Anthropic Messages API, e.g. Claude on Bedrock Mantle). Selects the LLM provider (`sentry.NewLLM`, `backend/internal/sentry/llm.go`). Not a secret — persisted to `config.yaml` like any other boot key. |
+| `base_url` | `sentry.chat_base_url` | The chat endpoint. For `api_type:"openai"` this is the OpenAI-compatible `/v1` base; for `api_type:"anthropic"` the SDK strips a trailing `/v1` and appends `/v1/messages` itself, so the **same configured URL works for both** api types. |
 | `api_key` | `sentry.chat_api_key` | Secret; redacted on GET, preserved on a blank PUT |
-| `model` | `sentry.chat_model` | A **literal** model id — point it at a tool-calling-capable model |
+| `model` | `sentry.chat_model` | A **literal** model id — point it at a tool-calling-capable model (for `anthropic`, a Claude inference-profile id) |
 | `timeout` | `sentry.request_timeout_seconds` (fallback `60`) | Per-request timeout (seconds) |
 | `max_tokens` | `sentry.max_output_tokens` (fallback `1024`) | Per-completion cap |
 | `max_iterations` | `12` | Model↔tool round-trips per turn before a forced final answer (clamped ≤ 32) |
@@ -77,6 +78,7 @@ Boot keys (`config.yaml` `sentry:` section → seeded row):
 
 | Key | Seeds |
 |-----|-------|
+| `sentry.chat_api_type` | `chat` row `api_type` (default `openai`; set `anthropic` for the Anthropic Messages API) |
 | `sentry.chat_base_url` / `sentry.chat_api_key` / `sentry.chat_model` | `chat` row endpoint |
 | `sentry.request_timeout_seconds` / `sentry.max_output_tokens` | `chat` row `timeout` / `max_tokens` (also `memory` `timeout`) |
 | `sentry.memory_enabled` | `memory` row `enabled` |
@@ -102,12 +104,16 @@ POST /api/sentry/config/test         → validate a candidate endpoint
 ```
 PUT /api/sentry/config/chat
 {"value": {
+  "api_type": "openai",
   "base_url": "https://api.openai.com/v1",
   "api_key":  "sk-...",
   "model":    "gpt-4o",
   "timeout":  60
 }}
 ```
+
+`api_type` defaults to `"openai"` when omitted. See **Claude on AWS Bedrock
+(Anthropic API type)** below for the `"anthropic"` variant.
 
 ```
 PUT /api/sentry/config/memory
@@ -141,12 +147,57 @@ before saving; omitted fields fall back first to the live `sentry.*` boot
 config, then to the runtime-stored `chat`/`memory` rows of
 `agentguard_sentry_config` — the Settings editor never echoes a saved
 `api_key` back, so this is what makes "Test connection" work for a deployment
-configured entirely at runtime.
+configured entirely at runtime. `chat_api_type` (`"openai"`/`"anthropic"`) is
+one of those optional body fields — omit it to test against the stored/boot
+`api_type`.
 
 The **chat model must support tool/function calling.** The embedding model
 (`memory` row) is reserved for Sentry's own memory in **Phase 2** — Sentry
 chat itself never embeds today (Semantic DLP's `dlp_embed`/`dlp_search` are
 unrelated, driven by `agentguard_dlp_config`).
+
+## Claude on AWS Bedrock (Anthropic API type)
+
+Sentry's chat LLM has two providers, selected by the `chat` row's `api_type`
+(boot default `sentry.chat_api_type`, default `openai`):
+
+- `"openai"` — the default; any OpenAI-compatible `/v1/chat/completions`
+  endpoint (OpenAI itself, most gateways/proxies, local model servers).
+- `"anthropic"` — the Anthropic Messages API over a Bearer-token endpoint,
+  implemented with `anthropic-sdk-go`
+  (`backend/internal/sentry/anthropic.go`). This is how Sentry talks to
+  **Claude on AWS Bedrock** via Bedrock Mantle.
+
+To point Sentry at Claude on Bedrock, under **Settings → Sentry Agent** (or
+`PUT /api/sentry/config/chat`) set the `chat` row to:
+
+| Field | Value |
+|-------|-------|
+| API type | `anthropic` |
+| Base URL | `https://bedrock-mantle.<region>.api.aws/v1` — region-gated to `us-east-1` or `us-west-2` (**not** `us-west-1`) |
+| API key | A long-term Bedrock API key |
+| Model | A Claude inference-profile id, e.g. `us.anthropic.claude-sonnet-4-20250514-v1:0` |
+
+```
+PUT /api/sentry/config/chat
+{"value": {
+  "api_type": "anthropic",
+  "base_url": "https://bedrock-mantle.us-east-1.api.aws/v1",
+  "api_key":  "<bedrock-api-key>",
+  "model":    "us.anthropic.claude-sonnet-4-20250514-v1:0",
+  "timeout":  60
+}}
+```
+
+Run **Test connection** (`POST /api/sentry/config/test` with
+`chat_api_type: "anthropic"`) afterward and confirm `checks.chat.tool_calling`
+is `true` — Sentry's ReAct loop requires tool calling, and this is the same
+requirement as the `openai` path.
+
+The **same `base_url` works for both api types** — `normalizeAnthropicBaseURL`
+strips a trailing `/v1` and the SDK re-appends `/v1/messages` itself, while
+the `openai` client keeps the `/v1` and appends `/chat/completions`. You do
+not need a different URL per provider, only a different `api_type`.
 
 ## Skills (tool surface)
 
@@ -206,10 +257,16 @@ server (`backend/scripts/dlp_mock_model.py`, shared with the DLP tests — it
 supports streaming tool-calls, and a non-stream tool-call response for the
 `POST /api/sentry/config/test` probe): send a user message containing
 `MOCK_TOOL_CALL {"name":"...","arguments":{...}}` and the mock replies with a
-streamed tool call, then `MOCK_ANSWER ...` once a tool result comes back.
+streamed tool call, then `MOCK_ANSWER ...` once a tool result comes back. The
+mock also serves `POST /v1/messages` as an Anthropic Messages SSE stream (a
+`tool_use` block when the request carries `tools`, else a `text` block) so
+`api_type: "anthropic"` can be exercised the same way, with no real Bedrock
+endpoint.
 `backend/scripts/sentry_integration.sh` (`make sentry-integration`) drives
 this end-to-end against a live Timeplus: mock model → provision → point
 `agentguard_sentry_config`'s `chat` row at the mock → assert
 `POST /api/sentry/config/test` (memory off → embedding skipped, then memory
-on → embedding probed) → forced tool-call chat turn → assert the NDJSON
+on → embedding probed) → switch the `chat` row to `api_type: "anthropic"`
+against the mock's `/v1/messages` and re-assert `checks.chat.tool_calling`,
+then revert to `openai` → forced tool-call chat turn → assert the NDJSON
 stream → replay the conversation and assert a `role="tool"` row.
