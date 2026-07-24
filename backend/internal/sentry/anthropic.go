@@ -9,9 +9,12 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
-// anthropicLLM is an LLM backed by the Anthropic Messages API over a Bearer
-// endpoint (Bedrock Mantle or compatible). base_url is normalized so the same
-// configured URL works for both providers.
+// anthropicLLM is an LLM backed by the Anthropic Messages API, authenticated
+// with an x-api-key header (AWS Bedrock Mantle's Anthropic surface and native
+// api.anthropic.com both use this scheme). normalizeAnthropicBaseURL strips a
+// trailing /v1 so the SDK's appended /v1/messages lands correctly; note the
+// base URL differs per provider on Bedrock (Anthropic at .../anthropic, the
+// OpenAI-compatible surface at .../openai/v1) — see docs/sentry.md.
 type anthropicLLM struct{}
 
 // NewAnthropicLLM returns an LLM implementation that talks to an Anthropic
