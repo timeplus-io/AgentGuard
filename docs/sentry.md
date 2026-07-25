@@ -26,8 +26,13 @@ is read-only. Those are later phases.
    even with `dlp.enabled: false` — its config is entirely independent of
    DLP's.
 4. Optionally set `sentry.skill_dir` to an on-disk override of the vendored
-   `timeplus-sql-guide` skill (`SENTRY_SKILL_DIR` env var); refresh the
-   vendored copy with `make sentry-sync-skill`.
+   `timeplus-sql-guide` skill (`SENTRY_SKILL_DIR` env var). The skill's
+   `references/` are vendored verbatim from
+   [timeplus-io/AgentSkills](https://github.com/timeplus-io/AgentSkills) and
+   refreshed with `make sentry-sync-skill`; `SKILL.md` is locally adapted for
+   Sentry's internal read-only `run_sql` execution channel (no curl/REST
+   instructions) and is not overwritten by the sync — the sync prints an
+   upstream diff so knowledge changes can be folded in manually (#215).
 
 ## `agentguard_sentry_config`: Sentry's dedicated model config
 
