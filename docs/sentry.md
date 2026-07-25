@@ -246,6 +246,29 @@ Every tool call and result is streamed to the client as `tool_call`/
 `tool_result` NDJSON events and persisted to `agentguard_sentry_messages`
 (`role="tool"`) so a conversation replays exactly what happened.
 
+## Conversation management
+
+Conversations are owner-scoped (the session user) and managed from the
+`/sentry` page's conversation rail:
+
+- **Rename** — `PATCH /api/sentry/conversations/:id` with `{title}`
+  (inline edit in the rail). Titles are truncated to 80 runes. A rename
+  preserves the conversation's position in the list (`updated_at` is kept).
+- **Delete** — `DELETE /api/sentry/conversations/:id` is a soft-delete
+  (`status` → `deleted`): the conversation disappears from the list and
+  reads 404 afterwards. Message rows stay in the append-only
+  `agentguard_sentry_messages` log but become unreachable through the API.
+  Legacy `archived` rows are treated the same as deleted.
+- **LLM auto-naming** — a new conversation is initially titled with its
+  (truncated) first user message. After each successful turn, while the
+  title still equals that auto-derived value, Sentry asks the configured
+  chat model for a short summary name (≤ 8 words) and renames the
+  conversation. This runs asynchronously off the turn's critical path and
+  fails open (any error keeps the current title). A title set by the
+  operator — or a previous auto-naming pass — is never overwritten; no
+  extra schema column is needed because "still auto-titled" is detected by
+  comparing the title against the truncated first user message.
+
 ## Budgets
 
 A turn stops requesting tools once `max_iterations` is hit (the final

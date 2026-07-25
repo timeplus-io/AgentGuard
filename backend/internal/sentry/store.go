@@ -36,7 +36,7 @@ type Store struct {
 	// backed by an in-memory per-conversation message list instead of
 	// Timeplus, so the agent loop is unit-testable with a scripted fake LLM
 	// and no live Timeplus (see loop_test.go). CreateConversation/Conversation/
-	// List/Archive are unaffected — the loop never calls them mid-turn.
+	// List/Delete/Rename are unaffected — the loop never calls them mid-turn.
 	Disabled bool
 
 	mu      sync.Mutex
@@ -266,8 +266,12 @@ func (s *Store) TouchConversation(id string) error {
 	return s.writeConversationRow(c, createdAt, time.Now().UTC())
 }
 
-// Archive marks a conversation "archived" (re-inserting the full row).
-func (s *Store) Archive(id string) error {
+// Delete soft-deletes a conversation (status -> "deleted", re-inserting the
+// full row). Rows stay in the mutable stream as tombstones — List filters
+// them out and handlers treat any non-"active" status as not found. Messages
+// in the append-only agentguard_sentry_messages log are left in place; they
+// become unreachable through the API once the conversation is deleted.
+func (s *Store) Delete(id string) error {
 	c, ok, err := s.Conversation(id)
 	if err != nil {
 		return err
@@ -275,9 +279,25 @@ func (s *Store) Archive(id string) error {
 	if !ok {
 		return fmt.Errorf("sentry store: conversation %s not found", id)
 	}
-	c.Status = "archived"
+	c.Status = "deleted"
 	createdAt := parseSentryTime(c.CreatedAt)
 	return s.writeConversationRow(c, createdAt, time.Now().UTC())
+}
+
+// Rename replaces a conversation's title (truncated to 80 runes),
+// re-inserting the full row. created_at AND updated_at are both preserved:
+// a rename must not resurface the conversation at the top of List's
+// most-recently-updated ordering.
+func (s *Store) Rename(id, title string) error {
+	c, ok, err := s.Conversation(id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("sentry store: conversation %s not found", id)
+	}
+	c.Title = truncateTitle(title)
+	return s.writeConversationRow(c, parseSentryTime(c.CreatedAt), parseSentryTime(c.UpdatedAt))
 }
 
 // Conversation returns the current row for id, or ok=false if it doesn't
@@ -297,15 +317,16 @@ LIMIT 1`, dlpquery.EscapeSQLStr(id))
 	return conversationFromRow(rows[0]), true, nil
 }
 
-// List returns user's conversations, most-recently-updated first, capped at
-// limit.
+// List returns user's active conversations, most-recently-updated first,
+// capped at limit. Non-"active" rows (deleted, and legacy archived) are
+// filtered out.
 func (s *Store) List(user string, limit int) ([]models.SentryConversation, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	sql := fmt.Sprintf(`SELECT conversation_id, user, title, status, created_at, updated_at
 FROM table(agentguard_sentry_conversations)
-WHERE user = '%s'
+WHERE user = '%s' AND status = 'active'
 ORDER BY updated_at DESC
 LIMIT %d`, dlpquery.EscapeSQLStr(user), limit)
 	rows, err := tp.Query(s.TP, sql)

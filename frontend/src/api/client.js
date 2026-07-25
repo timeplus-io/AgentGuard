@@ -40,6 +40,7 @@ async function send(method, path, body) {
 
 const post = (path, body) => send('POST', path, body)
 const put = (path, body) => send('PUT', path, body)
+const patch = (path, body) => send('PATCH', path, body)
 
 async function del(path) {
   const res = await fetch(`${BASE}${path}`, { method: 'DELETE', credentials: 'include' })
@@ -245,7 +246,8 @@ export const api = {
   sentryStatus: () => get('/sentry/status'),
   sentryConversations: () => get('/sentry/conversations'),
   sentryConversation: (id) => get(`/sentry/conversations/${encodeURIComponent(id)}`),
-  sentryArchive: (id) => del(`/sentry/conversations/${encodeURIComponent(id)}`),
+  sentryRename: (id, title) => patch(`/sentry/conversations/${encodeURIComponent(id)}`, { title }),
+  sentryDelete: (id) => del(`/sentry/conversations/${encodeURIComponent(id)}`),
 
   // Runtime Sentry config stream (agentguard_sentry_config): chat/memory rows.
   getSentryConfig: () => get('/sentry/config'),
