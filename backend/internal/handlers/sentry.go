@@ -45,8 +45,9 @@ func sentryRegistry(cfg *config.Config) *skills.Registry {
 
 // resolveConversation implements the create-or-continue semantics shared by
 // SentryChat: an empty id starts a new conversation (titled from the first
-// message); a non-empty id must exist and be owned by user, else an error
-// mapping to 404/403 (checked BEFORE any NDJSON header is written).
+// message); a non-empty id must exist, be owned by user, and still be
+// "active" (a deleted/archived conversation is gone — not found), else an
+// error mapping to 404/403 (checked BEFORE any NDJSON header is written).
 func resolveConversation(store *sentry.Store, user, id, message string) (models.SentryConversation, error) {
 	if strings.TrimSpace(id) == "" {
 		return store.CreateConversation(user, message)
@@ -55,13 +56,33 @@ func resolveConversation(store *sentry.Store, user, id, message string) (models.
 	if err != nil {
 		return models.SentryConversation{}, err
 	}
-	if !ok {
+	if !ok || conv.Status != "active" {
 		return models.SentryConversation{}, errConversationNotFound
 	}
 	if conv.User != user {
 		return models.SentryConversation{}, errConversationForbidden
 	}
 	return conv, nil
+}
+
+// ownedActiveConversation loads :id, enforcing existence + "active" status
+// (404) and session-user ownership (403), writing the error response itself.
+// Shared by the Get/Rename/Delete conversation handlers.
+func ownedActiveConversation(c *gin.Context, store *sentry.Store) (models.SentryConversation, bool) {
+	conv, ok, err := store.Conversation(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return models.SentryConversation{}, false
+	}
+	if !ok || conv.Status != "active" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
+		return models.SentryConversation{}, false
+	}
+	if conv.User != sessionUser(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "conversation belongs to another user"})
+		return models.SentryConversation{}, false
+	}
+	return conv, true
 }
 
 // SentryChat handles POST /sentry/chat: {conversation_id?, message} -> an
@@ -137,7 +158,13 @@ func SentryChat(cfg *config.Config) gin.HandlerFunc {
 			if !emitted {
 				emit(sentry.Event{Type: "error", Message: err.Error()})
 			}
+			return
 		}
+		// Off the critical path: while the conversation still carries its
+		// auto-derived title (first user message, never renamed by the
+		// operator), ask the chat model for a short summary name. No-op once
+		// any rename — human or LLM — has happened; fail-open on any error.
+		sentry.MaybeAutoTitleAsync(llm, cc, store, conv.ConversationID)
 	}
 }
 
@@ -157,22 +184,14 @@ func ListSentryConversations(cfg *config.Config) gin.HandlerFunc {
 }
 
 // GetSentryConversation handles GET /sentry/conversations/:id: the
-// conversation plus its full message replay, owner-only (403/404).
+// conversation plus its full message replay, owner-only (403/404; a deleted
+// conversation is 404).
 func GetSentryConversation(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rcfg := auth.RequestCfg(c, cfg)
 		store := &sentry.Store{TP: &rcfg.Timeplus}
-		conv, ok, err := store.Conversation(c.Param("id"))
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+		conv, ok := ownedActiveConversation(c, store)
 		if !ok {
-			c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
-			return
-		}
-		if conv.User != sessionUser(c) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "conversation belongs to another user"})
 			return
 		}
 		msgs, err := store.Messages(conv.ConversationID)
@@ -184,30 +203,56 @@ func GetSentryConversation(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// ArchiveSentryConversation handles DELETE /sentry/conversations/:id:
-// owner-only soft-archive (status -> "archived").
-func ArchiveSentryConversation(cfg *config.Config) gin.HandlerFunc {
+// RenameSentryConversation handles PATCH /sentry/conversations/:id:
+// owner-only title replacement ({title}, non-empty, truncated to 80 runes).
+// A user-set title is permanent: it no longer matches the auto-derived
+// first-message title, so LLM auto-naming (MaybeAutoTitle) will never
+// overwrite it.
+func RenameSentryConversation(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rcfg := auth.RequestCfg(c, cfg)
 		store := &sentry.Store{TP: &rcfg.Timeplus}
-		conv, ok, err := store.Conversation(c.Param("id"))
+		var body struct {
+			Title string `json:"title"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.Title) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "title is required"})
+			return
+		}
+		conv, ok := ownedActiveConversation(c, store)
+		if !ok {
+			return
+		}
+		if err := store.Rename(conv.ConversationID, strings.TrimSpace(body.Title)); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		conv, _, err := store.Conversation(conv.ConversationID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		c.JSON(http.StatusOK, gin.H{"conversation": conv})
+	}
+}
+
+// DeleteSentryConversation handles DELETE /sentry/conversations/:id:
+// owner-only soft-delete (status -> "deleted"). The conversation disappears
+// from List and reads 404 afterwards; message rows stay in the append-only
+// log but become unreachable through the API.
+func DeleteSentryConversation(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rcfg := auth.RequestCfg(c, cfg)
+		store := &sentry.Store{TP: &rcfg.Timeplus}
+		conv, ok := ownedActiveConversation(c, store)
 		if !ok {
-			c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
 			return
 		}
-		if conv.User != sessionUser(c) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "conversation belongs to another user"})
-			return
-		}
-		if err := store.Archive(conv.ConversationID); err != nil {
+		if err := store.Delete(conv.ConversationID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"status": "archived"})
+		c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 	}
 }
 

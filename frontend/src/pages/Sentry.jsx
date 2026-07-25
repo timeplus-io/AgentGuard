@@ -118,7 +118,11 @@ export default function Sentry() {
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
 
+  const [editingId, setEditingId] = useState(null)
+  const [editTitle, setEditTitle] = useState('')
+
   const abortRef = useRef(null)
+  const titleRefreshRef = useRef(null)
   const openAssistantIdRef = useRef(null)
   const scrollRef = useRef(null)
   const activeIdRef = useRef(null)
@@ -140,7 +144,10 @@ export default function Sentry() {
     if (status?.enabled) loadConversations()
   }, [status, loadConversations])
 
-  useEffect(() => () => abortRef.current?.abort(), [])
+  useEffect(() => () => {
+    abortRef.current?.abort()
+    if (titleRefreshRef.current) clearTimeout(titleRefreshRef.current)
+  }, [])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -183,14 +190,34 @@ export default function Sentry() {
     setConvError(null)
   }
 
-  async function archiveConversation(id, e) {
+  async function deleteConversation(id, e) {
     e.stopPropagation()
+    if (!window.confirm('Delete this conversation? It will be removed from your list.')) return
     try {
-      await api.sentryArchive(id)
+      await api.sentryDelete(id)
       if (activeId === id) newConversation()
       loadConversations()
     } catch (err) {
-      setConversationsError(err?.message || 'Failed to archive conversation')
+      setConversationsError(err?.message || 'Failed to delete conversation')
+    }
+  }
+
+  function startRename(c, e) {
+    e.stopPropagation()
+    setEditingId(c.conversation_id)
+    setEditTitle(c.title || '')
+  }
+
+  async function commitRename() {
+    const id = editingId
+    const title = editTitle.trim()
+    setEditingId(null)
+    if (!id || !title) return
+    try {
+      await api.sentryRename(id, title)
+      loadConversations()
+    } catch (err) {
+      setConversationsError(err?.message || 'Failed to rename conversation')
     }
   }
 
@@ -270,6 +297,10 @@ export default function Sentry() {
     } finally {
       setStreaming(false)
       loadConversations() // picks up the new/updated conversation in the rail
+      // The server may auto-title the conversation via the LLM shortly after
+      // the turn completes; refresh once more to pick the new name up.
+      if (titleRefreshRef.current) clearTimeout(titleRefreshRef.current)
+      titleRefreshRef.current = setTimeout(loadConversations, 5000)
     }
   }
 
@@ -358,14 +389,39 @@ export default function Sentry() {
                           : 'text-gray-400 hover:bg-surface-container-high hover:text-gray-100'
                       }`}
                     >
-                      <span className="flex-1 min-w-0 truncate">{c.title || 'Untitled conversation'}</span>
-                      <button
-                        onClick={e => archiveConversation(c.conversation_id, e)}
-                        title="Archive conversation"
-                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-error shrink-0"
-                      >
-                        <span className="material-symbols-outlined text-sm">archive</span>
-                      </button>
+                      {editingId === c.conversation_id ? (
+                        <input
+                          autoFocus
+                          value={editTitle}
+                          onChange={e => setEditTitle(e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                          onBlur={commitRename}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); commitRename() }
+                            if (e.key === 'Escape') setEditingId(null)
+                          }}
+                          maxLength={80}
+                          className="flex-1 min-w-0 bg-surface-container-highest text-gray-100 text-xs rounded-sm px-1.5 py-0.5 outline-none"
+                        />
+                      ) : (
+                        <>
+                          <span className="flex-1 min-w-0 truncate">{c.title || 'Untitled conversation'}</span>
+                          <button
+                            onClick={e => startRename(c, e)}
+                            title="Rename conversation"
+                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-100 shrink-0"
+                          >
+                            <span className="material-symbols-outlined text-sm">edit</span>
+                          </button>
+                          <button
+                            onClick={e => deleteConversation(c.conversation_id, e)}
+                            title="Delete conversation"
+                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-error shrink-0"
+                          >
+                            <span className="material-symbols-outlined text-sm">delete</span>
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
