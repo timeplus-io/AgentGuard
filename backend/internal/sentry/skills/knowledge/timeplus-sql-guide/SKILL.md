@@ -2,23 +2,24 @@
 name: timeplus-sql-guide
 description: >
   Write and execute Timeplus streaming SQL for real-time analytics. Use this skill
-  when the user wants to create streams, run streaming queries, build materialized
-  views, ingest data, send data to sinks, write UDFs, or simulate data with random
-  streams. Executes SQL via the ClickHouse-compatible HTTP interface on port 8123
-  using environment variables TIMEPLUS_HOST, TIMEPLUS_USER, and TIMEPLUS_PASSWORD.
-  Covers full Timeplus SQL syntax including window functions, JOINs, CTEs, UDFs,
-  data types, aggregations, and all DDL/DML statements.
+  when the user wants to query streams, analyze historical data, or understand
+  materialized views, UDFs, and streaming pipelines. Read-only queries are executed
+  through the built-in run_sql tool; write-path SQL (CREATE, INSERT, sinks, UDFs)
+  is covered as knowledge for explaining pipelines and drafting SQL the operator
+  runs themselves. Covers full Timeplus SQL syntax including window functions,
+  JOINs, CTEs, UDFs, data types, aggregations, and all DDL/DML statements.
 license: Apache-2.0
 compatibility: >
-  Requires curl. Set environment variables: TIMEPLUS_HOST (hostname or IP of
-  Timeplus server), TIMEPLUS_USER (username, default: 'default'),
-  TIMEPLUS_PASSWORD (password). Port 8123 must be accessible. For streaming
-  ingest, port 3218 must also be accessible.
+  Adapted for AgentGuard Sentry: SQL executes through the internal read-only
+  run_sql tool — no shell, no curl, no environment variables, no direct network
+  access to Timeplus.
 metadata:
   author: timeplus-io
   version: "1.1.1"
   docs: https://docs.timeplus.com
   github: https://github.com/timeplus-io/proton
+  upstream: https://github.com/timeplus-io/AgentSkills/tree/main/timeplus-sql-guide
+  adapted-for: AgentGuard Sentry (execution channel rewritten for run_sql; knowledge content kept complete)
   tags:
     - timeplus
     - streaming-sql
@@ -26,22 +27,13 @@ metadata:
     - real-time-analytics
     - materialized-views
     - udf
-  openclaw:
-    requires:
-      env:
-        - TIMEPLUS_HOST
-        - TIMEPLUS_USER
-        - TIMEPLUS_PASSWORD
-      bins:
-        - curl
-    primaryEnv: TIMEPLUS_PASSWORD
 ---
 
 # Timeplus Streaming SQL Guide
 
 You are an expert in **Timeplus** — a high-performance real-time streaming analytics
-platform built on a streaming SQL engine (Proton). You write correct, efficient
-Timeplus SQL and execute it via the ClickHouse-compatible HTTP API.
+platform built on a streaming SQL engine. You write correct, efficient
+Timeplus SQL and execute read-only queries via the built-in `run_sql` tool.
 
 ## Quick Reference
 
@@ -62,93 +54,67 @@ Timeplus SQL and execute it via the ClickHouse-compatible HTTP API.
 
 ## Executing SQL
 
-### Environment Setup
+### The `run_sql` tool
 
-Always use these environment variables — never hardcode credentials:
+All SQL you execute goes through the `run_sql` tool: one statement per call,
+results returned as JSON rows. There is no shell, no curl, and no credential
+setup — the tool talks to Timeplus for you.
 
 ```
-- TIMEPLUS_HOST       # hostname or IP
-- TIMEPLUS_USER       # username
-- TIMEPLUS_PASSWORD   # password (can be empty)
+run_sql({"sql": "SELECT count() FROM table(agentguard_cim_event)"})
 ```
 
-### Running SQL via curl (port 8123)
+The tool enforces a **read-only, bounded** contract. A query is accepted only if:
 
-Port 8123 is the ClickHouse-compatible HTTP interface. Use it for **all DDL and
-historical queries** (CREATE, DROP, INSERT, SELECT from `table(...)`).
-Always pass credentials with curl's `-u` option.
+- It is a **single statement** starting with `SELECT` or `WITH` (no `;`-separated
+  batches, no `DESCRIBE`/`SHOW`/`EXPLAIN` — use the `system.*` tables below instead).
+- Every `FROM`/`JOIN` source is **bounded**: `table(stream)` for historical reads,
+  a sub-select, a CTE name, or one of the allowlisted system tables
+  `system.tables`, `system.columns`, `system.functions`,
+  `system.v_failed_mat_views`. A **bare stream name is rejected** — that would be
+  an unbounded streaming read.
+- It contains none of the forbidden keywords: `INSERT`, `ALTER`, `CREATE`,
+  `DROP`, `TRUNCATE`, `RENAME`, `OPTIMIZE`, `GRANT`, `REVOKE`, `KILL`,
+  `SETTINGS`, `OUTFILE`, `INFILE`, or a bare `SYSTEM` command.
+- `table(...)` wraps a **plain stream name only** — `table(url(...))`,
+  `table(file(...))` etc. are rejected.
 
-NOTE, if the curl returns nothing, it is not an error, it means the query returns no records. You can check the HTTP status code to confirm success (200 OK) or failure (4xx/5xx).
+Additional behavior:
 
-```bash
-# Standard pattern — pipe SQL into curl
-echo "YOUR SQL HERE" | curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
+- A `LIMIT` is **injected automatically** (default 100) if you omit one, and an
+  oversized `LIMIT` is clamped to the server maximum. Still write explicit,
+  sensible `LIMIT`s.
+- Queries run under a **timeout**; an expensive full scan may return
+  `error: query timed out` — narrow the time range (`_tp_time >= now() - 1h`)
+  or aggregate instead of selecting raw rows.
+- An **empty result** (`[]`) means no rows matched — it is not an error.
+- Failures come back as a result string starting with `error: ...` — read it,
+  fix the SQL, and retry.
+
+### Schema discovery
+
+Prefer the dedicated tools: `list_streams` (stream/MV names) and
+`describe_stream` (columns and types). Equivalent `run_sql` queries:
+
+```sql
+-- List streams (SHOW STREAMS is not accepted; query system.tables)
+SELECT name, engine FROM system.tables WHERE database = 'default' LIMIT 100
+
+-- Inspect a stream's columns (DESCRIBE is not accepted; query system.columns)
+SELECT name, type FROM system.columns WHERE table = 'sensor_data'
+
+-- Check materialized-view health
+SELECT * FROM system.v_failed_mat_views
 ```
 
-**Health check:**
-```bash
-curl "http://${TIMEPLUS_HOST}:8123/"
-# Returns: Ok.
-```
+### Write-path SQL is knowledge, not execution
 
-**DDL example — create a stream:**
-```bash
-echo "CREATE STREAM IF NOT EXISTS sensor_data (
-  device_id string,
-  temperature float32,
-  ts datetime64(3, 'UTC') DEFAULT now64(3, 'UTC')
-) SETTINGS logstore_retention_ms=86400000" | \
-curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
-```
-
-**Historical query with JSON output:**
-```bash
-echo "SELECT * FROM table(sensor_data) LIMIT 10" | \
-curl "http://${TIMEPLUS_HOST}:8123/?default_format=JSONEachRow" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
-```
-
-**Insert data:**
-```bash
-echo "INSERT INTO sensor_data (device_id, temperature) VALUES ('dev-1', 23.5), ('dev-2', 18.2)" | \
-curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
-```
-
-### Streaming Ingest via REST API (port 3218)
-
-For pushing event batches into a stream:
-
-```bash
-curl -s -X POST "http://${TIMEPLUS_HOST}:3218/proton/v1/ingest/streams/sensor_data" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "columns": ["device_id", "temperature"],
-    "data": [
-      ["dev-1", 23.5],
-      ["dev-2", 18.2],
-      ["dev-3", 31.0]
-    ]
-  }'
-```
-
-### Output Formats
-
-Append `?default_format=<format>` to the URL:
-
-| Format | Use Case |
-|--------|----------|
-| `TabSeparated` | Default, human-readable |
-| `JSONEachRow` | One JSON object per line |
-| `JSONCompact` | Compact JSON array |
-| `CSV` | Comma-separated |
-| `Vertical` | Column-per-line, for inspection |
+This guide (and its references) keeps the full write path — `CREATE STREAM`,
+`INSERT`, materialized views, sinks, random streams, UDFs, scheduled tasks,
+alerts — because you need it to **explain existing pipelines and draft SQL for
+the operator**. `run_sql` cannot execute any of it. When a task needs DDL or
+writes, produce the SQL in a code block for the operator to run in the
+Timeplus console, and say clearly that you did not execute it.
 
 ---
 
@@ -157,15 +123,21 @@ Append `?default_format=<format>` to the URL:
 ### Streaming vs Historical Queries
 
 ```sql
--- STREAMING: Continuous, never ends. Default behavior.
+-- STREAMING: Continuous, never ends. Default behavior in Timeplus.
+-- (Not executable via run_sql — unbounded.)
 SELECT device_id, temperature FROM sensor_data;
 
 -- HISTORICAL: Bounded, returns immediately. Use table().
+-- (This is the form run_sql executes.)
 SELECT device_id, temperature FROM table(sensor_data) LIMIT 100;
 
 -- HISTORICAL + FUTURE: All past events + all future events
+-- (Not executable via run_sql — unbounded.)
 SELECT * FROM sensor_data WHERE _tp_time >= earliest_timestamp();
 ```
+
+Everything you run through `run_sql` is the historical form: wrap the stream
+in `table(...)` and bound it with a `WHERE` on `_tp_time` and/or a `LIMIT`.
 
 ### ORDER BY and LIMIT on Streaming Queries
 
@@ -206,103 +178,73 @@ It defaults to ingestion time. You can set a custom event-time column via
 
 ## Common Patterns
 
-### Pattern 1: Create stream → insert → query
-```bash
-# 1. Create stream
-echo "CREATE STREAM IF NOT EXISTS orders (
-  order_id string,
-  product string,
-  amount float32,
-  region string
-)" | curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
+### Pattern 1: Explore then query (run_sql)
+```sql
+-- 1. Find the stream
+SELECT name FROM system.tables WHERE name LIKE '%orders%'
 
-# 2. Insert data
-echo "INSERT INTO orders VALUES ('o-1','Widget',19.99,'US'), ('o-2','Gadget',49.99,'EU')" | \
-  curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
+-- 2. Check its schema
+SELECT name, type FROM system.columns WHERE table = 'orders'
 
-# 3. Query historical data
-echo "SELECT region, sum(amount) FROM table(orders) GROUP BY region" | \
-  curl "http://${TIMEPLUS_HOST}:8123/?default_format=JSONEachRow" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
+-- 3. Query historical data
+SELECT region, sum(amount) FROM table(orders) GROUP BY region LIMIT 100
 ```
 
-### Pattern 2: Window aggregation (streaming)
-```bash
-echo "SELECT window_start, region, sum(amount) AS revenue
+### Pattern 2: Bounded time-window analysis (run_sql)
+```sql
+SELECT to_start_of_interval(_tp_time, INTERVAL 1 MINUTE) AS minute,
+       region, sum(amount) AS revenue
+FROM table(orders)
+WHERE _tp_time >= now() - INTERVAL 1 HOUR
+GROUP BY minute, region
+ORDER BY minute DESC
+LIMIT 100
+```
+
+### Pattern 3: Window aggregation (streaming — knowledge only)
+```sql
+-- Continuous per-minute revenue; runs forever. Draft for the operator,
+-- not executable via run_sql.
+SELECT window_start, region, sum(amount) AS revenue
 FROM tumble(orders, 1m)
 GROUP BY window_start, region
-EMIT AFTER WATERMARK AND DELAY 5s" | \
-  curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
+EMIT AFTER WATERMARK AND DELAY 5s
 ```
 
-### Pattern 3: Materialized view pipeline
-```bash
-echo "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_revenue_by_region
+### Pattern 4: Materialized view pipeline (DDL — knowledge only)
+```sql
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_revenue_by_region
 INTO revenue_by_region AS
 SELECT window_start, region, sum(amount) AS total
 FROM tumble(orders, 5m)
-GROUP BY window_start, region" | \
-  curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
+GROUP BY window_start, region
 ```
 
-### Pattern 4: Random stream for testing
-```bash
-echo "CREATE RANDOM STREAM IF NOT EXISTS mock_sensors (
+### Pattern 5: Random stream for testing (DDL — knowledge only)
+```sql
+CREATE RANDOM STREAM IF NOT EXISTS mock_sensors (
   device_id string DEFAULT 'device-' || to_string(rand() % 10),
   temperature float32 DEFAULT 20 + (rand() % 30),
   status string DEFAULT ['ok','warn','error'][rand() % 3 + 1]
-) SETTINGS eps=5" | \
-  curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
+) SETTINGS eps=5
 ```
 
 ---
 
 ## Error Handling
 
-Common errors and fixes:
+Common `run_sql` errors and fixes:
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `Connection refused` | Wrong host/port | Check `TIMEPLUS_HOST` and port 8123 is open |
-| `Authentication failed` | Wrong credentials | Check `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD` |
-| `Stream already exists` | Duplicate CREATE | Use `CREATE STREAM IF NOT EXISTS` |
-| `Unknown column` | Typo or wrong stream | Run `DESCRIBE stream_name` to check schema |
-| `Streaming query timeout` | Using streaming on port 8123 | Wrap with `table()` for historical query |
+| `stream "x" must be read via table(x)` | Bare stream name in FROM/JOIN | Wrap it: `FROM table(x)` |
+| `forbidden keyword ...` | DDL/write/`SETTINGS` in the query | run_sql is read-only; drop the keyword or draft the SQL for the operator |
+| `query must start with SELECT or WITH` | `SHOW`/`DESCRIBE`/`EXPLAIN`/DDL | Use `system.tables` / `system.columns` instead |
+| `only system.tables/columns/functions/v_failed_mat_views are readable` | Other `system.*` table | Stay within the allowlisted four |
+| `query timed out` | Expensive scan | Narrow `_tp_time` range, aggregate, lower LIMIT |
+| `Unknown column` | Typo or wrong stream | Check `system.columns` or `describe_stream` |
 | `Type mismatch` | Wrong data type | Use explicit cast: `cast(val, 'float32')` |
 | `Watermark with delay is only supported with streaming window function` | `EMIT ... WITH DELAY` on a plain `GROUP BY` | Drop the EMIT clause (plain GROUP BY already emits on update), or wrap the source in `tumble()`/`hop()`/`session()` |
-
-**Inspect a stream:**
-```bash
-echo "DESCRIBE sensor_data" | curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
-```
-
-**List all streams:**
-```bash
-echo "SHOW STREAMS" | curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
-```
-
-**Explain a query:**
-```bash
-echo "EXPLAIN SELECT * FROM tumble(sensor_data, 1m) GROUP BY window_start" | \
-  curl "http://${TIMEPLUS_HOST}:8123/" \
-  -u "${TIMEPLUS_USER}:${TIMEPLUS_PASSWORD}" \
-  --data-binary @-
-```
 
 ---
 
@@ -321,3 +263,6 @@ Load the relevant reference file when the user's request requires deeper knowled
 - **Scheduled Tasks** → `references/TASK.md`
 - **Alerts** → `references/ALERT.md`
 
+Reference files describe the **full** Timeplus SQL surface, including DDL and
+write paths that `run_sql` cannot execute — use them to understand and draft
+such SQL, then hand it to the operator.

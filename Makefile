@@ -170,7 +170,7 @@ dlp-integration:
 
 # ── Sentry ───────────────────────────────────────────────────────────────────
 
-## sentry-sync-skill: refresh the vendored timeplus-sql-guide skill from timeplus-io/AgentSkills
+## sentry-sync-skill: refresh the vendored timeplus-sql-guide references/ from timeplus-io/AgentSkills (SKILL.md is locally adapted for run_sql and is not synced)
 sentry-sync-skill:
 	backend/scripts/sync_sql_skill.sh
 
