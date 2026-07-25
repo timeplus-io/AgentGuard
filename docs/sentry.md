@@ -25,14 +25,18 @@ is read-only. Those are later phases.
    live afterward under **Settings → Sentry Agent** (see below). Sentry works
    even with `dlp.enabled: false` — its config is entirely independent of
    DLP's.
-4. Optionally set `sentry.skill_dir` to an on-disk override of the vendored
-   `timeplus-sql-guide` skill (`SENTRY_SKILL_DIR` env var). The skill's
+4. Optionally set `sentry.skill_dir` to an on-disk override of the embedded
+   knowledge skills (`SENTRY_SKILL_DIR` env var): a **parent** directory
+   containing one subdirectory per skill (`timeplus-sql-guide/`,
+   `agentguard-guide/`), each with a `SKILL.md` + `references/`. Two skills
+   ship embedded: `timeplus-sql-guide` (generic Timeplus SQL; its
    `references/` are vendored verbatim from
    [timeplus-io/AgentSkills](https://github.com/timeplus-io/AgentSkills) and
-   refreshed with `make sentry-sync-skill`; `SKILL.md` is locally adapted for
-   Sentry's internal read-only `run_sql` execution channel (no curl/REST
-   instructions) and is not overwritten by the sync — the sync prints an
-   upstream diff so knowledge changes can be folded in manually (#215).
+   refreshed with `make sentry-sync-skill`, while `SKILL.md` is locally
+   adapted for Sentry's internal read-only `run_sql` execution channel and
+   is not overwritten by the sync — #215) and `agentguard-guide`
+   (AgentGuard's own streams and the canonical queries behind every API
+   resource — #219).
 
 ## `agentguard_sentry_config`: Sentry's dedicated model config
 
@@ -230,8 +234,8 @@ All Phase-1 tools are read-only (`internal/sentry/skills/`, registered in
 
 | Tool | Access |
 |------|--------|
-| `load_skill` | Load the Timeplus SQL guide — call once before non-trivial SQL |
-| `load_skill_reference` | Load one deep-dive reference file from the guide |
+| `load_skill` | Load a knowledge skill by `name`: `timeplus-sql-guide` (SQL syntax) or `agentguard-guide` (AgentGuard streams + canonical queries) — call each once per conversation as needed |
+| `load_skill_reference` | Load one deep-dive reference file from a skill (`skill`, `name`) |
 | `list_streams` | List `agentguard_*`/`mv_*` streams and materialized views |
 | `describe_stream` | Columns + types for one stream |
 | `run_sql` | Ad-hoc read-only SQL (`table(...)` for historical reads); LIMIT enforced |
