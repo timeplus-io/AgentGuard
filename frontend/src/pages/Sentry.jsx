@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
+import Markdown from '../components/Markdown'
 import { api } from '../api/client'
 
 let localSeq = 0
@@ -90,13 +91,13 @@ function MessageBubble({ item }) {
       </div>
     )
   }
-  // assistant — no markdown renderer in the frontend (see SemanticDLP's
-  // report pane); render as plain text preserving whitespace, same approach.
+  // assistant — render Markdown (headings, GFM tables, lists, code); the
+  // pending cursor follows the rendered content while streaming.
   return (
-    <p className="max-w-2xl text-sm text-gray-100 whitespace-pre-wrap break-words leading-relaxed">
-      {item.content}
+    <div className="max-w-2xl">
+      <Markdown>{item.content}</Markdown>
       {item.pending && <span className="inline-block w-1.5 h-3.5 bg-primary/70 ml-0.5 align-text-bottom animate-pulse" />}
-    </p>
+    </div>
   )
 }
 
