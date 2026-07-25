@@ -192,6 +192,32 @@ func EffectiveValue(cfg *Config, key string) any {
 		return cfg.DLP.RequestTimeoutSeconds
 	case "dlp.max_output_tokens":
 		return cfg.DLP.MaxOutputTokens
+	case "sentry.enabled":
+		return cfg.Sentry.Enabled
+	case "sentry.skill_dir":
+		return cfg.Sentry.SkillDir
+	case "sentry.chat_base_url":
+		return cfg.Sentry.ChatBaseURL
+	case "sentry.chat_api_key":
+		return cfg.Sentry.ChatAPIKey
+	case "sentry.chat_model":
+		return cfg.Sentry.ChatModel
+	case "sentry.chat_api_type":
+		return cfg.Sentry.ChatAPIType
+	case "sentry.memory_enabled":
+		return cfg.Sentry.MemoryEnabled
+	case "sentry.embedding_base_url":
+		return cfg.Sentry.EmbeddingBaseURL
+	case "sentry.embedding_api_key":
+		return cfg.Sentry.EmbeddingAPIKey
+	case "sentry.embedding_model":
+		return cfg.Sentry.EmbeddingModel
+	case "sentry.embedding_dim":
+		return cfg.Sentry.EmbeddingDim
+	case "sentry.request_timeout_seconds":
+		return cfg.Sentry.RequestTimeoutSeconds
+	case "sentry.max_output_tokens":
+		return cfg.Sentry.MaxOutputTokens
 	case "setup.complete":
 		return cfg.SetupComplete
 	}
@@ -240,6 +266,32 @@ func ApplyChange(cfg *Config, key string, value any) error {
 		return setInt(&cfg.DLP.RequestTimeoutSeconds, value)
 	case "dlp.max_output_tokens":
 		return setInt(&cfg.DLP.MaxOutputTokens, value)
+	case "sentry.enabled":
+		return setBool(&cfg.Sentry.Enabled, value)
+	case "sentry.skill_dir":
+		return setString(&cfg.Sentry.SkillDir, value)
+	case "sentry.chat_base_url":
+		return setString(&cfg.Sentry.ChatBaseURL, value)
+	case "sentry.chat_api_key":
+		return setString(&cfg.Sentry.ChatAPIKey, value)
+	case "sentry.chat_model":
+		return setString(&cfg.Sentry.ChatModel, value)
+	case "sentry.chat_api_type":
+		return setString(&cfg.Sentry.ChatAPIType, value)
+	case "sentry.memory_enabled":
+		return setBool(&cfg.Sentry.MemoryEnabled, value)
+	case "sentry.embedding_base_url":
+		return setString(&cfg.Sentry.EmbeddingBaseURL, value)
+	case "sentry.embedding_api_key":
+		return setString(&cfg.Sentry.EmbeddingAPIKey, value)
+	case "sentry.embedding_model":
+		return setString(&cfg.Sentry.EmbeddingModel, value)
+	case "sentry.embedding_dim":
+		return setInt(&cfg.Sentry.EmbeddingDim, value)
+	case "sentry.request_timeout_seconds":
+		return setInt(&cfg.Sentry.RequestTimeoutSeconds, value)
+	case "sentry.max_output_tokens":
+		return setInt(&cfg.Sentry.MaxOutputTokens, value)
 	}
 	return fmt.Errorf("key %q cannot be applied", key)
 }

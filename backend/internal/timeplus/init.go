@@ -13,6 +13,17 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 )
 
+// Connect opens a single native-protocol connection to Timeplus and returns
+// it to the caller (who is responsible for closing it). It is the exported
+// door into connectOnce for packages outside internal/timeplus (e.g.
+// internal/sentry's conversation store) that need conn.PrepareBatch for
+// native, quote-safe inserts of arbitrary user content — the same reason
+// WriteDLPConfig uses the native batch path instead of an HTTP INSERT … VALUES
+// literal.
+func Connect(cfg *config.TimeplusConfig) (proton.Conn, error) {
+	return connectOnce(cfg)
+}
+
 // connectOnce makes a single connection attempt to Timeplus. It does not retry.
 // The caller is responsible for retrying or reporting the error.
 func connectOnce(cfg *config.TimeplusConfig) (proton.Conn, error) {
@@ -50,7 +61,7 @@ func bt(s string) string { return btReplacer.Replace(s) }
 // do not become rule instances until they are explicitly installed. If an
 // agentguard_rules stream from an earlier release already exists with an
 // incompatible schema, Init fails and asks the operator to reprovision.
-func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, dlpCfg config.DLPConfig, emit func(status, msg string)) error {
+func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, dlpCfg config.DLPConfig, sentryCfg config.SentryConfig, emit func(status, msg string)) error {
 	if emit == nil {
 		emit = func(status, msg string) { log.Printf("[provision:%s] %s", status, msg) }
 	}
@@ -149,6 +160,12 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, dlpCfg config
 	if err := InitDLP(ctx, conn, dlpCfg, emit); err != nil {
 		log.Printf("timeplus init: warning provisioning DLP: %v (continuing)", err)
 		emit("ok", "  - Semantic DLP provisioning failed (non-fatal): "+err.Error())
+	}
+
+	emit("running", "$ Provisioning Sentry conversational core…")
+	if err := InitSentry(ctx, conn, sentryCfg, emit); err != nil {
+		log.Printf("timeplus init: warning provisioning Sentry: %v (continuing)", err)
+		emit("ok", "  - Sentry provisioning failed (non-fatal): "+err.Error())
 	}
 
 	emit("ok", "  ✓ All resources provisioned")

@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-
 func TestCoerceAndValidate(t *testing.T) {
 	cases := []struct {
 		key     string
@@ -14,16 +13,16 @@ func TestCoerceAndValidate(t *testing.T) {
 		wantErr bool
 		want    any
 	}{
-		{"server.port", float64(9090), false, 9090},      // JSON numbers arrive as float64
-		{"server.port", float64(0), true, nil},           // out of range
-		{"server.port", float64(70000), true, nil},       // out of range
-		{"server.port", "abc", true, nil},                // wrong type
+		{"server.port", float64(9090), false, 9090}, // JSON numbers arrive as float64
+		{"server.port", float64(0), true, nil},      // out of range
+		{"server.port", float64(70000), true, nil},  // out of range
+		{"server.port", "abc", true, nil},           // wrong type
 		{"dlp.enabled", true, false, true},
-		{"dlp.enabled", "yes", true, nil},                // wrong type
+		{"dlp.enabled", "yes", true, nil}, // wrong type
 		{"holds.fail_policy", "allow", false, "allow"},
-		{"holds.fail_policy", "maybe", true, nil},        // not in enum
+		{"holds.fail_policy", "maybe", true, nil}, // not in enum
 		{"dlp.embedding_dim", float64(768), false, 768},
-		{"dlp.embedding_dim", float64(0), true, nil},     // must be >= 1
+		{"dlp.embedding_dim", float64(0), true, nil}, // must be >= 1
 		{"dlp.base_url", "http://x:4000/v1", false, "http://x:4000/v1"},
 		{"dlp.base_url", "not a url", true, nil},
 		{"agentguard.url", "https://h:8080", false, "https://h:8080"},
@@ -32,7 +31,7 @@ func TestCoerceAndValidate(t *testing.T) {
 		{"holds.timeout_seconds", float64(300), false, 300}, // within ceiling
 		{"holds.timeout_seconds", float64(541), true, nil},  // exceeds 540 ceiling
 		{"holds.mv_wait_ms", float64(0), false, 0},          // zero allowed
-		{"nope.key", "x", true, nil},                     // unknown key
+		{"nope.key", "x", true, nil},                        // unknown key
 	}
 	for _, c := range cases {
 		got, err := CoerceAndValidate(c.key, c.raw)
@@ -103,6 +102,92 @@ func TestEffectiveAndApply(t *testing.T) {
 	}
 	if cfg.DLP.APIKey != "sk-x" {
 		t.Error("ApplyChange dlp.api_key not applied")
+	}
+}
+
+func TestEffectiveAndApplySentry(t *testing.T) {
+	cfg := &Config{}
+	cfg.Sentry.Enabled = false
+	cfg.Sentry.SkillDir = ""
+
+	if got := EffectiveValue(cfg, "sentry.enabled"); got != false {
+		t.Errorf("EffectiveValue sentry.enabled: got %v", got)
+	}
+	if got := EffectiveValue(cfg, "sentry.skill_dir"); got != "" {
+		t.Errorf("EffectiveValue sentry.skill_dir: got %v", got)
+	}
+	if err := ApplyChange(cfg, "sentry.enabled", true); err != nil {
+		t.Fatalf("ApplyChange sentry.enabled: %v", err)
+	}
+	if !cfg.Sentry.Enabled {
+		t.Error("ApplyChange sentry.enabled: cfg still false")
+	}
+	if got := EffectiveValue(cfg, "sentry.enabled"); got != true {
+		t.Errorf("EffectiveValue sentry.enabled after apply: got %v", got)
+	}
+	if err := ApplyChange(cfg, "sentry.skill_dir", "/opt/skills/timeplus-sql-guide"); err != nil {
+		t.Fatalf("ApplyChange sentry.skill_dir: %v", err)
+	}
+	if cfg.Sentry.SkillDir != "/opt/skills/timeplus-sql-guide" {
+		t.Error("ApplyChange sentry.skill_dir not applied")
+	}
+	if got := EffectiveValue(cfg, "sentry.skill_dir"); got != "/opt/skills/timeplus-sql-guide" {
+		t.Errorf("EffectiveValue sentry.skill_dir after apply: got %v", got)
+	}
+
+	stringCases := []struct {
+		key string
+		dst *string
+	}{
+		{"sentry.chat_base_url", &cfg.Sentry.ChatBaseURL},
+		{"sentry.chat_api_key", &cfg.Sentry.ChatAPIKey},
+		{"sentry.chat_model", &cfg.Sentry.ChatModel},
+		{"sentry.embedding_base_url", &cfg.Sentry.EmbeddingBaseURL},
+		{"sentry.embedding_api_key", &cfg.Sentry.EmbeddingAPIKey},
+		{"sentry.embedding_model", &cfg.Sentry.EmbeddingModel},
+	}
+	for _, tc := range stringCases {
+		want := "value-for-" + tc.key
+		if err := ApplyChange(cfg, tc.key, want); err != nil {
+			t.Fatalf("ApplyChange %s: %v", tc.key, err)
+		}
+		if *tc.dst != want {
+			t.Errorf("ApplyChange %s: cfg field not updated, got %q", tc.key, *tc.dst)
+		}
+		if got := EffectiveValue(cfg, tc.key); got != want {
+			t.Errorf("EffectiveValue %s after apply: got %v, want %v", tc.key, got, want)
+		}
+	}
+
+	if err := ApplyChange(cfg, "sentry.memory_enabled", true); err != nil {
+		t.Fatalf("ApplyChange sentry.memory_enabled: %v", err)
+	}
+	if !cfg.Sentry.MemoryEnabled {
+		t.Error("ApplyChange sentry.memory_enabled: cfg still false")
+	}
+	if got := EffectiveValue(cfg, "sentry.memory_enabled"); got != true {
+		t.Errorf("EffectiveValue sentry.memory_enabled after apply: got %v", got)
+	}
+
+	intCases := []struct {
+		key string
+		dst *int
+	}{
+		{"sentry.embedding_dim", &cfg.Sentry.EmbeddingDim},
+		{"sentry.request_timeout_seconds", &cfg.Sentry.RequestTimeoutSeconds},
+		{"sentry.max_output_tokens", &cfg.Sentry.MaxOutputTokens},
+	}
+	for i, tc := range intCases {
+		want := 100 + i
+		if err := ApplyChange(cfg, tc.key, want); err != nil {
+			t.Fatalf("ApplyChange %s: %v", tc.key, err)
+		}
+		if *tc.dst != want {
+			t.Errorf("ApplyChange %s: cfg field not updated, got %d", tc.key, *tc.dst)
+		}
+		if got := EffectiveValue(cfg, tc.key); got != want {
+			t.Errorf("EffectiveValue %s after apply: got %v, want %v", tc.key, got, want)
+		}
 	}
 }
 

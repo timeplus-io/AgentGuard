@@ -1,11 +1,23 @@
 import Toggle from '../Toggle'
 import DLPConfigEditor from '../DLPConfigEditor'
+import SentryConfigEditor from '../SentryConfigEditor'
 
 // DLP keys that remain server-config (config.yaml): the enable switch and the
 // embedding dimension (baked into the stream/index). Everything else — endpoint,
 // models, timeouts, tokens, entity catalog — is edited live below via the config
 // stream, so it's hidden from the flat key list to avoid two sources of truth.
 const DLP_SERVER_KEYS = new Set(['dlp.enabled', 'dlp.embedding_dim'])
+
+// Sentry keys that remain server-config (config.yaml): the enable switch and
+// the SQL skill directory override. Everything else — chat_base_url,
+// chat_api_key, chat_model, memory_enabled, embedding_base_url,
+// embedding_api_key, embedding_model, embedding_dim,
+// request_timeout_seconds, max_output_tokens — is a boot default only; the
+// live value is edited below via the agentguard_sentry_config stream's
+// `chat`/`memory` rows, so those keys are hidden from the flat key list to
+// avoid two sources of truth (see registry.go's descriptions, which already
+// point operators at Settings → Sentry Agent).
+const SENTRY_SERVER_KEYS = new Set(['sentry.enabled', 'sentry.skill_dir'])
 
 const SOURCE_LABEL = {
   default: 'default',
@@ -106,6 +118,8 @@ export default function SettingsSection({
 }) {
   const keys = section.id === 'dlp'
     ? section.keys.filter((k) => DLP_SERVER_KEYS.has(k.key))
+    : section.id === 'sentry'
+    ? section.keys.filter((k) => SENTRY_SERVER_KEYS.has(k.key))
     : section.keys
 
   const keyList = (
@@ -118,6 +132,30 @@ export default function SettingsSection({
       ))}
     </div>
   )
+
+  if (section.id === 'sentry') {
+    return (
+      <section className="bg-gray-800 rounded-sm px-6 py-4">
+        <h3 className="text-base font-medium text-gray-100 mb-3">{section.title}</h3>
+        <div className="flex flex-col gap-4">
+          <div className="bg-gray-900/40 rounded-sm px-4 py-3">
+            <h4 className="text-sm font-semibold text-gray-100 mb-1">Server config</h4>
+            <p className="text-xs text-gray-400">
+              Boot defaults stored in config.yaml — saved with the Save bar below. All other Sentry settings are edited live under Model configuration.
+            </p>
+            {keyList}
+          </div>
+          <div className="bg-gray-900/40 rounded-sm px-4 py-3">
+            <h4 className="text-sm font-semibold text-gray-100 mb-1">Model configuration</h4>
+            <p className="text-xs text-gray-400 mb-2">
+              Live state in the agentguard_sentry_config stream — changes apply immediately, with no restart or re-provision, independent of the Save bar. Renders regardless of Semantic DLP status.
+            </p>
+            <SentryConfigEditor />
+          </div>
+        </div>
+      </section>
+    )
+  }
 
   if (section.id !== 'dlp') {
     return (

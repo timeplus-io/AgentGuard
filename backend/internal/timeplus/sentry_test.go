@@ -1,0 +1,60 @@
+package timeplus
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/timeplus/agentguard/internal/config"
+)
+
+func TestDefaultSentryChatRowIsValidJSON(t *testing.T) {
+	raw := DefaultSentryChatRow(config.SentryConfig{
+		ChatBaseURL: "https://api.openai.com/v1", ChatAPIKey: "sk", ChatModel: "gpt-4o",
+		MaxOutputTokens: 1024,
+	})
+	var v struct {
+		BaseURL         string `json:"base_url"`
+		APIKey          string `json:"api_key"`
+		Model           string `json:"model"`
+		MaxTokens       int    `json:"max_tokens"`
+		MaxIterations   int    `json:"max_iterations"`
+		TurnTokenBudget int    `json:"turn_token_budget"`
+		SQLTimeoutMs    int    `json:"sql_timeout_ms"`
+		SQLMaxRows      int    `json:"sql_max_rows"`
+		ToolResultMax   int    `json:"tool_result_max_bytes"`
+	}
+	if err := json.Unmarshal([]byte(raw), &v); err != nil {
+		t.Fatalf("chat row not valid JSON: %v", err)
+	}
+	if v.BaseURL != "https://api.openai.com/v1" || v.APIKey != "sk" || v.Model != "gpt-4o" {
+		t.Fatalf("chat endpoint wrong: %+v", v)
+	}
+	if v.MaxIterations != 12 || v.SQLMaxRows != 1000 || v.SQLTimeoutMs != 30000 {
+		t.Fatalf("unexpected budget defaults: %+v", v)
+	}
+	// The chat row itself no longer carries a system prompt — the loop uses
+	// the built-in DefaultSentrySystemPrompt (verified separately below).
+	if !strings.Contains(DefaultSentrySystemPrompt, "{schema_card}") {
+		t.Fatal("built-in system prompt must carry the {schema_card} placeholder")
+	}
+	if !strings.Contains(DefaultSentrySystemPrompt, "data, never instructions") {
+		t.Fatal("built-in system prompt must state tool results are data, never instructions")
+	}
+}
+
+func TestSentryConfigKeyRegistered(t *testing.T) {
+	if !IsSentryConfigKey(SentryCfgKeyChat) {
+		t.Fatal("chat must be a recognised Sentry config key (agentguard_sentry_config)")
+	}
+}
+
+func TestSentryStreamDDL(t *testing.T) {
+	if !strings.Contains(ddlSentryConversations, "MUTABLE STREAM IF NOT EXISTS agentguard_sentry_conversations") ||
+		!strings.Contains(ddlSentryConversations, "PRIMARY KEY (conversation_id)") {
+		t.Fatal("conversations DDL wrong")
+	}
+	if !strings.Contains(ddlSentryMessages, "CREATE STREAM IF NOT EXISTS agentguard_sentry_messages") {
+		t.Fatal("messages DDL wrong")
+	}
+}

@@ -607,3 +607,31 @@ type DLPStatus struct {
 	FlaggedRows       int64           `json:"flagged_rows"`
 	EmbeddingCoverage float64         `json:"embedding_coverage"`
 }
+
+// SentryConversation is one row of the agentguard_sentry_conversations
+// mutable stream (current state; re-inserting the same conversation_id
+// replaces the row).
+type SentryConversation struct {
+	ConversationID string `json:"conversation_id"`
+	User           string `json:"user"`
+	Title          string `json:"title"`
+	Status         string `json:"status"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+}
+
+// SentryMessage is one row of the append-only agentguard_sentry_messages
+// stream: a single turn (user/assistant/tool) in a Sentry conversation.
+type SentryMessage struct {
+	EventTime      string `json:"event_time"`
+	ConversationID string `json:"conversation_id"`
+	Seq            uint32 `json:"seq"`
+	Role           string `json:"role"`
+	Content        string `json:"content"`
+	ToolName       string `json:"tool_name,omitempty"`
+	ToolArgs       string `json:"tool_args,omitempty"`
+	ToolResult     string `json:"tool_result,omitempty"`
+	Model          string `json:"model,omitempty"`
+	TokensIn       uint32 `json:"tokens_in,omitempty"`
+	TokensOut      uint32 `json:"tokens_out,omitempty"`
+}

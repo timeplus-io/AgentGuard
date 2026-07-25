@@ -6,6 +6,7 @@
         compose-up compose-down compose-restart \
         scripts-sync package-plugins \
         dlp-mock dlp-seed dlp-integration \
+        sentry-sync-skill sentry-integration \
         docs-api
 
 BINARY      := backend/server
@@ -166,6 +167,16 @@ dlp-seed:
 ## dlp-integration: end-to-end DLP test (mock + provision + enrich + query round-trip) against a live Timeplus
 dlp-integration:
 	bash backend/scripts/dlp_integration.sh
+
+# ── Sentry ───────────────────────────────────────────────────────────────────
+
+## sentry-sync-skill: refresh the vendored timeplus-sql-guide skill from timeplus-io/AgentSkills
+sentry-sync-skill:
+	backend/scripts/sync_sql_skill.sh
+
+## sentry-integration: end-to-end Sentry chat test (mock model + provision + forced tool call + replay) against a live Timeplus
+sentry-integration:
+	bash backend/scripts/sentry_integration.sh
 
 # ── Docs ─────────────────────────────────────────────────────────────────────
 

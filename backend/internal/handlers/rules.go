@@ -700,6 +700,12 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.
 			detectedDim, _ := tp.ProbeEmbeddingDim(&reqCfg.Timeplus)
 			recordDLPProvisioned(shared, reqCfg.DLP, detectedDim)
 		}
+		// Best-effort Sentry re-provision, same rationale as DLP above.
+		if reqCfg.Sentry.Enabled {
+			if err := tp.SyncSentry(reqCfg.Timeplus, reqCfg.Sentry); err != nil {
+				log.Printf("rules: SyncMVs Sentry sync: %v", err)
+			}
+		}
 
 		c.JSON(http.StatusOK, gin.H{"results": results, "orphaned": orphaned})
 	}

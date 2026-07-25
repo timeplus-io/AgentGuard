@@ -159,6 +159,14 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | GET | `/api/dlp/status` | `DLPStatusHandler` | DLP provisioning + enrichment health (stream/MV/UDF presence, row counts, embedding coverage) |
 | GET | `/api/dlp/config` | `GetDLPConfig` | Current per-UDF config rows from `agentguard_dlp_config` (api_key redacted) |
 | PUT | `/api/dlp/config/:key` | `UpsertDLPConfig` | Upsert one UDF's config (`{value}`); validates JSON/entity catalog, preserves stored api_key; live, no re-provision |
+| POST | `/api/sentry/chat` | `SentryChat` | `{conversation_id?, message}` → NDJSON stream of `sentry.Event` lines (`meta`/`token`/`tool_call`/`tool_result`/`done`/`error`). 503 if `sentry.enabled=false` or no `base_url` in resolved config |
+| GET | `/api/sentry/conversations` | `ListSentryConversations` | Session user's own conversations, most-recently-updated first |
+| GET | `/api/sentry/conversations/:id` | `GetSentryConversation` | Conversation + full message replay, owner-only (403/404) |
+| DELETE | `/api/sentry/conversations/:id` | `ArchiveSentryConversation` | Owner-only soft-archive (`status` → `archived`) |
+| GET | `/api/sentry/status` | `SentryStatus` | Enabled/provisioned flags, resolved chat model, whether a `base_url` is configured |
+| GET | `/api/sentry/config` | `GetSentryConfig` | Current `chat`/`memory` rows from `agentguard_sentry_config` (api_key redacted); 503 until Sentry provisioned |
+| PUT | `/api/sentry/config/:key` | `UpsertSentryConfig` | Upsert one Sentry config row (`chat`/`memory`, `{value}`); preserves stored api_key, validates JSON per key; live, no re-provision |
+| POST | `/api/sentry/config/test` | `TestSentryConfig` | Tests a candidate Sentry endpoint: chat reachability + a chat completion with `tool_choice:"required"` asserting `tool_calls` come back; the embedding check runs only when memory is enabled (else `checks.embedding.skipped:true`). Falls back to live `sentry.*` boot config for omitted fields. Never 5xx |
 
 ### Frontend (`frontend/src/`)
 
@@ -187,6 +195,7 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | `/rules/:id` | `RuleDetail` |
 | `/investigate` | `Investigate` |
 | `/dlp` | `SemanticDLP` |
+| `/sentry` | `Sentry` |
 | `/settings` | `Settings` |
 | `/onboarding` | `Onboarding` |
 
@@ -237,7 +246,10 @@ AgentGuard uses a **Common Information Model (CIM)** to normalize heterogeneous 
 | `agentguard_security_events` | Rule-triggered detections written by MVs |
 | `agentguard_cost_budgets` | Per-deployment monthly budget mutation log; current state via `arg_max(…updated_at) GROUP BY deployment_id HAVING NOT deleted` |
 | `agentguard_dlp_enriched` | One enriched row per conversation message (entities, risk tags/score, inline embedding); written by `mv_dlp_enrich`. See **Semantic DLP** below. |
-| `agentguard_dlp_config` | Mutable `key → JSON value` stream: a `shared` row (base_url/api_key/timeout/model-catalog common to all network UDFs) + one row per UDF (model/max_tokens/prompt). A pure `dlp_config_resolve(shared, config)` UDF folds `shared ⊕ own` (own wins) and resolves the model catalog into ONE flat config, so a network UDF only ever sees its own resolved endpoint — never `shared` or other models. Read live by the ingest MV (LEFT JOIN, wrapped per-row in `dlp_config_resolve`) and the funnel (scalar sub-queries wrapped in `dlp_config_resolve`); operators upsert a row to change endpoint/models/timeouts/entity catalog/prompts at runtime with no re-provision. Seeded seed-if-absent from `config.yaml`. |
+| `agentguard_dlp_config` | Mutable `key → JSON value` stream: a `shared` row (base_url/api_key/timeout/model-catalog common to all network UDFs) + one row per UDF (model/max_tokens/prompt). A pure `dlp_config_resolve(shared, config)` UDF folds `shared ⊕ own` (own wins) and resolves the model catalog into ONE flat config, so a network UDF only ever sees its own resolved endpoint — never `shared` or other models. Read live by the ingest MV (LEFT JOIN, wrapped per-row in `dlp_config_resolve`) and the funnel (scalar sub-queries wrapped in `dlp_config_resolve`); operators upsert a row to change endpoint/models/timeouts/entity catalog/prompts at runtime with no re-provision. Seeded seed-if-absent from `config.yaml`. Sentry has its own separate config stream (`agentguard_sentry_config` below) and no longer reads this one. |
+| `agentguard_sentry_config` | Mutable `key → JSON value` stream dedicated to Sentry, now just TWO self-contained rows: `chat` (the ReAct loop's own literal endpoint — base_url/api_key/model — + per-turn budgets; NO system_prompt, which is a built-in constant) and `memory` (an `enabled` toggle + its own embedding endpoint base_url/api_key/model/embedding_dim, reserved for Phase-2 memory). Each row is a flat literal endpoint — no `shared` row, no model catalog, and Sentry does NOT use `dlp_config_resolve`. Seeded seed-if-absent from the `sentry.*` section of `config.yaml`. Edited via `PUT /api/sentry/config/:key` / **Settings → Sentry Agent**, independent of `agentguard_dlp_config` and reachable with `dlp.enabled: false`. See **Sentry agent** below. |
+| `agentguard_sentry_conversations` | Mutable stream keyed on `conversation_id` (re-insert = upsert): `user`, `title`, `status` (`active`/`archived`), `created_at`, `updated_at`. Written by `internal/sentry.Store`. |
+| `agentguard_sentry_messages` | Append-only per-turn message log: `conversation_id`, `seq`, `role` (`user`/`assistant`/`tool`), `content`, `tool_name`/`tool_args`/`tool_result`, `model`, `tokens_in`/`tokens_out`. Replayed in `seq` order to rebuild a conversation. |
 
 Materialized views normalize raw streams into `agentguard_cim_event` and `agentguard_cim_metrics`. Backend metric handlers (`GetLLMMetrics`, `GetToolMetrics`) query `agentguard_cim_metrics` directly.
 
@@ -263,6 +275,10 @@ A natural-language forensic layer over conversation logs (full doc: `docs/dlp.md
   - `dlp_sample_events.json` + `dlp_load_events.py` — demo hook events (customer-PII leak, secret paste, source-code exfil, benign) inserted into `agentguard_hook_events`.
   - `dlp_seed.sh` — seed a provisioned/running stack for the `/dlp` page. `make dlp-seed`.
   - `dlp_integration.sh` — end-to-end test (mock → provision → enrich → query round-trip) against a live Timeplus. `make dlp-integration`.
+
+### Sentry agent
+
+Sentry is AgentGuard's conversational security-analyst agent (`/sentry` page, `/api/sentry/*`; full design: `docs/superpowers/specs/2026-07-22-sentry-agent-design.md`; operator doc: `docs/sentry.md`). An LLM-driven ReAct loop (`internal/sentry/loop.go`) answers operator questions by calling a fixed, read-only tool surface (`internal/sentry/skills/`) — schema introspection, ad-hoc SQL, DLP semantic search, and curated cross-resource reads over threats/holds/rules/cost/sessions — streaming `meta`/`token`/`tool_call`/`tool_result`/`done`/`error` events as NDJSON. The chat loop's system prompt is a **built-in constant** (`DefaultSentrySystemPrompt`), not config. Sentry has its own dedicated config stream, `agentguard_sentry_config`, holding TWO self-contained rows — `chat` (the loop's own literal endpoint + budgets) and `memory` (an enable toggle + its own embedding endpoint, gated by `memory.enabled`, reserved for Phase-2 memory) — seeded from the `sentry.*` section of `config.yaml`. Each row is a flat literal endpoint: Sentry does **not** use `dlp_config_resolve`, there is no `shared` row or model catalog, and it's entirely decoupled from `agentguard_dlp_config` — Sentry never reads DLP's config, so it works with `dlp.enabled: false` as long as `sentry.enabled: true` and its `chat` row has a `base_url`. Edited live via `PUT /api/sentry/config/:key` (`chat`/`memory`) + `POST /api/sentry/config/test` (chat reachability/tool-calling always; embedding only when memory enabled), or in the UI under **Settings → Sentry Agent** — reachable regardless of DLP provisioning status. This is **Phase 1** (chat core only) — memory, background tasks, and gated (write) tool access are later phases and are intentionally absent. The chat LLM layer has two providers selected by the `chat` row's `api_type` (boot default `sentry.chat_api_type`, default `openai`): the original OpenAI-compatible client, or `anthropic` — the Anthropic Messages API via `anthropic-sdk-go` over a Bearer-token endpoint (`internal/sentry/anthropic.go`), used for Claude on AWS Bedrock (Bedrock Mantle); both share the same `base_url`, normalized per-provider (`openai` keeps `/v1`, `anthropic` strips it and appends `/v1/messages`).
 
 ### Timeline handlers
 
