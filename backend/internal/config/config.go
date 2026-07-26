@@ -64,7 +64,7 @@ type DLPConfig struct {
 // 2026-07-23-sentry-config-reshape.
 type SentryConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`
-	SkillDir string `mapstructure:"skill_dir"` // optional on-disk override for the vendored timeplus-sql-guide skill
+	SkillDir string `mapstructure:"skill_dir"` // optional on-disk override for the embedded knowledge skills: a PARENT dir with one subdirectory per skill (timeplus-sql-guide/, agentguard-guide/, ...)
 	// chat endpoint boot defaults → agentguard_sentry_config `chat` row
 	ChatBaseURL           string `mapstructure:"chat_base_url"`
 	ChatAPIKey            string `mapstructure:"chat_api_key"`

@@ -9,8 +9,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/auth"
+	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
+	"github.com/timeplus/agentguard/internal/rules"
 	"github.com/timeplus/agentguard/internal/sentry"
 	"github.com/timeplus/agentguard/internal/sentry/skills"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
@@ -26,8 +28,10 @@ var (
 
 // sentryRegistry builds the full Phase-1 (read-only) tool surface Sentry's
 // chat loop exposes to the model: knowledge lookup, schema introspection,
-// ad-hoc SQL, DLP semantic search, and curated cross-resource read tools.
-func sentryRegistry(cfg *config.Config) *skills.Registry {
+// ad-hoc SQL, DLP semantic search, curated cross-resource read tools, and
+// the rule catalog (filesystem-backed — unreachable via SQL, so it needs a
+// real tool).
+func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) *skills.Registry {
 	return skills.NewRegistry(
 		skills.NewLoadSkill(cfg.Sentry.SkillDir),
 		skills.NewLoadSkillReference(cfg.Sentry.SkillDir),
@@ -40,6 +44,7 @@ func sentryRegistry(cfg *config.Config) *skills.Registry {
 		skills.NewGetRuleStatus(),
 		skills.NewGetCostSummary(),
 		skills.NewGetSessionTimeline(),
+		skills.NewRuleCatalog(mgr, lc),
 	)
 }
 
@@ -90,7 +95,7 @@ func ownedActiveConversation(c *gin.Context, store *sentry.Store) (models.Sentry
 // plain JSON (disabled, bad input, chat-config load, conversation
 // resolution/ownership) happens BEFORE any header is written; once streaming
 // begins, only NDJSON error events can report a failure.
-func SentryChat(cfg *config.Config) gin.HandlerFunc {
+func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rcfg := auth.RequestCfg(c, cfg)
 		if !rcfg.Sentry.Enabled {
@@ -147,7 +152,7 @@ func SentryChat(cfg *config.Config) gin.HandlerFunc {
 			}
 		}
 
-		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg), Store: store, Cfg: rcfg}
+		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc), Store: store, Cfg: rcfg}
 		if err := loop.Run(c.Request.Context(), cc, conv, strings.TrimSpace(body.Message), emit); err != nil {
 			log.Printf("sentry: chat: %v", err)
 			// The loop emits its own "error" event for in-stream failures

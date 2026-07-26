@@ -68,6 +68,16 @@ var (
 		"v_failed_mat_views": true,
 	}
 
+	// deniedStreams are streams the model must never read via run_sql even
+	// though table(<name>) is syntactically valid: their rows carry secrets
+	// (api_key values) that the HTTP API always redacts before returning.
+	// The comparison is against the bare stream name and its
+	// "default."-qualified form.
+	deniedStreams = map[string]bool{
+		"agentguard_dlp_config":    true,
+		"agentguard_sentry_config": true,
+	}
+
 	// CTE name collection: the first "WITH <name> AS" and any subsequent
 	// ", <name> AS (" in a comma-separated WITH list.
 	cteFirstRe = regexp.MustCompile(`(?i)\bWITH\s+(\w+)\s+AS\b`)
@@ -174,6 +184,11 @@ func validateTableCall(rest string) (int, error) {
 	interior := strings.TrimSpace(rest[openIdx : openIdx+idx])
 	if !plainTableArgRe.MatchString(interior) {
 		return 0, fmt.Errorf("table() must wrap a plain stream name")
+	}
+	name := strings.ToLower(interior)
+	name = strings.TrimPrefix(name, "default.")
+	if deniedStreams[name] {
+		return 0, fmt.Errorf("stream %q holds credentials and is not readable via run_sql", interior)
 	}
 	return openIdx + idx + 1, nil
 }
