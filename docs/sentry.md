@@ -274,6 +274,33 @@ Conversations are owner-scoped (the session user) and managed from the
   extra schema column is needed because "still auto-titled" is detected by
   comparing the title against the truncated first user message.
 
+## Gated writes & approvals
+
+The plumbing for write actions (#221) is in place ahead of the write tools
+themselves (#222). Any skill whose `Access()` is `GatedWrite` runs through a
+human-approval flow instead of executing directly:
+
+1. The loop registers a proposal in an in-memory registry, then emits an
+   `approval_request` NDJSON event carrying `proposal_id`, the tool name,
+   the **verbatim args**, and `timeout_ms`, and blocks.
+2. The chat UI renders a confirmation card (args shown verbatim) with
+   Approve / Deny. The decision goes to
+   `POST /api/sentry/approvals/:proposal_id/decide` (`{approve, reason?}`),
+   which only the conversation's owner may call (403 otherwise; an unknown
+   or already-resolved proposal is 404).
+3. The loop emits `approval_result` (`approved`/`denied`/`timeout`/
+   `abandoned` + decided_by + reason) and only executes the tool on an
+   explicit approve. Denial, timeout (default 5 minutes,
+   `approval_timeout_ms` in the chat config row, max 30 minutes), and
+   client disconnect all return an "not executed" result to the model.
+4. The decision and outcome are persisted in the tool row's metadata
+   (`toolCallMeta.approval`), so conversation replay shows the full audit
+   trail.
+
+There is **no auto-approve setting, by design**. A Loop constructed without
+an approval registry (e.g. future headless runs) never offers gated tools to
+the model at all.
+
 ## Budgets
 
 A turn stops requesting tools once `max_iterations` is hit (the final

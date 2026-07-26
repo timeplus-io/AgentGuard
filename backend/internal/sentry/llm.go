@@ -54,6 +54,9 @@ type ChatCfg struct {
 	SQLTimeoutMs       int    `json:"sql_timeout_ms"`
 	SQLMaxRows         int    `json:"sql_max_rows"`
 	ToolResultMaxBytes int    `json:"tool_result_max_bytes"`
+	// ApprovalTimeoutMs bounds how long a GatedWrite proposal waits for a
+	// human Approve/Deny before auto-denying (#221). Default 5 minutes.
+	ApprovalTimeoutMs int `json:"approval_timeout_ms"`
 }
 
 // applyDefaults fills zero values and clamps operator input to sane ceilings
@@ -73,6 +76,7 @@ func (c *ChatCfg) applyDefaults() {
 	def(&c.SQLTimeoutMs, 30000, 55000)
 	def(&c.SQLMaxRows, 1000, 5000)
 	def(&c.ToolResultMaxBytes, 16384, 131072)
+	def(&c.ApprovalTimeoutMs, 300000, 1800000)
 	if c.APIType == "" {
 		c.APIType = "openai"
 	}

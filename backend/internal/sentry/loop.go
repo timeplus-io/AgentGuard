@@ -3,8 +3,10 @@ package sentry
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
@@ -13,30 +15,40 @@ import (
 
 // Event is one line of the NDJSON stream sent to the Sentry chat UI over
 // the course of a single turn: meta once, then any number of
-// token/tool_call/tool_result, ending in exactly one done or error.
+// token/tool_call/tool_result (a GatedWrite call substitutes
+// approval_request → approval_result → tool_result-on-approve), ending in
+// exactly one done or error.
 type Event struct {
-	Type      string `json:"event"`                     // meta|token|tool_call|tool_result|done|error
-	Text      string `json:"text,omitempty"`            // token
-	ID        string `json:"id,omitempty"`              // tool_call/tool_result
-	Name      string `json:"name,omitempty"`            // tool_call/tool_result
-	Args      string `json:"args,omitempty"`            // tool_call
-	Result    string `json:"result,omitempty"`          // tool_result
-	Truncated bool   `json:"truncated,omitempty"`       // tool_result
-	ConvID    string `json:"conversation_id,omitempty"` // meta
-	Seq       uint32 `json:"seq,omitempty"`             // meta
-	TokensIn  int    `json:"tokens_in,omitempty"`       // done
-	TokensOut int    `json:"tokens_out,omitempty"`      // done
-	Message   string `json:"message,omitempty"`         // error
+	Type       string `json:"event"`                     // meta|token|tool_call|tool_result|approval_request|approval_result|done|error
+	Text       string `json:"text,omitempty"`            // token
+	ID         string `json:"id,omitempty"`              // tool_call/tool_result/approval_*
+	Name       string `json:"name,omitempty"`            // tool_call/tool_result/approval_*
+	Args       string `json:"args,omitempty"`            // tool_call/approval_request (verbatim)
+	Result     string `json:"result,omitempty"`          // tool_result
+	Truncated  bool   `json:"truncated,omitempty"`       // tool_result
+	ConvID     string `json:"conversation_id,omitempty"` // meta
+	Seq        uint32 `json:"seq,omitempty"`             // meta
+	TokensIn   int    `json:"tokens_in,omitempty"`       // done
+	TokensOut  int    `json:"tokens_out,omitempty"`      // done
+	Message    string `json:"message,omitempty"`         // error / approval_result reason
+	ProposalID string `json:"proposal_id,omitempty"`     // approval_request/approval_result
+	TimeoutMs  int    `json:"timeout_ms,omitempty"`      // approval_request
+	Decision   string `json:"decision,omitempty"`        // approval_result: approved|denied|timeout|abandoned
+	DecidedBy  string `json:"decided_by,omitempty"`      // approval_result
 }
 
 // Loop is AgentGuard Sentry's ReAct agent harness: it wires an LLM to a
-// read-only skills.Registry and a Store, running model -> tools -> model
-// until the model stops requesting tools or cc.MaxIterations is hit.
+// skills.Registry and a Store, running model -> tools -> model until the
+// model stops requesting tools or cc.MaxIterations is hit. ReadOnly skills
+// execute directly; GatedWrite skills go through the in-chat approval flow
+// (#221) and require Approvals to be set — a nil Approvals registry keeps
+// the surface read-only (gated defs are not offered to the model).
 type Loop struct {
-	LLM   LLM
-	Reg   *skills.Registry
-	Store *Store
-	Cfg   *config.Config // request-scoped (user creds)
+	LLM       LLM
+	Reg       *skills.Registry
+	Store     *Store
+	Cfg       *config.Config // request-scoped (user creds)
+	Approvals *ApprovalRegistry
 }
 
 // toolCallMeta is the JSON shape persisted in a role="tool" SentryMessage's
@@ -46,10 +58,23 @@ type Loop struct {
 // assistant tool_call a stored tool result answers -- it would desync
 // ToolCallID across a multi-turn conversation. Persisting it here is what
 // lets assembleContext rebuild the pairing purely from history rows.
+//
+// Approval, when set, is the audit record of a GatedWrite proposal: the
+// decision, who made it, and their stated reason. Unknown JSON fields are
+// ignored by older readers, so history replay is unaffected.
 type toolCallMeta struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Args string `json:"args"`
+	ID       string        `json:"id"`
+	Name     string        `json:"name"`
+	Args     string        `json:"args"`
+	Approval *approvalMeta `json:"approval,omitempty"`
+}
+
+// approvalMeta is the persisted audit trail of one GatedWrite proposal.
+type approvalMeta struct {
+	ProposalID string `json:"proposal_id"`
+	Decision   string `json:"decision"` // approved|denied|timeout|abandoned
+	DecidedBy  string `json:"decided_by,omitempty"`
+	Reason     string `json:"reason,omitempty"`
 }
 
 // Run executes one user turn: persists the user message, iterates
@@ -78,7 +103,14 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 	l.persist(models.SentryMessage{ConversationID: conv.ConversationID, Seq: seq, Role: "user", Content: userMsg})
 	seq++
 
-	tools := defsToTools(l.Reg.Defs(skills.ReadOnly)) // Phase 1: read-only surface
+	// Interactive chat with an approval registry offers the gated write
+	// surface too; without one (and in future headless runs) the model only
+	// ever sees read-only tools.
+	maxAccess := skills.ReadOnly
+	if l.Approvals != nil {
+		maxAccess = skills.GatedWrite
+	}
+	tools := defsToTools(l.Reg.Defs(maxAccess))
 	totalIn, totalOut := 0, 0
 	for iter := 0; iter < cc.MaxIterations; iter++ {
 		callTools := tools
@@ -106,12 +138,18 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 			return nil
 		}
 		for _, tc := range res.ToolCalls {
-			emit(Event{Type: "tool_call", ID: tc.ID, Name: tc.Name, Args: tc.Args})
-			out := runTool(ctx, l.Reg, rc, tc)
+			var out string
+			var appr *approvalMeta
+			if sk, ok := l.Reg.Get(tc.Name); ok && sk.Access() == skills.GatedWrite && l.Approvals != nil {
+				out, appr = l.runGated(ctx, cc, conv, rc, tc, emit)
+			} else {
+				emit(Event{Type: "tool_call", ID: tc.ID, Name: tc.Name, Args: tc.Args})
+				out = runTool(ctx, l.Reg, rc, tc)
+			}
 			outStr, cut := skills.Truncate(out, cc.ToolResultMaxBytes)
 			emit(Event{Type: "tool_result", ID: tc.ID, Name: tc.Name, Result: outStr, Truncated: cut})
 
-			metaJSON, err := json.Marshal(toolCallMeta(tc))
+			metaJSON, err := json.Marshal(toolCallMeta{ID: tc.ID, Name: tc.Name, Args: tc.Args, Approval: appr})
 			if err != nil {
 				log.Printf("sentry: marshal tool_call metadata for %s failed: %v", tc.ID, err)
 				metaJSON = nil
@@ -127,6 +165,73 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 		log.Printf("sentry: touch conversation %s failed: %v", conv.ConversationID, err)
 	}
 	return nil
+}
+
+// runGated runs one GatedWrite tool call through the in-chat approval flow
+// (#221): register the proposal (BEFORE emitting, so a decide can never
+// race registration), emit approval_request with the verbatim args, block
+// until a human decision / timeout / client disconnect, emit
+// approval_result, and only execute the skill on an explicit approve. The
+// returned string is the tool result fed back to the model either way; the
+// returned approvalMeta is persisted in the tool row as the audit record.
+// There is deliberately no auto-approve path.
+func (l *Loop) runGated(ctx context.Context, cc ChatCfg, conv models.SentryConversation, rc *skills.RunContext, tc ToolCall, emit func(Event)) (string, *approvalMeta) {
+	pid, err := newConversationID() // same 32-hex crypto/rand generator
+	if err != nil {
+		return "error: could not create approval proposal: " + err.Error(), nil
+	}
+	ch := l.Approvals.register(pid, conv.User)
+	defer l.Approvals.remove(pid)
+
+	emit(Event{Type: "approval_request", ProposalID: pid, ID: tc.ID, Name: tc.Name,
+		Args: tc.Args, TimeoutMs: cc.ApprovalTimeoutMs})
+
+	timer := time.NewTimer(time.Duration(cc.ApprovalTimeoutMs) * time.Millisecond)
+	defer timer.Stop()
+
+	decisionOf := func(d ApprovalDecision) string {
+		if d.Approved {
+			return "approved"
+		}
+		return "denied"
+	}
+	var d ApprovalDecision
+	var decision string
+	select {
+	case d = <-ch:
+		decision = decisionOf(d)
+	case <-timer.C:
+		// A decide can win the registry race in the same instant the timer
+		// fires (it removes the entry and sends before we stop waiting).
+		// Drain once so that decision is honored rather than dropped.
+		select {
+		case d = <-ch:
+			decision = decisionOf(d)
+		default:
+			decision = "timeout"
+		}
+	case <-ctx.Done():
+		decision = "abandoned"
+	}
+
+	meta := &approvalMeta{ProposalID: pid, Decision: decision, DecidedBy: d.DecidedBy, Reason: d.Reason}
+	emit(Event{Type: "approval_result", ProposalID: pid, ID: tc.ID, Name: tc.Name,
+		Decision: decision, DecidedBy: d.DecidedBy, Message: d.Reason})
+
+	switch decision {
+	case "approved":
+		return runTool(ctx, l.Reg, rc, tc), meta
+	case "denied":
+		msg := "error: write denied by " + d.DecidedBy
+		if d.Reason != "" {
+			msg += ": " + d.Reason
+		}
+		return msg + " — not executed", meta
+	case "timeout":
+		return fmt.Sprintf("error: approval timed out after %ds — not executed", cc.ApprovalTimeoutMs/1000), meta
+	default: // abandoned — client disconnected while waiting
+		return "error: approval abandoned (connection closed) — not executed", meta
+	}
 }
 
 // persist appends m to the Store, logging (never failing the turn) if the

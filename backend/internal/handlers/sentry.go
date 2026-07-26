@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +33,7 @@ var (
 // the rule catalog (filesystem-backed — unreachable via SQL, so it needs a
 // real tool).
 func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) *skills.Registry {
-	return skills.NewRegistry(
+	sks := []skills.Skill{
 		skills.NewLoadSkill(cfg.Sentry.SkillDir),
 		skills.NewLoadSkillReference(cfg.Sentry.SkillDir),
 		skills.NewListStreams(),
@@ -45,7 +46,13 @@ func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycl
 		skills.NewGetCostSummary(),
 		skills.NewGetSessionTimeline(),
 		skills.NewRuleCatalog(mgr, lc),
-	)
+	}
+	// Verification-only: a no-side-effect GatedWrite tool for exercising the
+	// #221 approval flow end-to-end before real write tools ship (#222).
+	if os.Getenv("SENTRY_DEMO_WRITE") == "1" {
+		sks = append(sks, skills.NewDemoWrite())
+	}
+	return skills.NewRegistry(sks...)
 }
 
 // resolveConversation implements the create-or-continue semantics shared by
@@ -95,7 +102,7 @@ func ownedActiveConversation(c *gin.Context, store *sentry.Store) (models.Sentry
 // plain JSON (disabled, bad input, chat-config load, conversation
 // resolution/ownership) happens BEFORE any header is written; once streaming
 // begins, only NDJSON error events can report a failure.
-func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.HandlerFunc {
+func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, approvals *sentry.ApprovalRegistry) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rcfg := auth.RequestCfg(c, cfg)
 		if !rcfg.Sentry.Enabled {
@@ -152,7 +159,7 @@ func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) g
 			}
 		}
 
-		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc), Store: store, Cfg: rcfg}
+		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc), Store: store, Cfg: rcfg, Approvals: approvals}
 		if err := loop.Run(c.Request.Context(), cc, conv, strings.TrimSpace(body.Message), emit); err != nil {
 			log.Printf("sentry: chat: %v", err)
 			// The loop emits its own "error" event for in-stream failures
@@ -258,6 +265,35 @@ func DeleteSentryConversation(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+	}
+}
+
+// DecideSentryApproval handles POST /sentry/approvals/:proposal_id/decide:
+// resolve one pending GatedWrite proposal ({approve, reason?}). Owner-only —
+// the registry itself enforces that only the conversation's user may decide
+// (403); an unknown or already-resolved proposal is 404. There is no
+// auto-approve path anywhere, by design (#221).
+func DecideSentryApproval(approvals *sentry.ApprovalRegistry) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			Approve bool   `json:"approve"`
+			Reason  string `json:"reason"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "body must be {approve: bool, reason?: string}"})
+			return
+		}
+		err := approvals.Decide(c.Param("proposal_id"), sessionUser(c), body.Approve, strings.TrimSpace(body.Reason))
+		switch {
+		case errors.Is(err, sentry.ErrApprovalNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, sentry.ErrApprovalForbidden):
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		case err != nil:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusOK, gin.H{"status": "decided", "approved": body.Approve})
+		}
 	}
 }
 
