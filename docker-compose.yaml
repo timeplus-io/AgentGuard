@@ -38,6 +38,10 @@ services:
       # was configured with. Defaults below are the standard Timeplus dev creds.
       TIMEPLUS_USER: "proton"
       TIMEPLUS_PASSWORD: "timeplus@t+"
+      # Registers Sentry's no-side-effect demo_write gated tool so the #221
+      # approval flow (card → approve/deny/timeout → audit) can be exercised
+      # end-to-end. Override with SENTRY_DEMO_WRITE=0 to hide it.
+      SENTRY_DEMO_WRITE: ${SENTRY_DEMO_WRITE:-1}
     volumes:
       # Persists config.yaml and custom catalog rules across container restarts and image upgrades.
       # Mounted at /app/data only — the binary at /app/server is never shadowed by the volume,
