@@ -37,10 +37,9 @@ function buildDraft(byKey) {
       sql_timeout_ms: chat.sql_timeout_ms ?? 30000,
       sql_max_rows: chat.sql_max_rows ?? 1000,
       tool_result_max_bytes: chat.tool_result_max_bytes ?? 16384,
-      // Gated-write tool groups: absent means enabled (read tools are
-      // always on and have no toggle).
-      write_threats: chat.write_tool_groups?.threats ?? true,
-      write_holds: chat.write_tool_groups?.holds ?? true,
+      // Single switch for the gated-write tools: absent means enabled
+      // (read tools are always on and have no toggle).
+      write_tools_enabled: chat.write_tools_enabled ?? true,
     },
     memory: {
       enabled: memory.enabled ?? false,
@@ -102,7 +101,7 @@ export default function SentryConfigEditor() {
         sql_timeout_ms: Number(c.sql_timeout_ms) || 0,
         sql_max_rows: Number(c.sql_max_rows) || 0,
         tool_result_max_bytes: Number(c.tool_result_max_bytes) || 0,
-        write_tool_groups: { threats: !!c.write_threats, holds: !!c.write_holds },
+        write_tools_enabled: !!c.write_tools_enabled,
       }
     }
     const m = draft.memory
@@ -222,17 +221,13 @@ export default function SentryConfigEditor() {
         </div>
 
         <div className="mt-4">
-          <p className={labelCls}>Write tools <span className="normal-case text-gray-500">— approval-gated actions Sentry may propose; read tools are always on</span></p>
-          <div className="flex items-center gap-6 mt-2">
-            <label className="flex items-center gap-2 text-xs text-gray-100">
-              <Toggle checked={draft.chat.write_threats} onChange={(v) => setChat({ write_threats: v })} />
-              Threats (acknowledge / clear)
-            </label>
-            <label className="flex items-center gap-2 text-xs text-gray-100">
-              <Toggle checked={draft.chat.write_holds} onChange={(v) => setChat({ write_holds: v })} />
-              Holds (approve / deny)
-            </label>
-          </div>
+          <label className="flex items-center gap-3 text-xs text-gray-100">
+            <Toggle checked={draft.chat.write_tools_enabled} onChange={(v) => setChat({ write_tools_enabled: v })} />
+            <span>
+              Write tools
+              <span className="text-gray-500"> — approval-gated actions Sentry may propose (acknowledge/clear threats, decide holds); read tools are always on</span>
+            </span>
+          </label>
         </div>
 
         <div className="mt-4 flex items-center gap-3">

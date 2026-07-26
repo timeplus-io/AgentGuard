@@ -85,8 +85,9 @@ func sentryHoldDecideFn(cfg *config.Config, holdReg *holdregistry.Registry) skil
 // (filesystem-backed — unreachable via SQL), and the batch-1 GatedWrite
 // tools (#222) — approval-gated by the loop (#221), never executed
 // directly.
-// Write-tool groups are operator-configurable via the chat config row's
-// write_tool_groups map (absent group = enabled); read tools are always on.
+// Gated-write tools are gated on ONE operator switch — the chat config
+// row's write_tools_enabled bool (absent = enabled); read tools are always
+// on.
 func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, holdReg *holdregistry.Registry, cc sentry.ChatCfg) *skills.Registry {
 	sks := []skills.Skill{
 		skills.NewLoadSkill(cfg.Sentry.SkillDir),
@@ -102,13 +103,11 @@ func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycl
 		skills.NewGetSessionTimeline(),
 		skills.NewRuleCatalog(mgr, lc),
 	}
-	if cc.WriteGroupEnabled("threats") {
+	if cc.WritesEnabled() {
 		sks = append(sks,
 			skills.NewAcknowledgeThreat(sentryThreatStatusFn(cfg)),
-			skills.NewClearThreat(sentryThreatStatusFn(cfg)))
-	}
-	if cc.WriteGroupEnabled("holds") {
-		sks = append(sks, skills.NewDecideHold(sentryHoldDecideFn(cfg, holdReg)))
+			skills.NewClearThreat(sentryThreatStatusFn(cfg)),
+			skills.NewDecideHold(sentryHoldDecideFn(cfg, holdReg)))
 	}
 	// Verification-only: a no-side-effect GatedWrite tool for exercising the
 	// #221 approval flow end-to-end.

@@ -57,20 +57,19 @@ type ChatCfg struct {
 	// ApprovalTimeoutMs bounds how long a GatedWrite proposal waits for a
 	// human Approve/Deny before auto-denying (#221). Default 5 minutes.
 	ApprovalTimeoutMs int `json:"approval_timeout_ms"`
-	// WriteToolGroups toggles gated-write tool groups by name ("threats",
-	// "holds"; future groups as they ship). A group ABSENT from the map is
-	// enabled — so a fresh deployment gets the full surface and operators
-	// opt groups off. Read tools are always enabled and are not part of
-	// this map.
-	WriteToolGroups map[string]bool `json:"write_tool_groups,omitempty"`
+	// WriteToolsEnabled is the single switch for ALL gated-write tools
+	// (acknowledge_threat/clear_threat/decide_hold, and future write
+	// batches). Pointer so an ABSENT key (legacy rows) means enabled; the
+	// operator sets false to remove every write tool from the model's
+	// surface. Read tools are always enabled and have no toggle.
+	WriteToolsEnabled *bool `json:"write_tools_enabled,omitempty"`
 }
 
-// WriteGroupEnabled reports whether a gated-write tool group is enabled:
-// true unless the operator explicitly set the group to false in the chat
-// config row.
-func (c ChatCfg) WriteGroupEnabled(group string) bool {
-	v, ok := c.WriteToolGroups[group]
-	return !ok || v
+// WritesEnabled reports whether gated-write tools are offered to the model:
+// true unless the operator explicitly set write_tools_enabled=false in the
+// chat config row.
+func (c ChatCfg) WritesEnabled() bool {
+	return c.WriteToolsEnabled == nil || *c.WriteToolsEnabled
 }
 
 // applyDefaults fills zero values and clamps operator input to sane ceilings

@@ -61,16 +61,19 @@ func TestChatCfgIgnoresConfigSystemPrompt(t *testing.T) {
 	}
 }
 
-func TestWriteGroupEnabled(t *testing.T) {
+func TestWritesEnabled(t *testing.T) {
 	var cc ChatCfg
-	if !cc.WriteGroupEnabled("threats") {
-		t.Fatal("absent map: every group must default to enabled")
+	if !cc.WritesEnabled() {
+		t.Fatal("absent key must default to enabled")
 	}
-	cc.WriteToolGroups = map[string]bool{"threats": false, "holds": true}
-	if cc.WriteGroupEnabled("threats") {
-		t.Fatal("explicit false must disable the group")
+	off := false
+	cc.WriteToolsEnabled = &off
+	if cc.WritesEnabled() {
+		t.Fatal("explicit false must disable write tools")
 	}
-	if !cc.WriteGroupEnabled("holds") || !cc.WriteGroupEnabled("future-group") {
-		t.Fatal("explicit true and unknown groups must stay enabled")
+	on := true
+	cc.WriteToolsEnabled = &on
+	if !cc.WritesEnabled() {
+		t.Fatal("explicit true must enable write tools")
 	}
 }

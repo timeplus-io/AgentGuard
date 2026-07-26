@@ -95,30 +95,25 @@ func sentryRegistryWithCC(t *testing.T, cfg *config.Config, cc sentry.ChatCfg) *
 	return sentryRegistry(cfg, mgr, rules.NewLifecycle(mgr), holdregistry.New(), cc)
 }
 
-// TestSentryRegistry_WriteGroupToggles: a group explicitly set false drops
-// exactly its tools; absent groups stay enabled; reads are unaffected.
-func TestSentryRegistry_WriteGroupToggles(t *testing.T) {
+// TestSentryRegistry_WriteToolsToggle: write_tools_enabled=false removes
+// every gated-write tool from the surface; reads are unaffected; absent
+// (nil) means enabled.
+func TestSentryRegistry_WriteToolsToggle(t *testing.T) {
 	t.Setenv("SENTRY_DEMO_WRITE", "")
-	reg := sentryRegistryWithCC(t, &config.Config{}, sentry.ChatCfg{
-		WriteToolGroups: map[string]bool{"threats": false},
-	})
-	for _, name := range []string{"acknowledge_threat", "clear_threat"} {
+	off := false
+	reg := sentryRegistryWithCC(t, &config.Config{}, sentry.ChatCfg{WriteToolsEnabled: &off})
+	for _, name := range []string{"acknowledge_threat", "clear_threat", "decide_hold"} {
 		if _, ok := reg.Get(name); ok {
-			t.Errorf("%s must be absent when the threats group is disabled", name)
+			t.Errorf("%s must be absent when write tools are disabled", name)
 		}
 	}
-	for _, name := range []string{"decide_hold", "get_threats", "run_sql"} {
+	for _, name := range []string{"get_threats", "get_holds", "run_sql"} {
 		if _, ok := reg.Get(name); !ok {
-			t.Errorf("%s must remain enabled", name)
+			t.Errorf("read tool %s must remain enabled", name)
 		}
 	}
-
-	reg = sentryRegistryWithCC(t, &config.Config{}, sentry.ChatCfg{
-		WriteToolGroups: map[string]bool{"threats": false, "holds": false},
-	})
-	if _, ok := reg.Get("decide_hold"); ok {
-		t.Error("decide_hold must be absent when the holds group is disabled")
-	}
+	// Absent (nil) => enabled — covered by TestSentryRegistry_HasAllSkills
+	// which uses a zero ChatCfg and expects the full 15-tool surface.
 }
 
 func TestSentryRegistry_HasAllSkills(t *testing.T) {
