@@ -283,7 +283,12 @@ Write actions run through the approval plumbing (#221). Batch 1 of the
 write tools (#222) ships `acknowledge_threat`, `clear_threat`, and
 `decide_hold` — each calls the same internal logic as its HTTP endpoint
 (injected as a closure, so agent-driven and UI-driven writes can't drift),
-and `decided_by` attribution comes from the conversation's owner. Any skill
+and `decided_by` attribution comes from the conversation's owner. Write
+tool **groups are operator-configurable** via the chat config row's
+`write_tool_groups` map (`{"threats": bool, "holds": bool}`, toggles under
+**Settings → Sentry Agent**): a group set to `false` removes its tools from
+the model's surface entirely; an absent group is enabled. Read tools are
+always on and have no toggle. Any skill
 whose `Access()` is `GatedWrite` runs through the human-approval flow
 instead of executing directly:
 

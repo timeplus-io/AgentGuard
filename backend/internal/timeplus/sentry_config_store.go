@@ -164,6 +164,10 @@ func DefaultSentryChatRow(sCfg config.SentryConfig) string {
 		"sql_timeout_ms":        30000,
 		"sql_max_rows":          1000,
 		"tool_result_max_bytes": 16384,
+		// Gated-write tool groups (#222). Absent == enabled; seeded
+		// explicitly so operators can discover the knob. Reads are always
+		// on and have no toggle.
+		"write_tool_groups": map[string]bool{"threats": true, "holds": true},
 	})
 	return string(b)
 }

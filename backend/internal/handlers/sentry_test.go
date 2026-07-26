@@ -13,6 +13,7 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/holdregistry"
 	"github.com/timeplus/agentguard/internal/rules"
+	"github.com/timeplus/agentguard/internal/sentry"
 	"github.com/timeplus/agentguard/internal/sentry/skills"
 )
 
@@ -76,14 +77,48 @@ var wantSentrySkills = []string{
 	"acknowledge_threat", "clear_threat", "decide_hold",
 }
 
-// testRegistry builds sentryRegistry with an empty in-memory catalog manager.
+// testRegistry builds sentryRegistry with an empty in-memory catalog manager
+// and default (all-enabled) write-tool groups.
 func testRegistry(t *testing.T, cfg *config.Config) *skills.Registry {
+	t.Helper()
+	return sentryRegistryWithCC(t, cfg, sentry.ChatCfg{})
+}
+
+// sentryRegistryWithCC is testRegistry with an explicit chat config (for
+// write_tool_groups filtering tests).
+func sentryRegistryWithCC(t *testing.T, cfg *config.Config, cc sentry.ChatCfg) *skills.Registry {
 	t.Helper()
 	mgr, err := catalog.New(fstest.MapFS{}, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return sentryRegistry(cfg, mgr, rules.NewLifecycle(mgr), holdregistry.New())
+	return sentryRegistry(cfg, mgr, rules.NewLifecycle(mgr), holdregistry.New(), cc)
+}
+
+// TestSentryRegistry_WriteGroupToggles: a group explicitly set false drops
+// exactly its tools; absent groups stay enabled; reads are unaffected.
+func TestSentryRegistry_WriteGroupToggles(t *testing.T) {
+	t.Setenv("SENTRY_DEMO_WRITE", "")
+	reg := sentryRegistryWithCC(t, &config.Config{}, sentry.ChatCfg{
+		WriteToolGroups: map[string]bool{"threats": false},
+	})
+	for _, name := range []string{"acknowledge_threat", "clear_threat"} {
+		if _, ok := reg.Get(name); ok {
+			t.Errorf("%s must be absent when the threats group is disabled", name)
+		}
+	}
+	for _, name := range []string{"decide_hold", "get_threats", "run_sql"} {
+		if _, ok := reg.Get(name); !ok {
+			t.Errorf("%s must remain enabled", name)
+		}
+	}
+
+	reg = sentryRegistryWithCC(t, &config.Config{}, sentry.ChatCfg{
+		WriteToolGroups: map[string]bool{"threats": false, "holds": false},
+	})
+	if _, ok := reg.Get("decide_hold"); ok {
+		t.Error("decide_hold must be absent when the holds group is disabled")
+	}
 }
 
 func TestSentryRegistry_HasAllSkills(t *testing.T) {

@@ -60,3 +60,17 @@ func TestChatCfgIgnoresConfigSystemPrompt(t *testing.T) {
 		t.Fatalf("system prompt must be the built-in constant, got %q", cc.SystemPrompt)
 	}
 }
+
+func TestWriteGroupEnabled(t *testing.T) {
+	var cc ChatCfg
+	if !cc.WriteGroupEnabled("threats") {
+		t.Fatal("absent map: every group must default to enabled")
+	}
+	cc.WriteToolGroups = map[string]bool{"threats": false, "holds": true}
+	if cc.WriteGroupEnabled("threats") {
+		t.Fatal("explicit false must disable the group")
+	}
+	if !cc.WriteGroupEnabled("holds") || !cc.WriteGroupEnabled("future-group") {
+		t.Fatal("explicit true and unknown groups must stay enabled")
+	}
+}

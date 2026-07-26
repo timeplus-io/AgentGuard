@@ -85,7 +85,9 @@ func sentryHoldDecideFn(cfg *config.Config, holdReg *holdregistry.Registry) skil
 // (filesystem-backed — unreachable via SQL), and the batch-1 GatedWrite
 // tools (#222) — approval-gated by the loop (#221), never executed
 // directly.
-func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, holdReg *holdregistry.Registry) *skills.Registry {
+// Write-tool groups are operator-configurable via the chat config row's
+// write_tool_groups map (absent group = enabled); read tools are always on.
+func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, holdReg *holdregistry.Registry, cc sentry.ChatCfg) *skills.Registry {
 	sks := []skills.Skill{
 		skills.NewLoadSkill(cfg.Sentry.SkillDir),
 		skills.NewLoadSkillReference(cfg.Sentry.SkillDir),
@@ -99,9 +101,14 @@ func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycl
 		skills.NewGetCostSummary(),
 		skills.NewGetSessionTimeline(),
 		skills.NewRuleCatalog(mgr, lc),
-		skills.NewAcknowledgeThreat(sentryThreatStatusFn(cfg)),
-		skills.NewClearThreat(sentryThreatStatusFn(cfg)),
-		skills.NewDecideHold(sentryHoldDecideFn(cfg, holdReg)),
+	}
+	if cc.WriteGroupEnabled("threats") {
+		sks = append(sks,
+			skills.NewAcknowledgeThreat(sentryThreatStatusFn(cfg)),
+			skills.NewClearThreat(sentryThreatStatusFn(cfg)))
+	}
+	if cc.WriteGroupEnabled("holds") {
+		sks = append(sks, skills.NewDecideHold(sentryHoldDecideFn(cfg, holdReg)))
 	}
 	// Verification-only: a no-side-effect GatedWrite tool for exercising the
 	// #221 approval flow end-to-end.
@@ -215,7 +222,7 @@ func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, a
 			}
 		}
 
-		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc, holdReg), Store: store, Cfg: rcfg, Approvals: approvals}
+		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc, holdReg, cc), Store: store, Cfg: rcfg, Approvals: approvals}
 		if err := loop.Run(c.Request.Context(), cc, conv, strings.TrimSpace(body.Message), emit); err != nil {
 			log.Printf("sentry: chat: %v", err)
 			// The loop emits its own "error" event for in-stream failures
