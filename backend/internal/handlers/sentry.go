@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +33,7 @@ var (
 // the rule catalog (filesystem-backed — unreachable via SQL, so it needs a
 // real tool).
 func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) *skills.Registry {
-	return skills.NewRegistry(
+	sks := []skills.Skill{
 		skills.NewLoadSkill(cfg.Sentry.SkillDir),
 		skills.NewLoadSkillReference(cfg.Sentry.SkillDir),
 		skills.NewListStreams(),
@@ -45,7 +46,13 @@ func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycl
 		skills.NewGetCostSummary(),
 		skills.NewGetSessionTimeline(),
 		skills.NewRuleCatalog(mgr, lc),
-	)
+	}
+	// Verification-only: a no-side-effect GatedWrite tool for exercising the
+	// #221 approval flow end-to-end before real write tools ship (#222).
+	if os.Getenv("SENTRY_DEMO_WRITE") == "1" {
+		sks = append(sks, skills.NewDemoWrite())
+	}
+	return skills.NewRegistry(sks...)
 }
 
 // resolveConversation implements the create-or-continue semantics shared by
