@@ -136,6 +136,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// to each request's Timeplus config via lifecycle.For(cfg).
 	lifecycle := rules.NewLifecycle(mgr)
 	sentryApprovals := sentry.NewApprovalRegistry()
+	if os.Getenv("SENTRY_DEMO_WRITE") == "1" {
+		fmt.Println("Sentry: demo_write gated tool ENABLED (SENTRY_DEMO_WRITE=1) — approval-flow verification only")
+	}
 
 	// Default to release mode; set GIN_MODE=debug to enable verbose request logging.
 	if os.Getenv("GIN_MODE") == "" {

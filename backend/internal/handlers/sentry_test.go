@@ -85,6 +85,7 @@ func testRegistry(t *testing.T, cfg *config.Config) *skills.Registry {
 }
 
 func TestSentryRegistry_HasAllTwelveSkills(t *testing.T) {
+	t.Setenv("SENTRY_DEMO_WRITE", "") // count assumes the demo tool is off
 	cfg := &config.Config{}
 	reg := testRegistry(t, cfg)
 
@@ -100,6 +101,37 @@ func TestSentryRegistry_HasAllTwelveSkills(t *testing.T) {
 		if !got[name] {
 			t.Errorf("missing skill %q in registry", name)
 		}
+	}
+}
+
+// TestSentryRegistry_DemoWriteEnvGate: demo_write appears ONLY when
+// SENTRY_DEMO_WRITE=1 is set in the server's environment.
+func TestSentryRegistry_DemoWriteEnvGate(t *testing.T) {
+	t.Setenv("SENTRY_DEMO_WRITE", "")
+	reg := testRegistry(t, &config.Config{})
+	if _, ok := reg.Get("demo_write"); ok {
+		t.Fatal("demo_write must be absent without SENTRY_DEMO_WRITE=1")
+	}
+
+	t.Setenv("SENTRY_DEMO_WRITE", "1")
+	reg = testRegistry(t, &config.Config{})
+	sk, ok := reg.Get("demo_write")
+	if !ok {
+		t.Fatal("demo_write missing with SENTRY_DEMO_WRITE=1")
+	}
+	if sk.Access() != skills.GatedWrite {
+		t.Fatalf("demo_write access = %v, want GatedWrite", sk.Access())
+	}
+	// And it must be offered in the gated def list (what the loop sends to
+	// the model when an approval registry is present).
+	found := false
+	for _, d := range reg.Defs(skills.GatedWrite) {
+		if d.Name == "demo_write" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("demo_write not in GatedWrite defs")
 	}
 }
 
