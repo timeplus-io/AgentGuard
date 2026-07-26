@@ -100,3 +100,12 @@ v_failed_mat_views, is not detecting — that's a finding worth reporting.
 
 The curated `get_rule_status` tool returns the merged installed-rule view;
 use SQL for history, rendered SQL inspection, or custom cuts.
+
+## The catalog is NOT in a stream
+
+`agentguard_rules` only records **installed** rule instances. The catalog of
+**installable** definitions (builtin rule packs + custom rules) lives on the
+server's filesystem, not in Timeplus — no SQL can list it. Use the
+`get_rule_catalog` tool: without arguments for the full list with
+installed/upgradeable status, or `{id}` for one definition's parameter
+schema and SQL template.

@@ -238,13 +238,14 @@ All Phase-1 tools are read-only (`internal/sentry/skills/`, registered in
 | `load_skill_reference` | Load one deep-dive reference file from a skill (`skill`, `name`) |
 | `list_streams` | List `agentguard_*`/`mv_*` streams and materialized views |
 | `describe_stream` | Columns + types for one stream |
-| `run_sql` | Ad-hoc read-only SQL (`table(...)` for historical reads); LIMIT enforced |
+| `run_sql` | Ad-hoc read-only SQL (`table(...)` for historical reads); LIMIT enforced; credential-bearing config streams (`agentguard_dlp_config`, `agentguard_sentry_config`) are not readable |
 | `dlp_search` | Semantic DLP recall+rerank over `agentguard_dlp_enriched` |
 | `get_threats` | Current AgentGuard threats (same rows as the Threats page) |
 | `get_holds` | Human-in-the-loop hold records (same rows as the Holds list) |
 | `get_rule_status` | Installed rules with current enabled/block_policy state |
 | `get_cost_summary` | Per-model token/cost/latency totals over a trailing window |
 | `get_session_timeline` | Ordered CIM event timeline for one session |
+| `get_rule_catalog` | Installable rule definitions (builtin + custom) with installed/upgradeable status; `{id}` for full detail incl. parameter schema. The catalog is filesystem-backed, not a Timeplus stream — SQL can't reach it |
 
 Every tool call and result is streamed to the client as `tool_call`/
 `tool_result` NDJSON events and persisted to `agentguard_sentry_messages`

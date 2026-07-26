@@ -107,3 +107,11 @@ For anything deeper — session drill-downs, token/latency metrics, cost math,
 hold timelines, DLP forensics — load the matching reference file first. For
 semantic (meaning-based) search over conversation content, prefer the
 `dlp_search` tool over hand-written SQL.
+
+## What SQL cannot reach
+
+- **The rule catalog** (installable rule definitions) is filesystem-backed,
+  not a stream — use the `get_rule_catalog` tool.
+- **Credential-bearing config streams** (`agentguard_dlp_config`,
+  `agentguard_sentry_config`) are blocked in run_sql; their API endpoints
+  redact secrets and there is nothing analytically useful in them.

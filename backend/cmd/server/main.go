@@ -225,7 +225,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.GET("/dlp/profiles", handlers.DLPProfilesHandler(cfg))
 			protected.GET("/dlp/config", handlers.GetDLPConfig(cfg))
 			protected.PUT("/dlp/config/:key", handlers.UpsertDLPConfig(cfg))
-			protected.POST("/sentry/chat", handlers.SentryChat(cfg))
+			protected.POST("/sentry/chat", handlers.SentryChat(cfg, mgr, lifecycle))
 			protected.GET("/sentry/conversations", handlers.ListSentryConversations(cfg))
 			protected.GET("/sentry/conversations/:id", handlers.GetSentryConversation(cfg))
 			protected.PATCH("/sentry/conversations/:id", handlers.RenameSentryConversation(cfg))
