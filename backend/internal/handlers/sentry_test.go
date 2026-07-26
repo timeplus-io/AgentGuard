@@ -25,7 +25,7 @@ func TestSentryChat_DisabledReturns503(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/sentry/chat", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	SentryChat(cfg, nil, nil)(c)
+	SentryChat(cfg, nil, nil, nil)(c)
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503, body = %s", w.Code, w.Body.String())
@@ -43,7 +43,7 @@ func TestSentryChat_EmptyMessageReturns400(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/sentry/chat", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	SentryChat(cfg, nil, nil)(c)
+	SentryChat(cfg, nil, nil, nil)(c)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())
@@ -60,7 +60,7 @@ func TestSentryChat_MissingBodyReturns400(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/sentry/chat", bytes.NewReader(nil))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	SentryChat(cfg, nil, nil)(c)
+	SentryChat(cfg, nil, nil, nil)(c)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())

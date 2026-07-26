@@ -38,6 +38,84 @@ function toolArgsFromRow(raw) {
   return raw
 }
 
+// approvalFromRow pulls the persisted GatedWrite approval audit record
+// ({decision, decided_by, reason}) out of a replayed tool row's meta, if any.
+function approvalFromRow(raw) {
+  if (!raw) return null
+  try {
+    const meta = JSON.parse(raw)
+    if (meta && typeof meta === 'object' && meta.approval) return meta.approval
+  } catch { /* not toolCallMeta JSON */ }
+  return null
+}
+
+// approvalStatusLine renders one compact line describing a resolved
+// GatedWrite decision (used in both the live card and replayed tool rows).
+function approvalStatusLine(a) {
+  if (!a || !a.decision) return null
+  const label = {
+    approved: `approved by ${a.decided_by || a.decidedBy || 'operator'}`,
+    denied: `denied by ${a.decided_by || a.decidedBy || 'operator'}`,
+    timeout: 'timed out — not executed',
+    abandoned: 'abandoned — not executed',
+  }[a.decision] || a.decision
+  const reason = a.reason ? ` — ${a.reason}` : ''
+  const cls = a.decision === 'approved' ? 'text-primary' : 'text-error'
+  return <span className={`text-[10px] ${cls}`}>write {label}{reason}</span>
+}
+
+// ApprovalCard renders a GatedWrite proposal: the tool + verbatim args the
+// model wants to run, with Approve / Deny while pending, then the decision
+// state and (if approved) the execution result.
+function ApprovalCard({ item, onDecide }) {
+  const pending = !item.decision
+  return (
+    <div className="bg-surface-container rounded-sm text-xs max-w-2xl">
+      <div className="px-4 py-2.5 flex items-center gap-2 text-gray-100">
+        <span className="material-symbols-outlined text-sm shrink-0 text-primary">gavel</span>
+        <span className="font-mono text-[11px]">{item.name || 'write action'}</span>
+        {pending
+          ? <span className="text-[10px] text-primary animate-pulse ml-1">awaiting your approval…</span>
+          : <span className="ml-1">{approvalStatusLine(item)}</span>}
+      </div>
+      <div className="px-4 pb-3 flex flex-col gap-2">
+        <div>
+          <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Proposed action</p>
+          <code className="block bg-surface-container-high rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono">
+            {prettyJSON(item.args) || '(no arguments)'}
+          </code>
+        </div>
+        {pending && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onDecide(item, true)}
+              disabled={item.deciding}
+              className="px-4 py-1.5 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-[0.98] transition-transform disabled:opacity-50"
+            >
+              Approve
+            </button>
+            <button
+              onClick={() => onDecide(item, false)}
+              disabled={item.deciding}
+              className="px-4 py-1.5 text-xs font-semibold rounded-sm bg-surface-container-high text-gray-100 hover:text-error disabled:opacity-50"
+            >
+              Deny
+            </button>
+          </div>
+        )}
+        {item.decision === 'approved' && item.result != null && (
+          <div>
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Result</p>
+            <code className="block bg-surface-container-high rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono max-h-64 overflow-y-auto">
+              {prettyJSON(item.result)}
+            </code>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ToolCard({ item }) {
   return (
     <details className="bg-surface-container rounded-sm text-xs max-w-2xl">
@@ -45,6 +123,7 @@ function ToolCard({ item }) {
         <span className="material-symbols-outlined text-sm shrink-0">settings</span>
         <span className="font-mono text-[11px]">{item.name || 'tool'}</span>
         {item.pending && <span className="text-[10px] text-gray-400 animate-pulse ml-1">running…</span>}
+        {item.approval && <span className="ml-1">{approvalStatusLine(item.approval)}</span>}
         {item.truncated && (
           <span className="ml-auto text-[9px] font-semibold uppercase tracking-widest rounded-full px-2 py-0.5 bg-error/10 text-error whitespace-nowrap">
             truncated
@@ -170,6 +249,7 @@ export default function Sentry() {
               return [{
                 id: `s${m.seq}`, role: 'tool', name: m.tool_name,
                 args: toolArgsFromRow(m.tool_args), result: m.tool_result,
+                approval: approvalFromRow(m.tool_args),
                 truncated: false, pending: false,
               }]
             }
@@ -221,6 +301,19 @@ export default function Sentry() {
     }
   }
 
+  // decideApproval resolves one pending GatedWrite proposal. The card's
+  // state flips when the loop's approval_result event echoes back — the
+  // local `deciding` flag only debounces the buttons.
+  async function decideApproval(item, approve) {
+    setMessages(prev => prev.map(m => m.id === item.id ? { ...m, deciding: true } : m))
+    try {
+      await api.sentryDecideApproval(item.proposalId, approve)
+    } catch (err) {
+      setMessages(prev => prev.map(m => m.id === item.id ? { ...m, deciding: false } : m))
+      setConvError(err?.message || 'Failed to submit decision')
+    }
+  }
+
   // finalizeOpenBubble clears pending:false on the currently-open assistant
   // bubble (if any) and nulls the ref. Call this everywhere the open
   // assistant bubble is being closed/abandoned -- otherwise its pending
@@ -268,6 +361,23 @@ export default function Sentry() {
             setMessages(prev => prev.some(m => m.id === ev.id)
               ? prev
               : [...prev, { id: ev.id, role: 'tool', name: ev.name, args: ev.args, result: null, truncated: false, pending: true }])
+            break
+
+          case 'approval_request':
+            finalizeOpenBubble()
+            setMessages(prev => prev.some(m => m.id === ev.id)
+              ? prev
+              : [...prev, {
+                  id: ev.id, role: 'approval', proposalId: ev.proposal_id,
+                  name: ev.name, args: ev.args, decision: null, result: null,
+                  truncated: false, deciding: false,
+                }])
+            break
+
+          case 'approval_result':
+            setMessages(prev => prev.map(m => m.id === ev.id
+              ? { ...m, decision: ev.decision, decidedBy: ev.decided_by, reason: ev.message, deciding: false }
+              : m))
             break
 
           case 'tool_result':
@@ -447,7 +557,9 @@ export default function Sentry() {
                   ) : (
                     messages.map(item => item.role === 'tool'
                       ? <ToolCard key={item.id} item={item} />
-                      : <MessageBubble key={item.id} item={item} />
+                      : item.role === 'approval'
+                        ? <ApprovalCard key={item.id} item={item} onDecide={decideApproval} />
+                        : <MessageBubble key={item.id} item={item} />
                     )
                   )}
                 </div>

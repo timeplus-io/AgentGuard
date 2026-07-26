@@ -31,6 +31,7 @@ import (
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
 	"github.com/timeplus/agentguard/internal/rules"
+	"github.com/timeplus/agentguard/internal/sentry"
 	"github.com/timeplus/agentguard/internal/web"
 )
 
@@ -134,6 +135,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// lifecycle owns the process-wide per-rule mutation locks; handlers bind it
 	// to each request's Timeplus config via lifecycle.For(cfg).
 	lifecycle := rules.NewLifecycle(mgr)
+	sentryApprovals := sentry.NewApprovalRegistry()
 
 	// Default to release mode; set GIN_MODE=debug to enable verbose request logging.
 	if os.Getenv("GIN_MODE") == "" {
@@ -225,7 +227,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.GET("/dlp/profiles", handlers.DLPProfilesHandler(cfg))
 			protected.GET("/dlp/config", handlers.GetDLPConfig(cfg))
 			protected.PUT("/dlp/config/:key", handlers.UpsertDLPConfig(cfg))
-			protected.POST("/sentry/chat", handlers.SentryChat(cfg, mgr, lifecycle))
+			protected.POST("/sentry/chat", handlers.SentryChat(cfg, mgr, lifecycle, sentryApprovals))
+			protected.POST("/sentry/approvals/:proposal_id/decide", handlers.DecideSentryApproval(sentryApprovals))
 			protected.GET("/sentry/conversations", handlers.ListSentryConversations(cfg))
 			protected.GET("/sentry/conversations/:id", handlers.GetSentryConversation(cfg))
 			protected.PATCH("/sentry/conversations/:id", handlers.RenameSentryConversation(cfg))
