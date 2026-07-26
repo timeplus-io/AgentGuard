@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/holdregistry"
 	"github.com/timeplus/agentguard/internal/rules"
 	"github.com/timeplus/agentguard/internal/sentry/skills"
 )
@@ -25,7 +26,7 @@ func TestSentryChat_DisabledReturns503(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/sentry/chat", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	SentryChat(cfg, nil, nil, nil)(c)
+	SentryChat(cfg, nil, nil, nil, nil)(c)
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503, body = %s", w.Code, w.Body.String())
@@ -43,7 +44,7 @@ func TestSentryChat_EmptyMessageReturns400(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/sentry/chat", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	SentryChat(cfg, nil, nil, nil)(c)
+	SentryChat(cfg, nil, nil, nil, nil)(c)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())
@@ -60,7 +61,7 @@ func TestSentryChat_MissingBodyReturns400(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/sentry/chat", bytes.NewReader(nil))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	SentryChat(cfg, nil, nil, nil)(c)
+	SentryChat(cfg, nil, nil, nil, nil)(c)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())
@@ -72,6 +73,7 @@ var wantSentrySkills = []string{
 	"load_skill", "load_skill_reference", "list_streams", "describe_stream",
 	"run_sql", "dlp_search", "get_threats", "get_holds", "get_rule_status",
 	"get_cost_summary", "get_session_timeline", "get_rule_catalog",
+	"acknowledge_threat", "clear_threat", "decide_hold",
 }
 
 // testRegistry builds sentryRegistry with an empty in-memory catalog manager.
@@ -81,10 +83,10 @@ func testRegistry(t *testing.T, cfg *config.Config) *skills.Registry {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return sentryRegistry(cfg, mgr, rules.NewLifecycle(mgr))
+	return sentryRegistry(cfg, mgr, rules.NewLifecycle(mgr), holdregistry.New())
 }
 
-func TestSentryRegistry_HasAllTwelveSkills(t *testing.T) {
+func TestSentryRegistry_HasAllSkills(t *testing.T) {
 	t.Setenv("SENTRY_DEMO_WRITE", "") // count assumes the demo tool is off
 	cfg := &config.Config{}
 	reg := testRegistry(t, cfg)

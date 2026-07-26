@@ -3,15 +3,18 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/holdregistry"
 	"github.com/timeplus/agentguard/internal/models"
 	"github.com/timeplus/agentguard/internal/rules"
 	"github.com/timeplus/agentguard/internal/sentry"
@@ -27,12 +30,62 @@ var (
 	errConversationNotFound  = errors.New("sentry: conversation not found")
 )
 
-// sentryRegistry builds the full Phase-1 (read-only) tool surface Sentry's
-// chat loop exposes to the model: knowledge lookup, schema introspection,
-// ad-hoc SQL, DLP semantic search, curated cross-resource read tools, and
-// the rule catalog (filesystem-backed — unreachable via SQL, so it needs a
-// real tool).
-func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) *skills.Registry {
+// sentryThreatStatusFn adapts the threat-status upsert the HTTP endpoints
+// use (upsertThreatStatus) into the skills.ThreatStatusFunc shape.
+func sentryThreatStatusFn(cfg *config.Config) skills.ThreatStatusFunc {
+	return func(agentID, deploymentID, sessionID, ruleID, status string) error {
+		return upsertThreatStatus(cfg, ThreatStatusBody{
+			AgentID: agentID, DeploymentID: deploymentID,
+			SessionID: sessionID, RuleID: ruleID,
+		}, status)
+	}
+}
+
+// sentryHoldDecideFn adapts the hold decision path — the SAME
+// getHoldByID + terminalizeHold sequence DecideHold runs, including the
+// in-memory holdregistry claim (unblocks the waiting plugin request) and
+// the SSE broadcast — into the skills.HoldDecideFunc shape.
+func sentryHoldDecideFn(cfg *config.Config, holdReg *holdregistry.Registry) skills.HoldDecideFunc {
+	return func(holdID, decision, decidedBy, reason string) (string, error) {
+		existing, err := getHoldByID(cfg, holdID)
+		if err != nil {
+			return "", fmt.Errorf("query hold: %w", err)
+		}
+		if existing == nil {
+			return "", fmt.Errorf("hold %s not found", holdID)
+		}
+		if existing.Status != "pending" {
+			return "hold already decided: " + existing.Status + " (no new write)", nil
+		}
+		won, err := terminalizeHold(cfg, holdReg, holdID, decision, decidedBy, reason, holdregistry.Decision{
+			Allow:  decision == "approved",
+			Reason: reason,
+		})
+		if err != nil {
+			return "", fmt.Errorf("write decision: %w", err)
+		}
+		if !won {
+			return "hold is already being resolved by another operator (no new write)", nil
+		}
+		GlobalAlertBroadcaster.Publish(models.AlertWebhookPayload{
+			RuleID:     existing.RuleID,
+			RuleName:   "hold_decided",
+			Severity:   existing.Severity,
+			AgentID:    existing.AgentID,
+			Message:    fmt.Sprintf("hold:%s|decision:%s", holdID, decision),
+			DetectedAt: time.Now().UTC().Format(time.RFC3339),
+		})
+		return fmt.Sprintf("hold %s %s (tool %s, agent %s)", holdID, decision, existing.ToolName, existing.AgentID), nil
+	}
+}
+
+// sentryRegistry builds the tool surface Sentry's chat loop exposes to the
+// model: knowledge lookup, schema introspection, ad-hoc SQL, DLP semantic
+// search, curated cross-resource read tools, the rule catalog
+// (filesystem-backed — unreachable via SQL), and the batch-1 GatedWrite
+// tools (#222) — approval-gated by the loop (#221), never executed
+// directly.
+func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, holdReg *holdregistry.Registry) *skills.Registry {
 	sks := []skills.Skill{
 		skills.NewLoadSkill(cfg.Sentry.SkillDir),
 		skills.NewLoadSkillReference(cfg.Sentry.SkillDir),
@@ -46,9 +99,12 @@ func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycl
 		skills.NewGetCostSummary(),
 		skills.NewGetSessionTimeline(),
 		skills.NewRuleCatalog(mgr, lc),
+		skills.NewAcknowledgeThreat(sentryThreatStatusFn(cfg)),
+		skills.NewClearThreat(sentryThreatStatusFn(cfg)),
+		skills.NewDecideHold(sentryHoldDecideFn(cfg, holdReg)),
 	}
 	// Verification-only: a no-side-effect GatedWrite tool for exercising the
-	// #221 approval flow end-to-end before real write tools ship (#222).
+	// #221 approval flow end-to-end.
 	if os.Getenv("SENTRY_DEMO_WRITE") == "1" {
 		sks = append(sks, skills.NewDemoWrite())
 	}
@@ -102,7 +158,7 @@ func ownedActiveConversation(c *gin.Context, store *sentry.Store) (models.Sentry
 // plain JSON (disabled, bad input, chat-config load, conversation
 // resolution/ownership) happens BEFORE any header is written; once streaming
 // begins, only NDJSON error events can report a failure.
-func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, approvals *sentry.ApprovalRegistry) gin.HandlerFunc {
+func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, approvals *sentry.ApprovalRegistry, holdReg *holdregistry.Registry) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rcfg := auth.RequestCfg(c, cfg)
 		if !rcfg.Sentry.Enabled {
@@ -159,7 +215,7 @@ func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, a
 			}
 		}
 
-		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc), Store: store, Cfg: rcfg, Approvals: approvals}
+		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc, holdReg), Store: store, Cfg: rcfg, Approvals: approvals}
 		if err := loop.Run(c.Request.Context(), cc, conv, strings.TrimSpace(body.Message), emit); err != nil {
 			log.Printf("sentry: chat: %v", err)
 			// The loop emits its own "error" event for in-stream failures

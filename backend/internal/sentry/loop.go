@@ -83,7 +83,7 @@ type approvalMeta struct {
 // response already succeeded from the operator's point of view).
 func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversation, userMsg string, emit func(Event)) error {
 	rc := &skills.RunContext{
-		Cfg: l.Cfg, ConversationID: conv.ConversationID,
+		Cfg: l.Cfg, ConversationID: conv.ConversationID, User: conv.User,
 		SQLTimeoutMs: cc.SQLTimeoutMs, SQLMaxRows: cc.SQLMaxRows,
 		ResultMaxBytes: cc.ToolResultMaxBytes, Loaded: map[string]bool{},
 	}
