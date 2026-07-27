@@ -26,8 +26,8 @@ import (
 //
 // It is a package-wide helper (holds, threats, cost_budgets, activity, ...) and
 // delegates to rules.EscapeSQLString — the canonical full escaper — so the two
-// byte-identical copies can never drift. Distinct from escapeSQL (helpers.go),
-// which is deliberately quote-only for identifier-ish values.
+// byte-identical copies can never drift. escapeSQL (helpers.go) now delegates
+// here too, so both handler escapers are backslash-safe.
 func escapeSQLStr(s string) string {
 	return rules.EscapeSQLString(s)
 }

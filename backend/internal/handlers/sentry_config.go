@@ -33,10 +33,16 @@ func GetSentryConfig(cfg *config.Config) gin.HandlerFunc {
 		out := make([]dlpConfigRowView, 0, len(rows))
 		for _, r := range rows {
 			redacted, hadKey := redactAPIKey(r.Value)
-			out = append(out, dlpConfigRowView{
+			view := dlpConfigRowView{
 				Key: r.Key, Value: redacted, APIKeySet: hadKey,
 				UpdatedAt: r.UpdatedAt, UpdatedBy: r.UpdatedBy,
-			})
+			}
+			// A row whose api_key can't be decrypted is shown (not 503'd) so
+			// the operator can see it exists and re-enter the key (#237).
+			if r.DecryptErr != nil {
+				view.DecryptError = "api_key could not be decrypted — re-enter it to fix"
+			}
+			out = append(out, view)
 		}
 		c.JSON(http.StatusOK, gin.H{"config": out, "keys": tp.SentryConfigKeys()})
 	}
@@ -69,6 +75,15 @@ func mergeSentryValue(cfg *config.Config, c *gin.Context, key string, bodyValue 
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
 		return string(b), nil // non-object value: nothing to preserve
+	}
+
+	// Only read (and thus decrypt) the existing row when we actually need to
+	// preserve a key — i.e. the body left api_key blank/absent. When the
+	// operator supplies a fresh key there is nothing to preserve, so skip the
+	// read entirely; otherwise a corrupt/undecryptable existing row would 503
+	// the very PUT meant to fix it, leaving no self-service recovery (#237).
+	if s, _ := m["api_key"].(string); s != "" {
+		return string(b), nil
 	}
 
 	rc := auth.RequestCfg(c, cfg)

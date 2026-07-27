@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -144,9 +143,16 @@ func parseTime(v any) time.Time {
 	return time.Time{}
 }
 
-// escapeSQL replaces single quotes to prevent SQL injection in string literals.
+// escapeSQL escapes a value for inclusion in a single-quoted SQL string
+// literal. It delegates to the canonical full escaper (escapeSQLStr →
+// rules.EscapeSQLString), which doubles single quotes AND backslashes.
+// Backslash escaping is required because Proton treats \' as an escaped quote:
+// a quote-only escaper lets a trailing backslash swallow the closing quote and
+// desync every following field in the statement (#237). Doubling a backslash
+// in a value that has none is a no-op, so this is safe for all callers —
+// including identifier-ish values that never carry backslashes.
 func escapeSQL(s string) string {
-	return strings.ReplaceAll(s, "'", "''")
+	return escapeSQLStr(s)
 }
 
 // rowStrSlice extracts a string slice from a row value, handling both

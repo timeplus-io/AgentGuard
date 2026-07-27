@@ -222,6 +222,9 @@ export default function Sentry() {
   const scrollRef = useRef(null)
   const activeIdRef = useRef(null)
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
+  // Monotonic token bumped on every conversation switch / new conversation, so
+  // a slow conversation-fetch that resolves out of order can be ignored (#237).
+  const convGenRef = useRef(0)
 
   const loadConversations = useCallback(() => {
     api.sentryConversations()
@@ -252,11 +255,13 @@ export default function Sentry() {
   function openConversation(id) {
     if (streaming || id === activeId) return
     abortRef.current?.abort()
+    const gen = ++convGenRef.current
     setActiveId(id)
     setLoadingConv(true)
     setConvError(null)
     api.sentryConversation(id)
       .then(d => {
+        if (gen !== convGenRef.current) return // a newer switch superseded this fetch
         const msgs = (d.messages || [])
           .slice()
           .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
@@ -274,13 +279,19 @@ export default function Sentry() {
           })
         setMessages(msgs)
       })
-      .catch(err => setConvError(err?.message || 'Failed to load conversation'))
-      .finally(() => setLoadingConv(false))
+      .catch(err => {
+        if (gen !== convGenRef.current) return // superseded — swallow the stale error too
+        setConvError(err?.message || 'Failed to load conversation')
+      })
+      .finally(() => {
+        if (gen === convGenRef.current) setLoadingConv(false)
+      })
   }
 
   function newConversation() {
     if (streaming) return
     abortRef.current?.abort()
+    convGenRef.current++ // invalidate any in-flight conversation fetch
     setActiveId(null)
     setMessages([])
     setConvError(null)
@@ -355,6 +366,7 @@ export default function Sentry() {
     setConvError(null)
     setMessages(prev => [...prev, { id: localId('user'), role: 'user', content: text }])
     openAssistantIdRef.current = null
+    openThinkingIdRef.current = null // clear any dangling ref from a prior aborted turn (#237)
 
     const ctrl = new AbortController()
     abortRef.current = ctrl
@@ -402,6 +414,7 @@ export default function Sentry() {
 
           case 'approval_request':
             finalizeOpenBubble()
+            finalizeOpenThinking() // stop the reasoning ellipsis during the (possibly long) approval wait
             setMessages(prev => prev.some(m => m.id === ev.id)
               ? prev
               : [...prev, {
@@ -440,6 +453,7 @@ export default function Sentry() {
       }
     } catch (err) {
       finalizeOpenBubble()
+      finalizeOpenThinking() // never leave the reasoning card pulsing after an error/abort (#237)
       if (err?.name !== 'AbortError') {
         setMessages(prev => [...prev, { id: localId('error'), role: 'error', content: err?.message || 'Chat request failed' }])
       }

@@ -38,6 +38,10 @@ type SentryConfigRow struct {
 	Value     string `json:"value"`
 	UpdatedAt string `json:"updated_at"`
 	UpdatedBy string `json:"updated_by"`
+	// DecryptErr is set when this row's api_key could not be decrypted (wrong
+	// or missing master key). Value then holds the raw ciphertext. Per-row so
+	// one corrupt row doesn't fail the whole read (#237). Not serialized.
+	DecryptErr error `json:"-"`
 }
 
 func SentryConfigKeys() []string { return []string{SentryCfgKeyChat, SentryCfgKeyMemory} }
@@ -59,16 +63,23 @@ FROM table(agentguard_sentry_config) ORDER BY key`)
 	}
 	out := make([]SentryConfigRow, 0, len(rows))
 	for _, r := range rows {
-		value, derr := decryptSentryValue(asDLPString(r["value"]))
-		if derr != nil {
-			// Wrong/missing master key: surface loudly rather than handing
-			// callers ciphertext or a silently-empty credential (#234).
-			return nil, fmt.Errorf("sentry config %q: %w", asDLPString(r["key"]), derr)
+		raw := asDLPString(r["value"])
+		row := SentryConfigRow{
+			Key:       asDLPString(r["key"]),
+			UpdatedAt: asDLPString(r["updated_at"]),
+			UpdatedBy: asDLPString(r["updated_by"]),
 		}
-		out = append(out, SentryConfigRow{
-			Key: asDLPString(r["key"]), Value: value,
-			UpdatedAt: asDLPString(r["updated_at"]), UpdatedBy: asDLPString(r["updated_by"]),
-		})
+		// Per-row tolerance (#237): a wrong/missing master key for ONE row
+		// (e.g. the rarely-touched memory row) must not fail the whole read
+		// and take down chat. Keep the ciphertext and flag the row; callers
+		// needing this key's plaintext (ReadSentryConfigValue) surface the
+		// error, while GetSentryConfig can still render the healthy rows.
+		if value, derr := decryptSentryValue(raw); derr != nil {
+			row.Value, row.DecryptErr = raw, derr
+		} else {
+			row.Value = value
+		}
+		out = append(out, row)
 	}
 	return out, nil
 }
@@ -128,6 +139,11 @@ func ReadSentryConfigValue(cfg *config.TimeplusConfig, key string) (string, erro
 	}
 	for _, r := range rows {
 		if r.Key == key {
+			if r.DecryptErr != nil {
+				// This specific key is corrupt: surface loudly so a bad
+				// api_key is never used as a bearer token (#234).
+				return "", fmt.Errorf("sentry config %q: %w", key, r.DecryptErr)
+			}
 			return r.Value, nil
 		}
 	}

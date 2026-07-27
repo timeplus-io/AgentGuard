@@ -43,6 +43,12 @@ type ToolDef struct {
 type ThinkingBlock struct {
 	Text      string
 	Signature string
+	// Redacted marks a redacted_thinking block. Its reasoning is encrypted by
+	// the safety system: Text then holds the opaque Data payload (not
+	// human-readable) and Signature is unused. It must still be echoed back
+	// verbatim within a turn's tool loop, so it is captured and replayed like a
+	// normal thinking block (#237).
+	Redacted bool
 }
 
 // ChatResult is the model's response to a single ChatStream call.

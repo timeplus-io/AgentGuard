@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import Toggle from './Toggle'
 
@@ -64,14 +64,34 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
   const [banner, setBanner] = useState(null)
   const [test, setTest] = useState(null)
 
-  const load = useCallback(() => {
+  // Mirror `dirty` into a ref so load() can read the current dirty set without
+  // taking it as a dependency (which would re-run the reloadToken effect on
+  // every keystroke). Used to decide which panels a refetch may overwrite.
+  const dirtyRef = useRef(dirty)
+  useEffect(() => { dirtyRef.current = dirty }, [dirty])
+
+  // load refetches the config and merges it into the form WITHOUT clobbering
+  // in-progress edits: a panel that is currently dirty keeps its edits unless
+  // it is the one we just saved (forceKey). Previously load() rebuilt the whole
+  // draft and cleared all dirty flags, so saving one panel — or any unrelated
+  // Settings save that bumps reloadToken — silently discarded the other panel's
+  // unsaved edits while showing "Saved" (#237).
+  const load = useCallback((forceKey = null) => {
     api.getSentryConfig()
       .then((res) => {
         const map = {}
         for (const r of res.config || []) map[r.key] = r
+        const fresh = buildDraft(map)
+        const keep = (k) => k !== forceKey && dirtyRef.current.has(k)
         setByKey(map)
-        setDraft(buildDraft(map))
-        setDirty(new Set())
+        setDraft((prev) => (prev
+          ? { chat: keep('chat') ? prev.chat : fresh.chat, memory: keep('memory') ? prev.memory : fresh.memory }
+          : fresh))
+        setDirty((prev) => {
+          const next = new Set()
+          for (const k of prev) if (keep(k)) next.add(k) // retain still-dirty panels; clear refreshed ones
+          return next
+        })
         setLoadErr(null)
       })
       .catch((e) => setLoadErr(e?.message || 'Failed to load Sentry config'))
@@ -79,7 +99,8 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
 
   // reloadToken changes when the Settings save bar writes config-file keys
   // (e.g. enabling Sentry, which provisions the streams, #226) — refetch so
-  // a pre-provision 503 error doesn't stick around after provisioning.
+  // a pre-provision 503 error doesn't stick around after provisioning. Dirty
+  // panels are preserved (see load).
   useEffect(() => { load() }, [load, reloadToken])
 
   const mark = (key) => setDirty((prev) => new Set(prev).add(key))
@@ -134,7 +155,7 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
         type: 'ok',
         msg: `${key === 'chat' ? 'Chat' : 'Memory'} config saved. Changes take effect on the next Sentry turn — no re-provision.`,
       })
-      load()
+      load(key) // refresh only the saved panel; the other panel's unsaved edits survive (#237)
     } catch (e) {
       setBanner({ type: 'err', msg: e?.message || 'Save failed' })
     } finally {
