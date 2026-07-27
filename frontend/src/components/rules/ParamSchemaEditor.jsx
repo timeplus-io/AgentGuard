@@ -147,7 +147,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="shrink-0 text-gray-400 hover:text-[#ffb0cf] transition-colors"
+          className="shrink-0 text-gray-400 hover:text-primary transition-colors"
           title={open ? 'Collapse' : 'Expand'}
         >
           <span className="material-symbols-outlined text-[18px] align-middle">
@@ -157,7 +157,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <code className="text-xs font-mono text-white">{row.key || '(unnamed)'}</code>
+            <code className="text-xs font-mono text-gray-100">{row.key || '(unnamed)'}</code>
             <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-surface-container-lowest text-gray-400">
               {row.type}
             </span>
@@ -170,7 +170,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
             type="button"
             onClick={() => onMove(-1)}
             disabled={index === 0}
-            className="text-gray-400 hover:text-white disabled:opacity-30 transition-colors"
+            className="text-gray-400 hover:text-gray-100 disabled:opacity-30 transition-colors"
             title="Move up"
           >
             <span className="material-symbols-outlined text-[16px] align-middle">arrow_upward</span>
@@ -179,7 +179,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
             type="button"
             onClick={() => onMove(1)}
             disabled={index === total - 1}
-            className="text-gray-400 hover:text-white disabled:opacity-30 transition-colors"
+            className="text-gray-400 hover:text-gray-100 disabled:opacity-30 transition-colors"
             title="Move down"
           >
             <span className="material-symbols-outlined text-[16px] align-middle">arrow_downward</span>
@@ -187,7 +187,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
           <button
             type="button"
             onClick={onRemove}
-            className="text-gray-400 hover:text-[#ffb4ab] transition-colors"
+            className="text-gray-400 hover:text-error transition-colors"
             title="Remove parameter"
           >
             <span className="material-symbols-outlined text-[16px] align-middle">delete</span>
@@ -206,7 +206,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
                 placeholder="threshold"
                 className={`${inputCls} font-mono ${keyError ? 'ring-1 ring-[#ffb4ab]/60' : ''}`}
               />
-              {keyError && <p className="text-[10px] text-[#ffb4ab] mt-1">{keyError}</p>}
+              {keyError && <p className="text-[10px] text-error mt-1">{keyError}</p>}
             </Field>
 
             <Field label="Type">
@@ -517,7 +517,7 @@ function OptionsEditor({ row, onUpdate }) {
             <button
               type="button"
               onClick={() => removeAt(i)}
-              className="text-gray-500 hover:text-[#ffb4ab]"
+              className="text-gray-500 hover:text-error"
               title="Remove option"
             >
               <span className="material-symbols-outlined text-[14px] align-middle">close</span>
@@ -543,7 +543,7 @@ function OptionsEditor({ row, onUpdate }) {
         <button
           type="button"
           onClick={add}
-          className="shrink-0 px-3 rounded-sm bg-surface-variant text-white hover:bg-surface-bright transition-colors"
+          className="shrink-0 px-3 rounded-sm bg-surface-variant text-gray-100 hover:bg-surface-bright transition-colors"
           title="Add option"
         >
           <span className="material-symbols-outlined text-[16px] align-middle">add</span>

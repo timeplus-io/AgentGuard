@@ -198,7 +198,7 @@ export default function DLPConfigEditor() {
   return (
     <div className="space-y-6">
       <p className="text-xs text-gray-400">
-        Live configuration stored in the <code className="font-mono text-[#ffb0cf]">agentguard_dlp_config</code> stream.
+        Live configuration stored in the <code className="font-mono text-primary">agentguard_dlp_config</code> stream.
         Edits apply immediately — no restart or re-provision. (Endpoint/model defaults in the server config only seed these on first provision.)
       </p>
 
@@ -264,7 +264,7 @@ export default function DLPConfigEditor() {
               <button onClick={() => removeModelRow(i)} className="text-gray-500 hover:text-error text-lg leading-none px-1" title="Remove model">×</button>
             </div>
           ))}
-          <button onClick={addModelRow} className="text-xs text-[#ffb0cf] hover:underline">+ add model</button>
+          <button onClick={addModelRow} className="text-xs text-primary hover:underline">+ add model</button>
         </div>
       </div>
 

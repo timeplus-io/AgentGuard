@@ -12,6 +12,24 @@ import {
   YAxis,
 } from 'recharts'
 import { api } from '../api/client'
+import { useTheme } from '../context/ThemeContext'
+
+// Recharts sets fill/stroke as SVG attributes, which don't resolve CSS var(),
+// so we read the resolved theme colors for chart chrome (grid/axis/separator)
+// and recompute when the theme changes (#240).
+function useChartChrome() {
+  const { theme } = useTheme()
+  return useMemo(() => {
+    const s = getComputedStyle(document.documentElement)
+    const v = (name, fallback) => s.getPropertyValue(name).trim() || fallback
+    return {
+      grid: v('--outline-variant', '#374151'),
+      axis: v('--on-surface-variant', '#71717a'),
+      axisLine: v('--outline', '#4b5563'),
+      separator: v('--surface-container', '#231f2b'),
+    }
+  }, [theme])
+}
 
 const TIME_WINDOWS = {
   '1m': { label: '1m', durationMs: 60_000, bucketMs: 5_000, tickMs: 1_000 },
@@ -228,7 +246,7 @@ function MetricCard({ label, value, severity, icon, delta }) {
       <div className="flex items-start justify-between gap-3">
         <span className="text-[10px] font-semibold text-gray-300 uppercase tracking-widest">{label}</span>
         <span
-          className={`material-symbols-outlined ${meta?.text || 'text-[#ffb0cf]'}`}
+          className={`material-symbols-outlined ${meta?.text || 'text-primary'}`}
           style={{ fontVariationSettings: "'FILL' 1" }}
         >
           {iconName}
@@ -525,6 +543,7 @@ function CircleTable({ rows, valueLabel }) {
 function CircleChartCard({ title, data, loading, valueLabel, lastRefreshedAt }) {
   const [hoveredKey, setHoveredKey] = useState(null)
   const [mode, setMode] = useState('chart')
+  const chrome = useChartChrome()
   const total = data.reduce((sum, item) => sum + item.value, 0)
 
   return (
@@ -557,7 +576,7 @@ function CircleChartCard({ title, data, loading, valueLabel, lastRefreshedAt }) 
                   nameKey="label"
                   innerRadius="58%"
                   outerRadius="82%"
-                  stroke="#231f2b"
+                  stroke={chrome.separator}
                   strokeWidth={2}
                   isAnimationActive={false}
                 >
@@ -582,12 +601,13 @@ function CircleChartCard({ title, data, loading, valueLabel, lastRefreshedAt }) 
 }
 
 function StackedChart({ rows, series, hoveredKey, onHover, xKey = 'label' }) {
+  const chrome = useChartChrome()
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={rows}>
-        <CartesianGrid stroke="#374151" vertical={false} />
-        <XAxis dataKey={xKey} stroke="#71717a" fontSize={11} tickLine={false} axisLine={{ stroke: '#4b5563' }} interval={0} />
-        <YAxis allowDecimals={false} stroke="#71717a" fontSize={11} tickLine={false} axisLine={{ stroke: '#4b5563' }} />
+        <CartesianGrid stroke={chrome.grid} vertical={false} />
+        <XAxis dataKey={xKey} stroke={chrome.axis} fontSize={11} tickLine={false} axisLine={{ stroke: chrome.axisLine }} interval={0} />
+        <YAxis allowDecimals={false} stroke={chrome.axis} fontSize={11} tickLine={false} axisLine={{ stroke: chrome.axisLine }} />
         <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
         {series.map((item, index) => (
           <Bar
@@ -596,7 +616,7 @@ function StackedChart({ rows, series, hoveredKey, onHover, xKey = 'label' }) {
             name={item.label}
             stackId="stack"
             fill={item.color}
-            stroke="#231f2b"
+            stroke={chrome.separator}
             strokeWidth={1}
             fillOpacity={hoveredKey && hoveredKey !== item.key ? 0.5 : 1}
             onMouseEnter={() => onHover(item.key)}
@@ -834,7 +854,7 @@ export default function ThreatAnalytics() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs">
+        <div className="flex items-center gap-3 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-error text-xs">
           <span className="material-symbols-outlined text-base shrink-0">error</span>
           <span>{error}</span>
         </div>

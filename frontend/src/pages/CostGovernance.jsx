@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { useTheme } from '../context/ThemeContext'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
@@ -8,9 +9,9 @@ import { api } from '../api/client'
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-[#2c2834] border border-[#574149]/20 px-3 py-2 rounded-sm text-xs">
+      <div className="bg-surface-container-high border border-outline-variant/20 px-3 py-2 rounded-sm text-xs">
         <p className="text-gray-400 font-semibold">{label}</p>
-        <p className="text-[#ffb0cf] font-bold">${payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+        <p className="text-primary font-bold">${payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
       </div>
     )
   }
@@ -50,13 +51,13 @@ function periodDeltaProps(pct, lowerIsBetter = true) {
   if (pct < 0) {
     return {
       delta: text,
-      deltaColor: lowerIsBetter ? 'text-emerald-400' : 'text-[#ffb4ab]',
+      deltaColor: lowerIsBetter ? 'text-emerald-400' : 'text-error',
       deltaIcon: 'trending_down',
     }
   }
   return {
     delta: text,
-    deltaColor: lowerIsBetter ? 'text-[#ffb4ab]' : 'text-emerald-400',
+    deltaColor: lowerIsBetter ? 'text-error' : 'text-emerald-400',
     deltaIcon: 'trending_up',
   }
 }
@@ -77,12 +78,24 @@ function budgetDeltaProps(status, pct) {
   }
   return {
     delta: `${Math.abs(pct).toFixed(1)}% over budget`,
-    deltaColor: 'text-[#ffb4ab]',
+    deltaColor: 'text-error',
     deltaIcon: 'trending_up',
   }
 }
 
 export default function CostGovernance() {
+  const { theme } = useTheme()
+  // Recharts fill/stroke are SVG attributes and don't resolve CSS var(), so
+  // read the resolved theme colors and recompute when the theme flips (#240).
+  const chartColors = useMemo(() => {
+    const s = getComputedStyle(document.documentElement)
+    const v = (name, fallback) => s.getPropertyValue(name).trim() || fallback
+    return {
+      axis: v('--on-surface-variant', '#52525b'),
+      barMax: v('--primary', '#ffb0cf'),
+      barRest: v('--surface-container-highest', '#1d1a25'),
+    }
+  }, [theme])
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
@@ -258,14 +271,14 @@ export default function CostGovernance() {
   ]
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100">
+    <div className="min-h-screen bg-surface text-gray-100">
       <Sidebar />
       <TopNav />
 
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
           {loadError && (
-            <div className="flex items-center gap-3 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs">
+            <div className="flex items-center gap-3 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-error text-xs">
               <span className="material-symbols-outlined text-base shrink-0">error</span>
               <span>{loadError}</span>
             </div>
@@ -274,7 +287,7 @@ export default function CostGovernance() {
             title="Cost Governance"
             subtitle="Monitor token spend, enforce budget policies, and detect cost anomalies across all agents."
             actions={<>
-              <button className="px-4 py-2 bg-[#2c2834] text-gray-100 text-xs font-medium rounded-sm border border-[#574149]/10 hover:bg-[#37333f] transition-colors flex items-center gap-2">
+              <button className="px-4 py-2 bg-surface-container-high text-gray-100 text-xs font-medium rounded-sm border border-outline-variant/10 hover:bg-surface-container-highest transition-colors flex items-center gap-2">
                 <span className="material-symbols-outlined text-[16px]">download</span>
                 Export Report
               </button>
@@ -284,7 +297,7 @@ export default function CostGovernance() {
           {/* KPI Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {kpis.map((kpi, i) => (
-              <div key={i} className="bg-[#1d1a25] p-6 rounded relative overflow-hidden group">
+              <div key={i} className="bg-surface-container-low p-6 rounded relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-16 h-16 bg-[#ffb0cf]/5 rounded-full -mr-8 -mt-8 group-hover:scale-150 transition-transform duration-500"></div>
                 <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">{kpi.label}</p>
                 <h3 className={`text-2xl font-semibold mt-2 ${kpi.valueColor || 'text-gray-100'}`}>{loading ? '...' : kpi.value}</h3>
@@ -301,21 +314,21 @@ export default function CostGovernance() {
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Daily Spend Trend */}
-            <div className="lg:col-span-2 bg-[#2c2834] p-6 rounded">
+            <div className="lg:col-span-2 bg-surface-container-high p-6 rounded">
               <div className="flex justify-between items-center mb-8">
                 <h4 className="text-base font-semibold text-gray-100">Daily Spend Trend</h4>
                 <div className="flex gap-2">
-                  <span className="px-2 py-1 bg-[#37333f] text-[10px] rounded text-[#ffb0cf] border border-[#ffb0cf]/20">30 DAYS</span>
+                  <span className="px-2 py-1 bg-surface-container-highest text-[10px] rounded text-primary border border-[#ffb0cf]/20">30 DAYS</span>
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={256}>
                 <BarChart data={spendData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#52525b', fontSize: 10, fontWeight: 700 }} />
+                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: chartColors.axis, fontSize: 10, fontWeight: 700 }} />
                   <YAxis hide />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,176,207,0.05)' }} />
                   <Bar dataKey="amount" radius={[2, 2, 0, 0]}>
                     {spendData.map((entry, index) => (
-                      <Cell key={index} fill={entry.amount === maxSpend ? '#ffb0cf' : '#1d1a25'} />
+                      <Cell key={index} fill={entry.amount === maxSpend ? chartColors.barMax : chartColors.barRest} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -323,7 +336,7 @@ export default function CostGovernance() {
             </div>
 
             {/* Token Breakdown */}
-            <div className="bg-[#2c2834] p-6 rounded">
+            <div className="bg-surface-container-high p-6 rounded">
               <h4 className="text-base font-semibold text-gray-100 mb-8">Token Breakdown</h4>
               <div className="space-y-6">
                 {tokenBreakdown.map(t => (
@@ -332,21 +345,21 @@ export default function CostGovernance() {
                       <span className="text-gray-400">{t.label}</span>
                       <span className="text-gray-100 font-semibold">{t.percentage}% ({(t.tokens ?? 0).toLocaleString()} tokens)</span>
                     </div>
-                    <div className="h-1.5 w-full bg-[#0f0c17] rounded-full overflow-hidden">
+                    <div className="h-1.5 w-full bg-surface-container-lowest rounded-full overflow-hidden">
                       <div className={`h-full ${TOKEN_COLORS[t.label] ?? 'bg-zinc-500'}`} style={{ width: `${t.percentage}%` }}></div>
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="mt-8 pt-8 border-t border-[#574149]/10">
+              <div className="mt-8 pt-8 border-t border-outline-variant/10">
                 <div className="flex items-center gap-4">
-                  <div className="flex-1 bg-[#0f0c17] p-3 rounded text-center">
+                  <div className="flex-1 bg-surface-container-lowest p-3 rounded text-center">
                     <p className="text-[10px] text-gray-400 uppercase font-semibold">Cache Savings</p>
                     <p className="text-base font-semibold text-emerald-400">{formatDollar(cacheSavings)}</p>
                   </div>
-                  <div className="flex-1 bg-[#0f0c17] p-3 rounded text-center">
+                  <div className="flex-1 bg-surface-container-lowest p-3 rounded text-center">
                     <p className="text-[10px] text-gray-400 uppercase font-semibold">Wasted Spend</p>
-                    <p className="text-base font-semibold text-[#ffb4ab]">{formatDollar(wastedSpend)}</p>
+                    <p className="text-base font-semibold text-error">{formatDollar(wastedSpend)}</p>
                   </div>
                 </div>
               </div>
@@ -354,17 +367,17 @@ export default function CostGovernance() {
           </div>
 
           {/* Cost per Agent/Model */}
-          <div className="bg-[#2c2834] p-6 rounded">
+          <div className="bg-surface-container-high p-6 rounded">
             <h4 className="text-base font-semibold text-gray-100 mb-6">Cost per Agent / Model</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {agentModelCosts.map((am, i) => (
-                <div key={`${am.agent_id}-${am.model}-${i}`} className="bg-gray-800 p-4 rounded flex items-center justify-between group hover:bg-[#37333f] transition-colors">
+                <div key={`${am.agent_id}-${am.model}-${i}`} className="bg-gray-800 p-4 rounded flex items-center justify-between group hover:bg-surface-container-highest transition-colors">
                   <div>
                     <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">{am.provider} / {am.model}</p>
                     <h5 className="font-semibold text-gray-100">{am.agent_name}</h5>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-[#ffb0cf]">{formatDollar(am.cost)}</p>
+                    <p className="font-semibold text-primary">{formatDollar(am.cost)}</p>
                     <p className="text-[10px] text-gray-400">{am.requests}</p>
                   </div>
                 </div>
@@ -376,7 +389,7 @@ export default function CostGovernance() {
           </div>
 
           {/* Monthly Budgets — powers the Forecasted Total delta */}
-          <div className="bg-[#2c2834] p-6 rounded">
+          <div className="bg-surface-container-high p-6 rounded">
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h4 className="text-base font-semibold text-gray-100">Monthly Budgets</h4>
@@ -385,7 +398,7 @@ export default function CostGovernance() {
               {!showAddBudget && (
                 <button
                   onClick={() => { setShowAddBudget(true); setBudgetError('') }}
-                  className="text-xs text-[#ffb0cf] font-semibold flex items-center gap-1 hover:underline"
+                  className="text-xs text-primary font-semibold flex items-center gap-1 hover:underline"
                 >
                   <span className="material-symbols-outlined text-xs">add_circle</span>
                   Add Budget
@@ -394,7 +407,7 @@ export default function CostGovernance() {
             </div>
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="text-gray-400 border-b border-[#574149]/10">
+                <tr className="text-gray-400 border-b border-outline-variant/10">
                   <th className="pb-3 font-medium">Deployment</th>
                   <th className="pb-3 font-medium">Monthly Budget</th>
                   <th className="pb-3 font-medium">Currency</th>
@@ -403,7 +416,7 @@ export default function CostGovernance() {
                   <th className="pb-3"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#574149]/5">
+              <tbody className="divide-y divide-outline-variant/5">
                 {budgets.map(b => (
                   <tr key={b.deployment_id}>
                     <td className="py-3 font-medium text-gray-100">{b.deployment_id}</td>
@@ -416,7 +429,7 @@ export default function CostGovernance() {
                         <button
                           onClick={() => handleEditBudget(b)}
                           disabled={showAddBudget}
-                          className="text-gray-400 hover:text-[#ffb0cf] disabled:opacity-40"
+                          className="text-gray-400 hover:text-primary disabled:opacity-40"
                           title="Edit"
                         >
                           <span className="material-symbols-outlined text-base">edit</span>
@@ -424,7 +437,7 @@ export default function CostGovernance() {
                         <button
                           onClick={() => handleDeleteBudget(b.deployment_id)}
                           disabled={deletingBudgetKey === b.deployment_id || showAddBudget}
-                          className="text-gray-400 hover:text-[#ffb4ab] disabled:opacity-40"
+                          className="text-gray-400 hover:text-error disabled:opacity-40"
                           title="Delete"
                         >
                           <span className="material-symbols-outlined text-base">close</span>
@@ -479,12 +492,12 @@ export default function CostGovernance() {
                         </button>
                         <button
                           onClick={() => { setShowAddBudget(false); setBudgetForm(EMPTY_BUDGET); setBudgetError(''); setEditingBudgetKey(null) }}
-                          className="px-2 py-1 bg-[#37333f] text-gray-100 text-[10px] font-semibold rounded"
+                          className="px-2 py-1 bg-surface-container-highest text-gray-100 text-[10px] font-semibold rounded"
                         >
                           Cancel
                         </button>
                       </div>
-                      {budgetError && <p className="text-[10px] text-[#ffb4ab] mt-1 text-right">{budgetError}</p>}
+                      {budgetError && <p className="text-[10px] text-error mt-1 text-right">{budgetError}</p>}
                     </td>
                   </tr>
                 )}
@@ -493,13 +506,13 @@ export default function CostGovernance() {
           </div>
 
           {/* Model Pricing */}
-          <div className="bg-[#2c2834] p-6 rounded">
+          <div className="bg-surface-container-high p-6 rounded">
             <div className="flex justify-between items-center mb-6">
               <h4 className="text-base font-semibold text-gray-100">Model Pricing</h4>
               {!showAddForm && (
                 <button
                   onClick={() => { setShowAddForm(true); setSaveError('') }}
-                  className="text-xs text-[#ffb0cf] font-semibold flex items-center gap-1 hover:underline"
+                  className="text-xs text-primary font-semibold flex items-center gap-1 hover:underline"
                 >
                   <span className="material-symbols-outlined text-xs">add_circle</span>
                   Add Model
@@ -508,7 +521,7 @@ export default function CostGovernance() {
             </div>
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="text-gray-400 border-b border-[#574149]/10">
+                <tr className="text-gray-400 border-b border-outline-variant/10">
                   <th className="pb-3 font-medium">Provider</th>
                   <th className="pb-3 font-medium">Model</th>
                   <th className="pb-3 font-medium">Input $/1M</th>
@@ -518,7 +531,7 @@ export default function CostGovernance() {
                   <th className="pb-3"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#574149]/5">
+              <tbody className="divide-y divide-outline-variant/5">
                 {pricing.map(p => {
                   const key = `${p.provider}/${p.model}`
                   return (
@@ -534,7 +547,7 @@ export default function CostGovernance() {
                           <button
                             onClick={() => handleEdit(p)}
                             disabled={showAddForm}
-                            className="text-gray-400 hover:text-[#ffb0cf] disabled:opacity-40"
+                            className="text-gray-400 hover:text-primary disabled:opacity-40"
                             title="Edit"
                           >
                             <span className="material-symbols-outlined text-base">edit</span>
@@ -542,7 +555,7 @@ export default function CostGovernance() {
                           <button
                             onClick={() => handleDelete(p.provider, p.model)}
                             disabled={deletingKey === key || showAddForm}
-                            className="text-gray-400 hover:text-[#ffb4ab] disabled:opacity-40"
+                            className="text-gray-400 hover:text-error disabled:opacity-40"
                             title="Delete"
                           >
                             <span className="material-symbols-outlined text-base">close</span>
@@ -616,12 +629,12 @@ export default function CostGovernance() {
                         </button>
                         <button
                           onClick={() => { setShowAddForm(false); setForm(EMPTY_FORM); setSaveError(''); setEditingKey(null) }}
-                          className="px-2 py-1 bg-[#37333f] text-gray-100 text-[10px] font-semibold rounded"
+                          className="px-2 py-1 bg-surface-container-highest text-gray-100 text-[10px] font-semibold rounded"
                         >
                           Cancel
                         </button>
                       </div>
-                      {saveError && <p className="text-[10px] text-[#ffb4ab] mt-1 text-right">{saveError}</p>}
+                      {saveError && <p className="text-[10px] text-error mt-1 text-right">{saveError}</p>}
                     </td>
                   </tr>
                 )}

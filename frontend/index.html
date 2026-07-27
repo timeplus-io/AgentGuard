@@ -11,6 +11,18 @@
         font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
       }
     </style>
+    <script>
+      // Apply the persisted theme before first paint to avoid a flash (#240).
+      // Default is dark; light is opt-in. Kept in sync at runtime by ThemeProvider.
+      (function () {
+        try {
+          var t = localStorage.getItem('theme');
+          var root = document.documentElement;
+          root.classList.remove('light', 'dark');
+          root.classList.add(t === 'light' ? 'light' : 'dark');
+        } catch (e) { /* no-op: <html class="dark"> remains */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

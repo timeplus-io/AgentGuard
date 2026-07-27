@@ -110,7 +110,7 @@ export default function Settings() {
   const reprovisionIds = sectionIdsWithFlag(sections, 'reprovision')
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100">
+    <div className="min-h-screen bg-surface text-gray-100">
       <Sidebar />
       <TopNav />
       <main className="pl-sidebar pt-16 pb-24 min-h-screen">

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -5,7 +6,8 @@ import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql'
 import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
 import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
 import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { useTheme } from '../context/ThemeContext'
 
 // Only these grammars are registered; PrismAsyncLight loads them as separate
 // lazy chunks. An unknown/absent language (or a partial fence mid-stream)
@@ -19,8 +21,10 @@ SyntaxHighlighter.registerLanguage('yaml', yaml)
 // for both inline and block code. Treat it as inline only when there is no
 // language class AND no newline; everything else is a block (a language-less
 // fenced block falls back to the 'text' grammar = no highlighting).
-const components = {
-  code({ className, children }) {
+// makeCodeRenderer builds the fenced-code renderer bound to a Prism style, so
+// syntax highlighting follows the active theme (oneDark / oneLight, #240).
+function makeCodeRenderer(prismStyle) {
+  return function code({ className, children }) {
     const match = /language-(\w+)/.exec(className || '')
     const text = String(children ?? '')
     const isInline = !className && !text.includes('\n')
@@ -36,7 +40,7 @@ const components = {
       <div className="bg-surface-container-high rounded-sm overflow-x-auto my-2">
         <SyntaxHighlighter
           language={language}
-          style={oneDark}
+          style={prismStyle}
           PreTag="div"
           customStyle={{ margin: 0, background: 'transparent', fontSize: '12px', padding: '10px' }}
           codeTagProps={{ style: { fontFamily: 'inherit', background: 'transparent' } }}
@@ -45,10 +49,13 @@ const components = {
         </SyntaxHighlighter>
       </div>
     )
-  },
+  }
+}
+
+const components = {
   a({ href, children }) {
     return (
-      <a href={href} className="text-[#ffb0cf] hover:underline" target="_blank" rel="noopener noreferrer">
+      <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
         {children}
       </a>
     )
@@ -110,9 +117,14 @@ const components = {
 // Digital Sentry dark theme. XSS-safe: react-markdown defaults escape raw HTML;
 // no rehype-raw / no dangerouslySetInnerHTML.
 export default function Markdown({ children }) {
+  const { theme } = useTheme()
+  const comps = useMemo(
+    () => ({ ...components, code: makeCodeRenderer(theme === 'light' ? oneLight : oneDark) }),
+    [theme],
+  )
   return (
     <div className="text-sm text-gray-100 break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={comps}>
         {children || ''}
       </ReactMarkdown>
     </div>

@@ -55,26 +55,26 @@ export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
   const sorted = [...rows].sort((a, b) => toMs(b.event_time) - toMs(a.event_time))
 
   return (
-    <div className="bg-[#2c2834] rounded-sm overflow-hidden">
-      <div className="px-6 py-4 flex items-center justify-between border-b border-[#574149]/10">
+    <div className="bg-surface-container-high rounded-sm overflow-hidden">
+      <div className="px-6 py-4 flex items-center justify-between border-b border-outline-variant/10">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-3">
           <span className={`w-2 h-2 rounded-full ${connected ? 'bg-[#ffb0cf] shadow-[0_0_10px_#ffb0cf] animate-pulse' : 'bg-zinc-600'}`} />
           Live Agent Activity
         </h3>
         {connected && (
-          <span className="text-[10px] font-semibold text-[#ffb0cf] uppercase tracking-widest">Live</span>
+          <span className="text-[10px] font-semibold text-primary uppercase tracking-widest">Live</span>
         )}
       </div>
       <div className="overflow-auto max-h-80">
         <table className="w-full text-left border-collapse">
-          <thead className="bg-[#211e29] sticky top-0 z-10">
+          <thead className="bg-surface-container sticky top-0 z-10">
             <tr>
               {['Time', 'Agent', 'Action', 'Tool / Model', 'Decision'].map(h => (
                 <th key={h} className="px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest">{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#574149]/10">
+          <tbody className="divide-y divide-outline-variant/10">
             {sorted.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-6 py-10 text-center text-xs">
@@ -85,8 +85,8 @@ export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
                 </td>
               </tr>
             ) : sorted.map((evt, i) => (
-              <tr key={`${evt.event_time}-${evt.agent_id}-${evt.hook_name}-${i}`} className="hover:bg-[#37333f] transition-colors">
-                <td className="px-6 py-3 text-[10px] font-mono text-[#ffb0cf] whitespace-nowrap">{formatEvtTime(evt.event_time)}</td>
+              <tr key={`${evt.event_time}-${evt.agent_id}-${evt.hook_name}-${i}`} className="hover:bg-surface-container-highest transition-colors">
+                <td className="px-6 py-3 text-[10px] font-mono text-primary whitespace-nowrap">{formatEvtTime(evt.event_time)}</td>
                 <td className="px-6 py-3">
                   <code className="text-xs font-mono text-gray-100">{evt.agent_id}</code>
                 </td>

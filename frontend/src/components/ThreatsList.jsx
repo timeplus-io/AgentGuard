@@ -133,7 +133,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
   return (
     <>
       {showFilters && (
-        <section className="bg-[#211e29] rounded p-6 mb-6 flex flex-wrap items-center gap-6">
+        <section className="bg-surface-container rounded p-6 mb-6 flex flex-wrap items-center gap-6">
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Severity</label>
             <div className="flex gap-1">
@@ -178,17 +178,17 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
       )}
 
       {actionError && (
-        <div className="mb-3 flex items-center gap-2 px-4 py-2 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs">
+        <div className="mb-3 flex items-center gap-2 px-4 py-2 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-error text-xs">
           <span className="material-symbols-outlined text-base shrink-0">error</span>
           <span className="flex-1">{actionError}</span>
-          <button onClick={() => setActionError(null)} className="text-[#ffb4ab] hover:text-white">
+          <button onClick={() => setActionError(null)} className="text-error hover:text-gray-100">
             <span className="material-symbols-outlined text-sm">close</span>
           </button>
         </div>
       )}
 
-      <section className="bg-[#211e29] rounded-sm overflow-hidden mb-8">
-        <div className="px-6 py-4 flex items-center justify-between border-b border-[#574149]/10">
+      <section className="bg-surface-container rounded-sm overflow-hidden mb-8">
+        <div className="px-6 py-4 flex items-center justify-between border-b border-outline-variant/10">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
             Threats
             <span className="ml-2 text-gray-400 font-normal normal-case">({filtered.length})</span>
@@ -196,7 +196,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
         </div>
         <div className="overflow-auto">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-[#2c2834] sticky top-0 z-10">
+            <thead className="bg-surface-container-high sticky top-0 z-10">
               <tr>
                 {headers.map(h => (
                   <th key={h} className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
@@ -205,7 +205,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#574149]/10">
+            <tbody className="divide-y divide-outline-variant/10">
               {loading ? (
                 <tr>
                   <td colSpan={colSpan} className="px-6 py-12 text-center text-gray-400 text-xs">
@@ -216,8 +216,8 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                 <tr>
                   <td colSpan={colSpan} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-2">
-                      <span className="material-symbols-outlined text-[#ffb4ab] text-3xl">error</span>
-                      <p className="text-xs text-[#ffb4ab]">{loadError}</p>
+                      <span className="material-symbols-outlined text-error text-3xl">error</span>
+                      <p className="text-xs text-error">{loadError}</p>
                     </div>
                   </td>
                 </tr>
@@ -231,7 +231,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                 <tr
                     key={t.threat_id}
                     onClick={() => navigate(`/threats/${t.threat_id}`)}
-                    className="hover:bg-[#2c2834] transition-colors cursor-pointer"
+                    className="hover:bg-surface-container-high transition-colors cursor-pointer"
                   >
                     <td className="px-6 py-4">
                       <SeverityBadge severity={t.severity} />
@@ -245,7 +245,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                           <Link
                             to={`/rules/${t.rule_id}`}
                             onClick={e => e.stopPropagation()}
-                            className="text-xs font-semibold text-gray-100 hover:text-[#ffb0cf] transition-colors"
+                            className="text-xs font-semibold text-gray-100 hover:text-primary transition-colors"
                           >
                             {t.rule_name}
                           </Link>
@@ -260,7 +260,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1.5">
                         <AgentTypeLogo agentType={agentTypeMap[t.agent_id]} />
-                        <code className="text-xs font-mono text-[#ffb0cf] px-2 py-0.5 bg-[#ffb0cf]/5 rounded-sm">
+                        <code className="text-xs font-mono text-primary px-2 py-0.5 bg-[#ffb0cf]/5 rounded-sm">
                           {t.agent_id}
                         </code>
                       </div>
@@ -272,7 +272,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                     </td>
                     <td className="px-6 py-4">
                       {t.session_id ? (
-                        <code className="text-[10px] font-mono text-gray-400 px-1.5 py-0.5 bg-[#2c2834] rounded-sm truncate block max-w-[120px]" title={t.session_id}>
+                        <code className="text-[10px] font-mono text-gray-400 px-1.5 py-0.5 bg-surface-container-high rounded-sm truncate block max-w-[120px]" title={t.session_id}>
                           {t.session_id.length > 12 ? t.session_id.slice(0, 12) + '…' : t.session_id}
                         </code>
                       ) : (

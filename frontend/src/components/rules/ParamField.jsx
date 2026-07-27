@@ -15,7 +15,7 @@ import { toggleMultiChoiceValue } from './paramValues'
 //   error        – validation message for this field, or falsy
 //   onChange(v)  – set the edited value
 //   onReset()    – reset this field to its default
-const labelCls = 'text-sm font-medium text-white'
+const labelCls = 'text-sm font-medium text-gray-100'
 const descCls = 'text-[11px] text-gray-400 mt-0.5'
 const inputCls =
   'w-full bg-surface-container-lowest text-sm text-gray-100 rounded-sm px-3 py-2 outline-none ' +

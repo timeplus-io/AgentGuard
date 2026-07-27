@@ -26,8 +26,8 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100 flex flex-col">
-      <nav className="bg-[#15121d] shadow-[0_0_12px_rgba(213,63,140,0.12)] sticky top-0 z-50 h-16 w-full flex items-center px-6 backdrop-blur-md">
+    <div className="min-h-screen bg-surface text-gray-100 flex flex-col">
+      <nav className="bg-surface shadow-[0_0_12px_rgba(213,63,140,0.12)] sticky top-0 z-50 h-16 w-full flex items-center px-6 backdrop-blur-md">
         <span className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] tracking-tight">AgentGuard</span>
       </nav>
 
@@ -35,14 +35,14 @@ export default function Login() {
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center space-y-2">
             <span
-              className="material-symbols-outlined text-4xl text-[#ffb0cf]"
+              className="material-symbols-outlined text-4xl text-primary"
               style={{ fontVariationSettings: "'FILL' 1" }}
             >security</span>
-            <h1 className="text-2xl font-bold text-white">Sign in to AgentGuard</h1>
+            <h1 className="text-2xl font-bold text-gray-100">Sign in to AgentGuard</h1>
             <p className="text-gray-400 text-xs">Use your Timeplus credentials</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="bg-[#2c2834] rounded-sm p-8 space-y-4">
+          <form onSubmit={handleSubmit} className="bg-surface-container-high rounded-sm p-8 space-y-4">
             <div className="space-y-1">
               <label htmlFor="login-username" className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Username</label>
               <input
@@ -71,7 +71,7 @@ export default function Login() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 text-xs text-[#ffb4ab]">
+              <div className="flex items-center gap-2 text-xs text-error">
                 <span className="material-symbols-outlined text-xs">error</span>
                 {error}
               </div>

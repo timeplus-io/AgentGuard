@@ -6,7 +6,7 @@ import ActivityDrawer from './ActivityDrawer'
 const STATUS_STYLES = {
   pending:    { bg: 'bg-amber-900/40',   text: 'text-amber-300',  label: 'Pending' },
   approved:   { bg: 'bg-emerald-900/40', text: 'text-emerald-400', label: 'Approved' },
-  denied:     { bg: 'bg-[#93000a]/40',   text: 'text-[#ffb4ab]',  label: 'Denied' },
+  denied:     { bg: 'bg-[#93000a]/40',   text: 'text-error',  label: 'Denied' },
   timeout:    { bg: 'bg-zinc-800/60',    text: 'text-gray-400',   label: 'Timed Out' },
   abandoned:  { bg: 'bg-zinc-800/60',    text: 'text-gray-400',   label: 'Abandoned' },
   auto_block: { bg: 'bg-orange-900/40',  text: 'text-orange-300', label: 'Auto-blocked' },
@@ -24,7 +24,7 @@ function StatusBadge({ status }) {
 
 function SeverityChip({ severity }) {
   if (!severity) return <span className="text-gray-400 text-[10px]">—</span>
-  const color = severity === 'critical' ? 'text-[#ffb4ab]' : severity === 'warning' ? 'text-amber-400' : 'text-gray-400'
+  const color = severity === 'critical' ? 'text-error' : severity === 'warning' ? 'text-amber-400' : 'text-gray-400'
   return <span className={`text-[10px] font-semibold uppercase ${color}`}>{severity}</span>
 }
 
@@ -118,7 +118,7 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="bg-[#1d1a25] border border-[#574149]/20 text-gray-100 text-xs rounded-sm px-2 py-1.5 focus:outline-none"
+          className="bg-surface-container-low border border-outline-variant/20 text-gray-100 text-xs rounded-sm px-2 py-1.5 focus:outline-none"
         >
           <option value="">All statuses</option>
           <option value="pending">Pending</option>
@@ -172,7 +172,7 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-[11px] mb-4">
+        <div className="flex items-center gap-2 px-3 py-2 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-error text-[11px] mb-4">
           <span className="material-symbols-outlined text-[14px]">error</span>
           <span className="flex-1">{error}</span>
           <button onClick={() => { setError(null); setAutoRefresh(true); fetchEvents() }} className="font-semibold hover:underline">Retry</button>
@@ -194,7 +194,7 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-gray-400 text-[10px] uppercase tracking-widest border-b border-[#574149]/20">
+              <tr className="text-gray-400 text-[10px] uppercase tracking-widest border-b border-outline-variant/20">
                 {columns.map(col => (
                   <th key={col} className="text-left py-2 px-3 font-semibold whitespace-nowrap">{col}</th>
                 ))}
@@ -206,12 +206,12 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
                 <tr
                   key={ev.id}
                   onClick={() => setSelectedEvent(ev)}
-                  className={`border-b border-[#574149]/10 cursor-pointer transition-colors hover:bg-[#1d1a25] ${
+                  className={`border-b border-outline-variant/10 cursor-pointer transition-colors hover:bg-surface-container-low ${
                     ev.status === 'pending' ? 'border-l-2 border-l-amber-500/60' : ''
                   }`}
                 >
                   <td className="py-2.5 px-3 text-gray-400 whitespace-nowrap font-mono text-[10px]">{formatTs(ev.event_time)}</td>
-                  <td className="py-2.5 px-3 font-mono text-[#93c5fd] whitespace-nowrap">{ev.tool_name || '—'}</td>
+                  <td className="py-2.5 px-3 font-mono text-info whitespace-nowrap">{ev.tool_name || '—'}</td>
                   <td className="py-2.5 px-3"><StatusBadge status={ev.status} /></td>
                   <td className="py-2.5 px-3 text-gray-400 max-w-[160px] truncate" title={ev.rule_name || ev.rule_id}>
                     {ev.rule_name || ev.rule_id || '—'}
@@ -237,12 +237,12 @@ export default function ActivityLog({ mode = 'global', sessionId, _threatId }) {
                         </button>
                         <button
                           onClick={() => handleDecide(ev, 'denied')}
-                          className="px-2.5 py-1 bg-[#93000a]/40 text-[#ffb4ab] text-[10px] font-semibold rounded-sm hover:bg-[#93000a]/60 transition-colors"
+                          className="px-2.5 py-1 bg-[#93000a]/40 text-error text-[10px] font-semibold rounded-sm hover:bg-[#93000a]/60 transition-colors"
                         >
                           Deny
                         </button>
                         {inlineErrors[ev.id] && (
-                          <span className="text-[10px] text-[#ffb4ab]" title={inlineErrors[ev.id]}>!</span>
+                          <span className="text-[10px] text-error" title={inlineErrors[ev.id]}>!</span>
                         )}
                       </div>
                     )}

@@ -10,11 +10,11 @@ export default function HoldToastContainer() {
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-sm">
       {arr.map(h => (
-        <div key={h.hold_id} className="bg-[#1d1a25] border border-[#ffb4ab]/40 rounded-sm p-3 shadow-lg">
+        <div key={h.hold_id} className="bg-surface-container-low border border-[#ffb4ab]/40 rounded-sm p-3 shadow-lg">
           <div className="flex items-center gap-2 mb-1">
-            <span className="material-symbols-outlined text-[#ffb4ab] text-base">block</span>
+            <span className="material-symbols-outlined text-error text-base">block</span>
             <span className={`text-[9px] uppercase font-semibold ${
-              h.severity === 'critical' ? 'text-[#ffb4ab]' :
+              h.severity === 'critical' ? 'text-error' :
               h.severity === 'warning'  ? 'text-amber-400' : 'text-gray-400'
             }`}>{h.severity}</span>
             <span className="text-[10px] text-gray-400 truncate flex-1">

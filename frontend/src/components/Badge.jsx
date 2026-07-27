@@ -5,9 +5,9 @@ const severityStyles = {
 }
 
 const statusStyles = {
-  ACTIVE: 'bg-[#ffb0cf]/10 text-[#ffb0cf] border border-[#ffb0cf]/20',
+  ACTIVE: 'bg-[#ffb0cf]/10 text-primary border border-[#ffb0cf]/20',
   THROTTLED: 'bg-[#ffb2b8]/10 text-[#ffb2b8] border border-[#ffb2b8]/20',
-  SUSPENDED: 'bg-[#ffb4ab]/10 text-[#ffb4ab] border border-[#ffb4ab]/20',
+  SUSPENDED: 'bg-[#ffb4ab]/10 text-error border border-[#ffb4ab]/20',
 }
 
 export function SeverityBadge({ severity }) {

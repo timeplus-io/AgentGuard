@@ -2,6 +2,84 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme tokens (#240) ───────────────────────────────────────────────────
+   Tailwind color tokens (tailwind.config.js) resolve to these CSS variables.
+   :root holds values constant across themes (brand/categorical scales + the
+   Material-3 "fixed" tokens). .dark and .light redefine the neutral ramp and
+   the M3 role tokens. The neutral ramp is INVERTED between themes (100 =
+   foreground, 900 = background in both), so bg-gray-800 text-gray-100 reads
+   correctly in either mode. .dark values are byte-identical to the original
+   dark-only palette, so dark mode is a visual no-op. */
+@layer base {
+  :root {
+    /* Brand / categorical scales — identical in both themes. */
+    --pink-100: #ffeef6; --pink-200: #ffcbe4; --pink-300: #ffaad2; --pink-400: #ff73b6;
+    --pink-500: #d53f8c; --pink-600: #be207c; --pink-700: #9f0e65; --pink-800: #690f49; --pink-900: #410c35;
+    --red-100: #ffe8eb; --red-200: #ffbac3; --red-300: #ff8696; --red-400: #ff465f;
+    --red-500: #dd3950; --red-600: #bb2c41; --red-700: #982031; --red-800: #761322; --red-900: #540613;
+    --orange-100: #ffece0; --orange-200: #ffc7a2; --orange-300: #ffa165; --orange-400: #ff7c27;
+    --orange-500: #dd6b21; --orange-600: #ba5a1b; --orange-700: #984915; --orange-800: #75380f; --orange-900: #532709;
+    --yellow-100: #fff6db; --yellow-200: #ffe492; --yellow-300: #ffd149; --yellow-400: #ffbf00;
+    --yellow-500: #dba400; --yellow-600: #b78901; --yellow-700: #926d01; --yellow-800: #6e5202; --yellow-900: #4a3702;
+    --green-100: #e0f8f3; --green-200: #a2e9da; --green-300: #65dbc1; --green-400: #27cca8;
+    --green-500: #23ad8f; --green-600: #1f8d77; --green-700: #1c6e5e; --green-800: #184e46; --green-900: #142f2d;
+    --blue-100: #dcf7fc; --blue-200: #96e6f6; --blue-300: #51d6f0; --blue-400: #0bc5ea;
+    --blue-500: #09a5c6; --blue-600: #0785a3; --blue-700: #06667f; --blue-800: #04465c; --blue-900: #022638;
+    --indigo-100: #e7e9ff; --indigo-200: #cfd3ff; --indigo-300: #aab0ff; --indigo-400: #8890ff;
+    --indigo-500: #7475df; --indigo-600: #605bbf; --indigo-700: #4a469c; --indigo-800: #333175; --indigo-900: #1d1b50;
+    --purple-100: #f4ebff; --purple-200: #dec4ff; --purple-300: #c89cff; --purple-400: #b275ff;
+    --purple-500: #9d55ec; --purple-600: #8934d9; --purple-700: #712bb5; --purple-800: #511e84; --purple-900: #36135b;
+
+    /* Material-3 "fixed" tokens — constant across themes by design. */
+    --primary-fixed: #ffd9e5; --primary-fixed-dim: #ffb0cf;
+    --on-primary-fixed: #3d0023; --on-primary-fixed-variant: #8c0055;
+    --secondary-fixed: #e7dff0; --secondary-fixed-dim: #cbc4d4;
+    --on-secondary-fixed: #1d1a25; --on-secondary-fixed-variant: #494552;
+    --tertiary-fixed: #ffdadb; --tertiary-fixed-dim: #ffb2b8;
+    --on-tertiary-fixed: #40000f; --on-tertiary-fixed-variant: #91002d;
+    --primary-button: #d53f8c; --primary-button-text: #ffffff;
+  }
+
+  .dark {
+    --gray-100: #f7f6f6; --gray-200: #ececed; --gray-300: #dad9db; --gray-400: #b5b4b8;
+    --gray-500: #7d7b82; --gray-600: #514e58; --gray-700: #3a3741; --gray-800: #231f2b; --gray-900: #120f1a;
+
+    --primary: #ffb0cf; --on-primary: #63003b; --primary-container: #f256a3; --on-primary-container: #570033;
+    --secondary: #cbc4d4; --on-secondary: #322e3b; --secondary-container: #4b4754; --on-secondary-container: #bcb6c5;
+    --tertiary: #ffb2b8; --on-tertiary: #67001e; --tertiary-container: #ff506f; --on-tertiary-container: #5b0019;
+    --surface: #15121d; --surface-dim: #15121d; --surface-bright: #3b3744;
+    --surface-container-lowest: #0f0c17; --surface-container-low: #1d1a25; --surface-container: #211e29;
+    --surface-container-high: #2c2834; --surface-container-highest: #37333f;
+    --surface-variant: #37333f; --on-surface: #e7dff0; --on-surface-variant: #ddbfc8;
+    --background: #15121d; --on-background: #e7dff0;
+    --outline: #a58a93; --outline-variant: #574149;
+    --error: #ffb4ab; --on-error: #690005; --error-container: #93000a; --on-error-container: #ffdad6;
+    --inverse-primary: #b01e6f; --inverse-surface: #e7dff0; --inverse-on-surface: #322e3b;
+    --surface-tint: #ffb0cf;
+    --info: #93c5fd;
+  }
+
+  .light {
+    /* Neutral ramp inverted vs .dark (axion pattern). */
+    --gray-900: #f7f6f6; --gray-800: #ececed; --gray-700: #dad9db; --gray-600: #b5b4b8;
+    --gray-500: #7d7b82; --gray-400: #514e58; --gray-300: #3a3741; --gray-200: #231f2b; --gray-100: #120f1a;
+
+    --primary: #b01e6f; --on-primary: #ffffff; --primary-container: #f256a3; --on-primary-container: #3d0023;
+    --secondary: #6b5c62; --on-secondary: #ffffff; --secondary-container: #efdde5; --on-secondary-container: #241a1f;
+    --tertiary: #b93d54; --on-tertiary: #ffffff; --tertiary-container: #ffdadb; --on-tertiary-container: #40000f;
+    --surface: #fff8f8; --surface-dim: #e8d6da; --surface-bright: #ffffff;
+    --surface-container-lowest: #ffffff; --surface-container-low: #fff0f3; --surface-container: #fbeaee;
+    --surface-container-high: #f6e3e9; --surface-container-highest: #f0dde3;
+    --surface-variant: #f2dde2; --on-surface: #201a1c; --on-surface-variant: #514347;
+    --background: #fff8f8; --on-background: #201a1c;
+    --outline: #837377; --outline-variant: #d6c2c7;
+    --error: #ba1a1a; --on-error: #ffffff; --error-container: #ffdad6; --on-error-container: #410002;
+    --inverse-primary: #ffb0cf; --inverse-surface: #362f31; --inverse-on-surface: #fbeef0;
+    --surface-tint: #b01e6f;
+    --info: #1e6fd0;
+  }
+}
+
 /* Inter — self-hosted, cyrillic-ext subset */
 @font-face { font-family: Inter; font-style: normal; font-display: swap; font-weight: 400; src: url(/static/console/inter-cyrillic-ext-400-normal.woff2) format("woff2"), url(/static/console/inter-cyrillic-ext-400-normal.woff) format("woff"); unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
 @font-face { font-family: Inter; font-style: normal; font-display: swap; font-weight: 500; src: url(/static/console/inter-cyrillic-ext-500-normal.woff2) format("woff2"), url(/static/console/inter-cyrillic-ext-500-normal.woff) format("woff"); unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
@@ -36,18 +114,18 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #15121d;
-  color: #f7f6f6;
+  background-color: var(--background);
+  color: var(--on-surface);
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #15121d; }
-::-webkit-scrollbar-thumb { background: #2c2834; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #37333f; }
+::-webkit-scrollbar-track { background: var(--background); }
+::-webkit-scrollbar-thumb { background: var(--surface-container-high); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--surface-container-highest); }
 
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #2c2834; border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--surface-container-high); border-radius: 10px; }
 
 /* Sidebar-aware main content offset — transitions with the sidebar */
 .pl-sidebar {
@@ -74,3 +152,35 @@ code[class*="language-"],
 pre[class*="language-"] {
   background: transparent !important;
 }
+
+/* Light-mode syntax palette (#240). prism-tomorrow ships a dark token palette
+   whose light-gray colors are unreadable on a light editor surface; override
+   the token colors (GitHub-light-ish) when the app is in light mode. */
+.light code[class*="language-"],
+.light pre[class*="language-"] { color: #24292e; }
+.light .token.comment,
+.light .token.prolog,
+.light .token.doctype,
+.light .token.cdata { color: #6a737d; }
+.light .token.punctuation { color: #24292e; }
+.light .token.property,
+.light .token.tag,
+.light .token.boolean,
+.light .token.number,
+.light .token.constant,
+.light .token.symbol,
+.light .token.deleted { color: #005cc5; }
+.light .token.selector,
+.light .token.attr-name,
+.light .token.string,
+.light .token.char,
+.light .token.builtin,
+.light .token.inserted { color: #032f62; }
+.light .token.operator,
+.light .token.entity,
+.light .token.url,
+.light .token.atrule,
+.light .token.attr-value,
+.light .token.keyword { color: #d73a49; }
+.light .token.function,
+.light .token.class-name { color: #6f42c1; }

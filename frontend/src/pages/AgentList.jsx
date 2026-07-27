@@ -76,7 +76,7 @@ export default function AgentList() {
   }, [page, limit])
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100">
+    <div className="min-h-screen bg-surface text-gray-100">
       <Sidebar />
       <TopNav />
 
@@ -91,7 +91,7 @@ export default function AgentList() {
               </p>
             </div>
             <div className="flex gap-3">
-              <button className="px-4 py-2 bg-[#2c2834] text-gray-100 text-xs font-medium rounded-sm border border-[#574149]/10 hover:bg-[#37333f] transition-colors flex items-center gap-2">
+              <button className="px-4 py-2 bg-surface-container-high text-gray-100 text-xs font-medium rounded-sm border border-outline-variant/10 hover:bg-surface-container-highest transition-colors flex items-center gap-2">
                 <span className="material-symbols-outlined text-xs">filter_list</span>
                 Filters
               </button>
@@ -103,10 +103,10 @@ export default function AgentList() {
           </div>
 
           {/* Table */}
-          <div className="bg-[#1d1a25] rounded-sm overflow-hidden">
+          <div className="bg-surface-container-low rounded-sm overflow-hidden">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-[#211e29] text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-400">
+                <tr className="bg-surface-container text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-400">
                   <th className="px-6 py-4">Agent ID</th>
                   <th className="px-6 py-4">Deployment</th>
                   <th className="px-6 py-4">Status</th>
@@ -117,19 +117,19 @@ export default function AgentList() {
                   <th className="px-6 py-4">Last Seen</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#574149]/10">
+              <tbody className="divide-y divide-outline-variant/10">
                 {loading ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center text-gray-400">
-                      <span className="material-symbols-outlined animate-spin text-[#ffb0cf]">refresh</span>
+                      <span className="material-symbols-outlined animate-spin text-primary">refresh</span>
                     </td>
                   </tr>
                 ) : error ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-2">
-                        <span className="material-symbols-outlined text-[#ffb4ab] text-3xl">error</span>
-                        <p className="text-xs text-[#ffb4ab]">{error}</p>
+                        <span className="material-symbols-outlined text-error text-3xl">error</span>
+                        <p className="text-xs text-error">{error}</p>
                       </div>
                     </td>
                   </tr>
@@ -142,11 +142,11 @@ export default function AgentList() {
                 ) : agents.map(agent => {
                   const compositeId = `${agent.deployment_id}__${agent.agent_id}`
                   return (
-                    <tr key={compositeId} className="group hover:bg-[#2c2834] transition-colors">
+                    <tr key={compositeId} className="group hover:bg-surface-container-high transition-colors">
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-2">
                           <AgentTypeLogo agentType={agent.agent_type} />
-                          <Link to={`/agents/${compositeId}`} className="text-xs font-medium text-gray-100 font-mono hover:text-[#ffb0cf] transition-colors">{agent.agent_id}</Link>
+                          <Link to={`/agents/${compositeId}`} className="text-xs font-medium text-gray-100 font-mono hover:text-primary transition-colors">{agent.agent_id}</Link>
                         </div>
                         <div className="text-[10px] text-gray-400 mt-0.5">{agent.deployment_name}</div>
                       </td>
@@ -203,7 +203,7 @@ export default function AgentList() {
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="w-8 h-8 flex items-center justify-center bg-[#1d1a25] hover:bg-[#211e29] transition-colors rounded-sm border border-[#574149]/10 text-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-8 h-8 flex items-center justify-center bg-surface-container-low hover:bg-surface-container transition-colors rounded-sm border border-outline-variant/10 text-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-xs">chevron_left</span>
               </button>
@@ -212,8 +212,8 @@ export default function AgentList() {
                   key={p}
                   onClick={() => setPage(p)}
                   className={`w-8 h-8 flex items-center justify-center rounded-sm border text-[10px] font-semibold transition-colors ${page === p
-                      ? 'bg-[#1d1a25] border-[#574149]/10 text-gray-100'
-                      : 'bg-transparent border-transparent text-gray-400 hover:bg-[#2c2834]'
+                      ? 'bg-surface-container-low border-outline-variant/10 text-gray-100'
+                      : 'bg-transparent border-transparent text-gray-400 hover:bg-surface-container-high'
                     }`}
                 >
                   {p}
@@ -222,7 +222,7 @@ export default function AgentList() {
               <button
                 onClick={() => setPage(p => p + 1)}
                 disabled={page >= Math.ceil(total / limit)}
-                className="w-8 h-8 flex items-center justify-center bg-[#1d1a25] hover:bg-[#2c2834] transition-colors rounded-sm border border-[#574149]/10 text-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-8 h-8 flex items-center justify-center bg-surface-container-low hover:bg-surface-container-high transition-colors rounded-sm border border-outline-variant/10 text-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-xs">chevron_right</span>
               </button>

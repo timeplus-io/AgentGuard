@@ -20,8 +20,8 @@ export function useNotifications() {
 function severityStyles(severity) {
   if (severity === 'critical') return {
     bar: 'bg-[#ffb0cf]',
-    icon: 'text-[#ffb0cf]',
-    badge: 'bg-[#93000a] text-[#ffb4ab]',
+    icon: 'text-primary',
+    badge: 'bg-[#93000a] text-error',
     label: 'CRITICAL',
   }
   return {
@@ -35,7 +35,7 @@ function severityStyles(severity) {
 function Toast({ n, onDismiss }) {
   const s = severityStyles(n.severity)
   return (
-    <div className="flex items-stretch bg-[#1d1a25] border border-[#574149]/20 rounded-sm shadow-2xl w-80 overflow-hidden animate-slide-in">
+    <div className="flex items-stretch bg-surface-container-low border border-outline-variant/20 rounded-sm shadow-2xl w-80 overflow-hidden animate-slide-in">
       {/* severity accent bar */}
       <div className={`w-1 flex-shrink-0 ${s.bar}`} />
       <div className="flex-1 p-4 min-w-0">
@@ -45,7 +45,7 @@ function Toast({ n, onDismiss }) {
               style={{ fontVariationSettings: "'FILL' 1" }}>
               {n.severity === 'critical' ? 'gpp_bad' : 'warning'}
             </span>
-            <span className="text-xs font-semibold text-white truncate">{n.rule_name || 'Security Alert'}</span>
+            <span className="text-xs font-semibold text-gray-100 truncate">{n.rule_name || 'Security Alert'}</span>
           </div>
           <button
             onClick={() => onDismiss(n.id)}
@@ -57,13 +57,13 @@ function Toast({ n, onDismiss }) {
         <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2 mb-2">{n.message}</p>
         <div className="flex items-center justify-between gap-2">
           {n.agent_id && (
-            <code className="text-[10px] font-mono text-[#ffb0cf] bg-[#ffb0cf]/5 px-1.5 py-0.5 rounded-sm truncate max-w-[120px]">
+            <code className="text-[10px] font-mono text-primary bg-[#ffb0cf]/5 px-1.5 py-0.5 rounded-sm truncate max-w-[120px]">
               {n.agent_id}
             </code>
           )}
           <Link
             to="/threats"
-            className="text-[10px] font-semibold text-[#ffb0cf] hover:underline underline-offset-2 ml-auto"
+            className="text-[10px] font-semibold text-primary hover:underline underline-offset-2 ml-auto"
           >
             View threats →
           </Link>

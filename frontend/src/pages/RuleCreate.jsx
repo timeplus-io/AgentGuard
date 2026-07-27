@@ -174,7 +174,7 @@ export default function RuleCreate({ mode = 'create' }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#15121d] text-gray-100">
+      <div className="min-h-screen bg-surface text-gray-100">
         <Sidebar />
         <TopNav />
         <main className="pl-sidebar pt-16 pb-8 min-h-screen">
@@ -190,13 +190,13 @@ export default function RuleCreate({ mode = 'create' }) {
 
   if (loadError) {
     return (
-      <div className="min-h-screen bg-[#15121d] text-gray-100">
+      <div className="min-h-screen bg-surface text-gray-100">
         <Sidebar />
         <TopNav />
         <main className="pl-sidebar pt-16 pb-8 min-h-screen flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
-            <span className="material-symbols-outlined text-[#ffb4ab] text-4xl">error</span>
-            <p className="text-sm text-[#ffb4ab]">{loadError}</p>
+            <span className="material-symbols-outlined text-error text-4xl">error</span>
+            <p className="text-sm text-error">{loadError}</p>
           </div>
         </main>
       </div>
@@ -204,7 +204,7 @@ export default function RuleCreate({ mode = 'create' }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100">
+    <div className="min-h-screen bg-surface text-gray-100">
       <Sidebar />
       <TopNav />
 
@@ -221,7 +221,7 @@ export default function RuleCreate({ mode = 'create' }) {
                   // not-yet-installed definition being edited), so Cancel must not
                   // route there — same reason the save path falls back to /rules.
                   onClick={() => navigate('/rules')}
-                  className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+                  className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-gray-100 transition-colors"
                 >
                   Cancel
                 </button>
@@ -261,7 +261,7 @@ export default function RuleCreate({ mode = 'create' }) {
           )}
 
           {saveError && (
-            <div className="px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/20 rounded-sm text-xs text-[#ffb4ab] font-mono flex items-center gap-2">
+            <div className="px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/20 rounded-sm text-xs text-error font-mono flex items-center gap-2">
               <span className="material-symbols-outlined text-xs shrink-0">error</span>
               {saveError}
             </div>
@@ -272,7 +272,7 @@ export default function RuleCreate({ mode = 'create' }) {
             <aside className="w-full xl:w-[26rem] shrink-0 space-y-6">
               {/* Metadata */}
               <div className="bg-surface-container-high rounded-sm p-6 flex flex-col gap-5">
-                <h3 className="text-[10px] font-bold text-[#ffb0cf] tracking-widest uppercase">Rule Metadata</h3>
+                <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">Rule Metadata</h3>
 
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="rule-id" className={labelCls}>
@@ -337,7 +337,7 @@ export default function RuleCreate({ mode = 'create' }) {
               {/* Parameters */}
               <div className="bg-surface-container-high rounded-sm p-6 flex flex-col gap-4">
                 <div>
-                  <h3 className="text-[10px] font-bold text-[#ffb0cf] tracking-widest uppercase">Parameters</h3>
+                  <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">Parameters</h3>
                   <p className="text-[10px] text-gray-400 mt-1">Typed knobs operators can override. Reference them in the template as <code className="text-gray-300 font-mono">{'{{ .Config.<key> }}'}</code>.</p>
                 </div>
                 <ParamSchemaEditor config={def.config} onChange={(config) => setField('config', config)} />
@@ -346,11 +346,11 @@ export default function RuleCreate({ mode = 'create' }) {
               {/* UDFs */}
               <div className="bg-surface-container-high rounded-sm p-6 flex flex-col gap-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-[10px] font-bold text-[#ffb0cf] tracking-widest uppercase">UDFs</h3>
+                  <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">UDFs</h3>
                   <button
                     type="button"
                     onClick={() => setField('udfs', [...def.udfs, ''])}
-                    className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 hover:text-[#ffb0cf] transition-colors"
+                    className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 hover:text-primary transition-colors"
                   >
                     <span className="material-symbols-outlined text-[14px] align-middle">add</span>
                     Add UDF
@@ -364,7 +364,7 @@ export default function RuleCreate({ mode = 'create' }) {
                       <button
                         type="button"
                         onClick={() => setField('udfs', def.udfs.filter((_, idx) => idx !== i))}
-                        className="text-gray-400 hover:text-[#ffb4ab] transition-colors"
+                        className="text-gray-400 hover:text-error transition-colors"
                         title="Remove UDF"
                       >
                         <span className="material-symbols-outlined text-[16px] align-middle">delete</span>
@@ -399,7 +399,7 @@ export default function RuleCreate({ mode = 'create' }) {
                     {compiling ? 'Compiling…' : 'Compile preview'}
                   </button>
                 </div>
-                <div className="h-72 overflow-auto custom-scrollbar bg-[#0f0c17]">
+                <div className="h-72 overflow-auto custom-scrollbar bg-surface-container-lowest">
                   <Editor
                     value={def.sql_template}
                     onValueChange={(v) => setField('sql_template', v)}
@@ -411,7 +411,7 @@ export default function RuleCreate({ mode = 'create' }) {
                       lineHeight: 1.6,
                       minHeight: '100%',
                       background: 'transparent',
-                      color: '#d4d4d8',
+                      color: 'var(--on-surface)',
                     }}
                     textareaClassName="focus:outline-none"
                   />
@@ -421,10 +421,10 @@ export default function RuleCreate({ mode = 'create' }) {
               {/* Inline field/definition errors from compile or save */}
               {fieldErrors.length > 0 && (
                 <div className="bg-[#93000a]/20 border border-[#ffb4ab]/20 rounded-sm p-4 space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#ffb4ab]">Validation errors</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-error">Validation errors</p>
                   {fieldErrors.map((f, i) => (
-                    <div key={i} className="text-xs text-[#ffb4ab] font-mono">
-                      {f.parameter ? <code className="text-[#ffb0cf]">{f.parameter}</code> : null}
+                    <div key={i} className="text-xs text-error font-mono">
+                      {f.parameter ? <code className="text-primary">{f.parameter}</code> : null}
                       {f.parameter ? ': ' : ''}
                       {f.message}
                     </div>
@@ -440,7 +440,7 @@ export default function RuleCreate({ mode = 'create' }) {
                 </div>
 
                 {compileError && (
-                  <div className="m-4 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/20 rounded-sm text-xs text-[#ffb4ab] font-mono flex items-start gap-2">
+                  <div className="m-4 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/20 rounded-sm text-xs text-error font-mono flex items-start gap-2">
                     <span className="material-symbols-outlined text-xs mt-0.5 shrink-0">error</span>
                     {compileError}
                   </div>
@@ -456,7 +456,7 @@ export default function RuleCreate({ mode = 'create' }) {
                     <>
                       {/* Safe: renderedSql is backend-rendered SQL; Prism highlight() HTML-encodes text content before emitting spans — safe only as long as highlight() remains the XSS boundary. */}
                       <pre
-                        className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
+                        className="bg-surface-container-lowest text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
                         dangerouslySetInnerHTML={{ __html: highlight(renderedSql, languages.sql, 'sql') }}
                       />
                     </>

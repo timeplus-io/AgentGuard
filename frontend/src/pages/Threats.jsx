@@ -15,7 +15,7 @@ export default function Threats() {
   )
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100">
+    <div className="min-h-screen bg-surface text-gray-100">
       <Sidebar />
       <TopNav />
 
@@ -28,17 +28,17 @@ export default function Threats() {
 
           {/* Pending holds banner — only on Threats tab */}
           {activeTab === 'threats' && pendingHoldsArr.length > 0 && (
-            <section className="bg-[#1d1a25] rounded-sm p-4 mb-6">
-              <h3 className="text-[11px] font-semibold uppercase tracking-widest text-[#ffb4ab] mb-3">
+            <section className="bg-surface-container-low rounded-sm p-4 mb-6">
+              <h3 className="text-[11px] font-semibold uppercase tracking-widest text-error mb-3">
                 ⚠ Pending Holds ({pendingHoldsArr.length})
               </h3>
-              <ul className="divide-y divide-[#574149]/20">
+              <ul className="divide-y divide-outline-variant/20">
                 {pendingHoldsArr.map(h => (
                   <li key={h.hold_id} className="flex items-center justify-between py-2.5">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className={`text-[10px] uppercase font-semibold ${
-                          h.severity === 'critical' ? 'text-[#ffb4ab]' :
+                          h.severity === 'critical' ? 'text-error' :
                           h.severity === 'warning'  ? 'text-amber-400' : 'text-gray-400'
                         }`}>
                           {h.severity}
@@ -62,14 +62,14 @@ export default function Threats() {
           )}
 
           {/* Tab bar */}
-          <div className="flex items-center gap-1 mb-6 border-b border-[#574149]/20 pb-0">
+          <div className="flex items-center gap-1 mb-6 border-b border-outline-variant/20 pb-0">
             {['threats', 'activity'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2 text-xs font-semibold capitalize transition-colors border-b-2 -mb-px ${
                   activeTab === tab
-                    ? 'text-[#ffb0cf] border-[#ffb0cf]'
+                    ? 'text-primary border-[#ffb0cf]'
                     : 'text-gray-400 border-transparent hover:text-gray-100'
                 }`}
               >
