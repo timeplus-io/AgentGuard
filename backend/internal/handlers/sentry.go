@@ -80,31 +80,34 @@ func sentryHoldDecideFn(cfg *config.Config, holdReg *holdregistry.Registry) skil
 }
 
 // sentryRegistry builds the tool surface Sentry's chat loop exposes to the
-// model: knowledge lookup, schema introspection, ad-hoc SQL, DLP semantic
-// search, curated cross-resource read tools, the rule catalog
-// (filesystem-backed — unreachable via SQL), and the batch-1 GatedWrite
-// tools (#222) — approval-gated by the loop (#221), never executed
-// directly.
-// Gated-write tools are gated on ONE operator switch — the chat config
-// row's write_tools_enabled bool (absent = enabled); read tools are always
-// on.
+// model.
+// The AgentGuard interaction surface — the agentguard-guide knowledge skill
+// plus every AgentGuard-specific tool, read and write — sits behind ONE
+// operator switch, the chat config row's agentguard_tools_enabled bool,
+// DISABLED by default. Off, Sentry is a generic Timeplus SQL analyst
+// (knowledge, schema introspection, run_sql). Write tools remain
+// individually approval-gated (#221) even when the surface is enabled.
 func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, holdReg *holdregistry.Registry, cc sentry.ChatCfg) *skills.Registry {
+	var hiddenSkills []string
+	if !cc.AgentGuardToolsEnabled {
+		hiddenSkills = append(hiddenSkills, "agentguard-guide")
+	}
 	sks := []skills.Skill{
-		skills.NewLoadSkill(cfg.Sentry.SkillDir),
-		skills.NewLoadSkillReference(cfg.Sentry.SkillDir),
+		skills.NewLoadSkill(cfg.Sentry.SkillDir, hiddenSkills...),
+		skills.NewLoadSkillReference(cfg.Sentry.SkillDir, hiddenSkills...),
 		skills.NewListStreams(),
 		skills.NewDescribeStream(),
 		skills.NewRunSQL(),
-		skills.NewDLPSearch(),
-		skills.NewGetThreats(),
-		skills.NewGetHolds(),
-		skills.NewGetRuleStatus(),
-		skills.NewGetCostSummary(),
-		skills.NewGetSessionTimeline(),
-		skills.NewRuleCatalog(mgr, lc),
 	}
-	if cc.WritesEnabled() {
+	if cc.AgentGuardToolsEnabled {
 		sks = append(sks,
+			skills.NewDLPSearch(),
+			skills.NewGetThreats(),
+			skills.NewGetHolds(),
+			skills.NewGetRuleStatus(),
+			skills.NewGetCostSummary(),
+			skills.NewGetSessionTimeline(),
+			skills.NewRuleCatalog(mgr, lc),
 			skills.NewAcknowledgeThreat(sentryThreatStatusFn(cfg)),
 			skills.NewClearThreat(sentryThreatStatusFn(cfg)),
 			skills.NewDecideHold(sentryHoldDecideFn(cfg, holdReg)))

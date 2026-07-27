@@ -164,10 +164,11 @@ func DefaultSentryChatRow(sCfg config.SentryConfig) string {
 		"sql_timeout_ms":        30000,
 		"sql_max_rows":          1000,
 		"tool_result_max_bytes": 16384,
-		// Single switch for ALL gated-write tools (#222). Absent == enabled;
-		// seeded explicitly so operators can discover the knob. Reads are
-		// always on and have no toggle.
-		"write_tools_enabled": true,
+		// Opt-in switch for Sentry's AgentGuard interaction surface (the
+		// agentguard-guide skill + all AgentGuard read/write tools).
+		// DISABLED by default — turn on under Settings → Sentry Agent to
+		// let Sentry interact with AgentGuard features.
+		"agentguard_tools_enabled": false,
 	})
 	return string(b)
 }

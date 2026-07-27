@@ -57,19 +57,17 @@ type ChatCfg struct {
 	// ApprovalTimeoutMs bounds how long a GatedWrite proposal waits for a
 	// human Approve/Deny before auto-denying (#221). Default 5 minutes.
 	ApprovalTimeoutMs int `json:"approval_timeout_ms"`
-	// WriteToolsEnabled is the single switch for ALL gated-write tools
-	// (acknowledge_threat/clear_threat/decide_hold, and future write
-	// batches). Pointer so an ABSENT key (legacy rows) means enabled; the
-	// operator sets false to remove every write tool from the model's
-	// surface. Read tools are always enabled and have no toggle.
-	WriteToolsEnabled *bool `json:"write_tools_enabled,omitempty"`
-}
-
-// WritesEnabled reports whether gated-write tools are offered to the model:
-// true unless the operator explicitly set write_tools_enabled=false in the
-// chat config row.
-func (c ChatCfg) WritesEnabled() bool {
-	return c.WriteToolsEnabled == nil || *c.WriteToolsEnabled
+	// AgentGuardToolsEnabled is the single opt-in switch for Sentry's
+	// AgentGuard interaction surface: the agentguard-guide knowledge skill
+	// plus every AgentGuard-specific tool, read (get_threats, get_holds,
+	// get_rule_status, get_cost_summary, get_session_timeline,
+	// get_rule_catalog, dlp_search) and write (acknowledge_threat,
+	// clear_threat, decide_hold — still individually approval-gated).
+	// DISABLED by default (absent key = false): out of the box Sentry is a
+	// generic Timeplus SQL analyst (knowledge skills, schema introspection,
+	// run_sql only); operators turn this on to let Sentry interact with
+	// AgentGuard features.
+	AgentGuardToolsEnabled bool `json:"agentguard_tools_enabled"`
 }
 
 // applyDefaults fills zero values and clamps operator input to sane ceilings

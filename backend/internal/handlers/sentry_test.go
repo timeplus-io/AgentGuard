@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -69,12 +71,18 @@ func TestSentryChat_MissingBodyReturns400(t *testing.T) {
 	}
 }
 
-// wantSentrySkills is the full Phase-1 tool surface sentryRegistry must expose.
+// wantSentrySkills is the full tool surface with agentguard_tools_enabled on.
 var wantSentrySkills = []string{
 	"load_skill", "load_skill_reference", "list_streams", "describe_stream",
 	"run_sql", "dlp_search", "get_threats", "get_holds", "get_rule_status",
 	"get_cost_summary", "get_session_timeline", "get_rule_catalog",
 	"acknowledge_threat", "clear_threat", "decide_hold",
+}
+
+// baseSentrySkills is the default (AgentGuard tools disabled) surface: a
+// generic Timeplus SQL analyst.
+var baseSentrySkills = []string{
+	"load_skill", "load_skill_reference", "list_streams", "describe_stream", "run_sql",
 }
 
 // testRegistry builds sentryRegistry with an empty in-memory catalog manager
@@ -95,31 +103,47 @@ func sentryRegistryWithCC(t *testing.T, cfg *config.Config, cc sentry.ChatCfg) *
 	return sentryRegistry(cfg, mgr, rules.NewLifecycle(mgr), holdregistry.New(), cc)
 }
 
-// TestSentryRegistry_WriteToolsToggle: write_tools_enabled=false removes
-// every gated-write tool from the surface; reads are unaffected; absent
-// (nil) means enabled.
-func TestSentryRegistry_WriteToolsToggle(t *testing.T) {
+// TestSentryRegistry_AgentGuardToolsDefaultOff: a zero ChatCfg (absent key)
+// yields ONLY the generic Timeplus analyst surface — no AgentGuard read or
+// write tools, and load_skill neither lists nor serves agentguard-guide.
+func TestSentryRegistry_AgentGuardToolsDefaultOff(t *testing.T) {
 	t.Setenv("SENTRY_DEMO_WRITE", "")
-	off := false
-	reg := sentryRegistryWithCC(t, &config.Config{}, sentry.ChatCfg{WriteToolsEnabled: &off})
-	for _, name := range []string{"acknowledge_threat", "clear_threat", "decide_hold"} {
-		if _, ok := reg.Get(name); ok {
-			t.Errorf("%s must be absent when write tools are disabled", name)
-		}
+	reg := testRegistry(t, &config.Config{}) // zero ChatCfg => disabled
+
+	defs := reg.Defs(skills.GatedWrite)
+	if len(defs) != len(baseSentrySkills) {
+		t.Fatalf("got %d skills, want %d: %+v", len(defs), len(baseSentrySkills), defs)
 	}
-	for _, name := range []string{"get_threats", "get_holds", "run_sql"} {
+	for _, name := range baseSentrySkills {
 		if _, ok := reg.Get(name); !ok {
-			t.Errorf("read tool %s must remain enabled", name)
+			t.Errorf("base tool %s missing", name)
 		}
 	}
-	// Absent (nil) => enabled — covered by TestSentryRegistry_HasAllSkills
-	// which uses a zero ChatCfg and expects the full 15-tool surface.
+	for _, name := range []string{"get_threats", "dlp_search", "get_rule_catalog", "acknowledge_threat", "decide_hold"} {
+		if _, ok := reg.Get(name); ok {
+			t.Errorf("%s must be absent when AgentGuard tools are disabled", name)
+		}
+	}
+
+	// The agentguard-guide knowledge skill is hidden too.
+	sk, _ := reg.Get("load_skill")
+	if strings.Contains(sk.Description(), "agentguard-guide") {
+		t.Error("load_skill description must not advertise agentguard-guide when disabled")
+	}
+	out, err := sk.Execute(context.Background(), &skills.RunContext{Loaded: map[string]bool{}},
+		json.RawMessage(`{"name":"agentguard-guide"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "unknown skill") || strings.Contains(out, "agentguard-guide") {
+		t.Fatalf("agentguard-guide must be unloadable and unlisted, got %.150q", out)
+	}
 }
 
 func TestSentryRegistry_HasAllSkills(t *testing.T) {
 	t.Setenv("SENTRY_DEMO_WRITE", "") // count assumes the demo tool is off
 	cfg := &config.Config{}
-	reg := testRegistry(t, cfg)
+	reg := sentryRegistryWithCC(t, cfg, sentry.ChatCfg{AgentGuardToolsEnabled: true})
 
 	defs := reg.Defs(skills.GatedWrite) // widest access class: every registered skill must show up
 	if len(defs) != len(wantSentrySkills) {

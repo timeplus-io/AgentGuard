@@ -283,12 +283,18 @@ Write actions run through the approval plumbing (#221). Batch 1 of the
 write tools (#222) ships `acknowledge_threat`, `clear_threat`, and
 `decide_hold` — each calls the same internal logic as its HTTP endpoint
 (injected as a closure, so agent-driven and UI-driven writes can't drift),
-and `decided_by` attribution comes from the conversation's owner. Write
-tools are gated on **one operator switch**: the chat config row's
-`write_tools_enabled` bool (toggle under **Settings → Sentry Agent**).
-Set `false`, every gated-write tool is removed from the model's surface
-entirely; absent means enabled. Read tools are always on and have no
-toggle. Any skill
+and `decided_by` attribution comes from the conversation's owner.
+
+The whole **AgentGuard interaction surface is opt-in**: the chat config
+row's `agentguard_tools_enabled` bool (toggle under **Settings → Sentry
+Agent**), **disabled by default**. Off, Sentry is a generic Timeplus SQL
+analyst — knowledge skills (minus `agentguard-guide`), `list_streams`/
+`describe_stream`, and read-only `run_sql`. On, it additionally gets the
+AgentGuard read tools (`get_threats`, `get_holds`, `get_rule_status`,
+`get_cost_summary`, `get_session_timeline`, `get_rule_catalog`,
+`dlp_search`), the `agentguard-guide` knowledge skill, and the gated write
+tools — each write still individually approval-gated. The system prompt
+adapts to the switch via the `{agentguard_tools}` placeholder. Any skill
 whose `Access()` is `GatedWrite` runs through the human-approval flow
 instead of executing directly:
 

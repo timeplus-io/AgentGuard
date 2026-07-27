@@ -60,20 +60,3 @@ func TestChatCfgIgnoresConfigSystemPrompt(t *testing.T) {
 		t.Fatalf("system prompt must be the built-in constant, got %q", cc.SystemPrompt)
 	}
 }
-
-func TestWritesEnabled(t *testing.T) {
-	var cc ChatCfg
-	if !cc.WritesEnabled() {
-		t.Fatal("absent key must default to enabled")
-	}
-	off := false
-	cc.WriteToolsEnabled = &off
-	if cc.WritesEnabled() {
-		t.Fatal("explicit false must disable write tools")
-	}
-	on := true
-	cc.WriteToolsEnabled = &on
-	if !cc.WritesEnabled() {
-		t.Fatal("explicit true must enable write tools")
-	}
-}
