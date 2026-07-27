@@ -289,6 +289,26 @@ Conversations are owner-scoped (the session user) and managed from the
   extra schema column is needed because "still auto-titled" is detected by
   comparing the title against the truncated first user message.
 
+## Credential encryption at rest (#234)
+
+`api_key` values in `agentguard_sentry_config` are sealed with AES-256-GCM
+before they reach the stream: any SQL reader (Timeplus console,
+`/investigate`, backups) sees `"api_key":"enc:v1:<base64>"`; only the
+AgentGuard runtime decrypts. The master key comes from:
+
+1. `AGENTGUARD_ENCRYPTION_KEY` (env var; any passphrase — stretched via
+   SHA-256), else
+2. an auto-generated `encryption.key` (64 hex chars, mode 0600) next to
+   `config.yaml` — zero-setup deployments get encryption automatically.
+
+Losing the key means stored api keys cannot be decrypted — re-enter them
+under **Settings → Sentry Agent** (the server refuses to start without a
+resolvable key, and a wrong key surfaces as a clear decrypt error, never a
+silently-empty credential). Pre-existing plaintext rows keep working
+(legacy passthrough) and converge to encrypted on their next save.
+DLP's config stream is out of scope — its keys are consumed inside
+Timeplus by the Python UDFs and need a separate design.
+
 ## Self-context (#229)
 
 The system prompt's `{self_context}` placeholder is substituted every turn

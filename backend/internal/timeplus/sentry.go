@@ -119,7 +119,7 @@ func seedSentryConfig(ctx context.Context, conn proton.Conn, sCfg config.SentryC
 	}
 	defer func() { _ = batch.Abort() }()
 	for _, k := range missing {
-		if err := batch.Append(k, rows[k], "system"); err != nil {
+		if err := batch.Append(k, encryptSentryValue(rows[k]), "system"); err != nil {
 			return err
 		}
 	}
