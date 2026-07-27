@@ -288,6 +288,17 @@ Conversations are owner-scoped (the session user) and managed from the
   extra schema column is needed because "still auto-titled" is detected by
   comparing the title against the truncated first user message.
 
+## Self-context (#229)
+
+The system prompt's `{self_context}` placeholder is substituted every turn
+with runtime facts about Sentry itself: model id + provider dialect,
+reasoning settings (thinking/effort, #212), per-turn budgets
+(max_iterations / turn_token_budget), the monitored Timeplus host, and
+today's UTC date — so "what model are you running on?" is answered from
+context instead of refused. Credentials (`api_key`, `base_url`) are never
+included (test-enforced), and the date is date-only so the cached system
+prefix invalidates at most once per day.
+
 ## Gated writes & approvals
 
 Write actions run through the approval plumbing (#221). Batch 1 of the
