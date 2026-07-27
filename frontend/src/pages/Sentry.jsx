@@ -468,7 +468,9 @@ export default function Sentry() {
   }
 
   function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Plain Enter must NOT send: it confirms IME composition (e.g. Chinese
+    // input) and inserts newlines. Send via the button or Ctrl/Cmd+Enter (#238).
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent?.isComposing) {
       e.preventDefault()
       send()
     }
@@ -663,7 +665,7 @@ export default function Sentry() {
                       {streaming ? 'Sending…' : 'Send'}
                     </button>
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-1.5">Enter to send · Shift+Enter for a new line</p>
+                  <p className="text-[10px] text-gray-400 mt-1.5">Ctrl/Cmd+Enter to send · Enter for a new line</p>
                 </div>
               </section>
             </div>
