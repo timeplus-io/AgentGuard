@@ -20,6 +20,7 @@ export default function Settings() {
   const [drafts, setDrafts] = useState({}) // key -> new value
   const [fieldErrors, setFieldErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const [configSavedAt, setConfigSavedAt] = useState(0)
   const [banner, setBanner] = useState(null) // {type, msg}
   const [tpTest, setTpTest] = useState(null)
   const [reprovisioning, setReprovisioning] = useState(false)
@@ -49,9 +50,16 @@ export default function Settings() {
     try {
       const res = await api.updateConfig(drafts)
       setDrafts({})
-      setBanner(res.restart_required
-        ? { type: 'warn', msg: 'Saved. Some changes require an AgentGuard restart to take effect.' }
-        : { type: 'ok', msg: 'Configuration saved.' })
+      if (res.sentry_provision_error) {
+        setBanner({ type: 'warn', msg: `Saved, but Sentry provisioning failed: ${res.sentry_provision_error}` })
+      } else if (res.restart_required) {
+        setBanner({ type: 'warn', msg: 'Saved. Some changes require an AgentGuard restart to take effect.' })
+      } else if (res.sentry_provisioned) {
+        setBanner({ type: 'ok', msg: 'Configuration saved. Sentry streams provisioned.' })
+      } else {
+        setBanner({ type: 'ok', msg: 'Configuration saved.' })
+      }
+      setConfigSavedAt(Date.now()) // tells live-config editors (Sentry/DLP) to refetch
       load()
     } catch (e) {
       if (e.errors) setFieldErrors(e.errors)
@@ -161,6 +169,7 @@ export default function Settings() {
                       onTestTimeplus={testTimeplus}
                       reprovisioning={reprovisioning}
                       onReprovision={reprovisionDLP}
+                      configSavedAt={configSavedAt}
                     />
                   </div>
                 ))}

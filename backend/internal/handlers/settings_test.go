@@ -535,3 +535,53 @@ func TestReprovisionRequiredAlwaysFalse(t *testing.T) {
 		}
 	}
 }
+
+// Enabling Sentry via PUT /api/config must trigger Sentry provisioning
+// (#226): before this, the toggle hot-applied but the agentguard_sentry_*
+// streams were never created, so the Sentry page 404'd (UNKNOWN_STREAM)
+// until a full setup-wizard re-provision. Timeplus is unreachable in unit
+// tests, so the attempt surfaces as sentry_provision_error — proving the
+// attempt happened — while the config save itself still succeeds.
+func TestUpdateConfigSentryEnableTriggersProvision(t *testing.T) {
+	cfg := newConfigForTest(t)
+	// Deterministically unreachable: SyncSentry dials Host:NativePort (the
+	// native protocol), so NativePort must be pinned too — leaving it at the
+	// default 8463 made this test connect to a live timeplusd in CI.
+	cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort = "127.0.0.1", 1, 1
+	w := putConfig(t, cfg, `{"sentry.enabled": true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Sentry.Enabled {
+		t.Error("sentry.enabled not hot-applied")
+	}
+	if prov, ok := resp["sentry_provisioned"].(bool); !ok || prov {
+		t.Errorf("sentry_provisioned = %v, want false (unreachable Timeplus)", resp["sentry_provisioned"])
+	}
+	if s, _ := resp["sentry_provision_error"].(string); s == "" {
+		t.Errorf("expected a provisioning attempt error, got %v", resp)
+	}
+}
+
+// Toggling other keys — or re-saving an already-enabled Sentry — must NOT
+// attempt provisioning.
+func TestUpdateConfigSentryProvisionOnlyOnTransition(t *testing.T) {
+	cfg := newConfigForTest(t)
+	cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort = "127.0.0.1", 1, 1
+	cfg.Sentry.Enabled = true
+	for _, body := range []string{`{"sentry.enabled": true}`, `{"dlp.enabled": true}`} {
+		w := putConfig(t, cfg, body)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+		}
+		var resp map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		if _, present := resp["sentry_provisioned"]; present {
+			t.Errorf("body %s: unexpected provisioning attempt: %v", body, resp)
+		}
+	}
+}

@@ -196,6 +196,7 @@ export default function Sentry() {
 
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [provisioning, setProvisioning] = useState(false)
 
   const [editingId, setEditingId] = useState(null)
   const [editTitle, setEditTitle] = useState('')
@@ -425,6 +426,24 @@ export default function Sentry() {
     ? (status.config_error || status.tables_check_error || 'Sentry streams are not provisioned yet.')
     : null
 
+  // provisionNow recovers a deployment where Sentry was enabled without its
+  // streams being provisioned (#226): POST /api/rules/sync reconciles all
+  // provisioning (incl. InitSentry), then status + rail are refreshed.
+  async function provisionNow() {
+    setProvisioning(true)
+    try {
+      await api.syncRules()
+      const s = await api.sentryStatus()
+      setStatus(s)
+      setStatusError(null)
+      loadConversations()
+    } catch (err) {
+      setStatusError(err?.message || 'Provisioning failed')
+    } finally {
+      setProvisioning(false)
+    }
+  }
+
   // needsChatModelHint: Sentry is enabled but has no usable chat endpoint yet
   // (no base_url configured, or the config row failed to load) — point the
   // operator at the runtime editor rather than leaving a silent empty chat.
@@ -466,9 +485,16 @@ export default function Sentry() {
         ) : (
           <div className="flex-1 flex flex-col min-h-0 px-8 pb-8 gap-3">
             {provisionWarning && (
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-error-container/20 rounded-sm text-error text-xs shrink-0">
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-error-container/20 rounded-sm text-error text-xs shrink-0">
                 <span className="material-symbols-outlined text-base shrink-0">warning</span>
-                {provisionWarning}
+                <span className="flex-1 min-w-0">{provisionWarning}</span>
+                <button
+                  onClick={provisionNow}
+                  disabled={provisioning}
+                  className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-[0.98] transition-transform disabled:opacity-50"
+                >
+                  {provisioning ? 'Provisioning…' : 'Provision now'}
+                </button>
               </div>
             )}
             <div className="flex-1 flex min-h-0 gap-4">

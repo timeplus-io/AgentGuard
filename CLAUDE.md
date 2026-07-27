@@ -149,7 +149,7 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | GET | `/api/onboarding/install-script` | `ServeInstallScript` | Returns agent install script |
 | POST | `/api/proton/query` | `ProtonQueryHandler` | Streaming proxy to Timeplus (NDJSON) |
 | GET | `/api/config` | `GetConfig` | Full effective config with per-key source (default/file/env/flag) + restart/reprovision flags; secrets report `set` not value |
-| PUT | `/api/config` | `UpdateConfig` | Atomic validate + merge-write changed keys to config.yaml; hot-applies non-restart keys to the live config |
+| PUT | `/api/config` | `UpdateConfig` | Atomic validate + merge-write changed keys to config.yaml; hot-applies non-restart keys to the live config. Enabling `sentry.enabled` (false→true) also provisions the Sentry streams via `SyncSentry` — failure is surfaced as `sentry_provision_error`, never fails the save (#226) |
 | POST | `/api/config/test-timeplus` | `TestTimeplusConfig` | Tests a candidate Timeplus host/port using session credentials |
 | POST | `/api/config/test-dlp` | `TestDLPConfig` | Tests DLP `base_url` reachability (GET `/models`), a real embedding call, and a chat completion per `chat_models[]` entry (falls back to the risk model). `embedding_dim<=0` accepts any non-empty vector. Never 5xx on unreachable. |
 | POST | `/api/dlp/query` | `DLPQuery` | Semantic DLP forensic funnel (understand → recall → rerank → summarize); streams NDJSON stage events. 503 if `dlp.enabled=false` or unprovisioned |
