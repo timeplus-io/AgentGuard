@@ -90,6 +90,10 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 		ResultMaxBytes: cc.ToolResultMaxBytes, Loaded: map[string]bool{},
 	}
 	system := strings.ReplaceAll(cc.SystemPrompt, "{schema_card}", skills.SchemaCard(&l.Cfg.Timeplus))
+	// {self_context}: runtime facts about Sentry itself (#229) — model,
+	// provider, reasoning settings, budgets, deployment, date. Date-only so
+	// the cached system prefix (#212) invalidates at most once per UTC day.
+	system = strings.ReplaceAll(system, "{self_context}", SelfContext(cc, l.Cfg, time.Now()))
 	// {agentguard_tools} adapts the ground rules to the operator's
 	// agentguard_tools_enabled switch, so the prompt never advertises tools
 	// the registry isn't offering (and vice versa).
