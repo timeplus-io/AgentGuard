@@ -24,7 +24,7 @@ func selfCtxFixture() (ChatCfg, *config.Config) {
 
 func TestSelfContextContents(t *testing.T) {
 	cc, cfg := selfCtxFixture()
-	out := SelfContext(cc, cfg, time.Date(2026, 7, 27, 23, 59, 0, 0, time.UTC))
+	out := SelfContext(cc, MemoryCfg{Configured: true, Enabled: true, Model: "nomic-embed-text", EmbeddingDim: 768}, cfg, time.Date(2026, 7, 27, 23, 59, 0, 0, time.UTC))
 
 	for _, want := range []string{
 		`"anthropic.claude-opus-4-8"`,
@@ -44,7 +44,7 @@ func TestSelfContextContents(t *testing.T) {
 	// OpenAI dialect variant: no anthropic-only lines.
 	cc2 := ChatCfg{Model: "gpt-x", APIType: "openai", Thinking: "adaptive", Effort: "high"}
 	cc2.applyDefaults()
-	out2 := SelfContext(cc2, cfg, time.Now())
+	out2 := SelfContext(cc2, MemoryCfg{}, cfg, time.Now())
 	if !strings.Contains(out2, "OpenAI-compatible") {
 		t.Errorf("openai dialect missing:\n%s", out2)
 	}
@@ -57,7 +57,7 @@ func TestSelfContextContents(t *testing.T) {
 // be exposable through prompt extraction.
 func TestSelfContextNeverLeaksSecrets(t *testing.T) {
 	cc, cfg := selfCtxFixture()
-	out := SelfContext(cc, cfg, time.Now())
+	out := SelfContext(cc, MemoryCfg{Configured: true, Model: "nomic-embed-text"}, cfg, time.Now())
 	if strings.Contains(out, "sk-SECRET-canary") || strings.Contains(out, "secret-endpoint.example") {
 		t.Fatalf("self-context leaked credentials:\n%s", out)
 	}
@@ -84,5 +84,26 @@ func TestLoopSubstitutesSelfContext(t *testing.T) {
 	}
 	if !strings.Contains(system.Content, `"test-model-id"`) {
 		t.Fatalf("substituted self-context missing model id:\n%.300s", system.Content)
+	}
+}
+
+func TestSelfContextMemoryLine(t *testing.T) {
+	cc, cfg := selfCtxFixture()
+	cases := []struct {
+		mem  MemoryCfg
+		want string
+	}{
+		{MemoryCfg{Configured: true, Enabled: true, Model: "nomic-embed-text", EmbeddingDim: 768}, `enabled and configured (embedding model "nomic-embed-text", 768 dims)`},
+		{MemoryCfg{Configured: true, Model: "nomic-embed-text"}, "disabled and not yet active"},
+		{MemoryCfg{}, "not configured"},
+	}
+	for _, c := range cases {
+		out := SelfContext(cc, c.mem, cfg, time.Now())
+		if !strings.Contains(out, c.want) {
+			t.Errorf("mem=%+v: missing %q in:\n%s", c.mem, c.want, out)
+		}
+		if !strings.Contains(out, "NOT yet active") && c.mem.Enabled {
+			t.Errorf("enabled memory must state it is not yet active")
+		}
 	}
 }
