@@ -17,7 +17,7 @@ func loadArgs(t *testing.T, m map[string]string) json.RawMessage {
 }
 
 func TestSkillNamesEmbedded(t *testing.T) {
-	names := skillNames("")
+	names := skillNames("", nil)
 	want := map[string]bool{"timeplus-sql-guide": false, "agentguard-guide": false}
 	for _, n := range names {
 		if _, ok := want[n]; ok {

@@ -23,27 +23,44 @@ var embeddedSkill embed.FS
 
 const skillRoot = "knowledge"
 
-// skillNames lists the available skills: subdirectories of skillDir when
-// set, else of the embedded knowledge tree.
-func skillNames(skillDir string) []string {
+// skillNames lists the available skills — subdirectories of skillDir when
+// set, else of the embedded knowledge tree — minus any hidden ones (skills
+// the operator's config keeps off the surface, e.g. agentguard-guide when
+// AgentGuard tools are disabled).
+func skillNames(skillDir string, hidden map[string]bool) []string {
 	var names []string
+	add := func(name string) {
+		if !hidden[name] {
+			names = append(names, name)
+		}
+	}
 	if skillDir != "" {
 		entries, _ := os.ReadDir(skillDir)
 		for _, e := range entries {
 			if e.IsDir() {
-				names = append(names, e.Name())
+				add(e.Name())
 			}
 		}
 	} else {
 		entries, _ := fs.ReadDir(embeddedSkill, skillRoot)
 		for _, e := range entries {
 			if e.IsDir() {
-				names = append(names, e.Name())
+				add(e.Name())
 			}
 		}
 	}
 	sort.Strings(names)
 	return names
+}
+
+// hiddenSet converts a hidden-skill name list to the lookup map skillNames/
+// knownSkill use.
+func hiddenSet(hidden []string) map[string]bool {
+	m := make(map[string]bool, len(hidden))
+	for _, h := range hidden {
+		m[h] = true
+	}
+	return m
 }
 
 // readSkillFile reads skill/rel from skillDir when set, else the embedded
@@ -76,9 +93,10 @@ func referenceNames(skillDir, skill string) []string {
 	return names
 }
 
-// knownSkill reports whether name is one of the available skills.
-func knownSkill(skillDir, name string) bool {
-	for _, s := range skillNames(skillDir) {
+// knownSkill reports whether name is one of the available (non-hidden)
+// skills.
+func knownSkill(skillDir string, hidden map[string]bool, name string) bool {
+	for _, s := range skillNames(skillDir, hidden) {
 		if s == name {
 			return true
 		}
@@ -86,13 +104,20 @@ func knownSkill(skillDir, name string) bool {
 	return false
 }
 
-type loadSkill struct{ dir string }
+type loadSkill struct {
+	dir    string
+	hidden map[string]bool
+}
 
-func NewLoadSkill(dir string) Skill { return loadSkill{dir} }
+// NewLoadSkill returns the load_skill tool. hidden names are removed from
+// the surface entirely: not listed, not loadable.
+func NewLoadSkill(dir string, hidden ...string) Skill {
+	return loadSkill{dir: dir, hidden: hiddenSet(hidden)}
+}
 
 func (loadSkill) Name() string { return "load_skill" }
-func (loadSkill) Description() string {
-	return "Load a knowledge skill by name. Available: timeplus-sql-guide (Timeplus SQL syntax, table(), windows, MVs — load before writing non-trivial SQL) and agentguard-guide (AgentGuard's streams and the canonical queries behind every API resource — load before querying AgentGuard data)."
+func (l loadSkill) Description() string {
+	return "Load a knowledge skill by name before relying on its domain (e.g. timeplus-sql-guide before writing non-trivial SQL). Available: " + strings.Join(skillNames(l.dir, l.hidden), ", ") + "."
 }
 func (loadSkill) Params() map[string]any {
 	return map[string]any{
@@ -110,8 +135,8 @@ func (l loadSkill) Execute(_ context.Context, rc *RunContext, args json.RawMessa
 	}
 	_ = json.Unmarshal(args, &a)
 	a.Name = filepath.Base(strings.TrimSpace(a.Name)) // no traversal
-	if a.Name == "" || a.Name == "." || !knownSkill(l.dir, a.Name) {
-		return "unknown skill; available skills: " + strings.Join(skillNames(l.dir), ", "), nil
+	if a.Name == "" || a.Name == "." || !knownSkill(l.dir, l.hidden, a.Name) {
+		return "unknown skill; available skills: " + strings.Join(skillNames(l.dir, l.hidden), ", "), nil
 	}
 	if rc.Loaded["skill:"+a.Name] {
 		return "(already loaded above)", nil
@@ -124,13 +149,20 @@ func (l loadSkill) Execute(_ context.Context, rc *RunContext, args json.RawMessa
 	return string(b), nil
 }
 
-type loadSkillRef struct{ dir string }
+type loadSkillRef struct {
+	dir    string
+	hidden map[string]bool
+}
 
-func NewLoadSkillReference(dir string) Skill { return loadSkillRef{dir} }
+// NewLoadSkillReference returns the load_skill_reference tool, hiding the
+// same skills as its paired NewLoadSkill.
+func NewLoadSkillReference(dir string, hidden ...string) Skill {
+	return loadSkillRef{dir: dir, hidden: hiddenSet(hidden)}
+}
 
 func (loadSkillRef) Name() string { return "load_skill_reference" }
 func (loadSkillRef) Description() string {
-	return "Load one deep-dive reference file from a knowledge skill (e.g. skill=timeplus-sql-guide name=SQL_REFERENCE.md, or skill=agentguard-guide name=COST.md)."
+	return "Load one deep-dive reference file from a knowledge skill (e.g. skill=timeplus-sql-guide name=SQL_REFERENCE.md)."
 }
 func (loadSkillRef) Params() map[string]any {
 	return map[string]any{
@@ -151,8 +183,8 @@ func (l loadSkillRef) Execute(_ context.Context, rc *RunContext, args json.RawMe
 	_ = json.Unmarshal(args, &a)
 	a.Skill = filepath.Base(strings.TrimSpace(a.Skill)) // no traversal
 	a.Name = filepath.Base(strings.TrimSpace(a.Name))
-	if a.Skill == "" || a.Skill == "." || !knownSkill(l.dir, a.Skill) {
-		return "unknown skill; available skills: " + strings.Join(skillNames(l.dir), ", "), nil
+	if a.Skill == "" || a.Skill == "." || !knownSkill(l.dir, l.hidden, a.Skill) {
+		return "unknown skill; available skills: " + strings.Join(skillNames(l.dir, l.hidden), ", "), nil
 	}
 	key := "ref:" + a.Skill + "/" + a.Name
 	if rc.Loaded[key] {

@@ -57,6 +57,17 @@ type ChatCfg struct {
 	// ApprovalTimeoutMs bounds how long a GatedWrite proposal waits for a
 	// human Approve/Deny before auto-denying (#221). Default 5 minutes.
 	ApprovalTimeoutMs int `json:"approval_timeout_ms"`
+	// AgentGuardToolsEnabled is the single opt-in switch for Sentry's
+	// AgentGuard interaction surface: the agentguard-guide knowledge skill
+	// plus every AgentGuard-specific tool, read (get_threats, get_holds,
+	// get_rule_status, get_cost_summary, get_session_timeline,
+	// get_rule_catalog, dlp_search) and write (acknowledge_threat,
+	// clear_threat, decide_hold — still individually approval-gated).
+	// DISABLED by default (absent key = false): out of the box Sentry is a
+	// generic Timeplus SQL analyst (knowledge skills, schema introspection,
+	// run_sql only); operators turn this on to let Sentry interact with
+	// AgentGuard features.
+	AgentGuardToolsEnabled bool `json:"agentguard_tools_enabled"`
 }
 
 // applyDefaults fills zero values and clamps operator input to sane ceilings

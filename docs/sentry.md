@@ -246,6 +246,9 @@ All Phase-1 tools are read-only (`internal/sentry/skills/`, registered in
 | `get_cost_summary` | Per-model token/cost/latency totals over a trailing window |
 | `get_session_timeline` | Ordered CIM event timeline for one session |
 | `get_rule_catalog` | Installable rule definitions (builtin + custom) with installed/upgradeable status; `{id}` for full detail incl. parameter schema. The catalog is filesystem-backed, not a Timeplus stream — SQL can't reach it |
+| `acknowledge_threat` | **GatedWrite** — mark one threat acknowledged (identity from `get_threats`); runs the same status upsert as the Threats page |
+| `clear_threat` | **GatedWrite** — mark one threat cleared; auto-reopens if the rule fires again |
+| `decide_hold` | **GatedWrite** — approve/deny one pending hold; runs the same terminalization path as the Holds UI (holdregistry claim + SSE broadcast), so the waiting agent action unblocks |
 
 Every tool call and result is streamed to the client as `tool_call`/
 `tool_result` NDJSON events and persisted to `agentguard_sentry_messages`
@@ -276,9 +279,24 @@ Conversations are owner-scoped (the session user) and managed from the
 
 ## Gated writes & approvals
 
-The plumbing for write actions (#221) is in place ahead of the write tools
-themselves (#222). Any skill whose `Access()` is `GatedWrite` runs through a
-human-approval flow instead of executing directly:
+Write actions run through the approval plumbing (#221). Batch 1 of the
+write tools (#222) ships `acknowledge_threat`, `clear_threat`, and
+`decide_hold` — each calls the same internal logic as its HTTP endpoint
+(injected as a closure, so agent-driven and UI-driven writes can't drift),
+and `decided_by` attribution comes from the conversation's owner.
+
+The whole **AgentGuard interaction surface is opt-in**: the chat config
+row's `agentguard_tools_enabled` bool (toggle under **Settings → Sentry
+Agent**), **disabled by default**. Off, Sentry is a generic Timeplus SQL
+analyst — knowledge skills (minus `agentguard-guide`), `list_streams`/
+`describe_stream`, and read-only `run_sql`. On, it additionally gets the
+AgentGuard read tools (`get_threats`, `get_holds`, `get_rule_status`,
+`get_cost_summary`, `get_session_timeline`, `get_rule_catalog`,
+`dlp_search`), the `agentguard-guide` knowledge skill, and the gated write
+tools — each write still individually approval-gated. The system prompt
+adapts to the switch via the `{agentguard_tools}` placeholder. Any skill
+whose `Access()` is `GatedWrite` runs through the human-approval flow
+instead of executing directly:
 
 1. The loop registers a proposal in an in-memory registry, then emits an
    `approval_request` NDJSON event carrying `proposal_id`, the tool name,

@@ -19,6 +19,7 @@ const (
 type RunContext struct {
 	Cfg            *config.Config // per-request creds already injected
 	ConversationID string
+	User           string // conversation owner — attribution for gated writes (decided_by)
 	SQLTimeoutMs   int
 	SQLMaxRows     int
 	ResultMaxBytes int

@@ -37,6 +37,9 @@ function buildDraft(byKey) {
       sql_timeout_ms: chat.sql_timeout_ms ?? 30000,
       sql_max_rows: chat.sql_max_rows ?? 1000,
       tool_result_max_bytes: chat.tool_result_max_bytes ?? 16384,
+      // Opt-in switch for the AgentGuard interaction surface (skill +
+      // read/write tools). Absent means DISABLED — generic SQL analyst.
+      agentguard_tools_enabled: chat.agentguard_tools_enabled ?? false,
     },
     memory: {
       enabled: memory.enabled ?? false,
@@ -98,6 +101,7 @@ export default function SentryConfigEditor() {
         sql_timeout_ms: Number(c.sql_timeout_ms) || 0,
         sql_max_rows: Number(c.sql_max_rows) || 0,
         tool_result_max_bytes: Number(c.tool_result_max_bytes) || 0,
+        agentguard_tools_enabled: !!c.agentguard_tools_enabled,
       }
     }
     const m = draft.memory
@@ -214,6 +218,18 @@ export default function SentryConfigEditor() {
               />
             </label>
           ))}
+        </div>
+
+        <div className="mt-4">
+          <label className="flex items-start gap-3 text-xs text-gray-100 max-w-2xl">
+            <span className="pt-0.5">
+              <Toggle checked={draft.chat.agentguard_tools_enabled} onChange={(v) => setChat({ agentguard_tools_enabled: v })} />
+            </span>
+            <span>
+              <span className="font-medium">AgentGuard skills &amp; tools</span>
+              <span className="text-gray-500"> — let Sentry read and act on AgentGuard features (threats, holds, rules, cost, DLP; write actions still require in-chat approval). Off: Sentry is a generic Timeplus SQL analyst.</span>
+            </span>
+          </label>
         </div>
 
         <div className="mt-4 flex items-center gap-3">
