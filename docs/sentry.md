@@ -253,6 +253,13 @@ All Phase-1 tools are read-only (`internal/sentry/skills/`, registered in
 | `acknowledge_threat` | **GatedWrite** — mark one threat acknowledged (identity from `get_threats`); runs the same status upsert as the Threats page |
 | `clear_threat` | **GatedWrite** — mark one threat cleared; auto-reopens if the rule fires again |
 | `decide_hold` | **GatedWrite** — approve/deny one pending hold; runs the same terminalization path as the Holds UI (holdregistry claim + SSE broadcast), so the waiting agent action unblocks |
+| `install_rule` | **GatedWrite** — install a catalog rule (optional typed overrides); deploys its detection MV through the lifecycle service (compiler + preflight + drop/create) |
+| `configure_rule` | **GatedWrite** — replace an installed rule's full parameter override map and redeploy |
+| `set_rule_enabled` | **GatedWrite** — enable/disable a rule, idempotent explicit-state semantics (never blind-flips on stale state); disabling abandons pending holds |
+| `set_rule_policy` | **GatedWrite** — log_only / auto_block / hold; log_only abandons pending holds |
+| `upgrade_rule` | **GatedWrite** — upgrade to the current catalog definition, preserving compatible overrides |
+| `uninstall_rule` | **GatedWrite** — soft-delete + drop MV + abandon pending holds |
+| `sync_rules` | **GatedWrite** — reconcile MVs with installed snapshots (recovery after MV failures) |
 
 Every tool call and result is streamed to the client as `tool_call`/
 `tool_result` NDJSON events and persisted to `agentguard_sentry_messages`

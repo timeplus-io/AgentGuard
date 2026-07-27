@@ -79,6 +79,95 @@ func sentryHoldDecideFn(cfg *config.Config, holdReg *holdregistry.Registry) skil
 	}
 }
 
+// sentryRuleLifecycleFuncs adapts the rule-lifecycle service — the SAME
+// calls the HTTP endpoints run (parameter compiler, candidate preflight,
+// per-rule-serialized drop/create MV) including the hold-abandonment side
+// effects — into the skills.RuleLifecycleFuncs shape. Results are the
+// updated instance as JSON, matching what the Rules UI receives.
+func sentryRuleLifecycleFuncs(cfg *config.Config, lc *rules.Lifecycle, holdReg *holdregistry.Registry) skills.RuleLifecycleFuncs {
+	instJSON := func(inst rules.RuleInstance) (string, error) {
+		b, err := json.Marshal(inst)
+		if err != nil {
+			return "", err
+		}
+		return string(b), nil
+	}
+	return skills.RuleLifecycleFuncs{
+		Install: func(ruleID string, overrides map[string]any, user, reason string) (string, error) {
+			inst, err := lc.For(&cfg.Timeplus).Install(ruleID, overrides, user, reason)
+			if err != nil {
+				return "", err
+			}
+			return instJSON(inst)
+		},
+		Configure: func(ruleID string, overrides map[string]any, user, reason string) (string, error) {
+			inst, err := lc.For(&cfg.Timeplus).Configure(ruleID, overrides, user, reason)
+			if err != nil {
+				return "", err
+			}
+			return instJSON(inst)
+		},
+		SetEnabled: func(ruleID string, enabled bool, user string) (string, error) {
+			// Idempotent explicit-state semantics on top of the service's
+			// flip-only Toggle: a model acting on stale state must never
+			// accidentally flip the wrong way.
+			svc := lc.For(&cfg.Timeplus)
+			insts, err := svc.List()
+			if err != nil {
+				return "", err
+			}
+			for _, inst := range insts {
+				if inst.RuleID == ruleID && inst.Enabled == enabled {
+					return fmt.Sprintf(`{"rule_id":%q,"enabled":%t,"note":"already in the desired state; no change"}`, ruleID, enabled), nil
+				}
+			}
+			inst, err := svc.Toggle(ruleID, user, "toggle via sentry")
+			if err != nil {
+				return "", err
+			}
+			if !inst.Enabled {
+				AbandonHoldsForRule(cfg, holdReg, GlobalAlertBroadcaster, ruleID, "rule disabled")
+			}
+			return instJSON(inst)
+		},
+		SetPolicy: func(ruleID, policy, user, reason string) (string, error) {
+			inst, err := lc.For(&cfg.Timeplus).SetPolicy(ruleID, policy, user, reason)
+			if err != nil {
+				return "", err
+			}
+			if inst.BlockPolicy == "log_only" {
+				AbandonHoldsForRule(cfg, holdReg, GlobalAlertBroadcaster, ruleID, "rule policy changed to log_only")
+			}
+			return instJSON(inst)
+		},
+		Upgrade: func(ruleID, user string) (string, error) {
+			inst, err := lc.For(&cfg.Timeplus).Upgrade(ruleID, user, "upgrade via sentry")
+			if err != nil {
+				return "", err
+			}
+			return instJSON(inst)
+		},
+		Uninstall: func(ruleID, user string) (string, error) {
+			if _, err := lc.For(&cfg.Timeplus).Uninstall(ruleID, user, "uninstall via sentry"); err != nil {
+				return "", err
+			}
+			AbandonHoldsForRule(cfg, holdReg, GlobalAlertBroadcaster, ruleID, "rule uninstalled")
+			return fmt.Sprintf(`{"rule_id":%q,"deleted":true}`, ruleID), nil
+		},
+		Sync: func(user string) (string, error) {
+			results, err := lc.For(&cfg.Timeplus).Sync()
+			if err != nil {
+				return "", err
+			}
+			b, err := json.Marshal(map[string]any{"results": results})
+			if err != nil {
+				return "", err
+			}
+			return string(b), nil
+		},
+	}
+}
+
 // sentryRegistry builds the tool surface Sentry's chat loop exposes to the
 // model.
 // The AgentGuard interaction surface — the agentguard-guide knowledge skill
@@ -111,6 +200,7 @@ func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycl
 			skills.NewAcknowledgeThreat(sentryThreatStatusFn(cfg)),
 			skills.NewClearThreat(sentryThreatStatusFn(cfg)),
 			skills.NewDecideHold(sentryHoldDecideFn(cfg, holdReg)))
+		sks = append(sks, skills.NewRuleLifecycleSkills(sentryRuleLifecycleFuncs(cfg, lc, holdReg))...)
 	}
 	// Verification-only: a no-side-effect GatedWrite tool for exercising the
 	// #221 approval flow end-to-end.
