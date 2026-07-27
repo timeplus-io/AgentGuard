@@ -97,7 +97,11 @@ func anthropicMessagesFromMsgs(msgs []Msg) (system string, amsgs []anthropic.Mes
 			// retain its reasoning blocks when the conversation continues
 			// within the same tool loop.
 			for _, tb := range m.Thinking {
-				blocks = append(blocks, anthropic.NewThinkingBlock(tb.Signature, tb.Text))
+				if tb.Redacted {
+					blocks = append(blocks, anthropic.NewRedactedThinkingBlock(tb.Text))
+				} else {
+					blocks = append(blocks, anthropic.NewThinkingBlock(tb.Signature, tb.Text))
+				}
 			}
 			if m.Content != "" {
 				blocks = append(blocks, anthropic.NewTextBlock(m.Content))
@@ -201,6 +205,12 @@ func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tool
 		switch b := block.AsAny().(type) {
 		case anthropic.ThinkingBlock:
 			res.Thinking = append(res.Thinking, ThinkingBlock{Text: b.Thinking, Signature: b.Signature})
+		case anthropic.RedactedThinkingBlock:
+			// The safety system redacted this reasoning; capture the opaque
+			// Data so it is echoed back on the same-turn continuation after a
+			// tool result (the API requires thinking blocks to be replayed),
+			// otherwise the follow-up call can 400 (#237).
+			res.Thinking = append(res.Thinking, ThinkingBlock{Text: b.Data, Redacted: true})
 		case anthropic.TextBlock:
 			res.Content += b.Text
 		case anthropic.ToolUseBlock:

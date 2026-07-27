@@ -19,6 +19,9 @@ type dlpConfigRowView struct {
 	APIKeySet bool            `json:"api_key_set"`
 	UpdatedAt string          `json:"updated_at"`
 	UpdatedBy string          `json:"updated_by"`
+	// DecryptError is set (Sentry only) when a row's api_key could not be
+	// decrypted — the operator should re-enter it. Omitted for healthy rows.
+	DecryptError string `json:"decrypt_error,omitempty"`
 }
 
 // blankAPIKey blanks a non-empty "api_key" on m, returning whether one existed.

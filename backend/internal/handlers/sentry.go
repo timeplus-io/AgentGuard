@@ -315,6 +315,12 @@ func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, a
 			c.JSON(http.StatusBadRequest, gin.H{"error": "message is required"})
 			return
 		}
+		// Trim once: the same trimmed text is used to title a new conversation
+		// AND is persisted as the stored user message, so the auto-title check
+		// (title == truncateTitle(storedMsg)) stays true. Titling from the raw
+		// (untrimmed) message while storing the trimmed one permanently defeats
+		// LLM auto-naming for any message with surrounding whitespace (#237).
+		message := strings.TrimSpace(body.Message)
 		user := sessionUser(c)
 		store := &sentry.Store{TP: &rcfg.Timeplus}
 
@@ -325,7 +331,7 @@ func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, a
 			return
 		}
 		llm := sentry.NewLLM(cc)
-		conv, err := resolveConversation(store, user, body.ConversationID, body.Message)
+		conv, err := resolveConversation(store, user, body.ConversationID, message)
 		if err != nil {
 			switch {
 			case errors.Is(err, errConversationForbidden):
@@ -359,7 +365,7 @@ func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, a
 
 		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc, holdReg, cc), Store: store, Cfg: rcfg, Approvals: approvals,
 			Memory: sentry.LoadMemoryCfg(&rcfg.Timeplus)}
-		if err := loop.Run(c.Request.Context(), cc, conv, strings.TrimSpace(body.Message), emit); err != nil {
+		if err := loop.Run(c.Request.Context(), cc, conv, message, emit); err != nil {
 			log.Printf("sentry: chat: %v", err)
 			// The loop emits its own "error" event for in-stream failures
 			// (e.g. a mid-turn LLM call). The pre-stream Messages/NextSeq

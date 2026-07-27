@@ -234,9 +234,11 @@ func TestEscapeSQL(t *testing.T) {
 		{"single quote", "O'Reilly", "O''Reilly"},
 		{"multiple quotes", "'a'b'c'", "''a''b''c''"},
 		{"empty", "", ""},
-		// escapeSQL deliberately does NOT escape backslashes — only single quotes.
-		// Use escapeSQLStr (in rules.go) when backslash escaping is needed.
-		{"backslash unchanged", `path\to\file`, `path\to\file`},
+		// escapeSQL is now backslash-safe (delegates to the canonical escaper):
+		// backslashes are doubled so a trailing "\" can't swallow the closing
+		// quote and desync the statement (#237).
+		{"backslash doubled", `path\to\file`, `path\\to\\file`},
+		{"trailing backslash + quote", `a\`, `a\\`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
