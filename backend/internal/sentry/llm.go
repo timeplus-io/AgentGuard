@@ -152,26 +152,19 @@ func NewLLM(cc ChatCfg) LLM {
 	return openaiLLM{}
 }
 
-// chatCfgResolveSQL reads the self-contained `chat` row directly — the row is
-// a concrete endpoint (base_url/api_key/model/budgets), so no
-// dlp_config_resolve fold/catalog resolution is needed (unlike DLP).
-func chatCfgResolveSQL() string {
-	return fmt.Sprintf(
-		"SELECT coalesce((SELECT value FROM table(agentguard_sentry_config) WHERE key='%s'), '') AS cfg",
-		tp.SentryCfgKeyChat)
-}
-
-// LoadChatCfg reads the `chat` row of agentguard_sentry_config live.
+// LoadChatCfg reads the `chat` row of agentguard_sentry_config live. It
+// MUST go through tp.ReadSentryConfigValue — the store's read path is what
+// decrypts the enc:v1 api_key envelope (#234); a raw SQL read here would
+// hand the ciphertext to the LLM client as a bearer token (the exact bug
+// that shipped 401s to Bedrock when this used its own coalesce query).
 func LoadChatCfg(tpCfg *config.TimeplusConfig) (ChatCfg, error) {
-	rows, err := tp.Query(tpCfg, chatCfgResolveSQL())
+	v, err := tp.ReadSentryConfigValue(tpCfg, tp.SentryCfgKeyChat)
 	if err != nil {
 		return ChatCfg{}, fmt.Errorf("sentry: load chat config: %w", err)
 	}
 	var cc ChatCfg
-	if len(rows) == 1 {
-		if s, ok := rows[0]["cfg"].(string); ok {
-			_ = json.Unmarshal([]byte(s), &cc)
-		}
+	if v != "" {
+		_ = json.Unmarshal([]byte(v), &cc)
 	}
 	cc.applyDefaults()
 	if cc.BaseURL == "" {

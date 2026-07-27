@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"os"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -41,13 +42,20 @@ func TestChatCfgClamps(t *testing.T) {
 	}
 }
 
-func TestLoadChatCfgSQLTargetsSentryStream(t *testing.T) {
-	sql := chatCfgResolveSQL()
-	if !strings.Contains(sql, "agentguard_sentry_config") || !strings.Contains(sql, "key='chat'") {
-		t.Fatalf("expected chat row read, got: %s", sql)
+// TestLoadChatCfgUsesDecryptingReadPath guards the #234 regression: the
+// chat config MUST be loaded through the store's decrypting read path, not
+// a raw SQL query — a raw read hands the enc:v1 api_key ciphertext to the
+// LLM client as a bearer token (Bedrock 401 "Invalid bearer token").
+func TestLoadChatCfgUsesDecryptingReadPath(t *testing.T) {
+	src, err := os.ReadFile("llm.go")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(sql, "dlp_config_resolve") || strings.Contains(sql, "agentguard_dlp_config") {
-		t.Fatalf("must not use the DLP resolver/stream: %s", sql)
+	if !strings.Contains(string(src), "tp.ReadSentryConfigValue(tpCfg, tp.SentryCfgKeyChat)") {
+		t.Fatal("LoadChatCfg must read via tp.ReadSentryConfigValue (the decrypting path)")
+	}
+	if strings.Contains(string(src), "coalesce((SELECT value FROM table(agentguard_sentry_config)") {
+		t.Fatal("LoadChatCfg must not run its own raw query against agentguard_sentry_config")
 	}
 }
 
