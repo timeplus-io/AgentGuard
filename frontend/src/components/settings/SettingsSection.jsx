@@ -115,6 +115,7 @@ export default function SettingsSection({
   onTestTimeplus,
   reprovisioning,
   onReprovision,
+  configSavedAt,
 }) {
   const keys = section.id === 'dlp'
     ? section.keys.filter((k) => DLP_SERVER_KEYS.has(k.key))
@@ -150,7 +151,7 @@ export default function SettingsSection({
             <p className="text-xs text-gray-400 mb-2">
               Live state in the agentguard_sentry_config stream — changes apply immediately, with no restart or re-provision, independent of the Save bar. Renders regardless of Semantic DLP status.
             </p>
-            <SentryConfigEditor />
+            <SentryConfigEditor reloadToken={configSavedAt} />
           </div>
         </div>
       </section>

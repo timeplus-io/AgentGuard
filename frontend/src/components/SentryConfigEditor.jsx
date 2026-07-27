@@ -51,7 +51,7 @@ function buildDraft(byKey) {
   }
 }
 
-export default function SentryConfigEditor() {
+export default function SentryConfigEditor({ reloadToken = 0 }) {
   const [byKey, setByKey] = useState(null)
   const [draft, setDraft] = useState(null)
   const [dirty, setDirty] = useState(() => new Set())
@@ -73,7 +73,10 @@ export default function SentryConfigEditor() {
       .catch((e) => setLoadErr(e?.message || 'Failed to load Sentry config'))
   }, [])
 
-  useEffect(() => { load() }, [load])
+  // reloadToken changes when the Settings save bar writes config-file keys
+  // (e.g. enabling Sentry, which provisions the streams, #226) — refetch so
+  // a pre-provision 503 error doesn't stick around after provisioning.
+  useEffect(() => { load() }, [load, reloadToken])
 
   const mark = (key) => setDirty((prev) => new Set(prev).add(key))
 
@@ -156,9 +159,17 @@ export default function SentryConfigEditor() {
 
   if (loadErr) {
     return (
-      <p className="text-xs text-error">
-        {loadErr} — runtime config is available only after Sentry is provisioned.
-      </p>
+      <div className="flex items-center gap-3">
+        <p className="text-xs text-error flex-1 min-w-0">
+          {loadErr} — runtime config is available only after Sentry is provisioned.
+        </p>
+        <button
+          onClick={load}
+          className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-sm bg-surface-container-high text-gray-100 hover:text-primary"
+        >
+          Retry
+        </button>
+      </div>
     )
   }
   if (!draft) return <p className="text-xs text-gray-400">Loading runtime config…</p>
