@@ -64,17 +64,19 @@
     --gray-900: #f7f6f6; --gray-800: #ececed; --gray-700: #dad9db; --gray-600: #b5b4b8;
     --gray-500: #7d7b82; --gray-400: #514e58; --gray-300: #3a3741; --gray-200: #231f2b; --gray-100: #120f1a;
 
+    /* Neutral white/gray surfaces (aligned with the gray ramp above); pink is
+       reserved for accents/buttons, not page/panel backgrounds (#240). */
     --primary: #b01e6f; --on-primary: #ffffff; --primary-container: #f256a3; --on-primary-container: #3d0023;
-    --secondary: #6b5c62; --on-secondary: #ffffff; --secondary-container: #efdde5; --on-secondary-container: #241a1f;
+    --secondary: #5b5b62; --on-secondary: #ffffff; --secondary-container: #e6e6ea; --on-secondary-container: #1c1b1f;
     --tertiary: #b93d54; --on-tertiary: #ffffff; --tertiary-container: #ffdadb; --on-tertiary-container: #40000f;
-    --surface: #fff8f8; --surface-dim: #e8d6da; --surface-bright: #ffffff;
-    --surface-container-lowest: #ffffff; --surface-container-low: #fff0f3; --surface-container: #fbeaee;
-    --surface-container-high: #f6e3e9; --surface-container-highest: #f0dde3;
-    --surface-variant: #f2dde2; --on-surface: #201a1c; --on-surface-variant: #514347;
-    --background: #fff8f8; --on-background: #201a1c;
-    --outline: #837377; --outline-variant: #d6c2c7;
+    --surface: #ffffff; --surface-dim: #e3e3e6; --surface-bright: #ffffff;
+    --surface-container-lowest: #ffffff; --surface-container-low: #f7f7f8; --surface-container: #f1f1f3;
+    --surface-container-high: #ececee; --surface-container-highest: #e6e6e9;
+    --surface-variant: #e4e4e7; --on-surface: #1a1a1e; --on-surface-variant: #46464c;
+    --background: #fafafa; --on-background: #1a1a1e;
+    --outline: #78787f; --outline-variant: #d4d4d8;
     --error: #ba1a1a; --on-error: #ffffff; --error-container: #ffdad6; --on-error-container: #410002;
-    --inverse-primary: #ffb0cf; --inverse-surface: #362f31; --inverse-on-surface: #fbeef0;
+    --inverse-primary: #ffb0cf; --inverse-surface: #2f2f33; --inverse-on-surface: #f2f2f5;
     --surface-tint: #b01e6f;
     --info: #1e6fd0;
   }
