@@ -17,6 +17,7 @@ import (
 	"github.com/timeplus/agentguard/internal/rules"
 	"github.com/timeplus/agentguard/internal/sentry"
 	"github.com/timeplus/agentguard/internal/sentry/skills"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
 func TestSentryChat_DisabledReturns503(t *testing.T) {
@@ -79,12 +80,14 @@ var wantSentrySkills = []string{
 	"acknowledge_threat", "clear_threat", "decide_hold",
 	"install_rule", "configure_rule", "set_rule_enabled", "set_rule_policy",
 	"upgrade_rule", "uninstall_rule", "sync_rules",
+	"get_sentry_config",
 }
 
 // baseSentrySkills is the default (AgentGuard tools disabled) surface: a
 // generic Timeplus SQL analyst.
 var baseSentrySkills = []string{
 	"load_skill", "load_skill_reference", "list_streams", "describe_stream", "run_sql",
+	"get_sentry_config",
 }
 
 // testRegistry builds sentryRegistry with an empty in-memory catalog manager
@@ -208,6 +211,33 @@ func TestSentryRegistry_DefsReadOnlyExcludesWriteSkills(t *testing.T) {
 		}
 		if sk.Access() != skills.ReadOnly {
 			t.Errorf("skill %q leaked into ReadOnly Defs() with access class %v", d.Name, sk.Access())
+		}
+	}
+}
+
+// TestSentryConfigToolView: the get_sentry_config rendering must redact api
+// keys (flag only, never the value) and carry the memory phase note.
+func TestSentryConfigToolView(t *testing.T) {
+	rows := []tp.SentryConfigRow{
+		{Key: "chat", Value: `{"api_type":"anthropic","model":"claude-x","api_key":"sk-CHAT-canary","base_url":"https://b"}`},
+		{Key: "memory", Value: `{"enabled":true,"model":"nomic-embed-text","embedding_dim":768,"api_key":"sk-MEM-canary"}`},
+	}
+	out, err := sentryConfigToolView(rows, sentry.ChatCfg{AgentGuardToolsEnabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"sk-CHAT-canary", "sk-MEM-canary"} {
+		if strings.Contains(out, secret) {
+			t.Fatalf("api key leaked into tool view: %s", out)
+		}
+	}
+	for _, want := range []string{
+		`"model":"claude-x"`, `"nomic-embed-text"`, `"embedding_dim":768`,
+		`"chat":true`, `"memory":true`, // api_key_set flags
+		"configuration-only", `"agentguard_tools_enabled":true`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("tool view missing %q:\n%s", want, out)
 		}
 	}
 }

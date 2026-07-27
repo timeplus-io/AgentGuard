@@ -23,7 +23,7 @@ import (
 // prefix on the anthropic path, so it must stay stable within a day —
 // static config facts only, plus a DATE-ONLY stamp (one cache
 // invalidation per UTC day, never a per-turn timestamp).
-func SelfContext(cc ChatCfg, cfg *config.Config, now time.Time) string {
+func SelfContext(cc ChatCfg, mem MemoryCfg, cfg *config.Config, now time.Time) string {
 	var b strings.Builder
 
 	dialect := "an OpenAI-compatible Chat Completions endpoint"
@@ -48,7 +48,15 @@ func SelfContext(cc ChatCfg, cfg *config.Config, now time.Time) string {
 		fmt.Fprintf(&b, "- You monitor the Timeplus Enterprise deployment at %q.\n", cfg.Timeplus.Host)
 	}
 
+	switch {
+	case mem.Configured && mem.Enabled:
+		fmt.Fprintf(&b, "- Persistent memory (semantic recall) is enabled and configured (embedding model %q, %d dims) but NOT yet active — the memory feature ships in a later phase; today you have no cross-conversation memory.\n", mem.Model, mem.EmbeddingDim)
+	case mem.Configured:
+		fmt.Fprintf(&b, "- Persistent memory is configured (embedding model %q) but disabled and not yet active; you have no cross-conversation memory.\n", mem.Model)
+	default:
+		b.WriteString("- Persistent memory is not configured; you have no cross-conversation memory.\n")
+	}
 	fmt.Fprintf(&b, "- Today's date (UTC): %s.\n", now.UTC().Format("2006-01-02"))
-	b.WriteString("- When the operator asks about your own model or configuration, answer from this section; you have no tool that reads your own runtime config, and its credentials are deliberately not available to you.")
+	b.WriteString("- When the operator asks about your own model or configuration, answer from this section, or call get_sentry_config for the full redacted runtime config; its credentials (api keys) are deliberately not available to you.")
 	return b.String()
 }

@@ -243,6 +243,7 @@ All Phase-1 tools are read-only (`internal/sentry/skills/`, registered in
 | `list_streams` | List `agentguard_*`/`mv_*` streams and materialized views |
 | `describe_stream` | Columns + types for one stream |
 | `run_sql` | Ad-hoc read-only SQL (`table(...)` for historical reads); LIMIT enforced; credential-bearing config streams (`agentguard_dlp_config`, `agentguard_sentry_config`) are not readable |
+| `get_sentry_config` | Sentry's OWN runtime config, redacted exactly like the HTTP API (`api_key` → set-flag only): chat + memory rows, posture, and the memory "configuration-only until Phase 2" note. Always on — the sanctioned path around the run_sql credential denylist |
 | `dlp_search` | Semantic DLP recall+rerank over `agentguard_dlp_enriched` |
 | `get_threats` | Current AgentGuard threats (same rows as the Threats page) |
 | `get_holds` | Human-in-the-loop hold records (same rows as the Holds list) |

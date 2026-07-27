@@ -51,6 +51,7 @@ type Loop struct {
 	Store     *Store
 	Cfg       *config.Config // request-scoped (user creds)
 	Approvals *ApprovalRegistry
+	Memory    MemoryCfg // summary of the memory config row, for {self_context}
 }
 
 // toolCallMeta is the JSON shape persisted in a role="tool" SentryMessage's
@@ -93,7 +94,7 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 	// {self_context}: runtime facts about Sentry itself (#229) — model,
 	// provider, reasoning settings, budgets, deployment, date. Date-only so
 	// the cached system prefix (#212) invalidates at most once per UTC day.
-	system = strings.ReplaceAll(system, "{self_context}", SelfContext(cc, l.Cfg, time.Now()))
+	system = strings.ReplaceAll(system, "{self_context}", SelfContext(cc, l.Memory, l.Cfg, time.Now()))
 	// {agentguard_tools} adapts the ground rules to the operator's
 	// agentguard_tools_enabled switch, so the prompt never advertises tools
 	// the registry isn't offering (and vice versa).

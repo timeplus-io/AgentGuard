@@ -168,6 +168,48 @@ func sentryRuleLifecycleFuncs(cfg *config.Config, lc *rules.Lifecycle, holdReg *
 	}
 }
 
+// sentryConfigToolView renders the get_sentry_config tool result from raw
+// config rows: the chat/memory values redacted with the SAME redactAPIKey
+// the HTTP API uses (api_key -> api_key_set flag), plus status/posture and
+// the honest phase note that memory is configuration-only until #211.
+// Pure — unit-tested with canary keys.
+func sentryConfigToolView(rows []tp.SentryConfigRow, cc sentry.ChatCfg) (string, error) {
+	cfgOut := map[string]any{}
+	keySet := map[string]bool{}
+	for _, r := range rows {
+		redacted, had := redactAPIKey(r.Value)
+		cfgOut[r.Key] = redacted
+		keySet[r.Key] = had
+	}
+	out := map[string]any{
+		"config":      cfgOut,
+		"api_key_set": keySet,
+		"status": map[string]any{
+			"agentguard_tools_enabled": cc.AgentGuardToolsEnabled,
+			"write_actions":            "require in-chat human approval",
+			"memory_active":            false,
+			"note":                     "memory is configuration-only until the memory feature (Phase 2) ships; the embedding endpoint is validated but not yet consumed",
+		},
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// sentrySelfConfigFn injects get_sentry_config's read: live rows from the
+// config stream, rendered through sentryConfigToolView.
+func sentrySelfConfigFn(cfg *config.Config, cc sentry.ChatCfg) func() (string, error) {
+	return func() (string, error) {
+		rows, err := tp.ReadSentryConfig(&cfg.Timeplus)
+		if err != nil {
+			return "", err
+		}
+		return sentryConfigToolView(rows, cc)
+	}
+}
+
 // sentryRegistry builds the tool surface Sentry's chat loop exposes to the
 // model.
 // The AgentGuard interaction surface — the agentguard-guide knowledge skill
@@ -187,6 +229,7 @@ func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycl
 		skills.NewListStreams(),
 		skills.NewDescribeStream(),
 		skills.NewRunSQL(),
+		skills.NewGetSentryConfig(sentrySelfConfigFn(cfg, cc)),
 	}
 	if cc.AgentGuardToolsEnabled {
 		sks = append(sks,
@@ -314,7 +357,8 @@ func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, a
 			}
 		}
 
-		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc, holdReg, cc), Store: store, Cfg: rcfg, Approvals: approvals}
+		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc, holdReg, cc), Store: store, Cfg: rcfg, Approvals: approvals,
+			Memory: sentry.LoadMemoryCfg(&rcfg.Timeplus)}
 		if err := loop.Run(c.Request.Context(), cc, conv, strings.TrimSpace(body.Message), emit); err != nil {
 			log.Printf("sentry: chat: %v", err)
 			// The loop emits its own "error" event for in-stream failures
