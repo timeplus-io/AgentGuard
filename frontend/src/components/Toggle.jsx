@@ -5,7 +5,7 @@ export default function Toggle({ checked, onChange, disabled }) {
       aria-checked={checked}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
-      className={`relative w-9 h-5 rounded-full transition-colors ${
+      className={`relative w-9 h-5 shrink-0 rounded-full transition-colors ${
         disabled
           ? checked ? 'bg-[#B83280]' : 'bg-[#7D7B82]'
           : checked ? 'bg-[#D53F8C]' : 'bg-[#4b4754]'

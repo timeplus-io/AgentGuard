@@ -221,10 +221,12 @@ export default function SentryConfigEditor() {
         </div>
 
         <div className="mt-4">
-          <label className="flex items-center gap-3 text-xs text-gray-100">
-            <Toggle checked={draft.chat.agentguard_tools_enabled} onChange={(v) => setChat({ agentguard_tools_enabled: v })} />
+          <label className="flex items-start gap-3 text-xs text-gray-100 max-w-2xl">
+            <span className="pt-0.5">
+              <Toggle checked={draft.chat.agentguard_tools_enabled} onChange={(v) => setChat({ agentguard_tools_enabled: v })} />
+            </span>
             <span>
-              AgentGuard skills &amp; tools
+              <span className="font-medium">AgentGuard skills &amp; tools</span>
               <span className="text-gray-500"> — let Sentry read and act on AgentGuard features (threats, holds, rules, cost, DLP; write actions still require in-chat approval). Off: Sentry is a generic Timeplus SQL analyst.</span>
             </span>
           </label>
