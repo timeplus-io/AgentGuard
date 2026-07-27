@@ -38,6 +38,10 @@ services:
       # was configured with. Defaults below are the standard Timeplus dev creds.
       TIMEPLUS_USER: "proton"
       TIMEPLUS_PASSWORD: "timeplus@t+"
+      # Optional: master key for at-rest encryption of api_keys stored in
+      # agentguard_sentry_config (#234). When unset, a key file is
+      # auto-generated in the agentguard-data volume next to config.yaml.
+      # AGENTGUARD_ENCRYPTION_KEY: "change-me"
       # Registers Sentry's no-side-effect demo_write gated tool so the #221
       # approval flow (card → approve/deny/timeout → audit) can be exercised
       # end-to-end. Override with SENTRY_DEMO_WRITE=0 to hide it.

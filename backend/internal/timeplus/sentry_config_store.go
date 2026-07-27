@@ -1,9 +1,12 @@
 package timeplus
 
 import (
+	"strings"
+
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/timeplus/agentguard/internal/secrets"
 
 	"github.com/timeplus/agentguard/internal/config"
 )
@@ -56,12 +59,66 @@ FROM table(agentguard_sentry_config) ORDER BY key`)
 	}
 	out := make([]SentryConfigRow, 0, len(rows))
 	for _, r := range rows {
+		value, derr := decryptSentryValue(asDLPString(r["value"]))
+		if derr != nil {
+			// Wrong/missing master key: surface loudly rather than handing
+			// callers ciphertext or a silently-empty credential (#234).
+			return nil, fmt.Errorf("sentry config %q: %w", asDLPString(r["key"]), derr)
+		}
 		out = append(out, SentryConfigRow{
-			Key: asDLPString(r["key"]), Value: asDLPString(r["value"]),
+			Key: asDLPString(r["key"]), Value: value,
 			UpdatedAt: asDLPString(r["updated_at"]), UpdatedBy: asDLPString(r["updated_by"]),
 		})
 	}
 	return out, nil
+}
+
+// encryptSentryValue seals the top-level api_key field of a config row's
+// JSON value through the process codec (#234). No codec / no api_key /
+// non-JSON → value passes through unchanged (legacy behavior). Idempotent:
+// an already-encrypted key is left as-is.
+func encryptSentryValue(value string) string {
+	c := secrets.Default()
+	if c == nil {
+		return value
+	}
+	var m map[string]any
+	if json.Unmarshal([]byte(value), &m) != nil {
+		return value
+	}
+	k, ok := m["api_key"].(string)
+	if !ok || k == "" {
+		return value
+	}
+	m["api_key"] = c.Encrypt(k)
+	b, err := json.Marshal(m)
+	if err != nil {
+		return value
+	}
+	return string(b)
+}
+
+// decryptSentryValue is encryptSentryValue's inverse: plaintext (legacy)
+// values pass through; an enc:v1 api_key that cannot be opened is an error.
+func decryptSentryValue(value string) (string, error) {
+	var m map[string]any
+	if json.Unmarshal([]byte(value), &m) != nil {
+		return value, nil
+	}
+	k, ok := m["api_key"].(string)
+	if !ok || !strings.HasPrefix(k, secrets.Prefix) {
+		return value, nil
+	}
+	plain, err := secrets.Default().Decrypt(k)
+	if err != nil {
+		return "", err
+	}
+	m["api_key"] = plain
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func ReadSentryConfigValue(cfg *config.TimeplusConfig, key string) (string, error) {
@@ -90,7 +147,7 @@ func WriteSentryConfig(cfg *config.TimeplusConfig, key, value, updatedBy string)
 		return fmt.Errorf("sentry config write: prepare: %w", err)
 	}
 	defer func() { _ = batch.Abort() }()
-	if err := batch.Append(key, value, updatedBy); err != nil {
+	if err := batch.Append(key, encryptSentryValue(value), updatedBy); err != nil {
 		return fmt.Errorf("sentry config write: append: %w", err)
 	}
 	return batch.Send()

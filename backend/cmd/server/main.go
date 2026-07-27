@@ -31,6 +31,7 @@ import (
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
 	"github.com/timeplus/agentguard/internal/rules"
+	"github.com/timeplus/agentguard/internal/secrets"
 	"github.com/timeplus/agentguard/internal/sentry"
 	"github.com/timeplus/agentguard/internal/web"
 )
@@ -101,6 +102,15 @@ func runServer(cmd *cobra.Command, args []string) error {
 		cfg.ConfigPath = cfgFile
 	} else {
 		cfg.ConfigPath = "config.yaml"
+	}
+
+	// Credential-at-rest encryption (#234): resolve the master key (env var
+	// AGENTGUARD_ENCRYPTION_KEY, else an auto-generated key file next to
+	// config.yaml). Failing to establish a key is fatal — starting without
+	// it would silently store credentials in plaintext.
+	if err := secrets.Init(filepath.Dir(cfg.ConfigPath)); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize credential encryption: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Capture which CLI flags were explicitly set, so the config UI can mark
