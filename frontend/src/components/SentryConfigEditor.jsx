@@ -40,6 +40,10 @@ function buildDraft(byKey) {
       // Opt-in switch for the AgentGuard interaction surface (skill +
       // read/write tools). Absent means DISABLED — generic SQL analyst.
       agentguard_tools_enabled: chat.agentguard_tools_enabled ?? false,
+      // Anthropic-only knobs (#212): ignored by the OpenAI provider.
+      thinking: chat.thinking || '',
+      effort: chat.effort || '',
+      prompt_cache_disabled: chat.prompt_cache_disabled ?? false,
     },
     memory: {
       enabled: memory.enabled ?? false,
@@ -105,6 +109,9 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
         sql_max_rows: Number(c.sql_max_rows) || 0,
         tool_result_max_bytes: Number(c.tool_result_max_bytes) || 0,
         agentguard_tools_enabled: !!c.agentguard_tools_enabled,
+        thinking: c.thinking,
+        effort: c.effort,
+        prompt_cache_disabled: !!c.prompt_cache_disabled,
       }
     }
     const m = draft.memory
@@ -230,6 +237,31 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
             </label>
           ))}
         </div>
+
+        {draft.chat.api_type === 'anthropic' && (
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3 items-end">
+            <label className="space-y-1"><span className={labelCls}>Thinking</span>
+              <select className={inputCls} value={draft.chat.thinking} onChange={(e) => setChat({ thinking: e.target.value })}>
+                <option value="">Provider default</option>
+                <option value="adaptive">Adaptive (streams reasoning)</option>
+              </select>
+            </label>
+            <label className="space-y-1"><span className={labelCls}>Effort</span>
+              <select className={inputCls} value={draft.chat.effort} onChange={(e) => setChat({ effort: e.target.value })}>
+                <option value="">Provider default</option>
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+                <option value="xhigh">xhigh</option>
+                <option value="max">max</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-gray-100 pb-1.5">
+              <Toggle checked={!draft.chat.prompt_cache_disabled} onChange={(v) => setChat({ prompt_cache_disabled: !v })} />
+              Prompt caching
+            </label>
+          </div>
+        )}
 
         <div className="mt-4">
           <label className="flex items-start gap-3 text-xs text-gray-100 max-w-2xl">

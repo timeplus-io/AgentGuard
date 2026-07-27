@@ -60,3 +60,27 @@ func TestChatCfgIgnoresConfigSystemPrompt(t *testing.T) {
 		t.Fatalf("system prompt must be the built-in constant, got %q", cc.SystemPrompt)
 	}
 }
+
+func TestChatCfgThinkingAndEffortNormalized(t *testing.T) {
+	cc := ChatCfg{Thinking: "adaptive", Effort: "xhigh"}
+	cc.applyDefaults()
+	if cc.Thinking != "adaptive" || cc.Effort != "xhigh" {
+		t.Fatalf("valid values must survive: %+v", cc)
+	}
+
+	// "disabled" would 400 on Fable 5; anything unknown collapses to "".
+	for _, bad := range []string{"disabled", "enabled", "on"} {
+		cc := ChatCfg{Thinking: bad}
+		cc.applyDefaults()
+		if cc.Thinking != "" {
+			t.Fatalf("thinking %q must normalize to empty, got %q", bad, cc.Thinking)
+		}
+	}
+	for _, bad := range []string{"maximum", "x-high", "0.5"} {
+		cc := ChatCfg{Effort: bad}
+		cc.applyDefaults()
+		if cc.Effort != "" {
+			t.Fatalf("effort %q must normalize to empty, got %q", bad, cc.Effort)
+		}
+	}
+}

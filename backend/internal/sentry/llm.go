@@ -22,8 +22,9 @@ type ToolCall struct {
 type Msg struct {
 	Role       string // "system" | "user" | "assistant" | "tool"
 	Content    string
-	ToolCallID string     // role=tool: which call this answers
-	ToolCalls  []ToolCall // role=assistant: calls it made
+	ToolCallID string          // role=tool: which call this answers
+	ToolCalls  []ToolCall      // role=assistant: calls it made
+	Thinking   []ThinkingBlock // role=assistant: reasoning blocks (anthropic only)
 }
 
 // ToolDef describes a callable tool exposed to the model.
@@ -32,12 +33,29 @@ type ToolDef struct {
 	Params            map[string]any // JSON schema
 }
 
+// ThinkingBlock is one reasoning block from an Anthropic adaptive-thinking
+// response: the (possibly empty) summarized text plus the opaque signature.
+// Blocks are carried in-memory through the turn's tool-use loop and echoed
+// back verbatim on the continuation request — the Anthropic API requires
+// an assistant tool_use turn to retain its thinking blocks. They are NOT
+// persisted across turns (dropping completed turns' thinking is standard
+// context-trimming behavior). The OpenAI provider ignores them.
+type ThinkingBlock struct {
+	Text      string
+	Signature string
+}
+
 // ChatResult is the model's response to a single ChatStream call.
 type ChatResult struct {
 	Content   string
 	ToolCalls []ToolCall
+	Thinking  []ThinkingBlock // anthropic adaptive thinking (empty otherwise)
 	TokensIn  int
 	TokensOut int
+	// Prompt-cache usage (anthropic only; zero elsewhere). Read = tokens
+	// served from cache, Write = tokens written to cache this call.
+	CacheReadTokens  int
+	CacheWriteTokens int
 }
 
 // ChatCfg is parsed directly from the self-contained `chat` row of
@@ -57,6 +75,20 @@ type ChatCfg struct {
 	// ApprovalTimeoutMs bounds how long a GatedWrite proposal waits for a
 	// human Approve/Deny before auto-denying (#221). Default 5 minutes.
 	ApprovalTimeoutMs int `json:"approval_timeout_ms"`
+	// Thinking selects the Anthropic reasoning mode: "" leaves the request's
+	// thinking parameter unset (the provider's default — off on Opus 4.7/4.8,
+	// adaptive on Sonnet 5 / Fable 5), "adaptive" explicitly enables adaptive
+	// thinking with summarized display (streamed to the chat UI as reasoning).
+	// Ignored by the OpenAI provider.
+	Thinking string `json:"thinking"`
+	// Effort sets output_config.effort on Anthropic requests: "" (provider
+	// default) or low/medium/high/xhigh/max. Ignored by the OpenAI provider.
+	Effort string `json:"effort"`
+	// PromptCacheDisabled turns OFF Anthropic prompt caching (cache_control
+	// on the system block). Caching is on by default: the system prompt +
+	// schema card is resent on every loop iteration, so breakpointing it
+	// pays for itself within a single multi-tool turn.
+	PromptCacheDisabled bool `json:"prompt_cache_disabled"`
 	// AgentGuardToolsEnabled is the single opt-in switch for Sentry's
 	// AgentGuard interaction surface: the agentguard-guide knowledge skill
 	// plus every AgentGuard-specific tool, read (get_threats, get_holds,
@@ -91,14 +123,24 @@ func (c *ChatCfg) applyDefaults() {
 	if c.APIType == "" {
 		c.APIType = "openai"
 	}
+	if c.Thinking != "adaptive" {
+		c.Thinking = "" // only ""/adaptive are valid; never send "disabled" (400 on Fable 5)
+	}
+	switch c.Effort {
+	case "low", "medium", "high", "xhigh", "max":
+	default:
+		c.Effort = ""
+	}
 	if c.SystemPrompt == "" {
 		c.SystemPrompt = tp.DefaultSentrySystemPrompt
 	}
 }
 
 // LLM is the interface Sentry's conversation loop uses to talk to a model.
+// onDelta streams incremental output: kind is "token" for answer text and
+// "thinking" for summarized reasoning (anthropic adaptive thinking only).
 type LLM interface {
-	ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onToken func(string)) (ChatResult, error)
+	ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onDelta func(kind, text string)) (ChatResult, error)
 }
 
 // NewLLM returns the LLM implementation for the configured api_type.

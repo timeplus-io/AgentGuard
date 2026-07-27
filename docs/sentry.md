@@ -323,6 +323,29 @@ There is **no auto-approve setting, by design**. A Loop constructed without
 an approval registry (e.g. future headless runs) never offers gated tools to
 the model at all.
 
+## Anthropic provider extras (#212)
+
+When the chat row's `api_type` is `anthropic`, three additional knobs apply
+(all live-editable in the chat config row / Settings → Sentry Agent;
+ignored by the OpenAI provider):
+
+- **`thinking`** — `""` (provider default) or `"adaptive"`: adaptive
+  thinking with summarized display. Reasoning streams to the chat UI as
+  dim, collapsed-by-default `thinking` NDJSON events, and the provider
+  echoes thinking blocks back verbatim within a turn's tool loop (required
+  by the API). Thinking is never persisted across turns. `"disabled"` is
+  deliberately not offered — it 400s on Claude Fable 5.
+- **`effort`** — `""` or `low`/`medium`/`high`/`xhigh`/`max`, mapped to
+  `output_config.effort`.
+- **`prompt_cache_disabled`** — prompt caching is ON by default: a
+  cache breakpoint on the system block caches tools + system prompt +
+  schema card, which the loop resends on every iteration, so it pays for
+  itself within a single multi-tool turn. Cache usage is surfaced on the
+  `done` NDJSON event (`cache_read_tokens` / `cache_write_tokens`).
+
+Computer use (the third item on #212) is intentionally not implemented:
+Sentry has no display or execution environment for it.
+
 ## Budgets
 
 A turn stops requesting tools once `max_iterations` is hit (the final

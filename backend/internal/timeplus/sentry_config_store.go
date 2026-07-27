@@ -164,6 +164,12 @@ func DefaultSentryChatRow(sCfg config.SentryConfig) string {
 		"sql_timeout_ms":        30000,
 		"sql_max_rows":          1000,
 		"tool_result_max_bytes": 16384,
+		// Anthropic-only knobs (#212): thinking ""|"adaptive", effort
+		// ""|low|medium|high|xhigh|max, prompt caching on unless disabled.
+		// Ignored by the OpenAI provider.
+		"thinking":              "",
+		"effort":                "",
+		"prompt_cache_disabled": false,
 		// Opt-in switch for Sentry's AgentGuard interaction surface (the
 		// agentguard-guide skill + all AgentGuard read/write tools).
 		// DISABLED by default — turn on under Settings → Sentry Agent to

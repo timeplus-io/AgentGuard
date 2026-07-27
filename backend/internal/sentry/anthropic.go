@@ -92,6 +92,13 @@ func anthropicMessagesFromMsgs(msgs []Msg) (system string, amsgs []anthropic.Mes
 		case "assistant":
 			flush()
 			var blocks []anthropic.ContentBlockParamUnion
+			// Thinking blocks must be echoed back verbatim, BEFORE text and
+			// tool_use — the API requires an assistant tool_use turn to
+			// retain its reasoning blocks when the conversation continues
+			// within the same tool loop.
+			for _, tb := range m.Thinking {
+				blocks = append(blocks, anthropic.NewThinkingBlock(tb.Signature, tb.Text))
+			}
 			if m.Content != "" {
 				blocks = append(blocks, anthropic.NewTextBlock(m.Content))
 			}
@@ -107,7 +114,7 @@ func anthropicMessagesFromMsgs(msgs []Msg) (system string, amsgs []anthropic.Mes
 	return system, amsgs
 }
 
-func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onToken func(string)) (ChatResult, error) {
+func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onDelta func(kind, text string)) (ChatResult, error) {
 	client := anthropic.NewClient(
 		option.WithBaseURL(normalizeAnthropicBaseURL(cc.BaseURL)),
 		// x-api-key header — the auth style used by both AWS Bedrock Mantle's
@@ -139,7 +146,26 @@ func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tool
 		Tools:     atools,
 	}
 	if system != "" {
-		params.System = []anthropic.TextBlockParam{{Text: system}}
+		sys := anthropic.TextBlockParam{Text: system}
+		// Prompt caching (on unless disabled): a breakpoint on the last
+		// system block caches tools + system together — the stable prefix
+		// (schema card included) that the loop resends every iteration.
+		if !cc.PromptCacheDisabled {
+			sys.CacheControl = anthropic.NewCacheControlEphemeralParam()
+		}
+		params.System = []anthropic.TextBlockParam{sys}
+	}
+	if cc.Thinking == "adaptive" {
+		// Summarized display so reasoning can stream to the chat UI; the
+		// default ("omitted") returns empty thinking text.
+		params.Thinking = anthropic.ThinkingConfigParamUnion{
+			OfAdaptive: &anthropic.ThinkingConfigAdaptiveParam{
+				Display: anthropic.ThinkingConfigAdaptiveDisplaySummarized,
+			},
+		}
+	}
+	if cc.Effort != "" {
+		params.OutputConfig = anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffort(cc.Effort)}
 	}
 
 	stream := client.Messages.NewStreaming(ctx, params)
@@ -148,9 +174,16 @@ func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tool
 	for stream.Next() {
 		event := stream.Current()
 		_ = msg.Accumulate(event)
-		if d, ok := event.AsAny().(anthropic.ContentBlockDeltaEvent); ok {
-			if td, ok := d.Delta.AsAny().(anthropic.TextDelta); ok && td.Text != "" && onToken != nil {
-				onToken(td.Text)
+		if d, ok := event.AsAny().(anthropic.ContentBlockDeltaEvent); ok && onDelta != nil {
+			switch delta := d.Delta.AsAny().(type) {
+			case anthropic.TextDelta:
+				if delta.Text != "" {
+					onDelta("token", delta.Text)
+				}
+			case anthropic.ThinkingDelta:
+				if delta.Thinking != "" {
+					onDelta("thinking", delta.Thinking)
+				}
 			}
 		}
 	}
@@ -159,11 +192,15 @@ func (anthropicLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tool
 	}
 
 	res := ChatResult{
-		TokensIn:  int(msg.Usage.InputTokens),
-		TokensOut: int(msg.Usage.OutputTokens),
+		TokensIn:         int(msg.Usage.InputTokens),
+		TokensOut:        int(msg.Usage.OutputTokens),
+		CacheReadTokens:  int(msg.Usage.CacheReadInputTokens),
+		CacheWriteTokens: int(msg.Usage.CacheCreationInputTokens),
 	}
 	for _, block := range msg.Content {
 		switch b := block.AsAny().(type) {
+		case anthropic.ThinkingBlock:
+			res.Thinking = append(res.Thinking, ThinkingBlock{Text: b.Thinking, Signature: b.Signature})
 		case anthropic.TextBlock:
 			res.Content += b.Text
 		case anthropic.ToolUseBlock:
