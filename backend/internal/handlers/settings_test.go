@@ -544,7 +544,10 @@ func TestReprovisionRequiredAlwaysFalse(t *testing.T) {
 // attempt happened — while the config save itself still succeeds.
 func TestUpdateConfigSentryEnableTriggersProvision(t *testing.T) {
 	cfg := newConfigForTest(t)
-	cfg.Timeplus.Host, cfg.Timeplus.Port = "127.0.0.1", 1 // deterministically unreachable
+	// Deterministically unreachable: SyncSentry dials Host:NativePort (the
+	// native protocol), so NativePort must be pinned too — leaving it at the
+	// default 8463 made this test connect to a live timeplusd in CI.
+	cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort = "127.0.0.1", 1, 1
 	w := putConfig(t, cfg, `{"sentry.enabled": true}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
@@ -568,7 +571,7 @@ func TestUpdateConfigSentryEnableTriggersProvision(t *testing.T) {
 // attempt provisioning.
 func TestUpdateConfigSentryProvisionOnlyOnTransition(t *testing.T) {
 	cfg := newConfigForTest(t)
-	cfg.Timeplus.Host, cfg.Timeplus.Port = "127.0.0.1", 1
+	cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort = "127.0.0.1", 1, 1
 	cfg.Sentry.Enabled = true
 	for _, body := range []string{`{"sentry.enabled": true}`, `{"dlp.enabled": true}`} {
 		w := putConfig(t, cfg, body)
