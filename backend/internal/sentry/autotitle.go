@@ -114,7 +114,7 @@ func MaybeAutoTitle(llm LLM, cc ChatCfg, store *Store, convID string) {
 
 	tcc := cc
 	tcc.MaxTokens = 64
-	res, err := llm.ChatStream(ctx, tcc, buildTitlePrompt(userMsg, assistantMsg), nil, func(string) {})
+	res, err := llm.ChatStream(ctx, tcc, buildTitlePrompt(userMsg, assistantMsg), nil, func(string, string) {})
 	if err != nil {
 		log.Printf("sentry: auto-title %s: llm: %v", convID, err)
 		return

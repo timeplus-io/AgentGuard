@@ -15,7 +15,7 @@ type openaiLLM struct{}
 // OpenAI-compatible /chat/completions endpoint.
 func NewOpenAILLM() LLM { return openaiLLM{} }
 
-func (openaiLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onToken func(string)) (ChatResult, error) {
+func (openaiLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onDelta func(kind, text string)) (ChatResult, error) {
 	client := openai.NewClient(option.WithBaseURL(cc.BaseURL), option.WithAPIKey(cc.APIKey))
 
 	oaMsgs := make([]openai.ChatCompletionMessageParamUnion, 0, len(msgs))
@@ -71,8 +71,8 @@ func (openaiLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools [
 	for stream.Next() {
 		chunk := stream.Current()
 		acc.AddChunk(chunk)
-		if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" && onToken != nil {
-			onToken(chunk.Choices[0].Delta.Content)
+		if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" && onDelta != nil {
+			onDelta("token", chunk.Choices[0].Delta.Content)
 		}
 	}
 	if err := stream.Err(); err != nil {

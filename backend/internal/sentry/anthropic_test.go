@@ -88,3 +88,31 @@ func TestNewLLMFactory(t *testing.T) {
 		t.Fatal("empty api_type must default to openaiLLM")
 	}
 }
+
+// TestAnthropicMessagesReplayThinkingBlocksFirst: assistant thinking blocks
+// must be echoed back verbatim and BEFORE text/tool_use blocks — the API
+// requires a tool_use turn to retain its reasoning when the loop continues.
+func TestAnthropicMessagesReplayThinkingBlocksFirst(t *testing.T) {
+	msgs := []Msg{
+		{Role: "user", Content: "q"},
+		{Role: "assistant", Content: "using a tool",
+			Thinking:  []ThinkingBlock{{Text: "let me check", Signature: "sig1"}},
+			ToolCalls: []ToolCall{{ID: "t1", Name: "run_sql", Args: "{}"}}},
+		{Role: "tool", ToolCallID: "t1", Content: "rows"},
+	}
+	_, amsgs := anthropicMessagesFromMsgs(msgs)
+	if len(amsgs) != 3 {
+		t.Fatalf("got %d messages, want 3", len(amsgs))
+	}
+	assistant := amsgs[1]
+	if len(assistant.Content) != 3 {
+		t.Fatalf("assistant blocks = %d, want 3 (thinking, text, tool_use)", len(assistant.Content))
+	}
+	tb := assistant.Content[0].OfThinking
+	if tb == nil || tb.Thinking != "let me check" || tb.Signature != "sig1" {
+		t.Fatalf("first block must be the verbatim thinking block, got %+v", assistant.Content[0])
+	}
+	if assistant.Content[1].OfText == nil || assistant.Content[2].OfToolUse == nil {
+		t.Fatal("thinking must precede text and tool_use")
+	}
+}

@@ -15,26 +15,28 @@ import (
 
 // Event is one line of the NDJSON stream sent to the Sentry chat UI over
 // the course of a single turn: meta once, then any number of
-// token/tool_call/tool_result (a GatedWrite call substitutes
+// token/thinking/tool_call/tool_result (a GatedWrite call substitutes
 // approval_request → approval_result → tool_result-on-approve), ending in
 // exactly one done or error.
 type Event struct {
-	Type       string `json:"event"`                     // meta|token|tool_call|tool_result|approval_request|approval_result|done|error
-	Text       string `json:"text,omitempty"`            // token
-	ID         string `json:"id,omitempty"`              // tool_call/tool_result/approval_*
-	Name       string `json:"name,omitempty"`            // tool_call/tool_result/approval_*
-	Args       string `json:"args,omitempty"`            // tool_call/approval_request (verbatim)
-	Result     string `json:"result,omitempty"`          // tool_result
-	Truncated  bool   `json:"truncated,omitempty"`       // tool_result
-	ConvID     string `json:"conversation_id,omitempty"` // meta
-	Seq        uint32 `json:"seq,omitempty"`             // meta
-	TokensIn   int    `json:"tokens_in,omitempty"`       // done
-	TokensOut  int    `json:"tokens_out,omitempty"`      // done
-	Message    string `json:"message,omitempty"`         // error / approval_result reason
-	ProposalID string `json:"proposal_id,omitempty"`     // approval_request/approval_result
-	TimeoutMs  int    `json:"timeout_ms,omitempty"`      // approval_request
-	Decision   string `json:"decision,omitempty"`        // approval_result: approved|denied|timeout|abandoned
-	DecidedBy  string `json:"decided_by,omitempty"`      // approval_result
+	Type             string `json:"event"`                        // meta|token|thinking|tool_call|tool_result|approval_request|approval_result|done|error
+	Text             string `json:"text,omitempty"`               // token
+	ID               string `json:"id,omitempty"`                 // tool_call/tool_result/approval_*
+	Name             string `json:"name,omitempty"`               // tool_call/tool_result/approval_*
+	Args             string `json:"args,omitempty"`               // tool_call/approval_request (verbatim)
+	Result           string `json:"result,omitempty"`             // tool_result
+	Truncated        bool   `json:"truncated,omitempty"`          // tool_result
+	ConvID           string `json:"conversation_id,omitempty"`    // meta
+	Seq              uint32 `json:"seq,omitempty"`                // meta
+	TokensIn         int    `json:"tokens_in,omitempty"`          // done
+	TokensOut        int    `json:"tokens_out,omitempty"`         // done
+	CacheReadTokens  int    `json:"cache_read_tokens,omitempty"`  // done (anthropic prompt caching)
+	CacheWriteTokens int    `json:"cache_write_tokens,omitempty"` // done (anthropic prompt caching)
+	Message          string `json:"message,omitempty"`            // error / approval_result reason
+	ProposalID       string `json:"proposal_id,omitempty"`        // approval_request/approval_result
+	TimeoutMs        int    `json:"timeout_ms,omitempty"`         // approval_request
+	Decision         string `json:"decision,omitempty"`           // approval_result: approved|denied|timeout|abandoned
+	DecidedBy        string `json:"decided_by,omitempty"`         // approval_result
 }
 
 // Loop is AgentGuard Sentry's ReAct agent harness: it wires an LLM to a
@@ -121,12 +123,20 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 	}
 	tools := defsToTools(l.Reg.Defs(maxAccess))
 	totalIn, totalOut := 0, 0
+	totalCacheRead, totalCacheWrite := 0, 0
 	for iter := 0; iter < cc.MaxIterations; iter++ {
 		callTools := tools
 		if iter == cc.MaxIterations-1 {
 			callTools = nil // budget exhausted: force a final answer (spec §13)
 		}
-		res, err := l.LLM.ChatStream(ctx, cc, msgs, callTools, func(t string) { emit(Event{Type: "token", Text: t}) })
+		res, err := l.LLM.ChatStream(ctx, cc, msgs, callTools, func(kind, text string) {
+			switch kind {
+			case "thinking":
+				emit(Event{Type: "thinking", Text: text})
+			default:
+				emit(Event{Type: "token", Text: text})
+			}
+		})
 		if err != nil {
 			emit(Event{Type: "error", Message: err.Error()})
 			return err
@@ -137,10 +147,16 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 			Content: res.Content, Model: cc.Model, TokensIn: uint32(res.TokensIn), TokensOut: uint32(res.TokensOut),
 			ToolArgs: marshalCalls(res.ToolCalls)})
 		seq++
-		msgs = append(msgs, Msg{Role: "assistant", Content: res.Content, ToolCalls: res.ToolCalls})
+		totalCacheRead += res.CacheReadTokens
+		totalCacheWrite += res.CacheWriteTokens
+		// Thinking blocks ride along in-memory only: the continuation
+		// request within this turn must echo them back (anthropic), and
+		// they are intentionally NOT persisted across turns.
+		msgs = append(msgs, Msg{Role: "assistant", Content: res.Content, ToolCalls: res.ToolCalls, Thinking: res.Thinking})
 
 		if len(res.ToolCalls) == 0 {
-			emit(Event{Type: "done", TokensIn: totalIn, TokensOut: totalOut})
+			emit(Event{Type: "done", TokensIn: totalIn, TokensOut: totalOut,
+				CacheReadTokens: totalCacheRead, CacheWriteTokens: totalCacheWrite})
 			if err := l.Store.TouchConversation(conv.ConversationID); err != nil {
 				log.Printf("sentry: touch conversation %s failed: %v", conv.ConversationID, err)
 			}
@@ -169,7 +185,8 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 			msgs = append(msgs, Msg{Role: "tool", Content: outStr, ToolCallID: tc.ID})
 		}
 	}
-	emit(Event{Type: "done", TokensIn: totalIn, TokensOut: totalOut})
+	emit(Event{Type: "done", TokensIn: totalIn, TokensOut: totalOut,
+		CacheReadTokens: totalCacheRead, CacheWriteTokens: totalCacheWrite})
 	if err := l.Store.TouchConversation(conv.ConversationID); err != nil {
 		log.Printf("sentry: touch conversation %s failed: %v", conv.ConversationID, err)
 	}

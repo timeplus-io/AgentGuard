@@ -152,6 +152,20 @@ function ToolCard({ item }) {
   )
 }
 
+// ThinkingCard renders streamed model reasoning (anthropic adaptive
+// thinking, summarized display) as a dim, collapsed-by-default block.
+function ThinkingCard({ item }) {
+  return (
+    <details className="max-w-2xl">
+      <summary className="cursor-pointer select-none list-none text-[11px] text-gray-500 flex items-center gap-1.5">
+        <span className="material-symbols-outlined text-sm">psychology</span>
+        Reasoning{item.pending && <span className="animate-pulse">…</span>}
+      </summary>
+      <p className="mt-1 pl-5 text-[11px] text-gray-500 italic whitespace-pre-wrap break-words">{item.content}</p>
+    </details>
+  )
+}
+
 function MessageBubble({ item }) {
   if (item.role === 'user') {
     return (
@@ -204,6 +218,7 @@ export default function Sentry() {
   const abortRef = useRef(null)
   const titleRefreshRef = useRef(null)
   const openAssistantIdRef = useRef(null)
+  const openThinkingIdRef = useRef(null)
   const scrollRef = useRef(null)
   const activeIdRef = useRef(null)
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
@@ -326,6 +341,13 @@ export default function Sentry() {
     openAssistantIdRef.current = null
   }
 
+  function finalizeOpenThinking() {
+    const openId = openThinkingIdRef.current
+    if (!openId) return
+    setMessages(prev => prev.map(m => m.id === openId ? { ...m, pending: false } : m))
+    openThinkingIdRef.current = null
+  }
+
   async function send() {
     const text = input.trim()
     if (!text || streaming) return
@@ -345,7 +367,20 @@ export default function Sentry() {
             if (ev.conversation_id) setActiveId(ev.conversation_id)
             break
 
+          case 'thinking':
+            setMessages(prev => {
+              const openId = openThinkingIdRef.current
+              if (openId) {
+                return prev.map(m => m.id === openId ? { ...m, content: (m.content || '') + (ev.text || '') } : m)
+              }
+              const id = localId('thinking')
+              openThinkingIdRef.current = id
+              return [...prev, { id, role: 'thinking', content: ev.text || '', pending: true }]
+            })
+            break
+
           case 'token':
+            finalizeOpenThinking() // reasoning ended; answer text begins
             setMessages(prev => {
               const openId = openAssistantIdRef.current
               if (openId) {
@@ -359,6 +394,7 @@ export default function Sentry() {
 
           case 'tool_call':
             finalizeOpenBubble() // a fresh assistant bubble starts after this
+            finalizeOpenThinking()
             setMessages(prev => prev.some(m => m.id === ev.id)
               ? prev
               : [...prev, { id: ev.id, role: 'tool', name: ev.name, args: ev.args, result: null, truncated: false, pending: true }])
@@ -389,10 +425,12 @@ export default function Sentry() {
 
           case 'done':
             finalizeOpenBubble()
+            finalizeOpenThinking()
             break
 
           case 'error':
             finalizeOpenBubble()
+            finalizeOpenThinking()
             setMessages(prev => [...prev, { id: localId('error'), role: 'error', content: ev.message || 'Sentry error' }])
             break
 
@@ -585,7 +623,9 @@ export default function Sentry() {
                       ? <ToolCard key={item.id} item={item} />
                       : item.role === 'approval'
                         ? <ApprovalCard key={item.id} item={item} onDecide={decideApproval} />
-                        : <MessageBubble key={item.id} item={item} />
+                        : item.role === 'thinking'
+                          ? <ThinkingCard key={item.id} item={item} />
+                          : <MessageBubble key={item.id} item={item} />
                     )
                   )}
                 </div>

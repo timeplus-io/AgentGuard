@@ -22,13 +22,13 @@ type fakeLLM struct {
 	gotTools [][]ToolDef
 }
 
-func (f *fakeLLM) ChatStream(_ context.Context, _ ChatCfg, msgs []Msg, tools []ToolDef, onToken func(string)) (ChatResult, error) {
+func (f *fakeLLM) ChatStream(_ context.Context, _ ChatCfg, msgs []Msg, tools []ToolDef, onDelta func(kind, text string)) (ChatResult, error) {
 	f.gotMsgs = append(f.gotMsgs, msgs)
 	f.gotTools = append(f.gotTools, tools)
 	r := f.script[f.calls]
 	f.calls++
-	if r.Content != "" && onToken != nil {
-		onToken(r.Content)
+	if r.Content != "" && onDelta != nil {
+		onDelta("token", r.Content)
 	}
 	return r, nil
 }
@@ -506,4 +506,35 @@ func containsMsg(msgs []Msg, role, content string) bool {
 		}
 	}
 	return false
+}
+
+// thinkingLLM emits a thinking delta before its text, like the anthropic
+// provider under adaptive thinking.
+type thinkingLLM struct{ fakeLLM }
+
+func (f *thinkingLLM) ChatStream(ctx context.Context, cc ChatCfg, msgs []Msg, tools []ToolDef, onDelta func(kind, text string)) (ChatResult, error) {
+	if onDelta != nil {
+		onDelta("thinking", "reasoning...")
+	}
+	return f.fakeLLM.ChatStream(ctx, cc, msgs, tools, onDelta)
+}
+
+func TestLoopEmitsThinkingEvents(t *testing.T) {
+	llm := &thinkingLLM{fakeLLM{script: []ChatResult{{Content: "answer", CacheReadTokens: 100, CacheWriteTokens: 50}}}}
+	l := &Loop{LLM: llm, Reg: skills.NewRegistry(fakeEchoSkill{}), Store: &Store{Disabled: true}, Cfg: testCfg()}
+
+	var events []Event
+	if err := l.Run(context.Background(), testChatCfg(), testConv(), "hi", func(e Event) { events = append(events, e) }); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := eventTypes(events), []string{"meta", "thinking", "token", "done"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("event types = %v, want %v", got, want)
+	}
+	if events[1].Text != "reasoning..." {
+		t.Fatalf("thinking text = %q", events[1].Text)
+	}
+	done := events[len(events)-1]
+	if done.CacheReadTokens != 100 || done.CacheWriteTokens != 50 {
+		t.Fatalf("done cache usage = %d/%d, want 100/50", done.CacheReadTokens, done.CacheWriteTokens)
+	}
 }
