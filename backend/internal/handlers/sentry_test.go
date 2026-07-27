@@ -77,6 +77,8 @@ var wantSentrySkills = []string{
 	"run_sql", "dlp_search", "get_threats", "get_holds", "get_rule_status",
 	"get_cost_summary", "get_session_timeline", "get_rule_catalog",
 	"acknowledge_threat", "clear_threat", "decide_hold",
+	"install_rule", "configure_rule", "set_rule_enabled", "set_rule_policy",
+	"upgrade_rule", "uninstall_rule", "sync_rules",
 }
 
 // baseSentrySkills is the default (AgentGuard tools disabled) surface: a
