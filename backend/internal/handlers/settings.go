@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -180,6 +181,7 @@ func UpdateConfig(cfg *config.Config, changedFlags map[string]bool) gin.HandlerF
 
 		// Hot-apply only non-restart keys to the live config.
 		config.Mu.Lock()
+		prevSentryEnabled := cfg.Sentry.Enabled
 		for key, val := range coerced {
 			meta, _ := config.MetaFor(key)
 			if meta.Restart {
@@ -191,14 +193,36 @@ func UpdateConfig(cfg *config.Config, changedFlags map[string]bool) gin.HandlerF
 		for k := range coerced {
 			saved = append(saved, k)
 		}
+		sentryCfg := cfg.Sentry // snapshot for provisioning outside the lock
 		view := buildConfigView(cfg, changedFlags)
 		config.Mu.Unlock()
 
-		c.JSON(http.StatusOK, gin.H{
+		resp := gin.H{
 			"saved":                saved,
 			"restart_required":     view["restart_required"],
 			"reprovision_required": view["reprovision_required"],
-		})
+		}
+
+		// Enabling Sentry at runtime must also provision it (#226):
+		// InitSentry only ever ran from the setup wizard / rules sync, and
+		// both skip a disabled Sentry — so a deployment provisioned with
+		// Sentry off had no agentguard_sentry_* streams, and the Sentry page
+		// 404'd (UNKNOWN_STREAM) after this toggle. SyncSentry is idempotent;
+		// a failure (e.g. Timeplus unreachable) never fails the config save —
+		// it is surfaced in the response, and the Sentry page offers a
+		// "Provision now" recovery via POST /api/rules/sync.
+		if !prevSentryEnabled && sentryCfg.Enabled {
+			rcfg := auth.RequestCfg(c, cfg)
+			if err := tp.SyncSentry(rcfg.Timeplus, sentryCfg); err != nil {
+				log.Printf("settings: provision Sentry on enable: %v", err)
+				resp["sentry_provisioned"] = false
+				resp["sentry_provision_error"] = err.Error()
+			} else {
+				resp["sentry_provisioned"] = true
+			}
+		}
+
+		c.JSON(http.StatusOK, resp)
 	}
 }
 

@@ -20,6 +20,10 @@ is read-only. Those are later phases.
    `agentguard_sentry_config` streams and seeds the two
    `agentguard_sentry_config` rows (`chat`/`memory`, seed-if-absent —
    a re-provision never clobbers operator edits).
+   Enabling `sentry.enabled` later via **Settings** also works: saving the
+   toggle provisions the Sentry streams automatically (#226); if Timeplus
+   was unreachable at that moment, the Sentry page shows a **Provision
+   now** button that runs `/api/rules/sync`.
 3. Point Sentry at a tool-calling-capable chat model, either via the
    `sentry.chat_*` boot defaults in `config.yaml` before first provision, or
    live afterward under **Settings → Sentry Agent** (see below). Sentry works
