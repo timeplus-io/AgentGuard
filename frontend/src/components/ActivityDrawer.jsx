@@ -67,9 +67,9 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
       />
 
       {/* Drawer */}
-      <div className="fixed right-0 top-0 h-full w-[480px] max-w-full bg-[#15121d] border-l border-[#574149]/20 z-50 flex flex-col overflow-hidden">
+      <div className="fixed right-0 top-0 h-full w-[480px] max-w-full bg-surface border-l border-outline-variant/20 z-50 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#574149]/20">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/20">
           <div>
             <h2 className="text-sm font-semibold text-gray-100">Tool Call Detail</h2>
             <p className="text-[10px] font-mono text-gray-400 mt-0.5">{event.id}</p>
@@ -86,7 +86,7 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
           <div className="grid grid-cols-2 gap-3 text-[11px]">
             <div>
               <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Tool</p>
-              <p className="font-mono text-[#93c5fd]">{event.tool_name || '—'}</p>
+              <p className="font-mono text-info">{event.tool_name || '—'}</p>
             </div>
             <div>
               <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Status</p>
@@ -98,7 +98,7 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
             </div>
             <div>
               <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Severity</p>
-              <p className={event.severity === 'critical' ? 'text-[#ffb4ab]' : event.severity === 'warning' ? 'text-amber-400' : 'text-gray-400'}>
+              <p className={event.severity === 'critical' ? 'text-error' : event.severity === 'warning' ? 'text-amber-400' : 'text-gray-400'}>
                 {event.severity || '—'}
               </p>
             </div>
@@ -123,7 +123,7 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
           {/* Arguments */}
           <div>
             <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1.5">Arguments</p>
-            <div className="bg-[#0f0c17] rounded-sm p-3 max-h-64 overflow-y-auto">
+            <div className="bg-surface-container-lowest rounded-sm p-3 max-h-64 overflow-y-auto">
               <JsonBlock raw={event.args_summary || event.hook_payload} />
             </div>
           </div>
@@ -160,7 +160,7 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
                 placeholder="Optional reason…"
                 value={decideReason}
                 onChange={e => setDecideReason(e.target.value)}
-                className="w-full bg-[#0f0c17] border border-[#574149]/30 rounded-sm p-2 text-xs text-gray-100 focus:border-zinc-500 focus:outline-none mb-3 resize-none"
+                className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-sm p-2 text-xs text-gray-100 focus:border-zinc-500 focus:outline-none mb-3 resize-none"
                 rows={2}
               />
               <div className="flex gap-2">
@@ -174,13 +174,13 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
                 <button
                   onClick={() => handleDecide('denied')}
                   disabled={decideStatus === 'pending'}
-                  className="px-4 py-1.5 bg-[#ffb4ab]/20 text-[#ffb4ab] text-xs font-semibold rounded-sm hover:bg-[#ffb4ab]/30 disabled:opacity-50 transition-colors"
+                  className="px-4 py-1.5 bg-[#ffb4ab]/20 text-error text-xs font-semibold rounded-sm hover:bg-[#ffb4ab]/30 disabled:opacity-50 transition-colors"
                 >
                   ✗ Deny
                 </button>
               </div>
               {decideStatus === 'error' && (
-                <p className="text-[11px] text-[#ffb4ab] mt-2">{decideError || 'Failed to submit. Try again.'}</p>
+                <p className="text-[11px] text-error mt-2">{decideError || 'Failed to submit. Try again.'}</p>
               )}
             </div>
           )}

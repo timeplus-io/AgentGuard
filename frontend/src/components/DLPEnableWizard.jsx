@@ -7,7 +7,7 @@ import {
 } from '../utils/dlpEnable.js'
 
 const inputCls =
-  'w-full rounded-sm bg-[#2c2834] text-gray-100 text-sm px-3 py-2 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50'
+  'w-full rounded-sm bg-surface-container-high text-gray-100 text-sm px-3 py-2 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50'
 const labelCls = 'text-[11px] uppercase tracking-wide text-gray-400'
 
 const EMPTY_FORM = {
@@ -110,9 +110,9 @@ export default function DLPEnableWizard({ status, onProvisioned }) {
   const missing = missingPieces(status)
 
   return (
-    <section className="bg-[#211e29] rounded-sm p-8 max-w-2xl mx-auto flex flex-col gap-6">
+    <section className="bg-surface-container rounded-sm p-8 max-w-2xl mx-auto flex flex-col gap-6">
       <div className="flex flex-col items-center text-center gap-2">
-        <span className="material-symbols-outlined text-5xl text-[#ffb0cf]">policy</span>
+        <span className="material-symbols-outlined text-5xl text-primary">policy</span>
         <h3 className="text-lg font-semibold text-gray-100">
           {status?.enabled ? 'Finish provisioning Semantic DLP' : 'Enable Semantic DLP'}
         </h3>
@@ -128,7 +128,7 @@ export default function DLPEnableWizard({ status, onProvisioned }) {
         )}
       </div>
 
-      {loadErr && <p className="text-xs text-[#ffb4ab]">{loadErr}</p>}
+      {loadErr && <p className="text-xs text-error">{loadErr}</p>}
 
       {/* Endpoint */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -176,11 +176,11 @@ export default function DLPEnableWizard({ status, onProvisioned }) {
         )}
       </div>
 
-      {error && <p className="text-xs text-[#ffb4ab]">{error}</p>}
+      {error && <p className="text-xs text-error">{error}</p>}
 
       {/* Validation results */}
       {result?.checks && (
-        <div className="bg-[#2c2834] rounded-sm p-4 text-xs space-y-1">
+        <div className="bg-surface-container-high rounded-sm p-4 text-xs space-y-1">
           <div className={result.checks.reachable?.ok ? 'text-emerald-400' : 'text-error'}>
             {result.checks.reachable?.ok ? '✓ endpoint reachable'
               : `✗ endpoint: ${result.checks.reachable?.error || 'unreachable'}`}

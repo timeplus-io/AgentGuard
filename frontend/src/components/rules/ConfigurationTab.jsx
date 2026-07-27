@@ -115,7 +115,7 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
           type="button"
           onClick={resetAll}
           disabled={!dirty && !someOverridden(values, defaults)}
-          className="text-[10px] uppercase tracking-wide text-gray-400 hover:text-[#ffb0cf] transition-colors disabled:opacity-40"
+          className="text-[10px] uppercase tracking-wide text-gray-400 hover:text-primary transition-colors disabled:opacity-40"
         >
           Reset all to defaults
         </button>

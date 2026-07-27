@@ -1,5 +1,5 @@
 const severityCard = {
-  critical: { border: 'border-l-[#ffb4ab]', iconColor: 'text-[#ffb4ab]' },
+  critical: { border: 'border-l-[#ffb4ab]', iconColor: 'text-error' },
   warning:  { border: 'border-l-[#ffb2b8]', iconColor: 'text-[#ffb2b8]' },
   info:     { border: 'border-l-zinc-700',  iconColor: 'text-gray-400'  },
 }
@@ -64,7 +64,7 @@ export function ThreatFeedItem({ threat, index = 0, ruleCategory = {}, compact =
             </span>
           )}
           {compact && index === 0 && (
-            <span className="px-2 py-0.5 bg-[#ffb0cf]/10 text-[#ffb0cf] text-[9px] font-semibold uppercase rounded-full">
+            <span className="px-2 py-0.5 bg-[#ffb0cf]/10 text-primary text-[9px] font-semibold uppercase rounded-full">
               Latest
             </span>
           )}

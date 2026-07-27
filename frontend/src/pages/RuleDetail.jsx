@@ -22,7 +22,7 @@ const CATEGORY_ICONS = {
 }
 
 function severityBadge(severity) {
-  if (severity === 'critical') return 'bg-[#ffb0cf]/10 text-[#ffb0cf] border border-[#ffb0cf]/20'
+  if (severity === 'critical') return 'bg-[#ffb0cf]/10 text-primary border border-[#ffb0cf]/20'
   if (severity === 'warning') return 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
   return 'bg-zinc-700/40 text-gray-400 border border-zinc-600/20'
 }
@@ -214,11 +214,11 @@ export default function RuleDetail() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#15121d] text-gray-100">
+      <div className="min-h-screen bg-surface text-gray-100">
         <Sidebar /><TopNav />
         <main className="pl-sidebar pt-16 pb-8 min-h-screen">
           <div className="p-6 lg:p-10 space-y-6">
-            {[1,2,3].map(i => <div key={i} className="bg-[#1d1a25] rounded-sm h-32 animate-pulse" />)}
+            {[1,2,3].map(i => <div key={i} className="bg-surface-container-low rounded-sm h-32 animate-pulse" />)}
           </div>
         </main>
       </div>
@@ -227,13 +227,13 @@ export default function RuleDetail() {
 
   if (!rule) {
     return (
-      <div className="min-h-screen bg-[#15121d] text-gray-100">
+      <div className="min-h-screen bg-surface text-gray-100">
         <Sidebar /><TopNav />
         <main className="pl-sidebar pt-16 pb-8 min-h-screen flex items-center justify-center">
           {loadError ? (
             <div className="flex flex-col items-center gap-3">
-              <span className="material-symbols-outlined text-[#ffb4ab] text-4xl">error</span>
-              <p className="text-sm text-[#ffb4ab]">{loadError}</p>
+              <span className="material-symbols-outlined text-error text-4xl">error</span>
+              <p className="text-sm text-error">{loadError}</p>
             </div>
           ) : (
             <p className="text-gray-400">Rule not found.</p>
@@ -247,18 +247,18 @@ export default function RuleDetail() {
   const udfs = inst.deployed_udfs || []
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100">
+    <div className="min-h-screen bg-surface text-gray-100">
       <Sidebar /><TopNav />
 
       {/* Toggle confirmation modal */}
       {toggleConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#1d1a25] border border-[#574149]/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-6">
-            <h3 className="text-base font-semibold text-white">
+          <div className="bg-surface-container-low border border-outline-variant/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-6">
+            <h3 className="text-base font-semibold text-gray-100">
               {inst.enabled ? 'Disable' : 'Enable'} Rule
             </h3>
             <p className="text-sm text-gray-400">
-              Are you sure you want to <span className="text-white font-medium">{inst.enabled ? 'disable' : 'enable'}</span> <span className="text-[#ffb0cf]">{inst.name}</span>?
+              Are you sure you want to <span className="text-gray-100 font-medium">{inst.enabled ? 'disable' : 'enable'}</span> <span className="text-primary">{inst.name}</span>?
               {inst.enabled
                 ? <span className="block mt-2 text-xs text-gray-400">This drops the detection materialized view; re-enabling redeploys it from the current configuration.</span>
                 : <span className="block mt-2 text-xs text-gray-400">This deploys the detection materialized view and starts monitoring.</span>
@@ -280,8 +280,8 @@ export default function RuleDetail() {
       {/* Upgrade modal: shows the upgrade plan (warnings/conflicts) before confirming. */}
       {upgradeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#1d1a25] border border-[#574149]/20 rounded-sm p-8 max-w-lg w-full mx-4 space-y-5">
-            <h3 className="text-base font-semibold text-white">
+          <div className="bg-surface-container-low border border-outline-variant/20 rounded-sm p-8 max-w-lg w-full mx-4 space-y-5">
+            <h3 className="text-base font-semibold text-gray-100">
               Upgrade {inst.name} → {targetVersion}
             </h3>
 
@@ -294,10 +294,10 @@ export default function RuleDetail() {
                 <>
                   {conflicts.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold text-[#ffb4ab] uppercase tracking-widest">Conflicts (block upgrade)</p>
+                      <p className="text-xs font-semibold text-error uppercase tracking-widest">Conflicts (block upgrade)</p>
                       {conflicts.map((c, i) => (
                         <div key={i} className="text-xs bg-red-500/10 border border-red-500/20 rounded-sm px-3 py-2">
-                          <code className="text-[#ffb4ab]">{c.parameter}</code>: <span className="text-gray-300">{c.message}</span>
+                          <code className="text-error">{c.parameter}</code>: <span className="text-gray-300">{c.message}</span>
                         </div>
                       ))}
                     </div>
@@ -335,10 +335,10 @@ export default function RuleDetail() {
       {/* Clone-as-custom modal */}
       {cloneModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#1d1a25] border border-[#574149]/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-5">
-            <h3 className="text-base font-semibold text-white">Clone as custom rule</h3>
+          <div className="bg-surface-container-low border border-outline-variant/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-5">
+            <h3 className="text-base font-semibold text-gray-100">Clone as custom rule</h3>
             <p className="text-xs text-gray-400">
-              Creates an editable copy of <span className="text-[#ffb0cf]">{inst.name}</span> with rescoped UDF names.
+              Creates an editable copy of <span className="text-primary">{inst.name}</span> with rescoped UDF names.
             </p>
             <div className="space-y-3">
               <div>
@@ -348,7 +348,7 @@ export default function RuleDetail() {
                   value={cloneNewId}
                   onChange={e => { setCloneNewId(e.target.value); setCloneExists(false); setCloneError(null) }}
                   placeholder="e.g. rp-003-custom"
-                  className="w-full bg-[#0f0c17] border border-zinc-700 rounded-sm px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#ffb0cf]/50"
+                  className="w-full bg-surface-container-lowest border border-zinc-700 rounded-sm px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-[#ffb0cf]/50"
                 />
               </div>
               <div>
@@ -358,15 +358,15 @@ export default function RuleDetail() {
                   value={cloneNewName}
                   onChange={e => setCloneNewName(e.target.value)}
                   placeholder="e.g. Score Rule (custom)"
-                  className="w-full bg-[#0f0c17] border border-zinc-700 rounded-sm px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#ffb0cf]/50"
+                  className="w-full bg-surface-container-lowest border border-zinc-700 rounded-sm px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-[#ffb0cf]/50"
                 />
               </div>
             </div>
             {cloneError && (
-              <p className={`text-xs font-mono ${cloneExists ? 'text-amber-300' : 'text-[#ffb4ab]'}`}>{cloneError}</p>
+              <p className={`text-xs font-mono ${cloneExists ? 'text-amber-300' : 'text-error'}`}>{cloneError}</p>
             )}
             {cloneExists && (
-              <div className="flex flex-col gap-2 rounded-sm bg-[#0f0c17] p-3">
+              <div className="flex flex-col gap-2 rounded-sm bg-surface-container-lowest p-3">
                 <p className="text-[11px] text-gray-400">Change the ID above to clone under a new name, or:</p>
                 <div className="flex gap-2">
                   <button
@@ -378,7 +378,7 @@ export default function RuleDetail() {
                   <button
                     onClick={deleteExistingClone}
                     disabled={cloneLoading}
-                    className="flex-1 px-3 py-2 text-xs font-semibold rounded-sm bg-[#3a1720] text-[#ffb4ab] hover:bg-[#4a1d29] transition-colors disabled:opacity-50"
+                    className="flex-1 px-3 py-2 text-xs font-semibold rounded-sm bg-error-container/60 text-error hover:bg-error-container/80 transition-colors disabled:opacity-50"
                   >
                     Delete existing draft
                   </button>
@@ -407,7 +407,7 @@ export default function RuleDetail() {
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
 
-          <Link to="/rules" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors uppercase tracking-widest font-semibold">
+          <Link to="/rules" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-100 transition-colors uppercase tracking-widest font-semibold">
             <span className="material-symbols-outlined text-[14px]">arrow_back</span>
             Rule Packs
           </Link>
@@ -415,14 +415,14 @@ export default function RuleDetail() {
           {/* Header row */}
           <div className="flex items-start justify-between gap-6 flex-wrap">
             <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 bg-[#0f0c17] flex items-center justify-center rounded-sm ${inst.enabled ? 'text-[#ffb0cf]' : 'text-gray-400'}`}>
+              <div className={`w-14 h-14 bg-surface-container-lowest flex items-center justify-center rounded-sm ${inst.enabled ? 'text-primary' : 'text-gray-400'}`}>
                 <span className="material-symbols-outlined text-[28px]" style={inst.enabled ? { fontVariationSettings: "'FILL' 1" } : {}}>{icon}</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">{inst.name}</h1>
+                <h1 className="text-2xl font-bold text-gray-100 tracking-tight">{inst.name}</h1>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-xs text-gray-400">
-                    <span className="material-symbols-outlined text-[12px] text-[#ffb0cf] align-middle" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                    <span className="material-symbols-outlined text-[12px] text-primary align-middle" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
                     {' '}{inst.definition_version}
                   </span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${severityBadge(inst.severity)}`}>
@@ -450,7 +450,7 @@ export default function RuleDetail() {
                 <button
                   onClick={() => { setUpgradeConflicts(null); setUpgradeModal(true) }}
                   disabled={actionLoading}
-                  className="px-4 py-2 text-xs font-semibold rounded-sm border border-[#ffb0cf]/30 text-[#ffb0cf] hover:bg-[#ffb0cf]/10 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-xs font-semibold rounded-sm border border-[#ffb0cf]/30 text-primary hover:bg-[#ffb0cf]/10 transition-colors disabled:opacity-50"
                 >
                   Upgrade{targetVersion ? ` to ${targetVersion}` : ''}
                   {rule.upgrade?.conflicts?.length > 0 && (
@@ -467,7 +467,7 @@ export default function RuleDetail() {
               {rule.definition?.origin === 'custom' ? (
                 <Link
                   to={`/rules/${id}/edit`}
-                  className="px-4 py-2 text-xs font-semibold rounded-sm border border-[#ffb0cf]/30 text-[#ffb0cf] hover:bg-[#ffb0cf]/10 transition-colors"
+                  className="px-4 py-2 text-xs font-semibold rounded-sm border border-[#ffb0cf]/30 text-primary hover:bg-[#ffb0cf]/10 transition-colors"
                 >
                   Edit definition
                 </Link>
@@ -499,14 +499,14 @@ export default function RuleDetail() {
             <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 flex items-start gap-3">
               <span className="material-symbols-outlined text-red-400 text-[18px] shrink-0 mt-0.5">error</span>
               <p className="text-xs text-red-400 font-mono break-all">{actionError}</p>
-              <button onClick={() => setActionError(null)} className="ml-auto text-gray-400 hover:text-white shrink-0">
+              <button onClick={() => setActionError(null)} className="ml-auto text-gray-400 hover:text-gray-100 shrink-0">
                 <span className="material-symbols-outlined text-[16px]">close</span>
               </button>
             </div>
           )}
 
           {/* Block Policy */}
-          <div className="bg-[#1d1a25] rounded-sm p-4">
+          <div className="bg-surface-container-low rounded-sm p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Block Policy</span>
               <BlockPolicySelect
@@ -531,28 +531,28 @@ export default function RuleDetail() {
           </div>
 
           {/* Rule Definition metadata */}
-          <div className="bg-[#1d1a25] p-8 rounded-sm">
+          <div className="bg-surface-container-low p-8 rounded-sm">
             <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-6">Rule Definition</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Rule ID</p>
-                <p className="text-sm font-mono text-white">{inst.rule_id}</p>
+                <p className="text-sm font-mono text-gray-100">{inst.rule_id}</p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Version</p>
-                <p className="text-sm text-white">{inst.definition_version}</p>
+                <p className="text-sm text-gray-100">{inst.definition_version}</p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Category</p>
-                <p className="text-sm text-white capitalize">{inst.category?.replace(/_/g, ' ')}</p>
+                <p className="text-sm text-gray-100 capitalize">{inst.category?.replace(/_/g, ' ')}</p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Severity</p>
-                <p className={`text-sm font-semibold capitalize ${inst.severity === 'critical' ? 'text-[#ffb0cf]' : 'text-amber-400'}`}>{inst.severity}</p>
+                <p className={`text-sm font-semibold capitalize ${inst.severity === 'critical' ? 'text-primary' : 'text-amber-400'}`}>{inst.severity}</p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">False Positive Rate</p>
-                <p className="text-sm text-white capitalize">{inst.fp_rate}</p>
+                <p className="text-sm text-gray-100 capitalize">{inst.fp_rate}</p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Hook Sources</p>
@@ -568,8 +568,8 @@ export default function RuleDetail() {
           </div>
 
           {/* Tabbed content: Configuration / Description / Detection SQL / UDFs / Recent Detections */}
-          <div className="bg-[#1d1a25] rounded-sm overflow-hidden">
-            <div className="flex border-b border-[#574149]/10 px-2 flex-wrap">
+          <div className="bg-surface-container-low rounded-sm overflow-hidden">
+            <div className="flex border-b border-outline-variant/10 px-2 flex-wrap">
               {[
                 { id: 'configuration', label: 'Configuration', badge: rule.schema?.length || 0 },
                 { id: 'description',   label: 'Description' },
@@ -582,11 +582,11 @@ export default function RuleDetail() {
                   <button
                     key={t.id}
                     onClick={() => setContentTab(t.id)}
-                    className={`px-4 py-3 text-xs font-semibold uppercase tracking-widest transition-colors border-b-2 ${active ? 'text-[#ffb0cf] border-[#ffb0cf]' : 'text-gray-400 hover:text-gray-100 border-transparent'}`}
+                    className={`px-4 py-3 text-xs font-semibold uppercase tracking-widest transition-colors border-b-2 ${active ? 'text-primary border-[#ffb0cf]' : 'text-gray-400 hover:text-gray-100 border-transparent'}`}
                   >
                     {t.label}
                     {t.badge != null && t.badge > 0 && (
-                      <span className={`ml-2 text-[10px] normal-case font-normal ${active ? 'text-[#ffb0cf]/70' : 'text-gray-400'}`}>
+                      <span className={`ml-2 text-[10px] normal-case font-normal ${active ? 'text-primary/70' : 'text-gray-400'}`}>
                         {t.badgeLabel ? `(${t.badgeLabel}: ${t.badge})` : `(${t.badge})`}
                       </span>
                     )}
@@ -641,12 +641,12 @@ export default function RuleDetail() {
                 <>
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-[11px] text-gray-400">Read-only — rendered from the definition template and current parameter values.</span>
-                    <button onClick={copySQL} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors">
+                    <button onClick={copySQL} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-100 transition-colors">
                       <span className="material-symbols-outlined text-[14px]">{copied ? 'check' : 'content_copy'}</span>
                       {copied ? 'Copied' : 'Copy'}
                     </button>
                   </div>
-                  <pre className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
+                  <pre className="bg-surface-container-lowest text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
                     dangerouslySetInnerHTML={{ __html: highlight(inst.rendered_sql || '', languages.sql, 'sql') }}
                   />
                 </>
@@ -662,12 +662,12 @@ export default function RuleDetail() {
                             {udfFuncName(udf)}
                             <span className="ml-2 text-[10px] text-gray-400 normal-case font-normal">UDF</span>
                           </h3>
-                          <button onClick={() => copyUDF(i, udf)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors">
+                          <button onClick={() => copyUDF(i, udf)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-100 transition-colors">
                             <span className="material-symbols-outlined text-[14px]">{copiedUDFs[i] ? 'check' : 'content_copy'}</span>
                             {copiedUDFs[i] ? 'Copied' : 'Copy'}
                           </button>
                         </div>
-                        <pre className="bg-[#0f0c17] text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
+                        <pre className="bg-surface-container-lowest text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
                           dangerouslySetInnerHTML={{ __html: highlight(udf || '', languages.sql, 'sql') }}
                         />
                       </div>

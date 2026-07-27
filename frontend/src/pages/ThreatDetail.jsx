@@ -56,10 +56,10 @@ function JsonValue({ value, depth }) {
       {open ? (
         <>
           <span className="text-gray-400">{ob}</span>
-          <div className="pl-4 border-l border-[#574149]/20 ml-0.5 mt-0.5 space-y-0.5">
+          <div className="pl-4 border-l border-outline-variant/20 ml-0.5 mt-0.5 space-y-0.5">
             {entries.map(([k, v]) => (
               <div key={k} className="flex gap-1.5 items-start">
-                <span className="text-[#93c5fd] shrink-0 select-none">
+                <span className="text-info shrink-0 select-none">
                   {isArr ? k : `"${k}"`}:
                 </span>
                 <JsonValue value={v} depth={depth + 1} />
@@ -93,7 +93,7 @@ function EventCard({ event }) {
   const hasDetail = event.run_id || event.event_data
 
   return (
-    <div className="bg-[#211e29] border border-[#574149]/10 rounded">
+    <div className="bg-surface-container border border-outline-variant/10 rounded">
       {/* Summary row — always visible, click to expand */}
       <div
         className="flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none"
@@ -106,12 +106,12 @@ function EventCard({ event }) {
           {formatTs(event.detected_at)}
         </span>
         {event.hook_name && (
-          <span className="bg-[#2c2834] text-gray-400 uppercase rounded-full text-[10px] font-semibold px-2 py-0.5 tracking-wide shrink-0">
+          <span className="bg-surface-container-high text-gray-400 uppercase rounded-full text-[10px] font-semibold px-2 py-0.5 tracking-wide shrink-0">
             {event.hook_name}
           </span>
         )}
         {event.tool_name && (
-          <span className="text-[10px] font-mono text-[#93c5fd] shrink-0">{event.tool_name}</span>
+          <span className="text-[10px] font-mono text-info shrink-0">{event.tool_name}</span>
         )}
         {event.message && (
           <span className="text-xs text-gray-100 truncate" title={event.message}>{event.message}</span>
@@ -120,7 +120,7 @@ function EventCard({ event }) {
 
       {/* Expanded detail — run_id + JSON tree */}
       {expanded && hasDetail && (
-        <div className="px-4 pb-3 pt-1 border-t border-[#574149]/10">
+        <div className="px-4 pb-3 pt-1 border-t border-outline-variant/10">
           {event.run_id && (
             <p className="text-[10px] font-mono text-gray-400 mb-2">run: {event.run_id}</p>
           )}
@@ -309,7 +309,7 @@ export default function ThreatDetail() {
     : null
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100">
+    <div className="min-h-screen bg-surface text-gray-100">
       <Sidebar />
       <TopNav />
 
@@ -317,9 +317,9 @@ export default function ThreatDetail() {
         {loading ? (
           /* Loading skeleton */
           <div className="p-8 space-y-4">
-            <div className="animate-pulse h-20 bg-[#211e29] rounded" />
-            <div className="animate-pulse h-48 bg-[#211e29] rounded" />
-            <div className="animate-pulse h-32 bg-[#211e29] rounded" />
+            <div className="animate-pulse h-20 bg-surface-container rounded" />
+            <div className="animate-pulse h-48 bg-surface-container rounded" />
+            <div className="animate-pulse h-32 bg-surface-container rounded" />
           </div>
         ) : error ? (
           /* Error state */
@@ -328,7 +328,7 @@ export default function ThreatDetail() {
             <p className="text-gray-400 text-sm">
               {error === 'HTTP 404' ? 'Threat not found.' : error}
             </p>
-            <Link to="/threats" className="text-[#ffb0cf] text-sm hover:underline">
+            <Link to="/threats" className="text-primary text-sm hover:underline">
               ← Back to Threats
             </Link>
           </div>
@@ -336,14 +336,14 @@ export default function ThreatDetail() {
           <div className="p-8">
             <section className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-center gap-3 min-w-0">
-                <Link to="/threats" className="text-gray-400 hover:text-[#ffb0cf] transition-colors shrink-0">
+                <Link to="/threats" className="text-gray-400 hover:text-primary transition-colors shrink-0">
                   <span className="material-symbols-outlined">arrow_back</span>
                 </Link>
 
                 <div className="flex flex-wrap items-center gap-3 min-w-0">
                   <Link
                     to={`/rules/${threat.rule_id}`}
-                    className="font-medium tracking-tight text-lg text-gray-100 hover:text-[#ffb0cf] transition-colors truncate max-w-[520px]"
+                    className="font-medium tracking-tight text-lg text-gray-100 hover:text-primary transition-colors truncate max-w-[520px]"
                   >
                     {threat.rule_name || threat.rule_id}
                   </Link>
@@ -352,7 +352,7 @@ export default function ThreatDetail() {
                   {threat.agent_id && (
                     <Link
                       to={`/agents/${agentCompoundId}`}
-                      className="bg-[#2c2834] text-[#ffb0cf] px-2.5 py-1 rounded-full text-[10px] font-semibold font-mono hover:bg-[#38323f] transition-colors whitespace-nowrap"
+                      className="bg-surface-container-high text-primary px-2.5 py-1 rounded-full text-[10px] font-semibold font-mono hover:bg-surface-container-highest transition-colors whitespace-nowrap"
                     >
                       {threat.agent_id}
                     </Link>
@@ -401,14 +401,14 @@ export default function ThreatDetail() {
             </section>
 
             {/* Tab bar */}
-            <div className="flex items-center gap-1 mb-8 border-b border-[#574149]/20 pb-0">
+            <div className="flex items-center gap-1 mb-8 border-b border-outline-variant/20 pb-0">
               {['overview', 'activity'].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`px-4 py-2 text-xs font-semibold capitalize transition-colors border-b-2 -mb-px ${
                     activeTab === tab
-                      ? 'text-[#ffb0cf] border-[#ffb0cf]'
+                      ? 'text-primary border-[#ffb0cf]'
                       : 'text-gray-400 border-transparent hover:text-gray-100'
                   }`}
                 >
@@ -425,12 +425,12 @@ export default function ThreatDetail() {
               <div className="space-y-8">
 
             {actionError && (
-              <div className="flex items-start gap-2 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs">
+              <div className="flex items-start gap-2 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-error text-xs">
                 <span className="material-symbols-outlined text-base shrink-0">error</span>
                 <span className="flex-1">{actionError}</span>
                 <button
                   onClick={() => setActionError('')}
-                  className="text-[#ffb4ab]/70 hover:text-[#ffb4ab] shrink-0"
+                  className="text-error/70 hover:text-error shrink-0"
                   aria-label="Dismiss"
                 >
                   <span className="material-symbols-outlined text-[14px]">close</span>
@@ -442,13 +442,13 @@ export default function ThreatDetail() {
             {threat.pending_hold && decideStatus !== 'approved' && decideStatus !== 'denied' && (
               <section className="bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm p-5">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="material-symbols-outlined text-[#ffb4ab]">block</span>
-                  <h2 className="text-sm font-semibold text-[#ffb4ab]">Pending Hold — Agent paused</h2>
+                  <span className="material-symbols-outlined text-error">block</span>
+                  <h2 className="text-sm font-semibold text-error">Pending Hold — Agent paused</h2>
                 </div>
                 <p className="text-xs text-gray-100 mb-3">
                   Tool: <code className="font-mono text-gray-100">{threat.pending_hold.tool_name}</code>
                 </p>
-                <pre className="bg-[#0f0c17] rounded-sm p-3 mb-4 text-[11px] font-mono text-gray-100 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+                <pre className="bg-surface-container-lowest rounded-sm p-3 mb-4 text-[11px] font-mono text-gray-100 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
                   {threat.pending_hold.args_summary || '(no arguments)'}
                 </pre>
                 <textarea
@@ -469,13 +469,13 @@ export default function ThreatDetail() {
                   <button
                     onClick={() => decide('denied')}
                     disabled={decideStatus === 'pending'}
-                    className="px-4 py-2 bg-[#ffb4ab]/20 text-[#ffb4ab] text-xs font-semibold rounded-sm hover:bg-[#ffb4ab]/30 disabled:opacity-50"
+                    className="px-4 py-2 bg-[#ffb4ab]/20 text-error text-xs font-semibold rounded-sm hover:bg-[#ffb4ab]/30 disabled:opacity-50"
                   >
                     ✗ Deny
                   </button>
                 </div>
                 {decideStatus === 'error' && (
-                  <p className="text-[11px] text-[#ffb4ab] mt-2">
+                  <p className="text-[11px] text-error mt-2">
                     Failed to submit decision{decideError ? `: ${decideError}` : '. Try again.'}
                   </p>
                 )}
@@ -483,7 +483,7 @@ export default function ThreatDetail() {
             )}
 
             {(decideStatus === 'approved' || decideStatus === 'denied') && (
-              <section className="bg-[#1d1a25] rounded-sm p-4">
+              <section className="bg-surface-container-low rounded-sm p-4">
                 <p className="text-xs text-emerald-400">
                   ✓ {decideStatus === 'approved' ? 'Approved' : 'Denied'} — agent has been notified.
                 </p>
@@ -493,25 +493,25 @@ export default function ThreatDetail() {
             {/* Stat strip */}
             <div className="grid grid-cols-4 gap-4">
               {/* Event Count */}
-              <div className="bg-[#211e29] border border-[#574149]/10 rounded p-4">
+              <div className="bg-surface-container border border-outline-variant/10 rounded p-4">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Event Count</p>
                 <p className="text-2xl font-medium text-gray-100">{threat.event_count ?? events.length}</p>
               </div>
 
               {/* First Seen */}
-              <div className="bg-[#211e29] border border-[#574149]/10 rounded p-4">
+              <div className="bg-surface-container border border-outline-variant/10 rounded p-4">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">First Seen</p>
                 <p className="text-sm text-gray-100">{formatTs(threat.first_seen)}</p>
               </div>
 
               {/* Last Seen */}
-              <div className="bg-[#211e29] border border-[#574149]/10 rounded p-4">
+              <div className="bg-surface-container border border-outline-variant/10 rounded p-4">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Last Seen</p>
                 <p className="text-sm text-gray-100">{formatTs(threat.last_seen)}</p>
               </div>
 
               {/* Session ID */}
-              <div className="bg-[#211e29] border border-[#574149]/10 rounded p-4">
+              <div className="bg-surface-container border border-outline-variant/10 rounded p-4">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Session ID</p>
                 {threat.session_id ? (
                   <code

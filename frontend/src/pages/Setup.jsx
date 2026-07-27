@@ -76,8 +76,8 @@ export default function Setup() {
   }
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100 flex flex-col">
-      <nav className="bg-[#15121d] shadow-[0_0_12px_rgba(213,63,140,0.12)] sticky top-0 z-50 h-16 w-full flex items-center px-6 backdrop-blur-md">
+    <div className="min-h-screen bg-surface text-gray-100 flex flex-col">
+      <nav className="bg-surface shadow-[0_0_12px_rgba(213,63,140,0.12)] sticky top-0 z-50 h-16 w-full flex items-center px-6 backdrop-blur-md">
         <span className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] tracking-tight">AgentGuard</span>
         <span className="ml-3 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">First-time Setup</span>
       </nav>
@@ -85,7 +85,7 @@ export default function Setup() {
       <main className="flex-1 flex items-start justify-center p-6 md:p-12">
         <div className="w-full max-w-2xl space-y-8">
           <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Setup AgentGuard</h1>
+            <h1 className="text-2xl font-bold text-gray-100 tracking-tight">Setup AgentGuard</h1>
             <p className="text-gray-400 text-xs mt-1 leading-relaxed">Connect to Timeplus and provision all monitoring resources.</p>
           </div>
 
@@ -93,25 +93,25 @@ export default function Setup() {
           <div className="flex items-center gap-0">
             {STEPS.map((s, i) => (
               <div key={i} className="flex items-center">
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-sm text-xs font-semibold ${i === step ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : i < step ? 'text-gray-400' : 'text-gray-400'}`}>
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i < step ? 'bg-[#f256a3] text-[#570033]' : i === step ? 'bg-[#ffb0cf]/20 text-[#ffb0cf]' : 'bg-[#37333f] text-gray-400'}`}>
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-sm text-xs font-semibold ${i === step ? 'bg-[#ffb0cf]/10 text-primary' : i < step ? 'text-gray-400' : 'text-gray-400'}`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i < step ? 'bg-[#f256a3] text-[#570033]' : i === step ? 'bg-[#ffb0cf]/20 text-primary' : 'bg-surface-container-highest text-gray-400'}`}>
                     {i < step ? '✓' : i + 1}
                   </span>
                   {s.label}
                 </div>
-                {i < STEPS.length - 1 && <div className="h-px w-8 bg-[#37333f]" />}
+                {i < STEPS.length - 1 && <div className="h-px w-8 bg-surface-container-highest" />}
               </div>
             ))}
           </div>
 
-          <div className="bg-[#2c2834] rounded-sm overflow-hidden">
+          <div className="bg-surface-container-high rounded-sm overflow-hidden">
             <div className="p-8 space-y-6">
 
               {/* Step 0: Connection */}
               {step === 0 && (
                 <>
                   <div>
-                    <h2 className="text-base font-semibold text-white">Timeplus Connection</h2>
+                    <h2 className="text-base font-semibold text-gray-100">Timeplus Connection</h2>
                     <p className="text-gray-400 text-xs mt-1">Enter the address of your Timeplus instance.</p>
                   </div>
                   <div className="space-y-3">
@@ -140,7 +140,7 @@ export default function Setup() {
               {step === 1 && (
                 <>
                   <div>
-                    <h2 className="text-base font-semibold text-white">Timeplus Credentials</h2>
+                    <h2 className="text-base font-semibold text-gray-100">Timeplus Credentials</h2>
                     <p className="text-gray-400 text-xs mt-1">Enter your Timeplus username and password. These will not be stored.</p>
                   </div>
                   <div className="space-y-3">
@@ -164,7 +164,7 @@ export default function Setup() {
                     <button
                       onClick={handleTestConnection}
                       disabled={testing || !username}
-                      className="px-4 py-2 text-xs font-semibold rounded-sm bg-[#37333f] text-gray-100 hover:text-white hover:bg-[#4b4754] transition-colors disabled:opacity-50"
+                      className="px-4 py-2 text-xs font-semibold rounded-sm bg-surface-container-highest text-gray-100 hover:text-gray-100 hover:bg-secondary-container transition-colors disabled:opacity-50"
                     >
                       {testing ? 'Testing…' : 'Test Connection'}
                     </button>
@@ -175,7 +175,7 @@ export default function Setup() {
                       </span>
                     )}
                     {testResult && !testResult.ok && (
-                      <span className="flex items-center gap-1.5 text-xs text-[#ffb4ab]">
+                      <span className="flex items-center gap-1.5 text-xs text-error">
                         <span className="material-symbols-outlined text-xs">error</span>
                         {testResult.error}
                       </span>
@@ -188,7 +188,7 @@ export default function Setup() {
               {step === 2 && (
                 <>
                   <div>
-                    <h2 className="text-base font-semibold text-white">Provision Resources</h2>
+                    <h2 className="text-base font-semibold text-gray-100">Provision Resources</h2>
                     <p className="text-gray-400 text-xs mt-1">Create all AgentGuard streams, materialized views, and rules in Timeplus.</p>
                   </div>
 
@@ -205,10 +205,10 @@ export default function Setup() {
                   )}
 
                   {(log.length > 0 || provisioning) && (
-                    <div className="bg-[#0f0c17] rounded-sm border border-[#574149]/10 p-4 font-mono text-[11px] leading-relaxed max-h-72 overflow-y-auto custom-scrollbar">
+                    <div className="bg-surface-container-lowest rounded-sm border border-outline-variant/10 p-4 font-mono text-[11px] leading-relaxed max-h-72 overflow-y-auto custom-scrollbar">
                       {log.map((entry, i) => (
                         <div key={i} className={
-                          entry.status === 'error' ? 'text-[#ffb4ab]' :
+                          entry.status === 'error' ? 'text-error' :
                           entry.status === 'done'  ? 'text-emerald-400 font-semibold' :
                           entry.status === 'running' ? 'text-gray-400' :
                           'text-gray-100'
@@ -216,13 +216,13 @@ export default function Setup() {
                           {entry.msg}
                         </div>
                       ))}
-                      {provisioning && <div className="text-[#ffb0cf] animate-pulse">▌</div>}
+                      {provisioning && <div className="text-primary animate-pulse">▌</div>}
                       <div ref={logEndRef} />
                     </div>
                   )}
 
                   {provisionError && (
-                    <div className="flex items-start gap-2 text-xs text-[#ffb4ab] bg-[#93000a]/20 border border-[#ffb4ab]/20 rounded-sm p-3">
+                    <div className="flex items-start gap-2 text-xs text-error bg-[#93000a]/20 border border-[#ffb4ab]/20 rounded-sm p-3">
                       <span className="material-symbols-outlined text-xs mt-0.5 shrink-0">error</span>
                       {provisionError}
                     </div>
@@ -232,11 +232,11 @@ export default function Setup() {
             </div>
 
             {/* Footer */}
-            <div className="bg-[#37333f]/30 px-8 py-5 flex justify-between items-center">
+            <div className="bg-surface-container-highest/30 px-8 py-5 flex justify-between items-center">
               <button
                 onClick={() => setStep(s => Math.max(0, s - 1))}
                 disabled={step === 0 || provisioning || done}
-                className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-white transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-gray-100 transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined text-xs">arrow_back</span>
                 Back

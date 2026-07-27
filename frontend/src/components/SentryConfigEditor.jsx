@@ -205,7 +205,7 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
   return (
     <div className="space-y-6">
       <p className="text-xs text-gray-400">
-        Live configuration stored in the <code className="font-mono text-[#ffb0cf]">agentguard_sentry_config</code> stream.
+        Live configuration stored in the <code className="font-mono text-primary">agentguard_sentry_config</code> stream.
         Edits apply immediately — no restart or re-provision. (Boot defaults in the server config only seed these on first provision.)
       </p>
 

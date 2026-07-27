@@ -22,12 +22,12 @@ export default function Dashboard() {
     {
       label: 'Total Agents', value: data.kpis.total_agents,
       delta: data.kpis.agents_delta || 'all time',
-      deltaColor: 'text-emerald-400', icon: 'smart_toy', iconColor: 'text-[#ffb0cf]', deltaIcon: 'trending_up',
+      deltaColor: 'text-emerald-400', icon: 'smart_toy', iconColor: 'text-primary', deltaIcon: 'trending_up',
     },
     {
       label: 'Total Token Cost (24h)', value: data.kpis.total_cost_24h,
       delta: data.kpis.cost_status,
-      deltaColor: 'text-gray-300', icon: 'monetization_on', iconColor: 'text-[#ffb0cf]', deltaIcon: 'horizontal_rule',
+      deltaColor: 'text-gray-300', icon: 'monetization_on', iconColor: 'text-primary', deltaIcon: 'horizontal_rule',
     },
     {
       label: 'Active Rules', value: data.kpis.active_rules,
@@ -35,8 +35,8 @@ export default function Dashboard() {
       deltaColor: 'text-emerald-400', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle',
     },
   ] : [
-    { label: 'Total Agents', value: '—', delta: 'loading…', deltaColor: 'text-gray-300', icon: 'smart_toy', iconColor: 'text-[#ffb0cf]', deltaIcon: 'trending_up' },
-    { label: 'Total Token Cost (24h)', value: '—', delta: 'loading…', deltaColor: 'text-gray-300', icon: 'monetization_on', iconColor: 'text-[#ffb0cf]', deltaIcon: 'horizontal_rule' },
+    { label: 'Total Agents', value: '—', delta: 'loading…', deltaColor: 'text-gray-300', icon: 'smart_toy', iconColor: 'text-primary', deltaIcon: 'trending_up' },
+    { label: 'Total Token Cost (24h)', value: '—', delta: 'loading…', deltaColor: 'text-gray-300', icon: 'monetization_on', iconColor: 'text-primary', deltaIcon: 'horizontal_rule' },
     { label: 'Active Rules', value: '—', delta: 'loading…', deltaColor: 'text-gray-300', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle' },
   ]
 
@@ -49,7 +49,7 @@ export default function Dashboard() {
         <div className="p-6 lg:p-10 space-y-8">
           {/* KPI Bento Grid */}
           {error && (
-            <div className="flex items-center gap-3 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs mb-2">
+            <div className="flex items-center gap-3 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-error text-xs mb-2">
               <span className="material-symbols-outlined text-base shrink-0">error</span>
               <span>{typeof error === 'string' ? error : error?.message || 'Failed to load dashboard data'}</span>
             </div>

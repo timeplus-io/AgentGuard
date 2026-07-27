@@ -59,7 +59,7 @@ function RiskTagChips({ tags, onClick }) {
         <span
           key={tag}
           onClick={onClick ? (e) => { e.stopPropagation(); onClick(tag) } : undefined}
-          className={`text-[10px] font-semibold rounded-full px-2 py-0.5 bg-[#ffb4ab]/10 text-[#ffb4ab] whitespace-nowrap ${onClick ? 'cursor-pointer hover:bg-[#ffb4ab]/20' : ''}`}
+          className={`text-[10px] font-semibold rounded-full px-2 py-0.5 bg-[#ffb4ab]/10 text-error whitespace-nowrap ${onClick ? 'cursor-pointer hover:bg-[#ffb4ab]/20' : ''}`}
         >
           {tag}
         </span>
@@ -70,7 +70,7 @@ function RiskTagChips({ tags, onClick }) {
 
 function RoleBadge({ role }) {
   const styles = {
-    user: 'bg-[#ffb0cf]/10 text-[#ffb0cf]',
+    user: 'bg-[#ffb0cf]/10 text-primary',
     assistant: 'bg-sky-900/50 text-sky-300',
     tool: 'bg-gray-700 text-gray-300',
   }
@@ -96,10 +96,10 @@ function StageDot({ done, active, label }) {
 
 function EvidenceCard({ ev, onOpenMessage }) {
   return (
-    <div className="bg-[#2c2834] rounded-sm p-4 flex flex-col gap-2">
+    <div className="bg-surface-container-high rounded-sm p-4 flex flex-col gap-2">
       <div className="flex items-center gap-2 flex-wrap">
         <RoleBadge role={ev.role} />
-        <code className="text-[10px] font-mono text-[#ffb0cf]">{ev.agent_id || ev.agent_type || '—'}</code>
+        <code className="text-[10px] font-mono text-primary">{ev.agent_id || ev.agent_type || '—'}</code>
         <span className="text-[10px] text-gray-400">{formatTs(ev.event_time)}</span>
         <span className="ml-auto flex items-center gap-2">
           {ev.rerank_score > 0 && (
@@ -115,7 +115,7 @@ function EvidenceCard({ ev, onOpenMessage }) {
       <div className="flex items-center gap-3 mt-auto pt-1">
         <button
           onClick={() => onOpenMessage(ev.message_id)}
-          className="text-[11px] font-semibold text-[#ffb0cf] hover:underline"
+          className="text-[11px] font-semibold text-primary hover:underline"
         >
           Message detail
         </button>
@@ -170,7 +170,7 @@ function AskPanel({ onOpenMessage }) {
   const error = stages?.error
 
   return (
-    <section className="bg-[#211e29] rounded-sm p-6 mb-6">
+    <section className="bg-surface-container rounded-sm p-6 mb-6">
       <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-3">
         Ask about data exposure
       </h3>
@@ -183,7 +183,7 @@ function AskPanel({ onOpenMessage }) {
           value={question}
           onChange={e => setQuestion(e.target.value)}
           placeholder="e.g. Did any agent leak credentials in the last week?"
-          className="flex-1 bg-[#2c2834] text-gray-100 text-sm rounded-sm px-4 py-2.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50"
+          className="flex-1 bg-surface-container-high text-gray-100 text-sm rounded-sm px-4 py-2.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50"
         />
         <button
           type="submit"
@@ -200,7 +200,7 @@ function AskPanel({ onOpenMessage }) {
             key={p}
             onClick={() => { setQuestion(p); ask(p) }}
             disabled={asking}
-            className="text-[11px] px-3 py-1.5 rounded-full bg-[#2c2834] text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors disabled:opacity-50"
+            className="text-[11px] px-3 py-1.5 rounded-full bg-surface-container-high text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
             {p}
           </button>
@@ -218,18 +218,18 @@ function AskPanel({ onOpenMessage }) {
           </div>
 
           {intent && (
-            <div className="bg-[#2c2834] rounded-sm p-4 mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px]">
+            <div className="bg-surface-container-high rounded-sm p-4 mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px]">
               <span className="text-gray-400 uppercase tracking-widest font-semibold text-[10px]">Intent</span>
               {intent.keywords?.length > 0 && (
-                <span className="text-gray-100">keywords: <span className="font-mono text-[#ffb0cf]">{intent.keywords.join(', ')}</span></span>
+                <span className="text-gray-100">keywords: <span className="font-mono text-primary">{intent.keywords.join(', ')}</span></span>
               )}
               {intent.entity_types?.length > 0 && (
-                <span className="text-gray-100">entities: <span className="font-mono text-[#ffb0cf]">{intent.entity_types.join(', ')}</span></span>
+                <span className="text-gray-100">entities: <span className="font-mono text-primary">{intent.entity_types.join(', ')}</span></span>
               )}
               {intent.risk_tags?.length > 0 && (
-                <span className="text-gray-100">risk tags: <span className="font-mono text-[#ffb4ab]">{intent.risk_tags.join(', ')}</span></span>
+                <span className="text-gray-100">risk tags: <span className="font-mono text-error">{intent.risk_tags.join(', ')}</span></span>
               )}
-              <span className="text-gray-100">window: <span className="font-mono text-[#ffb0cf]">{intent.time_range_days}d</span></span>
+              <span className="text-gray-100">window: <span className="font-mono text-primary">{intent.time_range_days}d</span></span>
             </div>
           )}
 
@@ -242,7 +242,7 @@ function AskPanel({ onOpenMessage }) {
           )}
 
           {error && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-[#93000a]/20 rounded-sm text-[#ffb4ab] text-xs">
+            <div className="flex items-center gap-2 px-4 py-2 bg-[#93000a]/20 rounded-sm text-error text-xs">
               <span className="material-symbols-outlined text-base shrink-0">error</span>
               {error.error}
             </div>
@@ -250,7 +250,7 @@ function AskPanel({ onOpenMessage }) {
 
           {answer && (
             <>
-              <div className="bg-[#2c2834] rounded-sm p-5 mb-4">
+              <div className="bg-surface-container-high rounded-sm p-5 mb-4">
                 <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Audit report</h4>
                 <p className="text-sm text-gray-100 whitespace-pre-wrap leading-relaxed">{answer.report}</p>
               </div>
@@ -278,7 +278,7 @@ function AskPanel({ onOpenMessage }) {
 
 function ProfileCard({ title, entries, renderKey }) {
   return (
-    <div className="bg-[#211e29] rounded-sm p-5">
+    <div className="bg-surface-container rounded-sm p-5">
       <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">{title}</h4>
       {!entries?.length ? (
         <p className="text-xs text-gray-400">No flagged messages in window.</p>
@@ -309,7 +309,7 @@ function RiskProfiles({ onTagClick, onAgentClick }) {
 
   if (error) {
     return (
-      <section className="bg-[#211e29] rounded-sm p-4 mb-6 text-xs text-[#ffb4ab]">
+      <section className="bg-surface-container rounded-sm p-4 mb-6 text-xs text-error">
         Risk profiles unavailable: {error}
       </section>
     )
@@ -320,7 +320,7 @@ function RiskProfiles({ onTagClick, onAgentClick }) {
         title={`Top risk agents (${profiles?.window_days ?? 30}d)`}
         entries={profiles?.top_agents}
         renderKey={e => (
-          <button onClick={() => onAgentClick(e.key)} className="font-mono text-[#ffb0cf] hover:underline truncate" title={e.key}>
+          <button onClick={() => onAgentClick(e.key)} className="font-mono text-primary hover:underline truncate" title={e.key}>
             {e.key || '(unknown)'}
           </button>
         )}
@@ -338,7 +338,7 @@ function RiskProfiles({ onTagClick, onAgentClick }) {
         renderKey={e => (
           <button
             onClick={() => onTagClick(e.key)}
-            className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-[#ffb4ab]/10 text-[#ffb4ab] hover:bg-[#ffb4ab]/20"
+            className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-[#ffb4ab]/10 text-error hover:bg-[#ffb4ab]/20"
           >
             {e.key}
           </button>
@@ -367,7 +367,7 @@ function MessageDetail({ messageId, onClose }) {
     <div className="fixed inset-0 z-[70] flex justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="relative w-full max-w-xl h-full bg-[#211e29] overflow-y-auto p-6 flex flex-col gap-4"
+        className="relative w-full max-w-xl h-full bg-surface-container overflow-y-auto p-6 flex flex-col gap-4"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -377,7 +377,7 @@ function MessageDetail({ messageId, onClose }) {
           </button>
         </div>
 
-        {error && <p className="text-xs text-[#ffb4ab]">{error}</p>}
+        {error && <p className="text-xs text-error">{error}</p>}
         {!msg && !error && <p className="text-xs text-gray-400">Loading…</p>}
 
         {msg && (
@@ -412,7 +412,7 @@ function MessageDetail({ messageId, onClose }) {
             {sessionHref(msg) && (
               <Link
                 to={sessionHref(msg)}
-                className="text-[11px] font-semibold text-[#ffb0cf] hover:underline w-fit"
+                className="text-[11px] font-semibold text-primary hover:underline w-fit"
               >
                 Open session →
               </Link>
@@ -425,7 +425,7 @@ function MessageDetail({ messageId, onClose }) {
                   {Object.entries(msg.entities).map(([type, values]) => (
                     <div key={type} className="flex items-start gap-2 text-[11px]">
                       <span className="font-semibold text-gray-400 whitespace-nowrap">{type}:</span>
-                      <span className="font-mono text-[#ffb4ab] break-all">{(values || []).join(', ')}</span>
+                      <span className="font-mono text-error break-all">{(values || []).join(', ')}</span>
                     </div>
                   ))}
                 </div>
@@ -434,7 +434,7 @@ function MessageDetail({ messageId, onClose }) {
 
             <div>
               <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Content</h4>
-              <pre className="text-xs text-gray-100 whitespace-pre-wrap break-words bg-[#2c2834] rounded-sm p-4 font-sans">
+              <pre className="text-xs text-gray-100 whitespace-pre-wrap break-words bg-surface-container-high rounded-sm p-4 font-sans">
                 {msg.content}
               </pre>
             </div>
@@ -479,7 +479,7 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
   const setFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: value }))
 
   return (
-    <section className="bg-[#211e29] rounded-sm overflow-hidden">
+    <section className="bg-surface-container rounded-sm overflow-hidden">
       <div className="px-6 py-4 flex flex-wrap items-center gap-4">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Enriched messages
@@ -492,19 +492,19 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
             value={filters.risk_tag}
             onChange={e => setFilter('risk_tag', e.target.value)}
             placeholder="risk tag"
-            className="w-32 bg-[#2c2834] text-gray-100 text-[11px] rounded-sm px-3 py-1.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50"
+            className="w-32 bg-surface-container-high text-gray-100 text-[11px] rounded-sm px-3 py-1.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50"
           />
           <input
             type="text"
             value={filters.agent_id}
             onChange={e => setFilter('agent_id', e.target.value)}
             placeholder="agent id"
-            className="w-32 bg-[#2c2834] text-gray-100 text-[11px] rounded-sm px-3 py-1.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50"
+            className="w-32 bg-surface-container-high text-gray-100 text-[11px] rounded-sm px-3 py-1.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50"
           />
           <select
             value={filters.role}
             onChange={e => setFilter('role', e.target.value)}
-            className="bg-[#2c2834] text-gray-100 text-[11px] rounded-sm px-2 py-1.5 focus:outline-none"
+            className="bg-surface-container-high text-gray-100 text-[11px] rounded-sm px-2 py-1.5 focus:outline-none"
           >
             <option value="">All roles</option>
             {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
@@ -512,7 +512,7 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
           <select
             value={filters.min_score}
             onChange={e => setFilter('min_score', e.target.value)}
-            className="bg-[#2c2834] text-gray-100 text-[11px] rounded-sm px-2 py-1.5 focus:outline-none"
+            className="bg-surface-container-high text-gray-100 text-[11px] rounded-sm px-2 py-1.5 focus:outline-none"
           >
             <option value="">Any risk</option>
             <option value="0.3">≥ 0.3</option>
@@ -532,7 +532,7 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
 
       <div className="overflow-auto">
         <table className="w-full text-left border-collapse">
-          <thead className="bg-[#2c2834] sticky top-0 z-10">
+          <thead className="bg-surface-container-high sticky top-0 z-10">
             <tr>
               {['Time', 'Role', 'Agent', 'Risk', 'Tags', 'Content'].map(h => (
                 <th key={h} className="px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
@@ -541,11 +541,11 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#574149]/10">
+          <tbody className="divide-y divide-outline-variant/10">
             {loading ? (
               <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-xs">Loading messages…</td></tr>
             ) : error ? (
-              <tr><td colSpan={6} className="px-6 py-12 text-center text-xs text-[#ffb4ab]">{error}</td></tr>
+              <tr><td colSpan={6} className="px-6 py-12 text-center text-xs text-error">{error}</td></tr>
             ) : messages.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-xs">
@@ -556,12 +556,12 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
               <tr
                 key={m.message_id}
                 onClick={() => onOpenMessage(m.message_id)}
-                className="hover:bg-[#2c2834] transition-colors cursor-pointer"
+                className="hover:bg-surface-container-high transition-colors cursor-pointer"
               >
                 <td className="px-6 py-3 text-[11px] text-gray-400 whitespace-nowrap">{formatTs(m.event_time)}</td>
                 <td className="px-6 py-3"><RoleBadge role={m.role} /></td>
                 <td className="px-6 py-3">
-                  <code className="text-[11px] font-mono text-[#ffb0cf] truncate block max-w-[140px]" title={m.agent_id}>
+                  <code className="text-[11px] font-mono text-primary truncate block max-w-[140px]" title={m.agent_id}>
                     {m.agent_id || '—'}
                   </code>
                 </td>
@@ -583,7 +583,7 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="px-2 py-1 rounded-sm hover:bg-[#2c2834] disabled:opacity-40"
+            className="px-2 py-1 rounded-sm hover:bg-surface-container-high disabled:opacity-40"
           >
             ← Prev
           </button>
@@ -591,7 +591,7 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="px-2 py-1 rounded-sm hover:bg-[#2c2834] disabled:opacity-40"
+            className="px-2 py-1 rounded-sm hover:bg-surface-container-high disabled:opacity-40"
           >
             Next →
           </button>
@@ -621,7 +621,7 @@ export default function SemanticDLP() {
     && Object.values(status?.udfs || {}).every(Boolean)
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100">
+    <div className="min-h-screen bg-surface text-gray-100">
       <Sidebar />
       <TopNav />
 
@@ -638,7 +638,7 @@ export default function SemanticDLP() {
           />
 
           {statusError ? (
-            <section className="bg-[#211e29] rounded-sm p-6 flex items-center gap-2 text-xs text-[#ffb4ab]">
+            <section className="bg-surface-container rounded-sm p-6 flex items-center gap-2 text-xs text-error">
               <span className="material-symbols-outlined text-base">error</span>
               {statusError}
             </section>

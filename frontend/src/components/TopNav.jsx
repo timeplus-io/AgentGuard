@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { api } from '../api/client'
 import { useOpenThreats } from '../hooks/useLiveThreatFeed'
 import { LiveThreatFeedList } from './LiveThreatFeed'
@@ -38,7 +39,7 @@ function NotificationsDrawer({ open, onClose, threats, loading, error }) {
       >
         <div className="h-10 px-4 border-b border-gray-700 bg-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="material-symbols-outlined text-[#ffb0cf] text-lg">notifications</span>
+            <span className="material-symbols-outlined text-primary text-lg">notifications</span>
             <h2 className="text-sm font-semibold text-gray-100 truncate">Live Threat Feed</h2>
             <span className="text-[10px] font-mono text-red-400">{threats.length}</span>
           </div>
@@ -74,6 +75,7 @@ function NotificationsDrawer({ open, onClose, threats, loading, error }) {
 
 export default function TopNav({ title }) {
   const { auth, setAuth } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -141,8 +143,19 @@ export default function TopNav({ title }) {
               </span>
             )}
           </button>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="h-10 w-10 hover:bg-gray-700 rounded-sm transition-colors flex items-center justify-center"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            <span className="material-symbols-outlined text-lg text-gray-400">
+              {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+            </span>
+          </button>
         </div>
-        <div className="h-8 w-px bg-[#574149] opacity-20"></div>
+        <div className="h-8 w-px bg-outline-variant opacity-20"></div>
         <div className="relative" ref={dropdownRef}>
           {auth.loggedIn && (
             <button

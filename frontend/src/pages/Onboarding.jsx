@@ -47,7 +47,7 @@ function CopyButton({ text }) {
     setTimeout(() => setCopied(false), 2000)
   }
   return (
-    <button onClick={handle} className="flex items-center gap-1.5 text-[10px] font-semibold uppercase text-[#ffb0cf] hover:text-white transition-colors">
+    <button onClick={handle} className="flex items-center gap-1.5 text-[10px] font-semibold uppercase text-primary hover:text-gray-100 transition-colors">
       <span className="material-symbols-outlined text-xs">{copied ? 'check' : 'content_copy'}</span>
       {copied ? 'Copied!' : 'Copy'}
     </button>
@@ -56,8 +56,8 @@ function CopyButton({ text }) {
 
 function CodeBlock({ label, code }) {
   return (
-    <div className="bg-gray-800 rounded-sm overflow-hidden border border-[#574149]/10">
-      <div className="bg-[#37333f]/50 px-4 py-2 flex justify-between items-center">
+    <div className="bg-gray-800 rounded-sm overflow-hidden border border-outline-variant/10">
+      <div className="bg-surface-container-highest/50 px-4 py-2 flex justify-between items-center">
         <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{label}</span>
         <CopyButton text={code} />
       </div>
@@ -256,7 +256,7 @@ export default function Onboarding() {
           {/* Left: Stepper */}
           <div className="lg:col-span-5 space-y-10">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-white mb-2">Connect Your Agent</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-gray-100 mb-2">Connect Your Agent</h1>
               {alreadyOnboarded && (
                 <button
                   onClick={() => navigate('/dashboard')}
@@ -274,7 +274,7 @@ export default function Onboarding() {
             </div>
 
             <div className="space-y-6 relative">
-              <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-[#37333f]"></div>
+              <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-surface-container-highest"></div>
               {STEPS.map((s, i) => {
                 const done = i < step
                 const active = i === step
@@ -289,11 +289,11 @@ export default function Onboarding() {
                         <div className="h-2 w-2 rounded-full bg-[#3d0023]"></div>
                       </div>
                     ) : (
-                      <div className="h-6 w-6 rounded-full bg-[#37333f] flex items-center justify-center z-10">
+                      <div className="h-6 w-6 rounded-full bg-surface-container-highest flex items-center justify-center z-10">
                         <div className="h-1.5 w-1.5 rounded-full bg-zinc-600"></div>
                       </div>
                     )}
-                    <span className={`text-xs ${active ? 'font-semibold text-[#ffb0cf]' : done ? 'text-gray-400' : 'text-gray-400'}`}>
+                    <span className={`text-xs ${active ? 'font-semibold text-primary' : done ? 'text-gray-400' : 'text-gray-400'}`}>
                       {i + 1}. {s.label}
                     </span>
                   </div>
@@ -302,7 +302,7 @@ export default function Onboarding() {
             </div>
 
             {alreadyOnboarded && (
-              <div className="flex items-start gap-3 p-4 bg-[#1d1a25] rounded-sm">
+              <div className="flex items-start gap-3 p-4 bg-surface-container-low rounded-sm">
                 <span className="material-symbols-outlined text-amber-400 text-sm mt-0.5">info</span>
                 <p className="text-xs text-gray-400 leading-relaxed">You've completed onboarding before. Rules already enabled will be shown with an "Already Enabled" badge.</p>
               </div>
@@ -310,14 +310,14 @@ export default function Onboarding() {
           </div>
 
           {/* Right: Step Content */}
-          <div className="lg:col-span-7 bg-[#2c2834] rounded-sm overflow-hidden flex flex-col min-h-[520px]">
+          <div className="lg:col-span-7 bg-surface-container-high rounded-sm overflow-hidden flex flex-col min-h-[520px]">
             <div className="p-8 flex-1 space-y-6">
 
               {/* Step 0: Select Agent */}
               {step === 0 && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-white tracking-tight">Select Agent Type</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">Select Agent Type</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">Choose the AI agent framework you want to protect with AgentGuard.</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -328,25 +328,25 @@ export default function Onboarding() {
                         disabled={at.disabled}
                         className={`p-6 rounded-sm text-left flex flex-col gap-4 border-2 transition-all ${
                           at.disabled
-                            ? 'border-[#574149]/10 bg-[#1d1a25] opacity-50 cursor-not-allowed'
+                            ? 'border-outline-variant/10 bg-surface-container-low opacity-50 cursor-not-allowed'
                             : selectedAgent === at.id
                               ? 'border-[#ffb0cf] bg-[#ffb0cf]/5'
-                              : 'border-[#574149]/20 bg-[#1d1a25] hover:border-[#574149]/40'
+                              : 'border-outline-variant/20 bg-surface-container-low hover:border-outline-variant/40'
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <div className={`w-10 h-10 rounded-sm flex items-center justify-center ${!at.disabled && selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'bg-[#211e29] text-gray-400'}`}>
+                          <div className={`w-10 h-10 rounded-sm flex items-center justify-center ${!at.disabled && selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-primary' : 'bg-surface-container text-gray-400'}`}>
                             {at.imgSrc
                               ? <img src={at.imgSrc} alt={at.name} className="h-6 w-6 object-contain" />
                               : <span className="material-symbols-outlined text-lg">{at.icon}</span>
                             }
                           </div>
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${at.disabled ? 'bg-[#37333f] text-gray-400' : selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-[#ffb0cf]' : 'bg-[#37333f] text-gray-400'}`}>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${at.disabled ? 'bg-surface-container-highest text-gray-400' : selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-primary' : 'bg-surface-container-highest text-gray-400'}`}>
                             {at.badge}
                           </span>
                         </div>
                         <div>
-                          <h3 className="text-sm font-semibold text-white mb-1">{at.name}</h3>
+                          <h3 className="text-sm font-semibold text-gray-100 mb-1">{at.name}</h3>
                           <p className="text-xs text-gray-400 leading-relaxed">{at.desc}</p>
                         </div>
                       </button>
@@ -359,7 +359,7 @@ export default function Onboarding() {
               {step === 1 && selectedAgent === 'openclaw' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">Install Plugin</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       Download and run the interactive install script from your OpenClaw project directory. It will prompt for the values below and patch your <code className="text-gray-100">openclaw.json</code> automatically.
                     </p>
@@ -415,7 +415,7 @@ export default function Onboarding() {
               {step === 1 && selectedAgent === 'claude-code' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">Install Plugin</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       Download and run the interactive install script. It will prompt you for the values below and configure everything automatically.
                     </p>
@@ -473,7 +473,7 @@ export default function Onboarding() {
               {step === 1 && selectedAgent === 'hermes' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-white tracking-tight">Install Plugin</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">Install Plugin</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       Download and run the interactive install script. It will pip-install the plugin, run <code className="text-gray-100">agentguard-hermes install</code>, and offer to append the required env vars to your shell profile.
                     </p>
@@ -532,7 +532,7 @@ export default function Onboarding() {
               {step === 2 && selectedAgent === 'openclaw' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-white tracking-tight">OpenTelemetry Config</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">OpenTelemetry Config</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       Enable the built-in OTel diagnostics plugin to export traces, metrics, and logs from OpenClaw to Timeplus.
                     </p>
@@ -561,7 +561,7 @@ export default function Onboarding() {
               {step === 2 && selectedAgent === 'claude-code' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-white tracking-tight">OpenTelemetry Config</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">OpenTelemetry Config</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       Enable Claude Code's built-in OTel telemetry to export LLM metrics and logs to Timeplus. This unlocks token usage, cost, and latency data.
                     </p>
@@ -590,12 +590,12 @@ export default function Onboarding() {
               {step === 2 && selectedAgent === 'hermes' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-white tracking-tight">OpenTelemetry Config</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">OpenTelemetry Config</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       OTel telemetry export is not yet supported by Hermes Agent.
                     </p>
                   </div>
-                  <div className="flex items-start gap-4 p-5 bg-[#1d1a25] rounded-sm border border-[#574149]/20">
+                  <div className="flex items-start gap-4 p-5 bg-surface-container-low rounded-sm border border-outline-variant/20">
                     <span className="material-symbols-outlined text-amber-400 text-xl mt-0.5 shrink-0">info</span>
                     <div className="space-y-1.5">
                       <p className="text-sm font-medium text-gray-100">OTel not yet available for Hermes</p>
@@ -617,7 +617,7 @@ export default function Onboarding() {
               {step === 3 && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-white tracking-tight">Activate Security Rules</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">Activate Security Rules</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
                       Select the rules to enable now and pick a block policy for each. You can refine these any time from the Rules page.
                     </p>
@@ -640,7 +640,7 @@ export default function Onboarding() {
                           <div
                             key={entry.id}
                             className={`flex items-center justify-between gap-4 p-3 rounded-sm border transition-colors ${
-                              isSelected ? 'bg-[#1d1a25] border-[#ffb0cf]/30' : 'bg-[#1d1a25] border-[#574149]/20'
+                              isSelected ? 'bg-surface-container-low border-[#ffb0cf]/30' : 'bg-surface-container-low border-outline-variant/20'
                             }`}
                           >
                             <div className="flex items-start gap-3 min-w-0">
@@ -686,11 +686,11 @@ export default function Onboarding() {
             </div>
 
             {/* Footer Actions */}
-            <div className="bg-[#37333f]/30 px-8 py-5 flex justify-between items-center">
+            <div className="bg-surface-container-highest/30 px-8 py-5 flex justify-between items-center">
               <button
                 onClick={handleBack}
                 disabled={step === 0}
-                className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-white transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-gray-100 transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined text-xs">arrow_back</span>
                 Back

@@ -75,7 +75,7 @@ function presetToISO(preset) {
 function KVRow({ label, value }) {
   if (value == null || value === '') return null
   return (
-    <div className="grid grid-cols-[130px_1fr] gap-2 py-1 border-b border-[#574149]/10 last:border-0">
+    <div className="grid grid-cols-[130px_1fr] gap-2 py-1 border-b border-outline-variant/10 last:border-0">
       <span className="text-[10px] text-gray-400 uppercase tracking-wider">{label}</span>
       <span className="text-xs font-mono text-gray-100 break-all">{String(value)}</span>
     </div>
@@ -92,7 +92,7 @@ function SessionSummary({ sessionDetail }) {
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-8">
-      <div className="w-full max-w-lg bg-[#1d1a25] rounded-sm p-6 space-y-6">
+      <div className="w-full max-w-lg bg-surface-container-low rounded-sm p-6 space-y-6">
         {/* Session ID */}
         <div>
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Session ID</p>
@@ -106,7 +106,7 @@ function SessionSummary({ sessionDetail }) {
             {isEnded ? 'Ended' : 'Active'}
           </span>
           {sessionDetail.session_type && (
-            <span className="ml-2 text-[10px] text-gray-400 bg-[#2c2834] px-2 py-0.5 rounded-full uppercase tracking-wider">
+            <span className="ml-2 text-[10px] text-gray-400 bg-surface-container-high px-2 py-0.5 rounded-full uppercase tracking-wider">
               {sessionDetail.session_type}
             </span>
           )}
@@ -114,32 +114,32 @@ function SessionSummary({ sessionDetail }) {
 
         {/* Model / Provider */}
         {(sessionDetail.model || sessionDetail.provider) && (
-          <div className="flex items-center gap-3 px-3 py-2 bg-[#0f0c17] rounded-sm">
+          <div className="flex items-center gap-3 px-3 py-2 bg-surface-container-lowest rounded-sm">
             <span className="material-symbols-outlined text-[13px] text-gray-400">smart_toy</span>
             {sessionDetail.provider && (
               <span className="text-[10px] text-gray-400 font-mono">{sessionDetail.provider}</span>
             )}
             {sessionDetail.model && (
-              <span className="text-xs font-mono text-[#ffb0cf]">{sessionDetail.model}</span>
+              <span className="text-xs font-mono text-primary">{sessionDetail.model}</span>
             )}
           </div>
         )}
 
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+          <div className="bg-surface-container-lowest rounded-sm px-4 py-3">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Started</p>
             <p className="text-xs font-mono text-gray-100">{startedAt ? fmtTime(startedAt) : '—'}</p>
           </div>
-          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+          <div className="bg-surface-container-lowest rounded-sm px-4 py-3">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Ended</p>
             <p className="text-xs font-mono text-gray-100">{endedAt ? fmtTime(endedAt) : '—'}</p>
           </div>
-          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+          <div className="bg-surface-container-lowest rounded-sm px-4 py-3">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Total Events</p>
             <p className="text-2xl font-bold text-gray-100">{sessionDetail.event_count ?? 0}</p>
           </div>
-          <div className="bg-[#0f0c17] rounded-sm px-4 py-3">
+          <div className="bg-surface-container-lowest rounded-sm px-4 py-3">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Tool Calls</p>
             <p className="text-2xl font-bold text-gray-100">{sessionDetail.total_tool_calls ?? 0}</p>
           </div>
@@ -157,7 +157,7 @@ function SessionHeader({ sessionDetail }) {
   const isEnded = sessionDetail.status === 'ended'
   const sid = sessionDetail.session_id ?? ''
   return (
-    <div className="px-5 py-3 border-b border-[#574149]/20 flex flex-wrap items-center gap-x-4 gap-y-1 shrink-0 bg-[#1d1a25]">
+    <div className="px-5 py-3 border-b border-outline-variant/20 flex flex-wrap items-center gap-x-4 gap-y-1 shrink-0 bg-surface-container-low">
       <code className="text-[11px] font-mono text-gray-100 break-all">{sid}</code>
       <span className={`flex items-center gap-1.5 text-[10px] font-semibold ${isEnded ? 'text-gray-400' : 'text-emerald-400'}`}>
         <span className={`w-1.5 h-1.5 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
@@ -203,10 +203,10 @@ function JsonValue({ value, depth }) {
       {open ? (
         <>
           <span className="text-gray-400">{ob}</span>
-          <div className="pl-4 border-l border-[#574149]/20 ml-0.5 mt-0.5 space-y-0.5">
+          <div className="pl-4 border-l border-outline-variant/20 ml-0.5 mt-0.5 space-y-0.5">
             {entries.map(([k, v]) => (
               <div key={k} className="flex gap-1.5 items-start">
-                <span className="text-[#93c5fd] shrink-0 select-none">
+                <span className="text-info shrink-0 select-none">
                   {isArr ? k : `"${k}"`}:
                 </span>
                 <JsonValue value={v} depth={depth + 1} />
@@ -230,17 +230,17 @@ function JsonValue({ value, depth }) {
 // ── RunEventCard ──────────────────────────────────────────────────────────────
 
 const hookBadgeColor = {
-  llm_input:            'text-[#ffb0cf] bg-[#ffb0cf]/10',
-  llm_output:           'text-[#ffb0cf] bg-[#ffb0cf]/10',
-  pre_llm_call:         'text-[#ffb0cf] bg-[#ffb0cf]/10',
-  post_llm_call:        'text-[#ffb0cf] bg-[#ffb0cf]/10',
-  pre_api_request:      'text-[#ffb0cf] bg-[#ffb0cf]/10',
-  post_api_request:     'text-[#ffb0cf] bg-[#ffb0cf]/10',
-  before_tool_call:     'text-[#93c5fd] bg-[#93c5fd]/10',
-  after_tool_call:      'text-[#93c5fd] bg-[#93c5fd]/10',
-  tool_result_persist:  'text-[#93c5fd] bg-[#93c5fd]/10',
-  pre_tool_call:        'text-[#93c5fd] bg-[#93c5fd]/10',
-  post_tool_call:       'text-[#93c5fd] bg-[#93c5fd]/10',
+  llm_input:            'text-primary bg-[#ffb0cf]/10',
+  llm_output:           'text-primary bg-[#ffb0cf]/10',
+  pre_llm_call:         'text-primary bg-[#ffb0cf]/10',
+  post_llm_call:        'text-primary bg-[#ffb0cf]/10',
+  pre_api_request:      'text-primary bg-[#ffb0cf]/10',
+  post_api_request:     'text-primary bg-[#ffb0cf]/10',
+  before_tool_call:     'text-info bg-info/10',
+  after_tool_call:      'text-info bg-info/10',
+  tool_result_persist:  'text-info bg-info/10',
+  pre_tool_call:        'text-info bg-info/10',
+  post_tool_call:       'text-info bg-info/10',
   session_start:        'text-gray-400  bg-zinc-700/30',
   session_end:          'text-gray-400  bg-zinc-700/30',
   on_session_start:     'text-gray-400  bg-zinc-700/30',
@@ -261,7 +261,7 @@ function RunEventCard({ event }) {
   const badgeCls = hookBadgeColor[event.hook_name] ?? 'text-gray-400 bg-zinc-700/20'
 
   return (
-    <div className={`rounded-sm border transition-colors ${isBlocked ? 'border-[#ffb4ab]/30 bg-[#93000a]/10' : 'border-[#574149]/10 bg-[#1d1a25]'}`}>
+    <div className={`rounded-sm border transition-colors ${isBlocked ? 'border-[#ffb4ab]/30 bg-[#93000a]/10' : 'border-outline-variant/10 bg-surface-container-low'}`}>
       {/* Summary row */}
       <div
         className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer select-none"
@@ -277,7 +277,7 @@ function RunEventCard({ event }) {
           {event.hook_name}
         </span>
         {event.tool_name && (
-          <span className="text-[11px] font-mono text-[#93c5fd] shrink-0">{event.tool_name}</span>
+          <span className="text-[11px] font-mono text-info shrink-0">{event.tool_name}</span>
         )}
         {(event.model || event.provider) && (
           <span className="text-[10px] text-gray-400 shrink-0 hidden sm:inline">
@@ -286,7 +286,7 @@ function RunEventCard({ event }) {
         )}
         <span className="flex-1" />
         {isBlocked && (
-          <span className="flex items-center gap-1 text-[10px] font-semibold text-[#ffb4ab] shrink-0">
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-error shrink-0">
             <span className="material-symbols-outlined text-[13px]">block</span>
             blocked
           </span>
@@ -298,9 +298,9 @@ function RunEventCard({ event }) {
 
       {/* Expanded: JSON tree */}
       {expanded && (
-        <div className="px-4 pb-3 pt-1 border-t border-[#574149]/10">
+        <div className="px-4 pb-3 pt-1 border-t border-outline-variant/10">
           {event.block_reason && (
-            <p className="text-[11px] text-[#ffb4ab] mb-2 font-mono">block reason: {event.block_reason}</p>
+            <p className="text-[11px] text-error mb-2 font-mono">block reason: {event.block_reason}</p>
           )}
           {parsedData !== null ? (
             <div className="text-[11px] font-mono text-gray-100 leading-relaxed">
@@ -408,7 +408,7 @@ function SkillsTab({ sessionId }) {
                   className={`flex items-center gap-2 w-full ${(location || description) ? 'cursor-pointer' : ''}`}
                   onClick={() => (location || description) && setExpanded(prev => ({ ...prev, [name]: !prev[name] }))}
                 >
-                  <span className="material-symbols-outlined text-[14px] text-[#ffb0cf]" style={{ fontVariationSettings: "'FILL' 0" }}>hexagon</span>
+                  <span className="material-symbols-outlined text-[14px] text-primary" style={{ fontVariationSettings: "'FILL' 0" }}>hexagon</span>
                   <span className="text-xs font-mono text-gray-100">{name}</span>
                   {sourceType && (
                     <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full border border-current ${SOURCE_TYPE_COLORS[sourceType] || 'text-gray-400'}`}>
@@ -554,7 +554,7 @@ function MemoryTab({ sessionId }) {
         ops.map((op, i) => (
           <div key={i}>
             <div
-              className="flex items-center gap-3 cursor-pointer hover:bg-[#2a1e24] rounded px-2 py-1 -mx-2"
+              className="flex items-center gap-3 cursor-pointer hover:bg-surface-container-high rounded px-2 py-1 -mx-2"
               onClick={() => setExpanded(prev => ({ ...prev, [i]: !prev[i] }))}
             >
               <span className="text-[10px] font-mono text-gray-400 w-16 shrink-0">{fmtTime(op.event_time)}</span>
@@ -568,7 +568,7 @@ function MemoryTab({ sessionId }) {
               </span>
             </div>
             {expanded[i] && (
-              <div className="ml-2 mt-1 mb-2 pl-3 border-l border-[#574149]/40 space-y-1">
+              <div className="ml-2 mt-1 mb-2 pl-3 border-l border-outline-variant/40 space-y-1">
                 {op.memory_path && (
                   <p className="text-[10px] font-mono text-gray-400 break-all">{op.memory_path}</p>
                 )}
@@ -576,7 +576,7 @@ function MemoryTab({ sessionId }) {
                   const parsed = safeParse(op.content_payload)
                   return parsed !== null
                     ? <div className="text-[10px] font-mono text-gray-100 leading-relaxed"><JsonValue value={parsed} depth={0} /></div>
-                    : <pre className="text-[10px] font-mono text-gray-400 bg-[#1a1218] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">{op.content_payload}</pre>
+                    : <pre className="text-[10px] font-mono text-gray-400 bg-surface rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">{op.content_payload}</pre>
                 })()}
               </div>
             )}
@@ -666,7 +666,7 @@ function AgentMemoryPanel({ agentId }) {
               { label: 'Searches', value: stats?.searches  ?? 0, color: 'text-blue-400' },
               { label: 'Reads',    value: stats?.reads     ?? 0, color: 'text-emerald-400' },
             ].map(({ label, value, color }) => (
-              <div key={label} className="bg-[#1a1218] rounded p-3 text-center">
+              <div key={label} className="bg-surface rounded p-3 text-center">
                 <p className={`text-lg font-bold font-mono ${color}`}>{value}</p>
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">{label}</p>
               </div>
@@ -682,7 +682,7 @@ function AgentMemoryPanel({ agentId }) {
             {recentOps.map((op, i) => (
               <div key={i}>
                 <div
-                  className="flex items-center gap-3 cursor-pointer hover:bg-[#2a1e24] rounded px-2 py-1 -mx-2"
+                  className="flex items-center gap-3 cursor-pointer hover:bg-surface-container-high rounded px-2 py-1 -mx-2"
                   onClick={() => setExpanded(prev => ({ ...prev, [i]: !prev[i] }))}
                 >
                   <span className="text-[10px] font-mono text-gray-400 w-16 shrink-0">{fmtTime(op.event_time)}</span>
@@ -696,14 +696,14 @@ function AgentMemoryPanel({ agentId }) {
                   </span>
                 </div>
                 {expanded[i] && (
-                  <div className="ml-2 mt-1 mb-2 pl-3 border-l border-[#574149]/40 space-y-1">
+                  <div className="ml-2 mt-1 mb-2 pl-3 border-l border-outline-variant/40 space-y-1">
                     {op.memory_path && (
                       <p className="text-[10px] font-mono text-gray-400 break-all">{op.memory_path}</p>
                     )}
                     {op.content_payload && (
                       safeParse(op.content_payload) !== null
                         ? <div className="text-[10px] font-mono text-gray-100 leading-relaxed"><JsonValue value={safeParse(op.content_payload)} depth={0} /></div>
-                        : <pre className="text-[10px] font-mono text-gray-400 bg-[#1a1218] rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">{op.content_payload}</pre>
+                        : <pre className="text-[10px] font-mono text-gray-400 bg-surface rounded p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-40">{op.content_payload}</pre>
                     )}
                   </div>
                 )}
@@ -773,7 +773,7 @@ function RunWaterfall({ spans }) {
           <div key={span.span_id}>
             <button
               onClick={() => hasAttrs && setExpandedSpan(isExpanded ? null : span.span_id)}
-              className={`w-full text-left flex items-center gap-3 px-2 py-1.5 rounded-sm transition-colors ${hasAttrs ? 'hover:bg-[#2c2834]/50 cursor-pointer' : 'cursor-default'}`}
+              className={`w-full text-left flex items-center gap-3 px-2 py-1.5 rounded-sm transition-colors ${hasAttrs ? 'hover:bg-surface-container-high/50 cursor-pointer' : 'cursor-default'}`}
             >
               {/* Name column */}
               <div
@@ -781,16 +781,16 @@ function RunWaterfall({ spans }) {
                 style={{ paddingLeft: depth * 16 }}
               >
                 {span.status === 'blocked' && (
-                  <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">block</span>
+                  <span className="material-symbols-outlined text-[12px] text-error">block</span>
                 )}
                 {span.status === 'error' && (
-                  <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">error</span>
+                  <span className="material-symbols-outlined text-[12px] text-error">error</span>
                 )}
                 <span className="text-[11px] text-gray-100 truncate">{span.name}</span>
               </div>
 
               {/* Bar column */}
-              <div className="flex-1 relative h-4 bg-[#0f0c17] rounded-sm overflow-hidden">
+              <div className="flex-1 relative h-4 bg-surface-container-lowest rounded-sm overflow-hidden">
                 <div
                   className="absolute top-0 h-full rounded-sm opacity-80"
                   style={{
@@ -818,7 +818,7 @@ function RunWaterfall({ spans }) {
             {/* Attribute panel */}
             {isExpanded && hasAttrs && (
               <div
-                className="mx-2 mb-1 bg-[#0f0c17] rounded-sm px-3 py-2"
+                className="mx-2 mb-1 bg-surface-container-lowest rounded-sm px-3 py-2"
                 style={{ marginLeft: depth * 16 + 8 }}
               >
                 {Object.entries(span.attributes).map(([k, v]) => (
@@ -848,7 +848,7 @@ function TimelineBody({ kind, body }) {
   const text = body.length > 800 ? body.slice(0, 800) + '…' : body
   if (isCode) {
     return (
-      <pre className="mt-1.5 bg-[#0f0c17] rounded-sm px-2 py-1.5 text-[10px] font-mono text-gray-100 break-all whitespace-pre-wrap overflow-x-auto">
+      <pre className="mt-1.5 bg-surface-container-lowest rounded-sm px-2 py-1.5 text-[10px] font-mono text-gray-100 break-all whitespace-pre-wrap overflow-x-auto">
         {text}
       </pre>
     )
@@ -862,7 +862,7 @@ function TimelineBody({ kind, body }) {
 
 function TurnTimeline({ turnIndex, events }) {
   return (
-    <div className="bg-[#1d1a25] rounded-sm p-5 mb-3 last:mb-0">
+    <div className="bg-surface-container-low rounded-sm p-5 mb-3 last:mb-0">
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <span className="text-xs font-semibold text-gray-100">
           {turnIndex === 0 ? 'Session' : `Turn #${turnIndex}`}
@@ -881,23 +881,23 @@ function TurnTimeline({ turnIndex, events }) {
                   style={{ backgroundColor: alert ? '#ffb4ab' : meta.dot }}
                 />
                 {i < events.length - 1 && (
-                  <div className="w-px flex-1 bg-[#574149]/20 my-1" style={{ minHeight: '12px' }} />
+                  <div className="w-px flex-1 bg-outline-variant/20 my-1" style={{ minHeight: '12px' }} />
                 )}
               </div>
               <div className="pb-3 flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-[10px] font-semibold uppercase tracking-wide ${alert ? 'text-[#ffb4ab]' : 'text-gray-400'}`}>
+                  <span className={`text-[10px] font-semibold uppercase tracking-wide ${alert ? 'text-error' : 'text-gray-400'}`}>
                     {meta.label}
                   </span>
-                  {ev.tool_name && <code className="text-[10px] font-mono text-[#93c5fd]">{ev.tool_name}</code>}
+                  {ev.tool_name && <code className="text-[10px] font-mono text-info">{ev.tool_name}</code>}
                   {ev.provider && <span className="text-[10px] text-gray-500 font-mono">{ev.provider}</span>}
                   {ev.model && <span className="text-[10px] text-gray-400 font-mono">{ev.model}</span>}
                   {ev.status === 'blocked' && (
-                    <span className="text-[10px] text-[#ffb4ab]">
+                    <span className="text-[10px] text-error">
                       blocked{ev.attributes?.block_reason ? `: ${ev.attributes.block_reason}` : ''}
                     </span>
                   )}
-                  {ev.status === 'error' && <span className="text-[10px] text-[#ffb4ab]">error</span>}
+                  {ev.status === 'error' && <span className="text-[10px] text-error">error</span>}
                   <span className="ml-auto text-[10px] font-mono text-gray-400">{fmtShortTime(ev.event_time)}</span>
                 </div>
                 <TimelineBody kind={ev.kind} body={ev.body} />
@@ -1131,14 +1131,14 @@ export default function AgentDetail() {
   const agentType = agent?.agent_type ?? ''
 
   return (
-    <div className="min-h-screen bg-[#15121d] text-gray-100">
+    <div className="min-h-screen bg-surface text-gray-100">
       <Sidebar />
 
 
       {/* TopNav */}
-      <header className="top-nav fixed top-0 right-0 h-16 bg-[#15121d]/95 z-50 flex justify-between items-center px-8 backdrop-blur-md shadow-[0_0_12px_rgba(213,63,140,0.12)]">
+      <header className="top-nav fixed top-0 right-0 h-16 bg-surface/95 z-50 flex justify-between items-center px-8 backdrop-blur-md shadow-[0_0_12px_rgba(213,63,140,0.12)]">
         <div className="flex items-center gap-4">
-          <Link to="/agents" className="text-gray-400 hover:text-[#ffb0cf] transition-colors">
+          <Link to="/agents" className="text-gray-400 hover:text-primary transition-colors">
             <span className="material-symbols-outlined">arrow_back</span>
           </Link>
           {agentType === 'claudecode' && (
@@ -1152,7 +1152,7 @@ export default function AgentDetail() {
           )}
           <span className="font-medium tracking-tight text-lg text-gray-100">{agentName}</span>
           {deploymentName && (
-            <span className="bg-[#2c2834] text-gray-400 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-tighter">
+            <span className="bg-surface-container-high text-gray-400 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-tighter">
               {deploymentName}
             </span>
           )}
@@ -1163,7 +1163,7 @@ export default function AgentDetail() {
             <select
               value={timePreset}
               onChange={e => setTimePreset(e.target.value)}
-              className="bg-[#2c2834] border border-[#574149]/30 text-xs text-gray-100 rounded-sm px-2 py-1.5 focus:outline-none focus:border-[#ffb0cf]/40 hover:border-[#574149]/60 transition-colors"
+              className="bg-surface-container-high border border-outline-variant/30 text-xs text-gray-100 rounded-sm px-2 py-1.5 focus:outline-none focus:border-[#ffb0cf]/40 hover:border-outline-variant/60 transition-colors"
             >
               {TIME_PRESETS.map(p => (
                 <option key={p.value} value={p.value}>{p.label}</option>
@@ -1172,7 +1172,7 @@ export default function AgentDetail() {
           </div>
           <button
             onClick={refresh}
-            className="flex items-center gap-2 text-xs text-gray-400 hover:text-[#ffb0cf] transition-colors px-3 py-1.5 rounded-sm hover:bg-[#2c2834]"
+            className="flex items-center gap-2 text-xs text-gray-400 hover:text-primary transition-colors px-3 py-1.5 rounded-sm hover:bg-surface-container-high"
           >
             <span className={`material-symbols-outlined text-base ${isRefreshing ? 'animate-spin' : ''}`}>
               refresh
@@ -1185,7 +1185,7 @@ export default function AgentDetail() {
       <main className="pl-sidebar pt-16 h-screen overflow-hidden flex flex-col">
         {/* Agent load error */}
         {agentError && (
-          <div className="flex items-center gap-3 mx-6 mt-4 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-[#ffb4ab] text-xs shrink-0">
+          <div className="flex items-center gap-3 mx-6 mt-4 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-error text-xs shrink-0">
             <span className="material-symbols-outlined text-base shrink-0">error</span>
             <span>{agentError}</span>
           </div>
@@ -1193,14 +1193,14 @@ export default function AgentDetail() {
         {/* Volume metric cards */}
         <section className="grid grid-cols-4 gap-4 p-6 pb-3 shrink-0">
           {volumeMetrics.map((m) => (
-            <div key={m.label} className={`p-4 rounded relative overflow-hidden group ${m.accent ? 'bg-[#93000a]/20 border border-[#ffb4ab]/20' : 'bg-[#2c2834]'}`}>
+            <div key={m.label} className={`p-4 rounded relative overflow-hidden group ${m.accent ? 'bg-[#93000a]/20 border border-[#ffb4ab]/20' : 'bg-surface-container-high'}`}>
               <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
-                <span className={`material-symbols-outlined text-4xl ${m.accent ? 'text-[#ffb4ab]' : ''}`}>{m.icon}</span>
+                <span className={`material-symbols-outlined text-4xl ${m.accent ? 'text-error' : ''}`}>{m.icon}</span>
               </div>
               <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest mb-1">{m.label}</p>
-              <h2 className={`text-2xl font-medium ${m.accent ? 'text-[#ffb4ab]' : 'text-gray-100'}`}>{m.value}</h2>
+              <h2 className={`text-2xl font-medium ${m.accent ? 'text-error' : 'text-gray-100'}`}>{m.value}</h2>
               {m.error && (
-                <p className="text-[10px] text-[#ffb4ab] mt-1 flex items-center gap-1 truncate" title={m.error}>
+                <p className="text-[10px] text-error mt-1 flex items-center gap-1 truncate" title={m.error}>
                   <span className="material-symbols-outlined text-[10px]">error</span>
                   {m.error}
                 </p>
@@ -1212,15 +1212,15 @@ export default function AgentDetail() {
         {/* Performance metric cards */}
         <section className="grid grid-cols-4 gap-4 px-6 pb-4 shrink-0">
           {perfMetrics.map((m) => (
-            <div key={m.label} className="bg-[#211e29] p-4 rounded relative overflow-hidden group border border-[#574149]/10">
+            <div key={m.label} className="bg-surface-container p-4 rounded relative overflow-hidden group border border-outline-variant/10">
               <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
-                <span className={`material-symbols-outlined text-4xl ${m.accent ? 'text-[#ffb4ab]' : ''}`}>{m.icon}</span>
+                <span className={`material-symbols-outlined text-4xl ${m.accent ? 'text-error' : ''}`}>{m.icon}</span>
               </div>
               <p className="text-[10px] font-medium text-gray-400 uppercase tracking-widest mb-1">{m.label}</p>
-              <h2 className={`text-2xl font-medium ${m.accent ? 'text-[#ffb4ab]' : 'text-gray-100'}`}>{m.value}</h2>
+              <h2 className={`text-2xl font-medium ${m.accent ? 'text-error' : 'text-gray-100'}`}>{m.value}</h2>
               {m.sub && <p className="text-[10px] text-gray-400 mt-1 truncate">{m.sub}</p>}
               {m.error && (
-                <p className="text-[10px] text-[#ffb4ab] mt-1 flex items-center gap-1 truncate" title={m.error}>
+                <p className="text-[10px] text-error mt-1 flex items-center gap-1 truncate" title={m.error}>
                   <span className="material-symbols-outlined text-[10px]">error</span>
                   {m.error}
                 </p>
@@ -1233,8 +1233,8 @@ export default function AgentDetail() {
         <div className="flex gap-4 px-6 pb-6 flex-1 min-h-0">
 
           {/* Sessions panel */}
-          <aside className="w-52 shrink-0 bg-[#211e29] rounded-sm flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#574149]/20 shrink-0">
+          <aside className="w-52 shrink-0 bg-surface-container rounded-sm flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-outline-variant/20 shrink-0">
               <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sessions</h3>
             </div>
             <div className="flex-1 overflow-y-auto">
@@ -1244,8 +1244,8 @@ export default function AgentDetail() {
                 </div>
               ) : sessionsError ? (
                 <div className="px-4 py-4 flex flex-col gap-1">
-                  <span className="material-symbols-outlined text-[#ffb4ab] text-base">error</span>
-                  <p className="text-[10px] text-[#ffb4ab]">{sessionsError}</p>
+                  <span className="material-symbols-outlined text-error text-base">error</span>
+                  <p className="text-[10px] text-error">{sessionsError}</p>
                 </div>
               ) : sessions.length === 0 ? (
                 <p className="text-[11px] text-gray-400 px-4 py-4">No sessions found</p>
@@ -1258,27 +1258,27 @@ export default function AgentDetail() {
                     <div key={session.session_id}>
                       <button
                         onClick={() => selectSession(session.session_id)}
-                        className={`w-full text-left px-4 py-3 flex items-start gap-2 border-l-2 transition-all hover:bg-[#2c2834]/50 ${
-                          isActive ? 'border-[#ffb0cf] bg-[#2c2834]/40' : 'border-transparent'
+                        className={`w-full text-left px-4 py-3 flex items-start gap-2 border-l-2 transition-all hover:bg-surface-container-high/50 ${
+                          isActive ? 'border-[#ffb0cf] bg-surface-container-high/40' : 'border-transparent'
                         }`}
                       >
-                        <span className={`material-symbols-outlined text-base mt-0.5 shrink-0 ${isActive ? 'text-[#ffb0cf]' : 'text-gray-400'}`}>
+                        <span className={`material-symbols-outlined text-base mt-0.5 shrink-0 ${isActive ? 'text-primary' : 'text-gray-400'}`}>
                           {sessionTypeIcon(session.session_type)}
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
                             <div className="flex items-center gap-1.5 min-w-0">
                               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${session.status === 'active' ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-                              <span className={`text-xs font-medium truncate ${isActive ? 'text-[#ffb0cf]' : 'text-gray-100'}`}>
+                              <span className={`text-xs font-medium truncate ${isActive ? 'text-primary' : 'text-gray-100'}`}>
                                 {session.session_type === 'Unknown' ? session.session_id?.slice(0, 8) : session.session_type}
                               </span>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                              <span className="text-[9px] bg-[#574149]/30 text-gray-400 px-1.5 py-0.5 rounded-full">
+                              <span className="text-[9px] bg-outline-variant/30 text-gray-400 px-1.5 py-0.5 rounded-full">
                                 {session.run_count}
                               </span>
                               {session.run_count > 0 && (
-                                <span className={`material-symbols-outlined text-[12px] transition-transform ${isExpanded && isActive ? 'text-[#ffb0cf] rotate-180' : 'text-gray-400'}`}>
+                                <span className={`material-symbols-outlined text-[12px] transition-transform ${isExpanded && isActive ? 'text-primary rotate-180' : 'text-gray-400'}`}>
                                   expand_more
                                 </span>
                               )}
@@ -1286,7 +1286,7 @@ export default function AgentDetail() {
                           </div>
                           <p className="text-[10px] text-gray-400 break-all mt-0.5">{session.session_key || session.session_id}</p>
                           {session.model && (
-                            <p className="text-[9px] font-mono text-[#ffb0cf]/70 mt-0.5">{session.model}</p>
+                            <p className="text-[9px] font-mono text-primary/70 mt-0.5">{session.model}</p>
                           )}
                           <p className="text-[9px] text-gray-400 font-mono mt-0.5">{fmtTime(session.last_seen)}</p>
                         </div>
@@ -1299,24 +1299,24 @@ export default function AgentDetail() {
                           <button
                             key={run.run_id}
                             onClick={() => selectRun(run.run_id)}
-                            className={`w-full text-left pl-10 pr-4 py-2 flex items-center justify-between border-l-2 transition-all hover:bg-[#2c2834]/60 ${
-                              isRunActive ? 'border-[#ffb0cf]/60 bg-[#2c2834]/30' : 'border-transparent'
+                            className={`w-full text-left pl-10 pr-4 py-2 flex items-center justify-between border-l-2 transition-all hover:bg-surface-container-high/60 ${
+                              isRunActive ? 'border-[#ffb0cf]/60 bg-surface-container-high/30' : 'border-transparent'
                             }`}
                           >
                             <div>
-                              <span className={`text-[11px] ${isRunActive ? 'text-[#ffb0cf]' : 'text-gray-400'}`}>
+                              <span className={`text-[11px] ${isRunActive ? 'text-primary' : 'text-gray-400'}`}>
                                 Run #{idx + 1}
                               </span>
                               <p className="text-[9px] text-gray-400 font-mono">{fmtTime(run.start_time)}</p>
                             </div>
                             <div className="flex items-center gap-1">
                               {run.tool_count > 0 && (
-                                <span className="text-[9px] bg-[#93c5fd]/10 text-[#93c5fd] px-1.5 py-0.5 rounded-full">
+                                <span className="text-[9px] bg-info/10 text-info px-1.5 py-0.5 rounded-full">
                                   {run.tool_count}
                                 </span>
                               )}
                               {run.has_block && (
-                                <span className="material-symbols-outlined text-[12px] text-[#ffb4ab]">block</span>
+                                <span className="material-symbols-outlined text-[12px] text-error">block</span>
                               )}
                             </div>
                           </button>
@@ -1330,7 +1330,7 @@ export default function AgentDetail() {
           </aside>
 
           {/* Timeline panel */}
-          <section className="flex-1 bg-[#211e29] rounded-sm flex flex-col min-w-0 overflow-hidden">
+          <section className="flex-1 bg-surface-container rounded-sm flex flex-col min-w-0 overflow-hidden">
 
             {/* Session header — only when a run is selected */}
             {selectedRun && sessionDetail && (
@@ -1339,7 +1339,7 @@ export default function AgentDetail() {
 
             {/* Tab bar — only when a run is selected */}
             {selectedSession && (
-              <div role="tablist" className="flex border-b border-[#574149]/20 shrink-0">
+              <div role="tablist" className="flex border-b border-outline-variant/20 shrink-0">
                 {[
                   { id: 'timeline', label: 'Timeline' },
                   { id: 'events',   label: 'Events' },
@@ -1354,7 +1354,7 @@ export default function AgentDetail() {
                     onClick={() => setActiveTab(tab.id)}
                     className={`px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider transition-colors border-b-2 ${
                       activeTab === tab.id
-                        ? 'border-[#ffb0cf] text-[#ffb0cf]'
+                        ? 'border-[#ffb0cf] text-primary'
                         : 'border-transparent text-gray-400 hover:text-gray-100'
                     }`}
                   >
@@ -1376,7 +1376,7 @@ export default function AgentDetail() {
                 sessionDetail ? (
                   <SessionSummary sessionDetail={sessionDetail} />
                 ) : sessionDetailError ? (
-                  <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
+                  <div className="flex flex-col items-center justify-center h-full text-error gap-2 p-6 text-center">
                     <span className="material-symbols-outlined text-4xl">error</span>
                     <p className="text-sm font-semibold">Failed to load session</p>
                     <p className="text-xs text-gray-400 max-w-md break-words">{sessionDetailError}</p>
@@ -1392,7 +1392,7 @@ export default function AgentDetail() {
                     <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
                   </div>
                 ) : traceError ? (
-                  <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
+                  <div className="flex flex-col items-center justify-center h-full text-error gap-2 p-6 text-center">
                     <span className="material-symbols-outlined text-4xl">error</span>
                     <p className="text-sm font-semibold">Failed to load trace</p>
                     <p className="text-xs text-gray-400 max-w-md break-words">{traceError}</p>
@@ -1406,7 +1406,7 @@ export default function AgentDetail() {
                     <span className="material-symbols-outlined animate-spin text-gray-400 text-3xl">refresh</span>
                   </div>
                 ) : eventsError ? (
-                  <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
+                  <div className="flex flex-col items-center justify-center h-full text-error gap-2 p-6 text-center">
                     <span className="material-symbols-outlined text-4xl">error</span>
                     <p className="text-sm font-semibold">Failed to load events</p>
                     <p className="text-xs text-gray-400 max-w-md break-words">{eventsError}</p>
@@ -1429,7 +1429,7 @@ export default function AgentDetail() {
                 (() => {
                   if (timelineError) {
                     return (
-                      <div className="flex flex-col items-center justify-center h-full text-[#ffb4ab] gap-2 p-6 text-center">
+                      <div className="flex flex-col items-center justify-center h-full text-error gap-2 p-6 text-center">
                         <span className="material-symbols-outlined text-4xl">error</span>
                         <p className="text-sm font-semibold">Failed to load timeline</p>
                         <p className="text-xs text-gray-400 max-w-md break-words">{timelineError}</p>
@@ -1469,7 +1469,7 @@ export default function AgentDetail() {
             </div>
 
             {eventsTruncated && (
-              <div className="px-6 py-2 border-t border-[#574149]/20 shrink-0 flex items-center gap-2">
+              <div className="px-6 py-2 border-t border-outline-variant/20 shrink-0 flex items-center gap-2">
                 <span className="material-symbols-outlined text-[14px] text-amber-400">warning</span>
                 <span className="text-[10px] text-amber-400">Showing first 500 events — session has more. Select a specific run from the sidebar to narrow the view.</span>
               </div>
