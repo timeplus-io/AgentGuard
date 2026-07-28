@@ -1,0 +1,4 @@
+{
+  "appName": "AgentGuard",
+  "actions": { "save": "Save", "cancel": "Cancel" }
+}
