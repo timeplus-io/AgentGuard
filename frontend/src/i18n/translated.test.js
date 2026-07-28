@@ -12,6 +12,7 @@ export const REPRESENTATIVE = [
   ['settings', 'language.label'],
   ['auth', 'login.submit'],
   ['dashboard', 'title'],
+  ['agents', 'list.title'],
 ]
 
 describe('zh-CN is actually translated', () => {

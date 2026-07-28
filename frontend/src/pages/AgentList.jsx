@@ -1,24 +1,15 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
-function fmtTokens(n) {
+function fmtTokens(n, opts) {
   if (!n) return '—'
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
-  return String(n)
+  return formatNumber(n, { notation: 'compact', maximumFractionDigits: 1, ...opts })
 }
 import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import { api } from '../api/client'
-
-function timeAgo(iso) {
-  if (!iso) return '—'
-  const ms = Date.now() - new Date(iso).getTime()
-  if (ms < 60000) return `${Math.floor(ms / 1000)}s ago`
-  if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`
-  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h ago`
-  return `${Math.floor(ms / 86400000)}d ago`
-}
+import { formatNumber, formatRelativeTime } from '../i18n/format'
 
 function AgentTypeLogo({ agentType }) {
   if (agentType === 'claudecode') {
@@ -55,6 +46,7 @@ function AgentTypeLogo({ agentType }) {
 }
 
 export default function AgentList() {
+  const { t } = useTranslation('agents')
   const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -71,9 +63,9 @@ export default function AgentList() {
           setTotal(data.total || 0)
         }
       })
-      .catch(err => setError(err?.message || 'Failed to load agents'))
+      .catch(err => setError(err?.message || t('list.error.loadFailed')))
       .finally(() => setLoading(false))
-  }, [page, limit])
+  }, [page, limit, t])
 
   return (
     <div className="min-h-screen bg-surface text-gray-100">
@@ -85,19 +77,19 @@ export default function AgentList() {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
             <div>
-              <h2 className="text-3xl font-medium text-gray-100 tracking-tight mb-2">Agent Fleet</h2>
+              <h2 className="text-3xl font-medium text-gray-100 tracking-tight mb-2">{t('list.title')}</h2>
               <p className="text-gray-400 text-xs max-w-lg">
-                Manage and monitor your active agents.
+                {t('list.subtitle')}
               </p>
             </div>
             <div className="flex gap-3">
               <button className="px-4 py-2 bg-surface-container-high text-gray-100 text-xs font-medium rounded-sm border border-outline-variant/10 hover:bg-surface-container-highest transition-colors flex items-center gap-2">
                 <span className="material-symbols-outlined text-xs">filter_list</span>
-                Filters
+                {t('list.filters')}
               </button>
               <Link to="/onboarding" className="px-4 py-2 bg-primary-button text-primary-button-text text-xs font-semibold rounded-sm flex items-center gap-2 hover:scale-[0.98] transition-transform">
                 <span className="material-symbols-outlined text-xs">cable</span>
-                Connect Agents
+                {t('list.connectAgents')}
               </Link>
             </div>
           </div>
@@ -107,14 +99,14 @@ export default function AgentList() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-surface-container text-[10px] font-semibold uppercase tracking-[0.15em] text-gray-400">
-                  <th className="px-6 py-4">Agent ID</th>
-                  <th className="px-6 py-4">Deployment</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Events</th>
-                  <th className="px-6 py-4">Sessions</th>
-                  <th className="px-6 py-4">Tokens</th>
-                  <th className="px-6 py-4">LLM Calls</th>
-                  <th className="px-6 py-4">Last Seen</th>
+                  <th className="px-6 py-4">{t('list.columns.agentId')}</th>
+                  <th className="px-6 py-4">{t('list.columns.deployment')}</th>
+                  <th className="px-6 py-4">{t('list.columns.status')}</th>
+                  <th className="px-6 py-4">{t('list.columns.events')}</th>
+                  <th className="px-6 py-4">{t('list.columns.sessions')}</th>
+                  <th className="px-6 py-4">{t('list.columns.tokens')}</th>
+                  <th className="px-6 py-4">{t('list.columns.llmCalls')}</th>
+                  <th className="px-6 py-4">{t('list.columns.lastSeen')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/10">
@@ -136,7 +128,7 @@ export default function AgentList() {
                 ) : agents.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center text-gray-400 text-xs">
-                      No agents found. Connect an agent to start monitoring.
+                      {t('list.empty')}
                     </td>
                   </tr>
                 ) : agents.map(agent => {
@@ -161,23 +153,23 @@ export default function AgentList() {
                             : 'bg-zinc-700/30 text-gray-400'
                         }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${agent.status === 'active' ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-                          {agent.status === 'active' ? 'Active' : 'Idle'}
+                          {agent.status === 'active' ? t('list.status.active') : t('list.status.idle')}
                         </span>
                       </td>
                       <td className="px-6 py-5">
-                        <div className="text-xs font-mono text-gray-100">{agent.event_count?.toLocaleString()}</div>
+                        <div className="text-xs font-mono text-gray-100">{agent.event_count != null ? formatNumber(agent.event_count) : ''}</div>
                       </td>
                       <td className="px-6 py-5">
-                        <div className="text-xs font-mono text-gray-100">{agent.session_count?.toLocaleString()}</div>
+                        <div className="text-xs font-mono text-gray-100">{agent.session_count != null ? formatNumber(agent.session_count) : ''}</div>
                       </td>
                       <td className="px-6 py-5">
                         <div className="text-xs font-mono text-gray-100">{fmtTokens(agent.total_tokens)}</div>
                       </td>
                       <td className="px-6 py-5">
-                        <div className="text-xs font-mono text-gray-100">{agent.llm_call_count?.toLocaleString() ?? '—'}</div>
+                        <div className="text-xs font-mono text-gray-100">{agent.llm_call_count != null ? formatNumber(agent.llm_call_count) : '—'}</div>
                       </td>
                       <td className="px-6 py-5 text-xs text-gray-400">
-                        {timeAgo(agent.last_seen)}
+                        {agent.last_seen ? formatRelativeTime(agent.last_seen) : '—'}
                       </td>
                     </tr>
                   )
@@ -189,9 +181,9 @@ export default function AgentList() {
           {/* Pagination */}
           <div className="mt-6 flex items-center justify-between text-[10px] text-gray-400 font-medium">
             <div className="flex items-center gap-4">
-              <span>Showing {agents.length} of {total} agents</span>
+              <span>{t('list.pagination.showing', { shown: agents.length, total })}</span>
               <div className="flex items-center gap-2">
-                <span>Show:</span>
+                <span>{t('list.pagination.show')}</span>
                 <select value={limit} onChange={e => { setLimit(Number(e.target.value)); setPage(1) }} className="bg-gray-800 border border-gray-600 rounded-sm text-[10px] py-1 pl-2 pr-6 focus:border-gray-400 focus:outline-none text-gray-400">
                   <option value={15}>15</option>
                   <option value={50}>50</option>

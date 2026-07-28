@@ -8,14 +8,16 @@ import enAuth from './locales/en/auth.json'
 import zhAuth from './locales/zh-CN/auth.json'
 import enDashboard from './locales/en/dashboard.json'
 import zhDashboard from './locales/zh-CN/dashboard.json'
+import enAgents from './locales/en/agents.json'
+import zhAgents from './locales/zh-CN/agents.json'
 
 export const SUPPORTED_LOCALES = ['en', 'zh-CN']
 export const DEFAULT_LOCALE = 'en'
 
 // Namespaces are registered here as page tasks add catalogs. common is the base.
 const resources = {
-  en: { common: enCommon, settings: enSettings, auth: enAuth, dashboard: enDashboard },
-  'zh-CN': { common: zhCommon, settings: zhSettings, auth: zhAuth, dashboard: zhDashboard },
+  en: { common: enCommon, settings: enSettings, auth: enAuth, dashboard: enDashboard, agents: enAgents },
+  'zh-CN': { common: zhCommon, settings: zhSettings, auth: zhAuth, dashboard: zhDashboard, agents: zhAgents },
 }
 
 i18n.use(initReactI18next).init({
@@ -23,7 +25,7 @@ i18n.use(initReactI18next).init({
   lng: DEFAULT_LOCALE,
   fallbackLng: DEFAULT_LOCALE,
   defaultNS: 'common',
-  ns: ['common', 'settings', 'auth', 'dashboard'],
+  ns: ['common', 'settings', 'auth', 'dashboard', 'agents'],
   interpolation: { escapeValue: false }, // React already escapes
   returnEmptyString: false,
   initImmediate: false, // synchronous init so t() works immediately (tests + first paint)
