@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { useTheme } from '../context/ThemeContext'
+import { useAuth } from '../context/AuthContext'
+import { writeKey } from '../lib/perm'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
@@ -85,6 +87,8 @@ function budgetDeltaProps(status, pct) {
 
 export default function CostGovernance() {
   const { theme } = useTheme()
+  const { can } = useAuth()
+  const canWrite = can(writeKey("cost"))
   // Recharts fill/stroke are SVG attributes and don't resolve CSS var(), so
   // read the resolved theme colors and recompute when the theme flips (#240).
   const chartColors = useMemo(() => {
@@ -395,7 +399,7 @@ export default function CostGovernance() {
                 <h4 className="text-base font-semibold text-gray-100">Monthly Budgets</h4>
                 <p className="text-xs text-gray-400 mt-1">Per-deployment monthly spend targets. The Forecasted Total KPI compares against the sum of active budgets.</p>
               </div>
-              {!showAddBudget && (
+              {!showAddBudget && canWrite && (
                 <button
                   onClick={() => { setShowAddBudget(true); setBudgetError('') }}
                   className="text-xs text-primary font-semibold flex items-center gap-1 hover:underline"
@@ -436,6 +440,7 @@ export default function CostGovernance() {
                         </button>
                         <button
                           onClick={() => handleDeleteBudget(b.deployment_id)}
+                          disabled={!canWrite}
                           disabled={deletingBudgetKey === b.deployment_id || showAddBudget}
                           className="text-gray-400 hover:text-error disabled:opacity-40"
                           title="Delete"
@@ -509,7 +514,7 @@ export default function CostGovernance() {
           <div className="bg-surface-container-high p-6 rounded">
             <div className="flex justify-between items-center mb-6">
               <h4 className="text-base font-semibold text-gray-100">Model Pricing</h4>
-              {!showAddForm && (
+              {!showAddForm && canWrite && (
                 <button
                   onClick={() => { setShowAddForm(true); setSaveError('') }}
                   className="text-xs text-primary font-semibold flex items-center gap-1 hover:underline"
@@ -554,6 +559,7 @@ export default function CostGovernance() {
                           </button>
                           <button
                             onClick={() => handleDelete(p.provider, p.model)}
+                            disabled={!canWrite}
                             disabled={deletingKey === key || showAddForm}
                             className="text-gray-400 hover:text-error disabled:opacity-40"
                             title="Delete"

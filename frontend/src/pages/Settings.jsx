@@ -12,8 +12,12 @@ import {
   activeSectionFromHash,
 } from '../utils/settingsNav'
 import { api } from '../api/client'
+import { useAuth } from '../context/AuthContext'
+import { writeKey } from '../lib/perm'
 
 export default function Settings() {
+  const { can } = useAuth()
+  const canWrite = can(writeKey("settings"))
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -182,8 +186,8 @@ export default function Settings() {
           <div className="fixed bottom-0 left-0 right-0 pl-sidebar bg-gray-800/95 backdrop-blur-md py-3 z-30 flex items-center justify-between [&>*:first-child]:pl-10 [&>*:last-child]:pr-10">
             <span className="text-sm text-gray-300">{dirtyKeys.length} unsaved change{dirtyKeys.length > 1 ? 's' : ''}</span>
             <div className="flex gap-3">
-              <button onClick={discard} disabled={saving} className="rounded-sm px-4 py-2 text-sm bg-gray-700 text-gray-100 hover:bg-gray-600">Discard</button>
-              <button onClick={save} disabled={saving}
+              <button onClick={discard} disabled={saving || !canWrite} className="rounded-sm px-4 py-2 text-sm bg-gray-700 text-gray-100 hover:bg-gray-600">Discard</button>
+              <button onClick={save} disabled={saving || !canWrite}
                 className="rounded-sm px-4 py-2 text-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] font-medium disabled:opacity-60">
                 {saving ? 'Saving…' : 'Save'}
               </button>

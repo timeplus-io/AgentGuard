@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
+	"github.com/timeplus/agentguard/internal/rbac"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
@@ -109,6 +110,24 @@ func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 			sendEvent("error", "Setup failed: "+err.Error())
 			return
 		}
+
+		// RBAC (#243): create the access-control streams, seed the built-in
+		// admin/viewer roles, and make the provisioning user an admin.
+		sendEvent("running", "Setting up access control…")
+		if err := rbac.EnsureStreams(&timeplusCfg); err != nil {
+			sendEvent("error", "Setup failed: "+err.Error())
+			return
+		}
+		rbacStore := &rbac.Store{TP: &timeplusCfg}
+		if err := rbacStore.SeedBuiltins(body.Username); err != nil {
+			sendEvent("error", "Setup failed: "+err.Error())
+			return
+		}
+		if err := rbacStore.AssignRole(body.Username, rbac.RoleAdmin, body.Username); err != nil {
+			sendEvent("error", "Setup failed: "+err.Error())
+			return
+		}
+		sendEvent("ok", "Access control ready — you are the administrator.")
 
 		// embedding_dim is auto-detected by probing the model through dlp_embed;
 		// fall back to the configured value if the endpoint was unreachable.

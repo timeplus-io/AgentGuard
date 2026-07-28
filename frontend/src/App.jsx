@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationsProvider } from './components/NotificationsProvider'
 import HoldToastContainer from './components/HoldToast'
+import NoAccess from './components/NoAccess'
+import { uiKey, NAV_RESOURCES } from './lib/perm'
 import Login from './pages/Login'
 import Setup from './pages/Setup'
 import Dashboard from './pages/Dashboard'
@@ -18,6 +20,7 @@ import SemanticDLP from './pages/SemanticDLP'
 import Sentry from './pages/Sentry'
 import Settings from './pages/Settings'
 import Onboarding from './pages/Onboarding'
+import AccessControl from './pages/AccessControl'
 
 function AuthGuard({ children }) {
   const { auth } = useAuth()
@@ -39,29 +42,45 @@ function AuthGuard({ children }) {
   )
 }
 
+// Gate renders its page only if the user holds ui:<resource>; otherwise it
+// shows the NoAccess screen (which keeps the nav so they can move elsewhere).
+function Gate({ resource, what, children }) {
+  const { can } = useAuth()
+  return can(uiKey(resource)) ? children : <NoAccess what={what} />
+}
+
+// HomeRedirect sends the user to their first accessible page (so a limited role
+// lands somewhere useful), or the NoAccess screen when they have none.
+function HomeRedirect() {
+  const { can } = useAuth()
+  const target = NAV_RESOURCES.find(([r]) => can(uiKey(r)))
+  return target ? <Navigate to={target[1]} replace /> : <NoAccess what="AgentGuard" />
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <AuthGuard>
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/agents" element={<AgentList />} />
-            <Route path="/agents/:id" element={<AgentDetail />} />
-            <Route path="/threats" element={<Threats />} />
-            <Route path="/threats/:id" element={<ThreatDetail />} />
-            <Route path="/threats/by-hold/:id" element={<ThreatDetail />} />
-            <Route path="/cost" element={<CostGovernance />} />
-            <Route path="/rules" element={<RulePacks />} />
-            <Route path="/rules/new" element={<RuleCreate mode="create" />} />
-            <Route path="/rules/:id/edit" element={<RuleCreate mode="edit" />} />
-            <Route path="/rules/:id" element={<RuleDetail />} />
-            <Route path="/investigate" element={<Investigate />} />
-            <Route path="/dlp" element={<SemanticDLP />} />
-            <Route path="/sentry" element={<Sentry />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/" element={<HomeRedirect />} />
+            <Route path="/dashboard" element={<Gate resource="dashboard" what="the dashboard"><Dashboard /></Gate>} />
+            <Route path="/agents" element={<Gate resource="agents" what="agents"><AgentList /></Gate>} />
+            <Route path="/agents/:id" element={<Gate resource="agents" what="agents"><AgentDetail /></Gate>} />
+            <Route path="/threats" element={<Gate resource="threats" what="threats"><Threats /></Gate>} />
+            <Route path="/threats/:id" element={<Gate resource="threats" what="threats"><ThreatDetail /></Gate>} />
+            <Route path="/threats/by-hold/:id" element={<Gate resource="threats" what="threats"><ThreatDetail /></Gate>} />
+            <Route path="/cost" element={<Gate resource="cost" what="cost governance"><CostGovernance /></Gate>} />
+            <Route path="/rules" element={<Gate resource="rules" what="rules"><RulePacks /></Gate>} />
+            <Route path="/rules/new" element={<Gate resource="rules" what="rules"><RuleCreate mode="create" /></Gate>} />
+            <Route path="/rules/:id/edit" element={<Gate resource="rules" what="rules"><RuleCreate mode="edit" /></Gate>} />
+            <Route path="/rules/:id" element={<Gate resource="rules" what="rules"><RuleDetail /></Gate>} />
+            <Route path="/investigate" element={<Gate resource="investigate" what="the SQL console"><Investigate /></Gate>} />
+            <Route path="/dlp" element={<Gate resource="dlp" what="Semantic DLP"><SemanticDLP /></Gate>} />
+            <Route path="/sentry" element={<Gate resource="sentry" what="Sentry"><Sentry /></Gate>} />
+            <Route path="/settings" element={<Gate resource="settings" what="settings"><Settings /></Gate>} />
+            <Route path="/access" element={<Gate resource="access" what="access control"><AccessControl /></Gate>} />
+            <Route path="/onboarding" element={<Gate resource="settings" what="onboarding"><Onboarding /></Gate>} />
           </Routes>
         </AuthGuard>
       </AuthProvider>

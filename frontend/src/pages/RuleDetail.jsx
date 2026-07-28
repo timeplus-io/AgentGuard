@@ -9,6 +9,8 @@ import TopNav from '../components/TopNav'
 import BlockPolicySelect from '../components/BlockPolicySelect'
 import ConfigurationTab from '../components/rules/ConfigurationTab'
 import { api } from '../api/client'
+import { useAuth } from '../context/AuthContext'
+import { writeKey } from '../lib/perm'
 
 const CATEGORY_ICONS = {
   prompt_injection_and_hijacking:    'phishing',
@@ -28,6 +30,8 @@ function severityBadge(severity) {
 }
 
 export default function RuleDetail() {
+  const { can } = useAuth()
+  const canWrite = can(writeKey("rules"))
   const { id } = useParams()
   const navigate = useNavigate()
   // `rule` is the GET /rules/:id read model: { instance, schema, defaults,
@@ -320,7 +324,7 @@ export default function RuleDetail() {
                       {blocked ? 'Close' : 'Cancel'}
                     </button>
                     {!blocked && (
-                      <button onClick={confirmUpgrade} disabled={actionLoading} className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors disabled:opacity-50">
+                      <button onClick={confirmUpgrade} disabled={actionLoading || !canWrite} className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors disabled:opacity-50">
                         {actionLoading ? 'Upgrading…' : `Upgrade to ${targetVersion}`}
                       </button>
                     )}
@@ -440,7 +444,7 @@ export default function RuleDetail() {
             <div className="flex items-center gap-3 flex-wrap">
               <button
                 onClick={handleToggle}
-                disabled={actionLoading}
+                disabled={actionLoading || !canWrite}
                 className={`px-4 py-2 text-xs font-semibold rounded-sm transition-colors disabled:opacity-50 ${inst.enabled ? 'bg-zinc-700 text-white hover:bg-zinc-600' : 'bg-primary-button text-primary-button-text'}`}
               >
                 {inst.enabled ? 'Disable' : 'Enable'}
@@ -449,7 +453,7 @@ export default function RuleDetail() {
               {upgradeAvailable && (
                 <button
                   onClick={() => { setUpgradeConflicts(null); setUpgradeModal(true) }}
-                  disabled={actionLoading}
+                  disabled={actionLoading || !canWrite}
                   className="px-4 py-2 text-xs font-semibold rounded-sm border border-[#ffb0cf]/30 text-primary hover:bg-[#ffb0cf]/10 transition-colors disabled:opacity-50"
                 >
                   Upgrade{targetVersion ? ` to ${targetVersion}` : ''}
@@ -474,7 +478,7 @@ export default function RuleDetail() {
               ) : (rule.definition?.origin === 'builtin' || rule.definition?.origin === 'imported') ? (
                 <button
                   onClick={openCloneModal}
-                  disabled={actionLoading}
+                  disabled={actionLoading || !canWrite}
                   className="px-4 py-2 text-xs font-semibold rounded-sm border border-zinc-600 text-gray-300 hover:bg-zinc-700 transition-colors disabled:opacity-50"
                 >
                   Clone as custom
@@ -482,13 +486,13 @@ export default function RuleDetail() {
               ) : null}
 
               {!uninstallConfirm ? (
-                <button onClick={() => setUninstallConfirm(true)} disabled={actionLoading} className="px-4 py-2 text-xs font-semibold rounded-sm border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                <button onClick={() => setUninstallConfirm(true)} disabled={actionLoading || !canWrite} className="px-4 py-2 text-xs font-semibold rounded-sm border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
                   Uninstall
                 </button>
               ) : (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-red-400">Are you sure?</span>
-                  <button onClick={handleUninstall} disabled={actionLoading} className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">Confirm</button>
+                  <button onClick={handleUninstall} disabled={actionLoading || !canWrite} className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">Confirm</button>
                   <button onClick={() => setUninstallConfirm(false)} className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors">Cancel</button>
                 </div>
               )}
@@ -614,7 +618,7 @@ export default function RuleDetail() {
                       <button
                         type="button"
                         onClick={() => { setUpgradeConflicts(null); setUpgradeModal(true) }}
-                        disabled={actionLoading}
+                        disabled={actionLoading || !canWrite}
                         className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors disabled:opacity-50"
                       >
                         Upgrade{targetVersion ? ` to ${targetVersion}` : ''}…

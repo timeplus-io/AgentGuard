@@ -4,6 +4,8 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import Markdown from '../components/Markdown'
+import { useAuth } from '../context/AuthContext'
+import { writeKey } from '../lib/perm'
 import { api } from '../api/client'
 
 let localSeq = 0
@@ -197,6 +199,8 @@ function MessageBubble({ item }) {
 const EMPTY_STATE_TEXT = 'Ask Sentry about your agents, threats, cost, rules, or DLP findings.'
 
 export default function Sentry() {
+  const { can } = useAuth()
+  const canWrite = can(writeKey('sentry')) // false for a view-only role
   const [status, setStatus] = useState(null)
   const [statusError, setStatusError] = useState(null)
 
@@ -647,25 +651,33 @@ export default function Sentry() {
                 </div>
 
                 <div className="p-4 bg-surface-container shrink-0">
-                  <div className="flex items-end gap-3">
-                    <textarea
-                      value={input}
-                      onChange={e => setInput(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={streaming}
-                      rows={2}
-                      placeholder="Ask Sentry…"
-                      className="flex-1 bg-surface-container-high text-gray-100 text-sm rounded-sm px-4 py-2.5 placeholder-gray-500 resize-none focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-60"
-                    />
-                    <button
-                      onClick={send}
-                      disabled={streaming || !input.trim()}
-                      className="px-5 py-2.5 text-xs font-semibold rounded bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-95 transition-transform disabled:opacity-50 whitespace-nowrap"
-                    >
-                      {streaming ? 'Sending…' : 'Send'}
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-gray-400 mt-1.5">Ctrl/Cmd+Enter to send · Enter for a new line</p>
+                  {canWrite ? (
+                    <>
+                      <div className="flex items-end gap-3">
+                        <textarea
+                          value={input}
+                          onChange={e => setInput(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          disabled={streaming}
+                          rows={2}
+                          placeholder="Ask Sentry…"
+                          className="flex-1 bg-surface-container-high text-gray-100 text-sm rounded-sm px-4 py-2.5 placeholder-gray-500 resize-none focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-60"
+                        />
+                        <button
+                          onClick={send}
+                          disabled={streaming || !input.trim()}
+                          className="px-5 py-2.5 text-xs font-semibold rounded bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-95 transition-transform disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {streaming ? 'Sending…' : 'Send'}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1.5">Ctrl/Cmd+Enter to send · Enter for a new line</p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-400 text-center py-2">
+                      You have read-only access to Sentry. Ask an administrator for write access to start conversations.
+                    </p>
+                  )}
                 </div>
               </section>
             </div>

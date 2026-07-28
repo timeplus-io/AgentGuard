@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useNotifications } from './NotificationsProvider'
+import { useAuth } from '../context/AuthContext'
+import { uiKey } from '../lib/perm'
 
 const navItems = [
-  { label: 'Dashboard', to: '/dashboard', icon: 'dashboard' },
-  { label: 'Agents', to: '/agents', icon: 'security' },
-  { label: 'Threats', to: '/threats', icon: 'gpp_maybe' },
-  { label: 'Cost', to: '/cost', icon: 'payments' },
-  { label: 'Rules', to: '/rules', icon: 'rule' },
-  { label: 'Semantic DLP', to: '/dlp', icon: 'policy' },
-  { label: 'Investigate', to: '/investigate', icon: 'search' },
-  { label: 'Sentry', to: '/sentry', icon: 'shield_person' },
-  { label: 'Settings', to: '/settings', icon: 'settings' },
+  { label: 'Dashboard', to: '/dashboard', icon: 'dashboard', resource: 'dashboard' },
+  { label: 'Agents', to: '/agents', icon: 'security', resource: 'agents' },
+  { label: 'Threats', to: '/threats', icon: 'gpp_maybe', resource: 'threats' },
+  { label: 'Cost', to: '/cost', icon: 'payments', resource: 'cost' },
+  { label: 'Rules', to: '/rules', icon: 'rule', resource: 'rules' },
+  { label: 'Semantic DLP', to: '/dlp', icon: 'policy', resource: 'dlp' },
+  { label: 'Investigate', to: '/investigate', icon: 'search', resource: 'investigate' },
+  { label: 'Sentry', to: '/sentry', icon: 'shield_person', resource: 'sentry' },
+  { label: 'Settings', to: '/settings', icon: 'settings', resource: 'settings' },
+  { label: 'Access Control', to: '/access', icon: 'admin_panel_settings', resource: 'access' },
 ]
 
 export default function Sidebar() {
@@ -22,6 +25,12 @@ export default function Sidebar() {
 
   const notifications = useNotifications()
   const pendingCount = notifications?.pendingHolds?.size ?? 0
+  const { can, auth } = useAuth()
+  // Access Control is only meaningful once RBAC is provisioned; hide it
+  // otherwise so an unprovisioned deployment can't self-serve-bootstrap it.
+  const visibleNav = navItems.filter(item =>
+    can(uiKey(item.resource)) && (item.resource !== 'access' || auth.rbacActive),
+  )
 
   // Auto-collapse on screens smaller than 1280px (xl breakpoint), otherwise respect user preference
   const collapsed = windowWidth < 1280 ? true : userCollapsed
@@ -42,7 +51,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-1">
-        {navItems.map(item => {
+        {visibleNav.map(item => {
           const showBadge = item.to === '/threats' && pendingCount > 0
           return (
             <NavLink
