@@ -143,6 +143,7 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("catalog.dir", "./catalog")
 	v.SetDefault("agentguard.url", "http://localhost:8080")
+	v.SetDefault("ui.default_language", "en")
 	v.SetDefault("timeplus.host", "localhost")
 	v.SetDefault("timeplus.port", 3218)
 	v.SetDefault("timeplus.native-port", 8463)

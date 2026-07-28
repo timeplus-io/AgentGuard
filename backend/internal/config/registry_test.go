@@ -54,3 +54,32 @@ func TestRegistryMetaInvariants(t *testing.T) {
 		t.Error("dlp.embedding_dim must be ReadOnly and not Reprovision")
 	}
 }
+
+func TestUIDefaultLanguageRegistered(t *testing.T) {
+	var found *KeyMeta
+	for i := range Registry() {
+		if Registry()[i].Key == "ui.default_language" {
+			found = &Registry()[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("ui.default_language not in registry")
+	}
+	if found.Type != TypeEnum {
+		t.Errorf("want TypeEnum, got %s", found.Type)
+	}
+	want := []string{"en", "zh-CN"}
+	if len(found.EnumValues) != len(want) {
+		t.Fatalf("enum values = %v", found.EnumValues)
+	}
+	hasUI := false
+	for _, s := range Sections() {
+		if s.ID == "ui" {
+			hasUI = true
+		}
+	}
+	if !hasUI {
+		t.Error("ui section not registered")
+	}
+}
