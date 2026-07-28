@@ -54,6 +54,15 @@ export const api = {
   authLogin: (username, password) => post('/auth/login', { username, password }),
   authLogout: () => post('/auth/logout', {}),
 
+  // ── Access control (RBAC) ─────────────────────────────────────────────────────
+  getPermissionCatalog: () => get('/permissions'),
+  listRoles: () => get('/roles'),
+  createRole: (role) => post('/roles', role),
+  updateRole: (name, role) => put(`/roles/${encodeURIComponent(name)}`, role),
+  deleteRole: (name) => del(`/roles/${encodeURIComponent(name)}`),
+  listUsers: () => get('/users'),
+  assignUserRole: (user, role) => put(`/users/${encodeURIComponent(user)}/role`, { role }),
+
   // ── Setup ───────────────────────────────────────────────────────────────────
   setupTestConnection: (host, port, username, password) =>
     post('/setup/test-connection', { host, port, username, password }),

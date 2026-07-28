@@ -2,15 +2,26 @@ package auth
 
 import (
 	"net/http"
+	"sort"
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/config"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
-// AuthStatus returns the current setup and login state.
-// This is the first call the frontend makes on load.
-func AuthStatus(cfg *config.Config, store *SessionStore) gin.HandlerFunc {
+// PermissionResolver resolves a username to its permission set and role name.
+// Implemented by *rbac.Resolver; declared here as an interface so the auth
+// package doesn't import rbac. Active() reports whether RBAC is enforced.
+type PermissionResolver interface {
+	PermissionsFor(user string) (perms map[string]bool, role string, err error)
+	Active() bool
+}
+
+// AuthStatus returns the current setup and login state, plus the logged-in
+// user's role and resolved permissions (empty when unassigned). This is the
+// first call the frontend makes on load; the frontend gates nav/routes/actions
+// on `permissions`.
+func AuthStatus(cfg *config.Config, store *SessionStore, res PermissionResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		config.Mu.RLock()
 		setupComplete := cfg.SetupComplete
@@ -20,11 +31,25 @@ func AuthStatus(cfg *config.Config, store *SessionStore) gin.HandlerFunc {
 			"setup_complete": setupComplete,
 			"logged_in":      false,
 			"username":       "",
+			"role":           "",
+			"permissions":    []string{},
+			"rbac_active":    res != nil && res.Active(),
 		}
 		if cookie, err := c.Cookie("agentguard_session"); err == nil {
 			if sess, ok := store.Get(cookie); ok {
 				status["logged_in"] = true
 				status["username"] = sess.User
+				if res != nil {
+					if perms, role, err := res.PermissionsFor(sess.User); err == nil {
+						status["role"] = role
+						keys := make([]string, 0, len(perms))
+						for k := range perms {
+							keys = append(keys, k)
+						}
+						sort.Strings(keys)
+						status["permissions"] = keys
+					}
+				}
 			}
 		}
 		c.JSON(http.StatusOK, status)

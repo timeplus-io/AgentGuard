@@ -30,6 +30,7 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
+	"github.com/timeplus/agentguard/internal/rbac"
 	"github.com/timeplus/agentguard/internal/rules"
 	"github.com/timeplus/agentguard/internal/secrets"
 	"github.com/timeplus/agentguard/internal/sentry"
@@ -142,6 +143,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
 	store := auth.NewSessionStore()
 	holdReg := holdregistry.New()
+	// RBAC (#243): the store reads/writes access-control streams with the
+	// service account (cfg.Timeplus), independent of the caller's credentials.
+	rbacStore := &rbac.Store{TP: &cfg.Timeplus}
+	rbacResolver := rbac.NewResolver(rbacStore)
 	// lifecycle owns the process-wide per-rule mutation locks; handlers bind it
 	// to each request's Timeplus config via lifecycle.For(cfg).
 	lifecycle := rules.NewLifecycle(mgr)
@@ -170,7 +175,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	api := r.Group("/api")
 	{
 		// Unauthenticated — must be reachable before login/setup.
-		api.GET("/auth/status", auth.AuthStatus(cfg, store))
+		api.GET("/auth/status", auth.AuthStatus(cfg, store, rbacResolver))
 		api.POST("/auth/login", auth.Login(cfg, store))
 		api.POST("/auth/logout", auth.Logout(store))
 		api.POST("/setup/test-connection", handlers.TestConnection())
@@ -183,8 +188,10 @@ func runServer(cmd *cobra.Command, args []string) error {
 		// /holds/_abandon-session/:session_id — unauthenticated (plugin calls fire-and-forget on SessionEnd).
 		api.POST("/holds/_abandon-session/:session_id", handlers.AbandonSession(cfg, holdReg))
 
-		// All existing routes — require a valid session cookie.
-		protected := api.Group("/", auth.AuthRequired(store))
+		// All existing routes — require a valid session cookie, then a role
+		// permission for the matched route (rbac.Middleware; no-op until RBAC
+		// is provisioned). See internal/rbac/middleware.go for the route map.
+		protected := api.Group("/", auth.AuthRequired(store), rbac.Middleware(rbacResolver))
 		{
 			protected.GET("/dashboard", handlers.GetDashboard(cfg))
 			protected.GET("/agents", handlers.ListAgents(cfg))
@@ -257,6 +264,15 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.PUT("/config", handlers.UpdateConfig(cfg, changedFlags))
 			protected.POST("/config/test-timeplus", handlers.TestTimeplusConfig(cfg))
 			protected.POST("/config/test-dlp", handlers.TestDLPConfig(cfg))
+
+			// RBAC administration (#243) — gated by api:access:* via the middleware.
+			protected.GET("/permissions", handlers.ListPermissions())
+			protected.GET("/roles", handlers.ListRoles(rbacStore))
+			protected.POST("/roles", handlers.CreateRole(rbacStore, rbacResolver))
+			protected.PUT("/roles/:name", handlers.UpdateRole(rbacStore, rbacResolver))
+			protected.DELETE("/roles/:name", handlers.DeleteRole(rbacStore, rbacResolver))
+			protected.GET("/users", handlers.ListUsers(rbacStore))
+			protected.PUT("/users/:user/role", handlers.AssignUserRole(rbacStore, rbacResolver))
 		}
 	}
 
