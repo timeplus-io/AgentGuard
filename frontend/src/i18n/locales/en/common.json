@@ -1,5 +1,6 @@
 {
   "appName": "AgentGuard",
+  "app": { "loading": "Loading…" },
   "actions": { "save": "Save", "cancel": "Cancel" },
   "nav": {
     "dashboard": "Dashboard",

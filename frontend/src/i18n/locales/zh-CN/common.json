@@ -1,5 +1,6 @@
 {
   "appName": "AgentGuard",
+  "app": { "loading": "加载中…" },
   "actions": { "save": "保存", "cancel": "取消" },
   "nav": {
     "dashboard": "仪表盘",
