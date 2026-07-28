@@ -352,6 +352,20 @@ And add to the `Registry()` slice (after the `agentguard` block):
 			Type: TypeEnum, EnumValues: []string{"en", "zh-CN"}},
 ```
 
+- [ ] **Step 4b: Wire the key through the Config pipeline (mirror `holds.fail_policy`)**
+
+Registering metadata is NOT enough — every key must be wired through the
+`Config` struct so `GET /api/config` reports its value and `PUT` applies it.
+Add a `UIConfig` struct + `Config.UI` field (`mapstructure:"ui"`), a
+`cfg.UI.DefaultLanguage = v.GetString("ui.default_language")` line in `load()`,
+a `v.Set("ui.default_language", cfg.UI.DefaultLanguage)` in `SaveChanges()`
+(config.go), and cases in BOTH `EffectiveValue` (`return cfg.UI.DefaultLanguage`)
+and `ApplyChange` (`setString(&cfg.UI.DefaultLanguage, value)`) in sources.go —
+exactly like `holds.fail_policy`. Without this, `EffectiveValue` returns nil and
+`GET /api/config` shows `"value": null`, breaking Task 4's `adoptServerDefault`.
+Add a `TestUIDefaultLanguageWiring` asserting the default reads `"en"` and
+`ApplyChange` updates `cfg.UI.DefaultLanguage`.
+
 - [ ] **Step 5: Run test + full config suite**
 
 Run: `cd backend && CGO_ENABLED=0 go test ./internal/config/`
