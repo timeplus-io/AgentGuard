@@ -316,6 +316,25 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if cfg.SetupComplete {
 		startedAt := time.Now().UTC()
 		go handlers.ReconcileOrphanedHolds(cfg, holdReg, startedAt)
+
+		// Activate RBAC on a deployment that completed setup before RBAC
+		// existed (#243). The setup wizard seeds RBAC for new installs; this
+		// migrates already-provisioned ones so the streams exist and the
+		// service account becomes the initial admin. Background + retrying,
+		// since the server starts independently of Timeplus.
+		go func() {
+			for attempt := 1; attempt <= 30; attempt++ {
+				if err := rbac.Migrate(&cfg.Timeplus, cfg.Timeplus.User); err != nil {
+					fmt.Printf("rbac: migration attempt %d failed (Timeplus not ready?): %v\n", attempt, err)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				rbacResolver.Invalidate()
+				fmt.Printf("rbac: access control ready (admin bootstrap user: %q)\n", cfg.Timeplus.User)
+				return
+			}
+			fmt.Println("rbac: migration gave up after retries; access control remains inactive")
+		}()
 	}
 
 	shutdownCh, stopSignals := shutdownSignalChannel()
