@@ -62,6 +62,36 @@ For each file listed in a Phase-2 task, apply this exact transform:
 Run: `cd frontend && npm install i18next@^23 react-i18next@^14`
 Expected: `package.json` gains both in `dependencies`; `npm install` exits 0.
 
+- [ ] **Step 1b: Set up the DOM test environment (foundation for T4/T6)**
+
+The repo currently has NO vitest config and NO DOM test libs; existing tests
+are pure-JS under the default `node` environment. Later i18n tasks need a DOM
+(`localStorage` in T4, component render in T6). Add them now, once.
+
+Run: `cd frontend && npm install -D jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event`
+
+Create `frontend/vitest.config.js`:
+```js
+import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    globals: false,
+    setupFiles: ['./src/test/setup.js'],
+  },
+})
+```
+Create `frontend/src/test/setup.js`:
+```js
+import '@testing-library/jest-dom'
+```
+Verify existing pure-JS tests still pass under jsdom:
+Run: `cd frontend && npx vitest run`
+Expected: existing suite green (jsdom is a superset for node-style tests).
+
 - [ ] **Step 2: Seed catalogs**
 
 `frontend/src/i18n/locales/en/common.json`:
@@ -155,8 +185,8 @@ Expected: succeeds.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add frontend/package.json frontend/package-lock.json frontend/src/i18n frontend/src/main.jsx
-git commit -m "feat(i18n): add react-i18next infra with en/zh-CN base catalog (#248)"
+git add frontend/package.json frontend/package-lock.json frontend/vitest.config.js frontend/src/test frontend/src/i18n frontend/src/main.jsx
+git commit -m "feat(i18n): add react-i18next infra + jsdom test env with en/zh-CN base catalog (#248)"
 ```
 
 ---
