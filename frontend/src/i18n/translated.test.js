@@ -8,6 +8,7 @@ const load = (mods, ns) =>
 // Representative keys appended by each page task. Each entry: [ns, dottedKey].
 export const REPRESENTATIVE = [
   ['common', 'actions.save'],
+  ['common', 'nav.dashboard'],
   ['settings', 'language.label'],
 ]
 

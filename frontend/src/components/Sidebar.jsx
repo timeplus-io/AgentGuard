@@ -1,23 +1,25 @@
 import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useNotifications } from './NotificationsProvider'
 import { useAuth } from '../context/AuthContext'
 import { uiKey } from '../lib/perm'
 
 const navItems = [
-  { label: 'Dashboard', to: '/dashboard', icon: 'dashboard', resource: 'dashboard' },
-  { label: 'Agents', to: '/agents', icon: 'security', resource: 'agents' },
-  { label: 'Threats', to: '/threats', icon: 'gpp_maybe', resource: 'threats' },
-  { label: 'Cost', to: '/cost', icon: 'payments', resource: 'cost' },
-  { label: 'Rules', to: '/rules', icon: 'rule', resource: 'rules' },
-  { label: 'Semantic DLP', to: '/dlp', icon: 'policy', resource: 'dlp' },
-  { label: 'Investigate', to: '/investigate', icon: 'search', resource: 'investigate' },
-  { label: 'Sentry', to: '/sentry', icon: 'shield_person', resource: 'sentry' },
-  { label: 'Settings', to: '/settings', icon: 'settings', resource: 'settings' },
-  { label: 'Access Control', to: '/access', icon: 'admin_panel_settings', resource: 'access' },
+  { labelKey: 'nav.dashboard', to: '/dashboard', icon: 'dashboard', resource: 'dashboard' },
+  { labelKey: 'nav.agents', to: '/agents', icon: 'security', resource: 'agents' },
+  { labelKey: 'nav.threats', to: '/threats', icon: 'gpp_maybe', resource: 'threats' },
+  { labelKey: 'nav.cost', to: '/cost', icon: 'payments', resource: 'cost' },
+  { labelKey: 'nav.rules', to: '/rules', icon: 'rule', resource: 'rules' },
+  { labelKey: 'nav.dlp', to: '/dlp', icon: 'policy', resource: 'dlp' },
+  { labelKey: 'nav.investigate', to: '/investigate', icon: 'search', resource: 'investigate' },
+  { labelKey: 'nav.sentry', to: '/sentry', icon: 'shield_person', resource: 'sentry' },
+  { labelKey: 'nav.settings', to: '/settings', icon: 'settings', resource: 'settings' },
+  { labelKey: 'nav.access', to: '/access', icon: 'admin_panel_settings', resource: 'access' },
 ]
 
 export default function Sidebar() {
+  const { t } = useTranslation()
   const [userCollapsed, setUserCollapsed] = useState(() =>
     localStorage.getItem('sidebar-collapsed') === 'true'
   )
@@ -53,11 +55,12 @@ export default function Sidebar() {
       <nav className="flex-1 flex flex-col gap-1">
         {visibleNav.map(item => {
           const showBadge = item.to === '/threats' && pendingCount > 0
+          const label = t(item.labelKey)
           return (
             <NavLink
               key={item.to}
               to={item.to}
-              title={collapsed ? `${item.label}${showBadge ? ` (${pendingCount} pending)` : ''}` : undefined}
+              title={collapsed ? `${label}${showBadge ? ` ${t('nav.pendingSuffix', { count: pendingCount })}` : ''}` : undefined}
               className={({ isActive }) => {
                 const base = 'relative flex items-center py-2 text-xs font-medium rounded-sm transition-all'
                 const layout = collapsed ? 'justify-center px-2' : 'gap-3 px-3'
@@ -75,7 +78,7 @@ export default function Sidebar() {
                   </span>
                 )}
               </span>
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && <span>{label}</span>}
               {showBadge && !collapsed && (
                 <span className="ml-auto bg-[#ffb4ab] text-[#3d0023] text-[9px] font-bold rounded-full px-1.5 py-0.5 min-w-[16px] text-center">
                   {pendingCount}
@@ -89,7 +92,7 @@ export default function Sidebar() {
       {/* Collapse toggle */}
       <button
         onClick={() => setUserCollapsed(v => !v)}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={collapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
         className={`flex items-center justify-center w-8 h-8 rounded-sm text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors ${collapsed ? 'mx-auto' : 'mx-2'}`}
       >
         <span className="material-symbols-outlined text-base">

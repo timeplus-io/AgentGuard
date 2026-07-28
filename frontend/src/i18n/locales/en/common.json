@@ -1,4 +1,29 @@
 {
   "appName": "AgentGuard",
-  "actions": { "save": "Save", "cancel": "Cancel" }
+  "actions": { "save": "Save", "cancel": "Cancel" },
+  "nav": {
+    "dashboard": "Dashboard",
+    "agents": "Agents",
+    "threats": "Threats",
+    "cost": "Cost",
+    "rules": "Rules",
+    "dlp": "Semantic DLP",
+    "investigate": "Investigate",
+    "sentry": "Sentry",
+    "settings": "Settings",
+    "access": "Access Control",
+    "pendingSuffix": "({{count}} pending)",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar"
+  },
+  "topNav": {
+    "byTimeplus": "BY TIMEPLUS",
+    "liveThreatFeed": "Live Threat Feed",
+    "closeNotifications": "Close notifications",
+    "switchToLightMode": "Switch to light mode",
+    "switchToDarkMode": "Switch to dark mode",
+    "logout": "Logout",
+    "loadingOpenThreats": "Loading open threats…",
+    "noOpenThreats": "No open threats."
+  }
 }

@@ -1,4 +1,29 @@
 {
   "appName": "AgentGuard",
-  "actions": { "save": "保存", "cancel": "取消" }
+  "actions": { "save": "保存", "cancel": "取消" },
+  "nav": {
+    "dashboard": "仪表盘",
+    "agents": "代理",
+    "threats": "威胁",
+    "cost": "成本",
+    "rules": "规则",
+    "dlp": "语义 DLP",
+    "investigate": "调查",
+    "sentry": "Sentry",
+    "settings": "设置",
+    "access": "访问控制",
+    "pendingSuffix": "(待处理 {{count}} 个)",
+    "collapseSidebar": "收起侧边栏",
+    "expandSidebar": "展开侧边栏"
+  },
+  "topNav": {
+    "byTimeplus": "BY TIMEPLUS",
+    "liveThreatFeed": "实时威胁动态",
+    "closeNotifications": "关闭通知",
+    "switchToLightMode": "切换到浅色模式",
+    "switchToDarkMode": "切换到深色模式",
+    "logout": "退出登录",
+    "loadingOpenThreats": "正在加载未处理威胁…",
+    "noOpenThreats": "暂无未处理威胁。"
+  }
 }

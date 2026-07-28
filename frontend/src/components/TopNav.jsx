@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { api } from '../api/client'
@@ -7,6 +8,7 @@ import { useOpenThreats } from '../hooks/useLiveThreatFeed'
 import { LiveThreatFeedList } from './LiveThreatFeed'
 
 function NotificationsDrawer({ open, onClose, threats, loading, error }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -35,19 +37,19 @@ function NotificationsDrawer({ open, onClose, threats, loading, error }) {
       <aside
         className={`fixed right-0 top-[41px] z-[90] h-[calc(100vh-41px)] w-full max-w-[420px] bg-gray-900 border-l border-gray-700 shadow-2xl transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full'}`}
         aria-hidden={!open}
-        aria-label="Live Threat Feed"
+        aria-label={t('topNav.liveThreatFeed')}
       >
         <div className="h-10 px-4 border-b border-gray-700 bg-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <span className="material-symbols-outlined text-primary text-lg">notifications</span>
-            <h2 className="text-sm font-semibold text-gray-100 truncate">Live Threat Feed</h2>
+            <h2 className="text-sm font-semibold text-gray-100 truncate">{t('topNav.liveThreatFeed')}</h2>
             <span className="text-[10px] font-mono text-red-400">{threats.length}</span>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-sm text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors"
-            title="Close notifications"
+            title={t('topNav.closeNotifications')}
           >
             <span className="material-symbols-outlined text-base">close</span>
           </button>
@@ -62,7 +64,7 @@ function NotificationsDrawer({ open, onClose, threats, loading, error }) {
                 error={error}
                 ruleCategory={{}}
                 compact
-                emptyMessage={loading ? 'Loading open threats…' : 'No open threats.'}
+                emptyMessage={loading ? t('topNav.loadingOpenThreats') : t('topNav.noOpenThreats')}
                 onThreatClick={handleThreatClick}
               />
             </div>
@@ -74,6 +76,7 @@ function NotificationsDrawer({ open, onClose, threats, loading, error }) {
 }
 
 export default function TopNav({ title }) {
+  const { t } = useTranslation()
   const { auth, setAuth } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -119,7 +122,7 @@ export default function TopNav({ title }) {
             className="h-[18px] w-auto mt-0.5"
           />
           <span className="text-[10px] font-semibold text-gray-400 uppercase" style={{fontFamily: 'Poppins, sans-serif', letterSpacing: '0.1em'}}>
-            BY TIMEPLUS
+            {t('topNav.byTimeplus')}
           </span>
         </div>
         {title && (
@@ -132,7 +135,7 @@ export default function TopNav({ title }) {
             type="button"
             onClick={() => setNotificationsOpen(true)}
             className="h-10 px-3 hover:bg-gray-700 rounded-sm transition-colors flex items-center gap-2"
-            title="Live Threat Feed"
+            title={t('topNav.liveThreatFeed')}
           >
             <span className={`material-symbols-outlined text-lg ${activeThreatCount > 0 ? 'text-red-500' : 'text-gray-400'}`}>
               notifications
@@ -147,8 +150,8 @@ export default function TopNav({ title }) {
             type="button"
             onClick={toggleTheme}
             className="h-10 w-10 hover:bg-gray-700 rounded-sm transition-colors flex items-center justify-center"
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? t('topNav.switchToLightMode') : t('topNav.switchToDarkMode')}
+            aria-label={theme === 'dark' ? t('topNav.switchToLightMode') : t('topNav.switchToDarkMode')}
           >
             <span className="material-symbols-outlined text-lg text-gray-400">
               {theme === 'dark' ? 'light_mode' : 'dark_mode'}
@@ -180,7 +183,7 @@ export default function TopNav({ title }) {
                 }}
                 className="w-full px-4 py-2 text-left text-xs text-gray-300 hover:bg-gray-700 hover:text-pink-400 transition-colors"
               >
-                Logout
+                {t('topNav.logout')}
               </button>
             </div>
           )}
