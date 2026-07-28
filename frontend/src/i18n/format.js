@@ -3,6 +3,7 @@ import i18n from './index.js'
 const locale = () => i18n.language || 'en'
 
 export function formatDate(value, opts = { dateStyle: 'medium', timeStyle: 'short' }) {
+  if (value == null) return ''
   const d = value instanceof Date ? value : new Date(value)
   if (isNaN(d.getTime())) return ''
   return new Intl.DateTimeFormat(locale(), opts).format(d)
@@ -24,6 +25,7 @@ const REL_STEPS = [
 ]
 
 export function formatRelativeTime(value, nowMs) {
+  if (value == null) return ''
   const then = (value instanceof Date ? value : new Date(value)).getTime()
   if (isNaN(then)) return ''
   const now = nowMs ?? Date.now()
