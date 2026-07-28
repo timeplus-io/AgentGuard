@@ -128,6 +128,7 @@ i18n.use(initReactI18next).init({
   ns: ['common'],
   interpolation: { escapeValue: false }, // React already escapes
   returnEmptyString: false,
+  initImmediate: false, // synchronous init so t() works immediately (tests + first paint)
 })
 
 export default i18n
@@ -425,18 +426,20 @@ export async function adoptServerDefault() {
 
 - [ ] **Step 4: Apply resolved locale at boot in `index.js`**
 
-At the end of `src/i18n/index.js`, after `export default i18n`, the boot locale is applied by the resolver import chain instead. Add to `index.js` before the export:
+Because `init()` runs synchronously (`initImmediate: false`), apply the stored
+locale directly right after the `init(...)` call — do NOT use an
+`i18n.on('initialized', …)` listener, which would attach after the event has
+already fired and never run. Do it inline (no import of `resolveLocale`, to
+avoid a circular import), before `export default i18n`:
 ```js
-// Apply the synchronous initial locale (localStorage or English) as soon as
-// the module loads. The async server-default adoption happens in App after auth.
-i18n.on('initialized', () => {
-  try {
-    const stored = localStorage.getItem('agentguard.locale')
-    const loc = ['en', 'zh-CN'].includes(stored) ? stored : 'en'
-    i18n.changeLanguage(loc)
-    document.documentElement.lang = loc
-  } catch { /* noop */ }
-})
+// Apply the synchronous initial locale: localStorage choice, else English.
+// Async server-default adoption (ui.default_language) happens in App after auth.
+try {
+  const stored = localStorage.getItem('agentguard.locale')
+  const loc = ['en', 'zh-CN'].includes(stored) ? stored : 'en'
+  i18n.changeLanguage(loc)
+  if (typeof document !== 'undefined') document.documentElement.lang = loc
+} catch { /* storage/document unavailable — stays on English */ }
 ```
 
 - [ ] **Step 5: Adopt server default after auth**
