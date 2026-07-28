@@ -191,6 +191,35 @@ func TestEffectiveAndApplySentry(t *testing.T) {
 	}
 }
 
+// TestUIDefaultLanguageWiring proves ui.default_language is wired through the
+// full Config/EffectiveValue/ApplyChange pipeline like every other key (fix
+// for the review finding on Task 3 of #248: the key was registered but never
+// wired, so EffectiveValue returned nil and ApplyChange errored).
+//
+// Uses LoadFrom against a nonexistent temp path rather than the global
+// Load()/viper.GetViper(), matching the hermetic pattern already used by
+// other internal `package config` tests (e.g. config_provisioned_test.go) —
+// it exercises the same defaulting path without depending on process env
+// vars or an ambient config.yaml.
+func TestUIDefaultLanguageWiring(t *testing.T) {
+	cfg, err := LoadFrom(filepath.Join(t.TempDir(), "missing.yaml"))
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if got := EffectiveValue(cfg, "ui.default_language"); got != "en" {
+		t.Errorf("EffectiveValue default = %v, want \"en\"", got)
+	}
+	if err := ApplyChange(cfg, "ui.default_language", "zh-CN"); err != nil {
+		t.Fatalf("ApplyChange: %v", err)
+	}
+	if cfg.UI.DefaultLanguage != "zh-CN" {
+		t.Errorf("after ApplyChange, DefaultLanguage = %q, want \"zh-CN\"", cfg.UI.DefaultLanguage)
+	}
+	if got := EffectiveValue(cfg, "ui.default_language"); got != "zh-CN" {
+		t.Errorf("EffectiveValue after change = %v, want \"zh-CN\"", got)
+	}
+}
+
 func TestCoerceDLPTimeoutTokens(t *testing.T) {
 	if _, err := CoerceAndValidate("dlp.request_timeout_seconds", float64(3)); err == nil {
 		t.Error("expected error for timeout below 5")

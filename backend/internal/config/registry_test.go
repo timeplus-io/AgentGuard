@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestRegistryCoversAllKeys(t *testing.T) {
 	reg := Registry()
@@ -70,8 +73,8 @@ func TestUIDefaultLanguageRegistered(t *testing.T) {
 		t.Errorf("want TypeEnum, got %s", found.Type)
 	}
 	want := []string{"en", "zh-CN"}
-	if len(found.EnumValues) != len(want) {
-		t.Fatalf("enum values = %v", found.EnumValues)
+	if !reflect.DeepEqual(found.EnumValues, want) {
+		t.Fatalf("enum values = %v, want %v", found.EnumValues, want)
 	}
 	hasUI := false
 	for _, s := range Sections() {

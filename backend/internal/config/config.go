@@ -40,6 +40,10 @@ type HoldsConfig struct {
 	Disabled       bool   `mapstructure:"disabled"`
 }
 
+type UIConfig struct {
+	DefaultLanguage string `mapstructure:"default_language"`
+}
+
 type DLPConfig struct {
 	Enabled        bool   `mapstructure:"enabled"`
 	BaseURL        string `mapstructure:"base_url"`
@@ -102,6 +106,7 @@ type Config struct {
 	AgentGuardURL  string
 	SetupComplete  bool
 	Holds          HoldsConfig    `mapstructure:"holds"`
+	UI             UIConfig       `mapstructure:"ui"`
 	DLP            DLPConfig      `mapstructure:"dlp"`
 	ProvisionedDLP ProvisionedDLP // loaded from provisioned.dlp.* in config.yaml
 	Sentry         SentryConfig   `mapstructure:"sentry"`
@@ -230,6 +235,7 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.Holds.TimeoutSeconds = v.GetInt("holds.timeout_seconds")
 	cfg.Holds.FailPolicy = v.GetString("holds.fail_policy")
 	cfg.Holds.Disabled = v.GetBool("holds.disabled")
+	cfg.UI.DefaultLanguage = v.GetString("ui.default_language")
 	cfg.DLP.Enabled = v.GetBool("dlp.enabled")
 	cfg.DLP.BaseURL = v.GetString("dlp.base_url")
 	cfg.DLP.APIKey = v.GetString("dlp.api_key")
@@ -339,6 +345,7 @@ func Save(cfg *Config, path string) error {
 	v.Set("holds.timeout_seconds", cfg.Holds.TimeoutSeconds)
 	v.Set("holds.fail_policy", cfg.Holds.FailPolicy)
 	v.Set("holds.disabled", cfg.Holds.Disabled)
+	v.Set("ui.default_language", cfg.UI.DefaultLanguage)
 	v.Set("dlp.enabled", cfg.DLP.Enabled)
 	v.Set("dlp.base_url", cfg.DLP.BaseURL)
 	v.Set("dlp.embedding_model", cfg.DLP.EmbeddingModel)
