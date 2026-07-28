@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
@@ -29,6 +30,7 @@ function viewSet(resources) {
 }
 
 export default function AccessControl() {
+  const { t } = useTranslation('auth')
   const { auth, refresh } = useAuth()
   const [tab, setTab] = useState('roles')
   const [catalog, setCatalog] = useState({ resources: [] })
@@ -45,8 +47,8 @@ export default function AccessControl() {
         setUsers(u.users || [])
         setLoadErr(null)
       })
-      .catch((e) => setLoadErr(e?.message || 'Failed to load access control'))
-  }, [])
+      .catch((e) => setLoadErr(e?.message || t('accessControl.loadError')))
+  }, [t])
   useEffect(() => { load() }, [load])
 
   return (
@@ -55,7 +57,7 @@ export default function AccessControl() {
       <TopNav />
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-6 max-w-5xl">
-          <PageHeader title="Access Control" subtitle="Roles and per-user permissions." />
+          <PageHeader title={t('accessControl.title')} subtitle={t('accessControl.subtitle')} />
 
           {loadErr && <div className="bg-error-container/40 text-error text-sm rounded-sm px-4 py-2">{loadErr}</div>}
           {banner && (
@@ -65,15 +67,15 @@ export default function AccessControl() {
           )}
 
           <div className="flex gap-1">
-            {['roles', 'users'].map((t) => (
+            {['roles', 'users'].map((tabKey) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
+                key={tabKey}
+                onClick={() => setTab(tabKey)}
                 className={`px-4 py-2 text-xs font-semibold rounded-sm capitalize transition-colors ${
-                  tab === t ? 'bg-gray-700 text-primary' : 'text-gray-400 hover:bg-gray-700'
+                  tab === tabKey ? 'bg-gray-700 text-primary' : 'text-gray-400 hover:bg-gray-700'
                 }`}
               >
-                {t}
+                {t(`accessControl.tabs.${tabKey}`)}
               </button>
             ))}
           </div>
@@ -95,6 +97,7 @@ export default function AccessControl() {
 // ── Roles ─────────────────────────────────────────────────────────────────────
 
 function RolesTab({ catalog, roles, onChanged, setBanner }) {
+  const { t } = useTranslation('auth')
   const [editing, setEditing] = useState(null) // {name, description, perms:Set, builtin, isNew}
   const resources = catalog.resources || []
 
@@ -103,13 +106,13 @@ function RolesTab({ catalog, roles, onChanged, setBanner }) {
     setEditing({ name: r.name, description: r.description || '', perms: new Set(r.permissions || []), builtin: r.builtin, isNew: false })
 
   const remove = async (r) => {
-    if (!window.confirm(`Delete role "${r.name}"? Users on it will lose all access until reassigned.`)) return
+    if (!window.confirm(t('accessControl.role.deleteConfirm', { name: r.name }))) return
     try {
       await api.deleteRole(r.name)
-      setBanner({ type: 'ok', msg: `Role "${r.name}" deleted.` })
+      setBanner({ type: 'ok', msg: t('accessControl.role.deletedMsg', { name: r.name }) })
       onChanged()
     } catch (e) {
-      setBanner({ type: 'err', msg: e?.message || 'Delete failed' })
+      setBanner({ type: 'err', msg: e?.message || t('accessControl.role.deleteFailed') })
     }
   }
 
@@ -119,7 +122,7 @@ function RolesTab({ catalog, roles, onChanged, setBanner }) {
         <>
           <div className="flex justify-end">
             <button onClick={startNew} className="px-4 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023]">
-              + New role
+              {t('accessControl.role.newRole')}
             </button>
           </div>
           <div className="space-y-2">
@@ -128,16 +131,16 @@ function RolesTab({ catalog, roles, onChanged, setBanner }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-gray-100">{r.name}</span>
-                    {r.builtin && <span className="text-[10px] uppercase tracking-wide bg-gray-700 text-gray-400 rounded-full px-2 py-0.5">built-in</span>}
+                    {r.builtin && <span className="text-[10px] uppercase tracking-wide bg-gray-700 text-gray-400 rounded-full px-2 py-0.5">{t('accessControl.role.builtinBadge')}</span>}
                   </div>
                   {r.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{r.description}</p>}
-                  <p className="text-[11px] text-gray-500 mt-0.5">{(r.permissions || []).length} permissions</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">{t('accessControl.role.permissionsCount', { count: (r.permissions || []).length })}</p>
                 </div>
                 <button onClick={() => startEdit(r)} className="text-xs text-gray-400 hover:text-gray-100 px-2 py-1">
-                  {r.builtin ? 'View' : 'Edit'}
+                  {r.builtin ? t('accessControl.role.view') : t('accessControl.role.edit')}
                 </button>
                 {!r.builtin && (
-                  <button onClick={() => remove(r)} className="text-xs text-error hover:opacity-80 px-2 py-1">Delete</button>
+                  <button onClick={() => remove(r)} className="text-xs text-error hover:opacity-80 px-2 py-1">{t('accessControl.role.delete')}</button>
                 )}
               </div>
             ))}
@@ -157,6 +160,7 @@ function RolesTab({ catalog, roles, onChanged, setBanner }) {
 }
 
 function RoleEditor({ resources, editing, setEditing, onDone, setBanner }) {
+  const { t } = useTranslation('auth')
   const readOnly = editing.builtin
   const has = (k) => editing.perms.has(k)
   const toggle = (k) => {
@@ -171,15 +175,15 @@ function RoleEditor({ resources, editing, setEditing, onDone, setBanner }) {
 
   const save = async () => {
     const name = (editing.name || '').trim()
-    if (!name) { setBanner({ type: 'err', msg: 'Role name is required.' }); return }
+    if (!name) { setBanner({ type: 'err', msg: t('accessControl.editor.nameRequired') }); return }
     const payload = { name, description: editing.description, permissions: [...editing.perms] }
     try {
       if (editing.isNew) await api.createRole(payload)
       else await api.updateRole(name, payload)
-      setBanner({ type: 'ok', msg: `Role "${name}" saved.` })
+      setBanner({ type: 'ok', msg: t('accessControl.editor.savedMsg', { name }) })
       onDone()
     } catch (e) {
-      setBanner({ type: 'err', msg: e?.message || 'Save failed' })
+      setBanner({ type: 'err', msg: e?.message || t('accessControl.editor.saveFailed') })
     }
   }
 
@@ -187,23 +191,27 @@ function RoleEditor({ resources, editing, setEditing, onDone, setBanner }) {
     <div className="bg-surface-container-high rounded-sm p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-100">
-          {editing.builtin ? `Role: ${editing.name} (built-in, read-only)` : editing.isNew ? 'New role' : `Edit role: ${editing.name}`}
+          {editing.builtin
+            ? t('accessControl.editor.builtinTitle', { name: editing.name })
+            : editing.isNew
+              ? t('accessControl.editor.newTitle')
+              : t('accessControl.editor.editTitle', { name: editing.name })}
         </h3>
-        <button onClick={() => setEditing(null)} className="text-xs text-gray-400 hover:text-gray-100">Back</button>
+        <button onClick={() => setEditing(null)} className="text-xs text-gray-400 hover:text-gray-100">{t('accessControl.editor.back')}</button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="space-y-1">
-          <span className="text-[11px] uppercase tracking-wide text-gray-400">Name</span>
+          <span className="text-[11px] uppercase tracking-wide text-gray-400">{t('accessControl.editor.nameLabel')}</span>
           <input
             className={inputCls} value={editing.name}
             disabled={!editing.isNew || readOnly}
             onChange={(e) => setEditing((s) => ({ ...s, name: e.target.value }))}
-            placeholder="e.g. analyst"
+            placeholder={t('accessControl.editor.namePlaceholder')}
           />
         </label>
         <label className="space-y-1">
-          <span className="text-[11px] uppercase tracking-wide text-gray-400">Description</span>
+          <span className="text-[11px] uppercase tracking-wide text-gray-400">{t('accessControl.editor.descriptionLabel')}</span>
           <input
             className={inputCls} value={editing.description} disabled={readOnly}
             onChange={(e) => setEditing((s) => ({ ...s, description: e.target.value }))}
@@ -213,9 +221,9 @@ function RoleEditor({ resources, editing, setEditing, onDone, setBanner }) {
 
       {!readOnly && (
         <div className="flex gap-2 text-xs">
-          <button onClick={() => setAll(fullSet)} className="px-2 py-1 rounded-sm bg-gray-700 text-gray-300 hover:text-gray-100">Full access</button>
-          <button onClick={() => setAll(viewSet)} className="px-2 py-1 rounded-sm bg-gray-700 text-gray-300 hover:text-gray-100">View only</button>
-          <button onClick={() => setEditing((e) => ({ ...e, perms: new Set() }))} className="px-2 py-1 rounded-sm bg-gray-700 text-gray-300 hover:text-gray-100">Clear</button>
+          <button onClick={() => setAll(fullSet)} className="px-2 py-1 rounded-sm bg-gray-700 text-gray-300 hover:text-gray-100">{t('accessControl.editor.fullAccess')}</button>
+          <button onClick={() => setAll(viewSet)} className="px-2 py-1 rounded-sm bg-gray-700 text-gray-300 hover:text-gray-100">{t('accessControl.editor.viewOnly')}</button>
+          <button onClick={() => setEditing((e) => ({ ...e, perms: new Set() }))} className="px-2 py-1 rounded-sm bg-gray-700 text-gray-300 hover:text-gray-100">{t('accessControl.editor.clear')}</button>
         </div>
       )}
 
@@ -224,10 +232,10 @@ function RoleEditor({ resources, editing, setEditing, onDone, setBanner }) {
         <table className="text-xs w-full">
           <thead>
             <tr className="text-gray-400 text-left">
-              <th className="py-2 pr-4 font-semibold">Resource</th>
-              <th className="py-2 px-3 font-semibold text-center">UI</th>
-              <th className="py-2 px-3 font-semibold text-center">API read</th>
-              <th className="py-2 px-3 font-semibold text-center">API write</th>
+              <th className="py-2 pr-4 font-semibold">{t('accessControl.editor.table.resource')}</th>
+              <th className="py-2 px-3 font-semibold text-center">{t('accessControl.editor.table.ui')}</th>
+              <th className="py-2 px-3 font-semibold text-center">{t('accessControl.editor.table.apiRead')}</th>
+              <th className="py-2 px-3 font-semibold text-center">{t('accessControl.editor.table.apiWrite')}</th>
             </tr>
           </thead>
           <tbody>
@@ -253,7 +261,7 @@ function RoleEditor({ resources, editing, setEditing, onDone, setBanner }) {
       {!readOnly && (
         <div className="flex justify-end">
           <button onClick={save} className="px-4 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023]">
-            Save role
+            {t('accessControl.editor.save')}
           </button>
         </div>
       )}
@@ -271,6 +279,7 @@ function Cell({ checked, onChange, disabled }) {
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 function UsersTab({ roles, users, me, onChanged, setBanner }) {
+  const { t } = useTranslation('auth')
   const [newUser, setNewUser] = useState('')
   const [newRole, setNewRole] = useState('')
   const roleNames = useMemo(() => roles.map((r) => r.name), [roles])
@@ -278,16 +287,16 @@ function UsersTab({ roles, users, me, onChanged, setBanner }) {
   const assign = async (user, role) => {
     try {
       await api.assignUserRole(user, role)
-      setBanner({ type: 'ok', msg: role ? `Assigned "${role}" to ${user}.` : `Removed ${user}'s role.` })
+      setBanner({ type: 'ok', msg: role ? t('accessControl.users.assignedMsg', { role, user }) : t('accessControl.users.removedMsg', { user }) })
       onChanged()
     } catch (e) {
-      setBanner({ type: 'err', msg: e?.message || 'Assignment failed' })
+      setBanner({ type: 'err', msg: e?.message || t('accessControl.users.assignFailed') })
     }
   }
 
   const addUser = async () => {
     const u = newUser.trim()
-    if (!u || !newRole) { setBanner({ type: 'err', msg: 'Enter a username and pick a role.' }); return }
+    if (!u || !newRole) { setBanner({ type: 'err', msg: t('accessControl.users.missingFields') }); return }
     await assign(u, newRole)
     setNewUser(''); setNewRole('')
   }
@@ -297,30 +306,30 @@ function UsersTab({ roles, users, me, onChanged, setBanner }) {
       {/* Add a user by name (may not have logged in yet) */}
       <div className="bg-surface-container-high rounded-sm p-4 flex flex-wrap items-end gap-3">
         <label className="space-y-1 flex-1 min-w-[180px]">
-          <span className="text-[11px] uppercase tracking-wide text-gray-400">Timeplus username</span>
-          <input className={inputCls} value={newUser} onChange={(e) => setNewUser(e.target.value)} placeholder="e.g. alice" />
+          <span className="text-[11px] uppercase tracking-wide text-gray-400">{t('accessControl.users.usernameLabel')}</span>
+          <input className={inputCls} value={newUser} onChange={(e) => setNewUser(e.target.value)} placeholder={t('accessControl.users.usernamePlaceholder')} />
         </label>
         <label className="space-y-1 min-w-[160px]">
-          <span className="text-[11px] uppercase tracking-wide text-gray-400">Role</span>
+          <span className="text-[11px] uppercase tracking-wide text-gray-400">{t('accessControl.users.roleLabel')}</span>
           <select className={inputCls} value={newRole} onChange={(e) => setNewRole(e.target.value)}>
-            <option value="">Select role…</option>
+            <option value="">{t('accessControl.users.roleSelectPlaceholder')}</option>
             {roleNames.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
         <button onClick={addUser} className="px-4 py-2 text-xs font-semibold rounded-sm bg-gray-700 text-gray-100 hover:bg-secondary-container">
-          Assign
+          {t('accessControl.users.assign')}
         </button>
       </div>
 
       <div className="space-y-2">
-        {users.length === 0 && <p className="text-sm text-gray-400">No users assigned yet.</p>}
+        {users.length === 0 && <p className="text-sm text-gray-400">{t('accessControl.users.empty')}</p>}
         {users.map((u) => (
           <div key={u.user} className="bg-surface-container-high rounded-sm px-4 py-3 flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <span className="text-sm font-semibold text-gray-100">{u.user}</span>
-              {u.user === me && <span className="text-[10px] text-gray-500 ml-2">(you)</span>}
+              {u.user === me && <span className="text-[10px] text-gray-500 ml-2">{t('accessControl.users.you')}</span>}
               {!roleNames.includes(u.role) && (
-                <span className="text-[10px] text-error ml-2">role “{u.role}” no longer exists — no access</span>
+                <span className="text-[10px] text-error ml-2">{t('accessControl.users.roleGone', { role: u.role })}</span>
               )}
             </div>
             <select
@@ -328,7 +337,7 @@ function UsersTab({ roles, users, me, onChanged, setBanner }) {
               value={roleNames.includes(u.role) ? u.role : ''}
               onChange={(e) => assign(u.user, e.target.value)}
             >
-              <option value="">— no access</option>
+              <option value="">{t('accessControl.users.noAccessOption')}</option>
               {roleNames.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </div>
