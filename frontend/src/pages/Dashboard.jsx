@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import { api } from '../api/client'
 import LiveAgentActivity from '../components/LiveAgentActivity'
 import ThreatAnalytics from '../components/ThreatAnalytics'
+import { formatNumber } from '../i18n/format'
 
 
 export default function Dashboard() {
+  const { t } = useTranslation('dashboard')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -20,30 +23,30 @@ export default function Dashboard() {
 
   const kpis = data ? [
     {
-      label: 'Total Agents', value: data.kpis.total_agents,
-      delta: data.kpis.agents_delta || 'all time',
+      label: t('kpi.totalAgents'), value: formatNumber(data.kpis.total_agents),
+      delta: data.kpis.agents_delta || t('kpi.allTime'),
       deltaColor: 'text-emerald-400', icon: 'smart_toy', iconColor: 'text-primary', deltaIcon: 'trending_up',
     },
     {
-      label: 'Total Token Cost (24h)', value: data.kpis.total_cost_24h,
+      label: t('kpi.totalCost24h'), value: data.kpis.total_cost_24h,
       delta: data.kpis.cost_status,
       deltaColor: 'text-gray-300', icon: 'monetization_on', iconColor: 'text-primary', deltaIcon: 'horizontal_rule',
     },
     {
-      label: 'Active Rules', value: data.kpis.active_rules,
-      delta: 'security policies enforced',
+      label: t('kpi.activeRules'), value: formatNumber(data.kpis.active_rules),
+      delta: t('kpi.securityPoliciesEnforced'),
       deltaColor: 'text-emerald-400', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle',
     },
   ] : [
-    { label: 'Total Agents', value: '—', delta: 'loading…', deltaColor: 'text-gray-300', icon: 'smart_toy', iconColor: 'text-primary', deltaIcon: 'trending_up' },
-    { label: 'Total Token Cost (24h)', value: '—', delta: 'loading…', deltaColor: 'text-gray-300', icon: 'monetization_on', iconColor: 'text-primary', deltaIcon: 'horizontal_rule' },
-    { label: 'Active Rules', value: '—', delta: 'loading…', deltaColor: 'text-gray-300', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle' },
+    { label: t('kpi.totalAgents'), value: '—', delta: t('kpi.loading'), deltaColor: 'text-gray-300', icon: 'smart_toy', iconColor: 'text-primary', deltaIcon: 'trending_up' },
+    { label: t('kpi.totalCost24h'), value: '—', delta: t('kpi.loading'), deltaColor: 'text-gray-300', icon: 'monetization_on', iconColor: 'text-primary', deltaIcon: 'horizontal_rule' },
+    { label: t('kpi.activeRules'), value: '—', delta: t('kpi.loading'), deltaColor: 'text-gray-300', icon: 'verified_user', iconColor: 'text-[#ffb2b8]', deltaIcon: 'check_circle' },
   ]
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
       <Sidebar />
-      <TopNav />
+      <TopNav title={t('title')} />
 
       <main className="pl-sidebar pt-10 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 space-y-8">
@@ -51,7 +54,7 @@ export default function Dashboard() {
           {error && (
             <div className="flex items-center gap-3 px-4 py-3 bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm text-error text-xs mb-2">
               <span className="material-symbols-outlined text-base shrink-0">error</span>
-              <span>{typeof error === 'string' ? error : error?.message || 'Failed to load dashboard data'}</span>
+              <span>{typeof error === 'string' ? error : error?.message || t('errors.loadDashboardFailed')}</span>
             </div>
           )}
           {loading ? (

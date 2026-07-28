@@ -11,8 +11,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import { useTheme } from '../context/ThemeContext'
+import { formatDate, formatNumber } from '../i18n/format'
 
 // Recharts sets fill/stroke as SVG attributes, which don't resolve CSS var(),
 // so we read the resolved theme colors for chart chrome (grid/axis/separator)
@@ -87,11 +89,10 @@ function parseTime(ts) {
 }
 
 function formatTick(ms, windowKey) {
-  const date = new Date(ms)
   if (windowKey === '1m') {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
+    return formatDate(ms, { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })
   }
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  return formatDate(ms, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
 function severityOf(value) {
@@ -105,16 +106,24 @@ function getBreakdownValue(threat, breakdown) {
   return severityOf(threat.severity)
 }
 
-function buildSeries(values, breakdown) {
+function labelForValue(value, breakdown, t) {
+  if (breakdown === 'severity') return t(`severity.${value}`, SEVERITY_META[value]?.label || value)
+  if (value === 'unknown-agent') return t('unknownAgent')
+  if (value === 'Unknown rule') return t('unknownRule')
+  return value
+}
+
+function buildSeries(values, breakdown, t) {
   return values.map((value, index) => ({
     key: `s${index}`,
     value,
-    label: breakdown === 'severity' ? SEVERITY_META[value]?.label || value : value,
+    label: labelForValue(value, breakdown, t),
     color: breakdown === 'severity' ? SEVERITY_META[value]?.color || '#e5e7eb' : PALETTE[index % PALETTE.length],
   }))
 }
 
 function useThreatsData() {
+  const { t } = useTranslation('dashboard')
   const [threats, setThreats] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -143,7 +152,7 @@ function useThreatsData() {
           setLastRefreshedAt(new Date())
         }
       } catch (err) {
-        if (!cancelled) setError(err?.message || 'Failed to load threats')
+        if (!cancelled) setError(err?.message || t('errors.loadThreatsFailed'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -161,9 +170,10 @@ function useThreatsData() {
 }
 
 function ViewToggle({ mode, onChange }) {
+  const { t } = useTranslation('dashboard')
   const nextMode = mode === 'chart' ? 'table' : 'chart'
-  const title = nextMode === 'table' ? 'View Table' : 'View Chart'
-  const label = nextMode === 'table' ? 'Show Table' : 'Show Chart'
+  const title = nextMode === 'table' ? t('chart.viewTable') : t('chart.viewChart')
+  const label = nextMode === 'table' ? t('chart.showTable') : t('chart.showChart')
 
   return (
     <button
@@ -181,6 +191,7 @@ function ViewToggle({ mode, onChange }) {
 }
 
 function ChartTooltip({ active, payload, label }) {
+  const { t } = useTranslation('dashboard')
   if (!active || !payload?.length) return null
   const visible = payload.filter(item => Number(item.value) > 0)
   const total = visible.reduce((sum, item) => sum + (Number(item.value) || 0), 0)
@@ -192,12 +203,12 @@ function ChartTooltip({ active, payload, label }) {
         {visible.map(item => (
           <div key={item.dataKey} className="flex items-center justify-between gap-6 text-[11px]">
             <span style={{ color: item.color }}>{item.name}</span>
-            <span className="font-mono text-gray-100">{item.value}</span>
+            <span className="font-mono text-gray-100">{formatNumber(item.value)}</span>
           </div>
         ))}
         <div className="pt-1 mt-1 border-t border-gray-700 flex items-center justify-between gap-6 text-[11px]">
-          <span className="text-gray-300">Total</span>
-          <span className="font-mono text-gray-100">{total}</span>
+          <span className="text-gray-300">{t('chart.total')}</span>
+          <span className="font-mono text-gray-100">{formatNumber(total)}</span>
         </div>
       </div>
     </div>
@@ -213,7 +224,7 @@ function PieTooltip({ active, payload }) {
     <div className="bg-gray-900 border border-gray-700 rounded-sm p-3 shadow-xl">
       <div className="flex items-center justify-between gap-6 text-[11px]">
         <span style={{ color: item.color }}>{item.label}</span>
-        <span className="font-mono text-gray-100">{item.value}</span>
+        <span className="font-mono text-gray-100">{formatNumber(item.value)}</span>
       </div>
     </div>
   )
@@ -261,6 +272,7 @@ function MetricCard({ label, value, severity, icon, delta }) {
 }
 
 function ChartControls({ title, view, onViewChange, options, selected, onToggle, onSelectAll, allowAgent = false }) {
+  const { t } = useTranslation('dashboard')
   const views = allowAgent ? ['severity', 'agent', 'rule'] : ['severity', 'rule']
   const allSelected = options.length > 0 && options.every(option => selected.includes(option.value))
 
@@ -281,14 +293,14 @@ function ChartControls({ title, view, onViewChange, options, selected, onToggle,
                     : 'text-gray-100 hover:text-pink-300 hover:bg-gray-800/60'
                 }`}
               >
-                {item === 'rule' ? 'Rule' : item}
+                {t(`breakdown.${item}`)}
               </button>
             ))}
           </div>
         </div>
 
         <div>
-          <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-2">Filter By</p>
+          <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-2">{t('chart.filterBy')}</p>
           <div className="space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar pr-1">
             <label className="group flex items-center gap-2 text-xs text-gray-100 cursor-pointer pb-2 border-b border-gray-700">
               <input
@@ -298,7 +310,7 @@ function ChartControls({ title, view, onViewChange, options, selected, onToggle,
                 className="sr-only"
               />
               <CheckboxMark checked={allSelected} />
-              <span className="font-semibold">Select All</span>
+              <span className="font-semibold">{t('chart.selectAll')}</span>
             </label>
             {options.map(option => {
               const checked = selected.includes(option.value)
@@ -323,6 +335,7 @@ function ChartControls({ title, view, onViewChange, options, selected, onToggle,
 }
 
 function GenericTable({ axisLabel, rows, series }) {
+  const { t } = useTranslation('dashboard')
   return (
     <div className="h-[380px] overflow-auto">
       <table className="w-full text-left border-collapse">
@@ -334,7 +347,7 @@ function GenericTable({ axisLabel, rows, series }) {
                 {item.label}
               </th>
             ))}
-            <th className="px-4 py-3 text-[10px] font-bold text-gray-300 uppercase tracking-widest">Total</th>
+            <th className="px-4 py-3 text-[10px] font-bold text-gray-300 uppercase tracking-widest">{t('chart.total')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-700">
@@ -343,10 +356,10 @@ function GenericTable({ axisLabel, rows, series }) {
               <td className="px-4 py-3 text-xs font-mono text-gray-100">{row.label}</td>
               {series.map(item => (
                 <td key={item.key} className="px-4 py-3 text-xs font-mono" style={{ color: item.color }}>
-                  {row[item.key] || 0}
+                  {formatNumber(row[item.key] || 0)}
                 </td>
               ))}
-              <td className="px-4 py-3 text-xs font-mono text-gray-100">{row.total}</td>
+              <td className="px-4 py-3 text-xs font-mono text-gray-100">{formatNumber(row.total)}</td>
             </tr>
           ))}
         </tbody>
@@ -356,6 +369,7 @@ function GenericTable({ axisLabel, rows, series }) {
 }
 
 function SortableGenericTable({ axisLabel, rows, series }) {
+  const { t } = useTranslation('dashboard')
   const [sort, setSort] = useState({ key: 'total', dir: 'desc' })
 
   const sorted = useMemo(() => {
@@ -400,7 +414,7 @@ function SortableGenericTable({ axisLabel, rows, series }) {
                 <HeaderButton sortKey={item.key}>{item.label}</HeaderButton>
               </th>
             ))}
-            <th className="px-4 py-3"><HeaderButton sortKey="total">Total</HeaderButton></th>
+            <th className="px-4 py-3"><HeaderButton sortKey="total">{t('chart.total')}</HeaderButton></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-700">
@@ -409,10 +423,10 @@ function SortableGenericTable({ axisLabel, rows, series }) {
               <td className="px-4 py-3 text-xs font-mono text-gray-100">{row.label}</td>
               {series.map(item => (
                 <td key={item.key} className="px-4 py-3 text-xs font-mono" style={{ color: item.color }}>
-                  {row[item.key] || 0}
+                  {formatNumber(row[item.key] || 0)}
                 </td>
               ))}
-              <td className="px-4 py-3 text-xs font-mono text-gray-100">{row.total}</td>
+              <td className="px-4 py-3 text-xs font-mono text-gray-100">{formatNumber(row.total)}</td>
             </tr>
           ))}
         </tbody>
@@ -422,29 +436,31 @@ function SortableGenericTable({ axisLabel, rows, series }) {
 }
 
 function EmptyState({ message }) {
+  const { t } = useTranslation('dashboard')
   return (
     <div className="h-full flex flex-col items-center justify-center text-xs text-gray-400 text-center">
-      <span>{message || 'Nothing to show here.'}</span>
-      {!message && <span>Select keys in the panel to view data.</span>}
+      <span>{message || t('empty.nothingToShow')}</span>
+      {!message && <span>{t('empty.selectKeysHint')}</span>}
     </div>
   )
 }
 
-function formatRefreshTime(date) {
+function formatRefreshTime(date, t) {
   return date
-    ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    : 'last refresh'
+    ? formatDate(date, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : t('empty.lastRefresh')
 }
 
-function noThreatsMessage(lastRefreshedAt) {
-  return `No threats as of ${formatRefreshTime(lastRefreshedAt)}`
+function noThreatsMessage(lastRefreshedAt, t) {
+  return t('empty.noThreatsAsOf', { time: formatRefreshTime(lastRefreshedAt, t) })
 }
 
 function NoThreatsOverlay({ lastRefreshedAt }) {
+  const { t } = useTranslation('dashboard')
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
       <span className="text-xs text-gray-400 bg-gray-800/80 border border-gray-700 px-3 py-2 rounded-sm">
-        {noThreatsMessage(lastRefreshedAt)}
+        {noThreatsMessage(lastRefreshedAt, t)}
       </span>
     </div>
   )
@@ -518,12 +534,13 @@ function PieLegend({ items, hoveredKey, onHover }) {
 }
 
 function CircleTable({ rows, valueLabel }) {
+  const { t } = useTranslation('dashboard')
   return (
     <div className="h-[300px] overflow-auto">
       <table className="w-full text-left border-collapse">
         <thead className="bg-gray-900">
           <tr>
-            <th className="px-4 py-3 text-[10px] font-bold text-gray-300 uppercase tracking-widest">Series</th>
+            <th className="px-4 py-3 text-[10px] font-bold text-gray-300 uppercase tracking-widest">{t('chart.series')}</th>
             <th className="px-4 py-3 text-[10px] font-bold text-gray-300 uppercase tracking-widest">{valueLabel}</th>
           </tr>
         </thead>
@@ -531,7 +548,7 @@ function CircleTable({ rows, valueLabel }) {
           {rows.map(row => (
             <tr key={row.key} className="hover:bg-gray-700/30">
               <td className="px-4 py-3 text-xs text-gray-100">{row.label}</td>
-              <td className="px-4 py-3 text-xs font-mono text-gray-100">{row.value}</td>
+              <td className="px-4 py-3 text-xs font-mono text-gray-100">{formatNumber(row.value)}</td>
             </tr>
           ))}
         </tbody>
@@ -541,6 +558,7 @@ function CircleTable({ rows, valueLabel }) {
 }
 
 function CircleChartCard({ title, data, loading, valueLabel, lastRefreshedAt }) {
+  const { t } = useTranslation('dashboard')
   const [hoveredKey, setHoveredKey] = useState(null)
   const [mode, setMode] = useState('chart')
   const chrome = useChartChrome()
@@ -555,14 +573,14 @@ function CircleChartCard({ title, data, loading, valueLabel, lastRefreshedAt }) 
       {mode === 'table' ? (
         total === 0 ? (
           <div className="h-[300px]">
-            <EmptyState message={loading ? 'Loading…' : noThreatsMessage(lastRefreshedAt)} />
+            <EmptyState message={loading ? t('empty.loading') : noThreatsMessage(lastRefreshedAt, t)} />
           </div>
         ) : (
           <CircleTable rows={data} valueLabel={valueLabel} />
         )
       ) : total === 0 ? (
         <div className="h-[300px]">
-          <EmptyState message={loading ? 'Loading…' : noThreatsMessage(lastRefreshedAt)} />
+          <EmptyState message={loading ? t('empty.loading') : noThreatsMessage(lastRefreshedAt, t)} />
         </div>
       ) : (
         <div className="h-[300px] flex flex-col">
@@ -630,6 +648,7 @@ function StackedChart({ rows, series, hoveredKey, onHover, xKey = 'label' }) {
 }
 
 export default function ThreatAnalytics() {
+  const { t } = useTranslation('dashboard')
   const [windowKey, setWindowKey] = useState('1h')
   const [statusFilter, setStatusFilter] = useState('all')
   const [now, setNow] = useState(() => Date.now())
@@ -689,7 +708,7 @@ export default function ThreatAnalytics() {
 
     const makeOptions = (breakdown) => {
       const values = breakdown === 'severity' ? SEVERITIES : breakdown === 'agent' ? allAgents : allRules
-      return buildSeries(values, breakdown)
+      return buildSeries(values, breakdown, t)
     }
 
     const buildVolume = (breakdown, selected) => {
@@ -722,7 +741,7 @@ export default function ThreatAnalytics() {
       for (const threat of windowThreats) {
         const agent = threat.agent_id || 'unknown-agent'
         if (!rowsByAgent.has(agent)) {
-          const row = { axis: agent, label: agent, total: 0 }
+          const row = { axis: agent, label: labelForValue(agent, 'agent', t), total: 0 }
           for (const item of series) row[item.key] = 0
           rowsByAgent.set(agent, row)
         }
@@ -755,7 +774,7 @@ export default function ThreatAnalytics() {
 
       return Array.from(counts.entries())
         .map(([value, count]) => {
-          const item = seriesByValue.get(value) || buildSeries([value], breakdown)[0]
+          const item = seriesByValue.get(value) || buildSeries([value], breakdown, t)[0]
           return { ...item, value, count, label: item.label, color: item.color }
         })
         .filter(item => item.count > 0)
@@ -780,7 +799,7 @@ export default function ThreatAnalytics() {
         rule: makeOptions('rule'),
       },
     }
-  }, [agentBreakdown, agentSelected, now, statusFilter, threats, volumeBreakdown, volumeSelected, windowKey])
+  }, [agentBreakdown, agentSelected, now, statusFilter, t, threats, volumeBreakdown, volumeSelected, windowKey])
 
   const volumeOptionKey = valuesKey(analytics.options[volumeBreakdown].map(item => item.value))
   const agentOptionKey = valuesKey(analytics.options[agentBreakdown].map(item => item.value))
@@ -809,15 +828,15 @@ export default function ThreatAnalytics() {
 
       <div className="sticky top-10 z-20 -mx-6 lg:-mx-10 px-6 lg:px-10 py-4 bg-gray-900/95 border-b border-gray-700 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-gray-100">Security Posture</h2>
-          <span className="text-[10px] font-mono text-gray-400">Refreshing every 5s</span>
+          <h2 className="text-xl font-semibold text-gray-100">{t('posture.title')}</h2>
+          <span className="text-[10px] font-mono text-gray-400">{t('posture.refreshing')}</span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-[10px] font-semibold text-gray-300 uppercase tracking-widest">Threat Status</span>
+          <span className="text-[10px] font-semibold text-gray-300 uppercase tracking-widest">{t('posture.threatStatus')}</span>
           <div className="inline-flex bg-gray-900 border border-gray-700 rounded-sm overflow-hidden">
             {[
-              ['all', 'All'],
-              ['active', 'Open'],
+              ['all', t('posture.statusAll')],
+              ['active', t('posture.statusOpen')],
             ].map(([key, label]) => (
               <button
                 key={key}
@@ -833,7 +852,7 @@ export default function ThreatAnalytics() {
               </button>
             ))}
           </div>
-          <span className="text-[10px] font-semibold text-gray-300 uppercase tracking-widest">Time Window</span>
+          <span className="text-[10px] font-semibold text-gray-300 uppercase tracking-widest">{t('posture.timeWindow')}</span>
           <div className="inline-flex bg-gray-900 border border-gray-700 rounded-sm overflow-hidden">
             {Object.keys(TIME_WINDOWS).map(key => (
               <button
@@ -861,24 +880,24 @@ export default function ThreatAnalytics() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <MetricCard label="Total Threats" value={loading ? '—' : analytics.totalThreats} icon="shield" delta="in selected window" />
-        <MetricCard label="Open Threats" value={loading ? '—' : analytics.activeThreats} icon="crisis_alert" delta="not cleared" />
-        <MetricCard label="Critical" value={loading ? '—' : analytics.severityCounts.critical} severity="critical" delta="highest severity" />
-        <MetricCard label="Warning" value={loading ? '—' : analytics.severityCounts.warning} severity="warning" delta="needs review" />
-        <MetricCard label="Info" value={loading ? '—' : analytics.severityCounts.info} severity="info" delta="low severity" />
+        <MetricCard label={t('metrics.totalThreats')} value={loading ? '—' : formatNumber(analytics.totalThreats)} icon="shield" delta={t('metrics.totalThreatsDelta')} />
+        <MetricCard label={t('metrics.openThreats')} value={loading ? '—' : formatNumber(analytics.activeThreats)} icon="crisis_alert" delta={t('metrics.openThreatsDelta')} />
+        <MetricCard label={t('severity.critical')} value={loading ? '—' : formatNumber(analytics.severityCounts.critical)} severity="critical" delta={t('metrics.criticalDelta')} />
+        <MetricCard label={t('severity.warning')} value={loading ? '—' : formatNumber(analytics.severityCounts.warning)} severity="warning" delta={t('metrics.warningDelta')} />
+        <MetricCard label={t('severity.info')} value={loading ? '—' : formatNumber(analytics.severityCounts.info)} severity="info" delta={t('metrics.infoDelta')} />
       </div>
 
       <div className="bg-gray-800 border border-gray-700 rounded-sm">
         <div className="flex items-stretch">
           <div className="min-w-0 flex-1">
             <div className="h-10 pl-5 pr-3 border-b border-gray-700 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-100">Threat Volume Over Time</h3>
+              <h3 className="text-sm font-semibold text-gray-100">{t('sections.threatVolumeOverTime')}</h3>
               <ViewToggle mode={volumeMode} onChange={setVolumeMode} />
             </div>
             {analytics.volume.series.length === 0 ? (
-              <EmptyChart message={loading ? 'Loading threat volume…' : undefined} />
+              <EmptyChart message={loading ? t('empty.loadingVolume') : undefined} />
             ) : volumeMode === 'table' ? (
-              <GenericTable axisLabel="Time" rows={analytics.volume.rows} series={analytics.volume.series} />
+              <GenericTable axisLabel={t('chart.time')} rows={analytics.volume.rows} series={analytics.volume.series} />
             ) : (
               <>
                 <div className="h-[320px] p-5 pb-3 relative">
@@ -901,7 +920,7 @@ export default function ThreatAnalytics() {
             )}
           </div>
           <ChartControls
-            title="Series By"
+            title={t('chart.seriesBy')}
             view={volumeBreakdown}
             onViewChange={setVolumeBreakdown}
             options={analytics.options[volumeBreakdown]}
@@ -917,13 +936,13 @@ export default function ThreatAnalytics() {
         <div className="flex items-stretch">
           <div className="min-w-0 flex-1">
             <div className="h-10 pl-5 pr-3 border-b border-gray-700 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-100">Threats Per Agent</h3>
+              <h3 className="text-sm font-semibold text-gray-100">{t('sections.threatsPerAgent')}</h3>
               <ViewToggle mode={agentMode} onChange={setAgentMode} />
             </div>
             {analytics.agent.series.length === 0 ? (
-              <EmptyChart message={loading ? 'Loading threats per agent…' : undefined} />
+              <EmptyChart message={loading ? t('empty.loadingPerAgent') : undefined} />
             ) : agentMode === 'table' ? (
-              <SortableGenericTable axisLabel="Agent" rows={analytics.agent.rows} series={analytics.agent.series} />
+              <SortableGenericTable axisLabel={t('chart.agentColumn')} rows={analytics.agent.rows} series={analytics.agent.series} />
             ) : (
               <>
                 <div className="h-[320px] p-5 pb-3 relative">
@@ -946,7 +965,7 @@ export default function ThreatAnalytics() {
             )}
           </div>
           <ChartControls
-            title="Series By"
+            title={t('chart.seriesBy')}
             view={agentBreakdown}
             onViewChange={setAgentBreakdown}
             options={analytics.options[agentBreakdown]}
@@ -958,9 +977,9 @@ export default function ThreatAnalytics() {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <CircleChartCard title="Threats by Severity" data={analytics.pies.severity} loading={loading} valueLabel={statusFilter === 'active' ? 'Open' : 'Total'} lastRefreshedAt={lastRefreshedAt} />
-        <CircleChartCard title="Threats by Agent" data={analytics.pies.agent} loading={loading} valueLabel={statusFilter === 'active' ? 'Open' : 'Total'} lastRefreshedAt={lastRefreshedAt} />
-        <CircleChartCard title="Threats by Rule" data={analytics.pies.rule} loading={loading} valueLabel={statusFilter === 'active' ? 'Open' : 'Total'} lastRefreshedAt={lastRefreshedAt} />
+        <CircleChartCard title={t('sections.threatsBySeverity')} data={analytics.pies.severity} loading={loading} valueLabel={statusFilter === 'active' ? t('metrics.valueOpen') : t('metrics.valueTotal')} lastRefreshedAt={lastRefreshedAt} />
+        <CircleChartCard title={t('sections.threatsByAgent')} data={analytics.pies.agent} loading={loading} valueLabel={statusFilter === 'active' ? t('metrics.valueOpen') : t('metrics.valueTotal')} lastRefreshedAt={lastRefreshedAt} />
+        <CircleChartCard title={t('sections.threatsByRule')} data={analytics.pies.rule} loading={loading} valueLabel={statusFilter === 'active' ? t('metrics.valueOpen') : t('metrics.valueTotal')} lastRefreshedAt={lastRefreshedAt} />
       </div>
     </section>
   )

@@ -1,3 +1,6 @@
+import { useTranslation } from 'react-i18next'
+import { formatDate } from '../i18n/format'
+
 const severityCard = {
   critical: { border: 'border-l-[#ffb4ab]', iconColor: 'text-error' },
   warning:  { border: 'border-l-[#ffb2b8]', iconColor: 'text-[#ffb2b8]' },
@@ -18,17 +21,17 @@ const CATEGORY_ICONS = {
 function formatThreatTime(ts) {
   if (!ts) return '—'
   try {
-    return new Date(typeof ts === 'string' ? ts.replace(' ', 'T') : ts)
-      .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return formatDate(typeof ts === 'string' ? ts.replace(' ', 'T') : ts, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   } catch { return String(ts) }
 }
 
 export function ThreatFeedItem({ threat, index = 0, ruleCategory = {}, compact = false, onClick }) {
+  const { t } = useTranslation('dashboard')
   const sev = threat.severity?.toLowerCase() || 'info'
   const { border, iconColor } = severityCard[sev] || severityCard.info
   const catIcon = CATEGORY_ICONS[ruleCategory[threat.rule_id]] || 'shield'
   const detectedAt = threat.detected_at || threat.last_seen
-  const message = threat.message || threat.events?.[0]?.message || 'No message available.'
+  const message = threat.message || threat.events?.[0]?.message || t('feed.noMessage')
   const hookName = threat.hook_name || threat.events?.[0]?.hook_name
 
   return (
@@ -65,7 +68,7 @@ export function ThreatFeedItem({ threat, index = 0, ruleCategory = {}, compact =
           )}
           {compact && index === 0 && (
             <span className="px-2 py-0.5 bg-[#ffb0cf]/10 text-primary text-[9px] font-semibold uppercase rounded-full">
-              Latest
+              {t('feed.latest')}
             </span>
           )}
         </div>
@@ -83,12 +86,13 @@ export function LiveThreatFeedList({
   emptyMessage,
   onThreatClick,
 }) {
+  const { t } = useTranslation('dashboard')
   if (threats.length === 0) {
     return (
       <p className="text-xs py-4 flex items-center gap-2">
         {error
           ? <><span className="material-symbols-outlined text-sm text-red-400">error</span><span className="text-red-400 font-mono">{error}</span></>
-          : <span className="text-gray-400">{emptyMessage || (connected ? 'Waiting for events…' : 'Monitoring…')}</span>
+          : <span className="text-gray-400">{emptyMessage || (connected ? t('feed.waitingForEvents') : t('feed.monitoring'))}</span>
         }
       </p>
     )
