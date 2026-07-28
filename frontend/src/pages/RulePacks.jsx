@@ -6,6 +6,8 @@ import PageHeader from '../components/PageHeader'
 import Toggle from '../components/Toggle'
 import { api } from '../api/client'
 import { rankBySearch } from '../utils/ruleSearch.js'
+import { useAuth } from '../context/AuthContext'
+import { writeKey } from '../lib/perm'
 
 const CATEGORY_ICONS = {
   prompt_injection_and_hijacking:    'phishing',
@@ -23,6 +25,8 @@ const RULES_PAGE_SIZE = 12
 
 export default function RulePacks() {
   const navigate = useNavigate()
+  const { can } = useAuth()
+  const canWrite = can(writeKey('rules')) // gate install/toggle/import/create
   const [rules, setRules] = useState([])
   const [catalog, setCatalog] = useState([])
   const [loading, setLoading] = useState(true)
@@ -267,7 +271,7 @@ export default function RulePacks() {
                 </button>
                 <button
                   onClick={() => importInputRef.current?.click()}
-                  disabled={importing}
+                  disabled={importing || !canWrite}
                   className="px-4 py-2 text-xs font-semibold rounded-sm bg-gray-800 border border-gray-600 text-gray-100 hover:text-gray-100 hover:border-pink-500 transition-colors flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-[14px]">upload</span>
@@ -275,6 +279,7 @@ export default function RulePacks() {
                 </button>
                 <button
                   onClick={() => navigate('/rules/new')}
+                  disabled={!canWrite}
                   className="px-4 py-2 bg-primary-button text-primary-button-text border border-pink-500 text-xs font-semibold rounded-sm hover:scale-[0.98] transition-all"
                 >
                   New Custom Rule
@@ -344,7 +349,7 @@ export default function RulePacks() {
                     <div className={`w-12 h-12 bg-surface-container-lowest flex items-center justify-center rounded-sm ${rule.active ? 'text-pink-400' : 'text-gray-400'}`}>
                       <span className="material-symbols-outlined" style={rule.active ? { fontVariationSettings: "'FILL' 1" } : {}}>{rule.icon}</span>
                     </div>
-                    <Toggle checked={rule.enabled} onChange={val => handleToggle(rule.id, val)} />
+                    <Toggle checked={rule.enabled} onChange={val => handleToggle(rule.id, val)} disabled={!canWrite} />
                   </div>
                   <div className="z-10">
                     <h3 className="text-lg font-semibold tracking-tight text-gray-100 mb-2">{rule.name}</h3>
@@ -443,7 +448,7 @@ export default function RulePacks() {
                     </div>
                     <button
                       onClick={() => setConfirmInstall(entry)}
-                      disabled={installing === entry.id}
+                      disabled={installing === entry.id || !canWrite}
                       className="mt-auto w-full px-3 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text border border-pink-500 disabled:opacity-50 transition-opacity"
                     >
                       {installing === entry.id ? 'Installing…' : 'Install'}

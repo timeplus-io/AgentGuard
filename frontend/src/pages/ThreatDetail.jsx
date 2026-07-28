@@ -4,6 +4,8 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import { SeverityBadge, ThreatStatusBadge } from '../components/Badge'
 import { api } from '../api/client'
+import { useAuth } from '../context/AuthContext'
+import { writeKey } from '../lib/perm'
 import ActivityLog from '../components/ActivityLog'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -142,6 +144,8 @@ function EventCard({ event }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ThreatDetail() {
+  const { can } = useAuth()
+  const canWrite = can(writeKey("threats"))
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -368,14 +372,14 @@ export default function ThreatDetail() {
                     <>
                       <button
                         onClick={handleAcknowledge}
-                        disabled={actionLoading}
+                        disabled={actionLoading || !canWrite}
                         className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors whitespace-nowrap"
                       >
                         Acknowledge
                       </button>
                       <button
                         onClick={handleClear}
-                        disabled={actionLoading}
+                        disabled={actionLoading || !canWrite}
                         className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
                       >
                         Clear
@@ -385,7 +389,7 @@ export default function ThreatDetail() {
                   {threat.status === 'acknowledged' && (
                     <button
                       onClick={handleClear}
-                      disabled={actionLoading}
+                      disabled={actionLoading || !canWrite}
                       className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
                     >
                       Clear
