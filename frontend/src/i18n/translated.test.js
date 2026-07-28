@@ -8,6 +8,7 @@ const load = (mods, ns) =>
 // Representative keys appended by each page task. Each entry: [ns, dottedKey].
 export const REPRESENTATIVE = [
   ['common', 'actions.save'],
+  ['settings', 'language.label'],
 ]
 
 describe('zh-CN is actually translated', () => {

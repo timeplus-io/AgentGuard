@@ -2,14 +2,16 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import enCommon from './locales/en/common.json'
 import zhCommon from './locales/zh-CN/common.json'
+import enSettings from './locales/en/settings.json'
+import zhSettings from './locales/zh-CN/settings.json'
 
 export const SUPPORTED_LOCALES = ['en', 'zh-CN']
 export const DEFAULT_LOCALE = 'en'
 
 // Namespaces are registered here as page tasks add catalogs. common is the base.
 const resources = {
-  en: { common: enCommon },
-  'zh-CN': { common: zhCommon },
+  en: { common: enCommon, settings: enSettings },
+  'zh-CN': { common: zhCommon, settings: zhSettings },
 }
 
 i18n.use(initReactI18next).init({
@@ -17,7 +19,7 @@ i18n.use(initReactI18next).init({
   lng: DEFAULT_LOCALE,
   fallbackLng: DEFAULT_LOCALE,
   defaultNS: 'common',
-  ns: ['common'],
+  ns: ['common', 'settings'],
   interpolation: { escapeValue: false }, // React already escapes
   returnEmptyString: false,
   initImmediate: false, // synchronous init so t() works immediately (tests + first paint)

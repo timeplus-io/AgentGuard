@@ -1,0 +1,8 @@
+{
+  "language": {
+    "label": "语言",
+    "help": "选择 AgentGuard 界面的语言。该设置保存在您的浏览器中。",
+    "english": "English",
+    "chinese": "简体中文"
+  }
+}

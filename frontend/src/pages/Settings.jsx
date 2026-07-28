@@ -5,6 +5,7 @@ import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import SettingsNav from '../components/settings/SettingsNav'
 import SettingsSection from '../components/settings/SettingsSection'
+import LanguageSelector from '../components/settings/LanguageSelector'
 import {
   keyToSectionMap,
   dirtyCountsBySection,
@@ -120,6 +121,8 @@ export default function Settings() {
       <main className="pl-sidebar pt-16 pb-24 min-h-screen">
         <div className="p-8 max-w-5xl">
           <PageHeader title="Settings" subtitle="View and edit AgentGuard server configuration. Keys set by environment variables or CLI flags are read-only." />
+
+          <div className="mb-6"><LanguageSelector /></div>
 
           {loading && <p className="text-gray-400 text-sm">Loading…</p>}
           {error && <p className="text-error text-sm">{error}</p>}

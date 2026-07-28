@@ -1,0 +1,8 @@
+{
+  "language": {
+    "label": "Language",
+    "help": "Choose the language for the AgentGuard interface. This is saved in your browser.",
+    "english": "English",
+    "chinese": "简体中文"
+  }
+}
