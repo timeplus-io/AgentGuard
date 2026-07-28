@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
-function fmtTokens(n, opts) {
+function fmtTokens(n) {
   if (!n) return '—'
-  return formatNumber(n, { notation: 'compact', maximumFractionDigits: 1, ...opts })
+  return formatNumber(n, { notation: 'compact', maximumFractionDigits: 1 })
 }
 import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'

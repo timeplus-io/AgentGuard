@@ -140,11 +140,11 @@ function SessionSummary({ sessionDetail }) {
           </div>
           <div className="bg-surface-container-lowest rounded-sm px-4 py-3">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.session.totalEvents')}</p>
-            <p className="text-2xl font-bold text-gray-100">{sessionDetail.event_count ?? 0}</p>
+            <p className="text-2xl font-bold text-gray-100">{formatNumber(sessionDetail.event_count ?? 0)}</p>
           </div>
           <div className="bg-surface-container-lowest rounded-sm px-4 py-3">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.session.toolCalls')}</p>
-            <p className="text-2xl font-bold text-gray-100">{sessionDetail.total_tool_calls ?? 0}</p>
+            <p className="text-2xl font-bold text-gray-100">{formatNumber(sessionDetail.total_tool_calls ?? 0)}</p>
           </div>
         </div>
 
@@ -764,8 +764,8 @@ function RunWaterfall({ spans }) {
 
   function fmtDuration(ms) {
     if (ms == null || ms === 0) return '—'
-    if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
-    return `${Math.round(ms)}ms`
+    if (ms >= 1000) return `${formatNumber(ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}s`
+    return `${formatNumber(Math.round(ms))}ms`
   }
 
   return (
@@ -1291,7 +1291,7 @@ export default function AgentDetail() {
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
                               <span className="text-[9px] bg-outline-variant/30 text-gray-400 px-1.5 py-0.5 rounded-full">
-                                {session.run_count}
+                                {formatNumber(session.run_count)}
                               </span>
                               {session.run_count > 0 && (
                                 <span className={`material-symbols-outlined text-[12px] transition-transform ${isExpanded && isActive ? 'text-primary rotate-180' : 'text-gray-400'}`}>
@@ -1328,7 +1328,7 @@ export default function AgentDetail() {
                             <div className="flex items-center gap-1">
                               {run.tool_count > 0 && (
                                 <span className="text-[9px] bg-info/10 text-info px-1.5 py-0.5 rounded-full">
-                                  {run.tool_count}
+                                  {formatNumber(run.tool_count)}
                                 </span>
                               )}
                               {run.has_block && (
