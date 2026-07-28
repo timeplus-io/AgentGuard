@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationsProvider } from './components/NotificationsProvider'
 import HoldToastContainer from './components/HoldToast'
 import NoAccess from './components/NoAccess'
 import { uiKey, NAV_RESOURCES } from './lib/perm'
+import { adoptServerDefault } from './i18n/resolveLocale'
 import Login from './pages/Login'
 import Setup from './pages/Setup'
 import Dashboard from './pages/Dashboard'
@@ -24,6 +26,9 @@ import AccessControl from './pages/AccessControl'
 
 function AuthGuard({ children }) {
   const { auth } = useAuth()
+  useEffect(() => {
+    if (auth.loggedIn) adoptServerDefault()
+  }, [auth.loggedIn])
   if (auth.loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">

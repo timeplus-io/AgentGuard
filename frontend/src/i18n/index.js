@@ -23,4 +23,13 @@ i18n.use(initReactI18next).init({
   initImmediate: false, // synchronous init so t() works immediately (tests + first paint)
 })
 
+// Apply the synchronous initial locale: localStorage choice, else English.
+// Async server-default adoption (ui.default_language) happens in App after auth.
+try {
+  const stored = localStorage.getItem('agentguard.locale')
+  const loc = ['en', 'zh-CN'].includes(stored) ? stored : 'en'
+  i18n.changeLanguage(loc)
+  if (typeof document !== 'undefined') document.documentElement.lang = loc
+} catch { /* storage/document unavailable — stays on English */ }
+
 export default i18n
