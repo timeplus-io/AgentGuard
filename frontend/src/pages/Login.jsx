@@ -5,7 +5,7 @@ import { api } from '../api/client'
 
 export default function Login() {
   const { t } = useTranslation('auth')
-  const { setAuth } = useAuth()
+  const { setAuth, refresh } = useAuth()
   const [username, setUsername] = useState(() => localStorage.getItem('agentguard_username') || '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
@@ -19,7 +19,12 @@ export default function Login() {
       const data = await api.authLogin(username, password)
       localStorage.setItem('agentguard_username', data.username)
       setPassword('')
+      // Optimistically enter the app, then re-fetch the full auth status so the
+      // new user's role/permissions replace the previous user's. The login
+      // response only carries the username, so without this the prior user's
+      // permission-gated UI (nav, role) would persist until a hard reload (#248).
       setAuth(prev => ({ ...prev, loggedIn: true, username: data.username }))
+      refresh()
     } catch (err) {
       setError(err.message === 'HTTP 401' ? t('login.errorInvalidCredentials') : (err.message || t('login.errorGeneric')))
     } finally {
