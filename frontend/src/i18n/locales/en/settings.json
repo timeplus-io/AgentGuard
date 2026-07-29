@@ -72,5 +72,162 @@
     "flag": "CLI flag",
     "envTitle": "Set by {{envVar}} — file edits have no effect until the variable is removed",
     "flagTitle": "Set by --{{flag}} — file edits have no effect"
+  },
+  "configSections": {
+    "server": "Server",
+    "timeplus": "Timeplus Connection",
+    "agentguard": "AgentGuard",
+    "catalog": "Catalog",
+    "holds": "Approval Holds",
+    "dlp": "Semantic DLP",
+    "sentry": "Sentry Agent",
+    "ui": "User Interface",
+    "setup": "Setup"
+  },
+  "configKeys": {
+    "server_port": {
+      "label": "HTTP port",
+      "description": "Port the AgentGuard server listens on."
+    },
+    "timeplus_host": {
+      "label": "Host",
+      "description": "Timeplus Enterprise hostname."
+    },
+    "timeplus_port": {
+      "label": "HTTP port",
+      "description": "Timeplus HTTP (Proton) port."
+    },
+    "timeplus_native-port": {
+      "label": "Native port",
+      "description": "Timeplus native TCP port."
+    },
+    "timeplus_user": {
+      "label": "Service user",
+      "description": "Service account username. Set via the TIMEPLUS_USER environment variable only."
+    },
+    "timeplus_password": {
+      "label": "Service password",
+      "description": "Service account password. Set via the TIMEPLUS_PASSWORD environment variable only."
+    },
+    "agentguard_url": {
+      "label": "Webhook base URL",
+      "description": "URL Timeplus uses to call back into AgentGuard (alerts, holds)."
+    },
+    "ui_default_language": {
+      "label": "Default UI language",
+      "description": "Language shown to users who haven't picked one in their browser."
+    },
+    "catalog_dir": {
+      "label": "Catalog directory",
+      "description": "Filesystem directory the rule catalog is loaded from."
+    },
+    "holds_mv_wait_ms": {
+      "label": "MV wait (ms)",
+      "description": "Milliseconds to wait for a rule MV to evaluate before deciding a hold."
+    },
+    "holds_timeout_seconds": {
+      "label": "Hold timeout (s)",
+      "description": "Seconds a hold waits for a human decision before failing (max 540)."
+    },
+    "holds_fail_policy": {
+      "label": "Fail policy",
+      "description": "What to do when a hold times out or the server shuts down."
+    },
+    "holds_disabled": {
+      "label": "Disable holds",
+      "description": "When true, no PreToolUse holds are created."
+    },
+    "dlp_enabled": {
+      "label": "Enable Semantic DLP",
+      "description": "Turn on the Semantic DLP enrichment + query pipeline."
+    },
+    "dlp_base_url": {
+      "label": "LLM base URL",
+      "description": "OpenAI-compatible base URL for DLP embedding/risk/summary models."
+    },
+    "dlp_api_key": {
+      "label": "API key",
+      "description": "Bearer key for the DLP LLM endpoint. Write-only; never displayed."
+    },
+    "dlp_embedding_model": {
+      "label": "Embedding model",
+      "description": "Model used to embed content. Baked into UDFs — change needs re-provision."
+    },
+    "dlp_embedding_dim": {
+      "label": "Embedding dimension",
+      "description": "Auto-detected from the embedding model at provision (probed via dlp_embed). Read-only; the configured value is only a fallback used when the endpoint is unreachable."
+    },
+    "dlp_risk_model": {
+      "label": "Risk model",
+      "description": "Model used for risk classification. Baked into UDFs — change needs re-provision."
+    },
+    "dlp_summary_model": {
+      "label": "Summary model",
+      "description": "Model used for query summarization. Baked into UDFs — change needs re-provision."
+    },
+    "dlp_request_timeout_seconds": {
+      "label": "Model request timeout (s)",
+      "description": "Per-call timeout for DLP model requests. 5–55 (must stay under the 60s query client). Baked into UDFs — change needs re-provision."
+    },
+    "dlp_max_output_tokens": {
+      "label": "Max output tokens",
+      "description": "Token budget for risk/understand/rerank model calls (summary uses at least 800). Raise for reasoning models. Baked into UDFs — change needs re-provision."
+    },
+    "sentry_enabled": {
+      "label": "Enable Sentry agent",
+      "description": "Conversational security analyst agent (chat, SQL skills). Model settings live in agentguard_sentry_config, editable under Settings → Sentry Agent."
+    },
+    "sentry_skill_dir": {
+      "label": "SQL skill directory override",
+      "description": "Optional path to an updated timeplus-sql-guide skill directory; empty uses the embedded copy."
+    },
+    "sentry_chat_base_url": {
+      "label": "Sentry chat base URL",
+      "description": "OpenAI-compatible endpoint for the Sentry chat model (boot default; edit live under Settings → Sentry Agent)."
+    },
+    "sentry_chat_api_key": {
+      "label": "Sentry chat API key",
+      "description": "API key for the Sentry chat endpoint."
+    },
+    "sentry_chat_model": {
+      "label": "Sentry chat model",
+      "description": "Tool-calling-capable chat model id for the Sentry agent loop."
+    },
+    "sentry_chat_api_type": {
+      "label": "Sentry chat API type",
+      "description": "LLM API dialect for the Sentry chat model: 'openai' (Chat Completions) or 'anthropic' (Anthropic Messages, e.g. Claude on Bedrock)."
+    },
+    "sentry_memory_enabled": {
+      "label": "Enable Sentry memory (Phase 2)",
+      "description": "Enables Sentry's embedding-backed memory (Phase 2). When off, no embedding endpoint is needed."
+    },
+    "sentry_embedding_base_url": {
+      "label": "Sentry embedding base URL",
+      "description": "OpenAI-compatible endpoint for the Sentry memory embedding model (may differ from chat, e.g. local Ollama)."
+    },
+    "sentry_embedding_api_key": {
+      "label": "Sentry embedding API key",
+      "description": "API key for the Sentry embedding endpoint."
+    },
+    "sentry_embedding_model": {
+      "label": "Sentry embedding model",
+      "description": "Embedding model id for Sentry memory (Phase 2)."
+    },
+    "sentry_embedding_dim": {
+      "label": "Sentry embedding dimension",
+      "description": "Vector dimension of the Sentry embedding model (Phase 2 memory)."
+    },
+    "sentry_request_timeout_seconds": {
+      "label": "Sentry model request timeout (s)",
+      "description": "Per-call timeout for Sentry model requests."
+    },
+    "sentry_max_output_tokens": {
+      "label": "Sentry max output tokens",
+      "description": "Per-completion token cap for the Sentry chat model."
+    },
+    "setup_complete": {
+      "label": "Setup complete",
+      "description": "Whether the setup wizard has been run."
+    }
   }
 }

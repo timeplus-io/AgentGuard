@@ -33,7 +33,7 @@ export default function SettingsNav({
               active ? 'text-pink-400 bg-gray-700' : 'text-gray-400 hover:bg-gray-700 hover:text-gray-100'
             }`}
           >
-            <span className="flex-1 truncate">{s.title}</span>
+            <span className="flex-1 truncate">{t('configSections.' + s.id, { defaultValue: s.title })}</span>
             {dirty > 0 && (
               <span className="bg-[#ffb0cf] text-[#3d0023] text-[9px] font-bold rounded-full px-1.5 py-0.5 min-w-[16px] text-center">
                 {dirty}

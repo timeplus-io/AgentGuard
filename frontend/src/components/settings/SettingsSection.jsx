@@ -89,13 +89,13 @@ function KeyField({ k, draftValue, onChange }) {
     <div className="py-3">
       <div className="flex items-center justify-between gap-3 mb-1">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-100">{k.label}</span>
+          <span className="text-sm text-gray-100">{t('configKeys.' + k.key.replace(/\./g, '_') + '.label', { defaultValue: k.label })}</span>
           <SourceChip k={k} />
           {k.restart && <span className="text-[10px] text-amber-400">{t('field.restartBadge')}</span>}
           {k.reprovision && <span className="text-[10px] text-amber-400">{t('field.reprovisionBadge')}</span>}
         </div>
       </div>
-      <p className="text-xs text-gray-400 mb-2">{k.description}</p>
+      <p className="text-xs text-gray-400 mb-2">{t('configKeys.' + k.key.replace(/\./g, '_') + '.description', { defaultValue: k.description })}</p>
       <div className="max-w-md">{input}</div>
     </div>
   )
@@ -136,7 +136,7 @@ export default function SettingsSection({
   if (section.id === 'sentry') {
     return (
       <section className="bg-gray-800 rounded-sm px-6 py-4">
-        <h3 className="text-base font-medium text-gray-100 mb-3">{section.title}</h3>
+        <h3 className="text-base font-medium text-gray-100 mb-3">{t('configSections.' + section.id, { defaultValue: section.title })}</h3>
         <div className="flex flex-col gap-4">
           <div className="bg-gray-900/40 rounded-sm px-4 py-3">
             <h4 className="text-sm font-semibold text-gray-100 mb-1">{t('section.serverConfigHeading')}</h4>
@@ -160,7 +160,7 @@ export default function SettingsSection({
   if (section.id !== 'dlp') {
     return (
       <section className="bg-gray-800 rounded-sm px-6 py-4">
-        <h3 className="text-base font-medium text-gray-100 mb-2">{section.title}</h3>
+        <h3 className="text-base font-medium text-gray-100 mb-2">{t('configSections.' + section.id, { defaultValue: section.title })}</h3>
         {keyList}
         {section.id === 'timeplus' && (
           <div className="mt-3 flex items-center gap-3">
@@ -179,7 +179,7 @@ export default function SettingsSection({
 
   return (
     <section className="bg-gray-800 rounded-sm px-6 py-4">
-      <h3 className="text-base font-medium text-gray-100 mb-3">{section.title}</h3>
+      <h3 className="text-base font-medium text-gray-100 mb-3">{t('configSections.' + section.id, { defaultValue: section.title })}</h3>
       <div className="flex flex-col gap-4">
         <div className="bg-gray-900/40 rounded-sm px-4 py-3">
           <h4 className="text-sm font-semibold text-gray-100 mb-1">{t('section.serverConfigHeading')}</h4>
