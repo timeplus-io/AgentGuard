@@ -142,3 +142,16 @@ sql_template: |
       -- DOB in shared memory content
       OR match(lower(content_payload), '\b(dob|date.of.birth|birth.?date)\b.{0,20}[0-9]{4}')
     )
+translations:
+  zh-CN:
+    name: "AgentLeak 智能体间委派 PII 通道传播检测器"
+    description: |
+      检测多智能体 LLM 系统中通过智能体间委派通道进行的过量 PII/PHI/财务数据传播。AgentLeak 基准测试（arXiv:2602.11510，2026年2月，覆盖 5 个前沿模型的 4,979 条执行轨迹）发现智能体间通信（C2）泄露 PII 的比例高达 68.8%，而直接输出仅为 27.2%——这意味着仅审计输出会遗漏 41.7% 的违规行为。多智能体配置降低了每条通道的泄露量，但打开了未被监控的内部通道，从而将系统总体暴露率提高到 68.9%。这一模式在 GPT-4o、GPT-4o-mini、Claude 3.5 Sonnet、Mistral Large 和 Llama 3.3 70B 上，以及在医疗、金融、法律和企业等领域中都保持一致。攻击面：编排（orchestrator）智能体通过委派工具调用将完整的对话上下文（包括社保号、医疗记录、信用卡号、身份验证令牌）传递给专用的子智能体。在没有针对每个子智能体进行上下文最小化的情况下，敏感数据可自由流向智能体网络中任何被攻陷或权限过宽的子智能体。v0.2.0 新增了 agentguard_memory_ops 分支：检测内存保存（memory-save）或内存更新（memory-upsert）操作被用作智能体间中继通道的情形——包含 PII/PHI 的 content_payload 被写入内存，随后被同一部署内的另一个智能体读取。这是 CrewAI 共享内存、LangGraph 共享状态以及自定义黑板（blackboard）模式多智能体系统中常见的间接 PII 通道。同时还扩展了委派 tool_name 的覆盖范围，纳入了 2026 年在 OpenHands 和 Anthropic 智能体框架中观察到的 run_task、execute_task、transfer_to_agent、handoff_to_agent、delegate_subtask 和 spawn_subagent 模式。
+
+      与 rp-027（租户会话间的跨会话数据串扰）、rp-054（OMNI-LEAK 级联式数据泄露，含显式的 URL 泄露目的地）以及 rp-010（A2A 委派中的信任升级）不同。本规则针对的是"传输中数据"模式：无论下游子智能体是恶意的还是仅仅权限范围过宽，只要智能体间委派调用的 tool_input 或共享内存写入中出现 PII/PHI/财务数据即会触发。
+
+      参考文献：arXiv:2602.11510（AgentLeak，2026年2/3月）、OWASP LLM02:2025、OWASP Agentic AI ASI05:2026 -
+      - https://arxiv.org/abs/2602.11510,
+      - https://github.com/Privatris/AgentLeak,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+      - https://labs.lares.com/owasp-agentic-top-10/

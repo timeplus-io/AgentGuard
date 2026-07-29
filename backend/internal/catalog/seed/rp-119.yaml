@@ -149,3 +149,27 @@ sql_template: |
       -- Some GraphRAG / knowledge graph query engines explicitly report path conflicts
       OR match(lower(tool_result), '(conflicting.{0,20}(path|relation|edge|node)|contradictory.{0,20}(relation|triple|assertion|fact)|topology.{0,20}(error|inconsistency|conflict|violation)|duplicate.{0,20}(relation|role|entity).{0,50}(same|identical|conflict))')
     )
+
+translations:
+  zh-CN:
+    name: "LogicPoison — GraphRAG 知识图谱拓扑污染检测器"
+    description: |
+      检测 LogicPoison 攻击（arXiv:2604.02954，香港理工大学 / 西南财经大学，2026年4月）：这是一种针对基于图的检索增强生成（GraphRAG）的新型攻击，它会破坏底层知识图谱的拓扑完整性，同时不改变表层文本语义。与需要显式注入关键词的基于文本的 RAG 投毒（rp-009）不同，LogicPoison 采用保类型的实体替换：将实体替换为类型兼容的替代对象（人物→人物，公司→公司），在保持文本表面合理性的同时破坏推理路径。该攻击针对(1) 全局逻辑枢纽——许多推理路径都会经过的高中心性图节点，以及(2) 特定查询的推理桥梁——多跳推理所必需的边。由于图谱拓扑在摄入之前就已在源语料层面被污染，GraphRAG 自身的社区检测和关系过滤防御会被绕过。可观测的运行时信号：GraphRAG 查询的 tool_result 中包含相互矛盾的实体-角色对——同一实体同时具有互斥的关系（同时被同一机构"雇用"和"解雇"）、两个不同实体声称对同一目标拥有相同角色（两个不同的人都被列为同一公司的CEO），或多跳推理路径中出现实体类型不匹配。这些矛盾在文档层面不可见，但当智能体查询被污染的子图时便会暴露出来。
+
+      与 rp-009（tool_result 中的文本注入标记）、rp-026（嵌入向量窃取）、rp-034（被植入后门的检索工具）、rp-070（CIPL 预言机探测）不同：本规则检测的是图查询结果中的结构性拓扑不一致，而非文本模式或行为异常。
+
+      参考文献：arXiv:2604.02954（LogicPoison，ACL 2026 主会，香港理工大学/西南财经大学），OWASP LLM08:2025（向量与嵌入弱点），OWASP LLM01:2025（提示注入）-
+      - https://arxiv.org/abs/2604.02954,
+      - https://arxiv.org/html/2604.02954v1,
+      - https://github.com/Jord8061/logicPoison,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
+      v0.2.0 新增了 KEPo（arXiv:2603.11501，WWW 2026 / ACM 万维网大会 2026）：这是一种互补的 GraphRAG 投毒攻击，针对的是知识演化路径而非拓扑结构。KEPo 伪造具有虚构知识演化路径的有毒事件（"从X到Y演化为Z"），通过构造貌似合理实则虚假的知识链来误导 GraphRAG 的社区检测。在多目标模式下，KEPo 会连接多个攻击语料库以放大被污染的社区规模。可观测信号：图谱/知识工具的 tool_result 中包含知识演化路径式的措辞（"演化为"、"取代了"、"更新事实"、"知识演化"），并伴随异常的角色/实体转变——这与 LogicPoison 的同时性矛盾（分支A，属于同一快照内的悖论）不同。
+
+      参考文献：arXiv:2604.02954（LogicPoison，ACL 2026 主会，香港理工大学/西南财经大学），arXiv:2603.11501（KEPo，WWW 2026 / ACM 万维网大会 2026，电子科技大学），OWASP LLM08:2025（向量与嵌入弱点），OWASP LLM01:2025（提示注入）-
+      - https://arxiv.org/abs/2604.02954,
+      - https://arxiv.org/html/2604.02954v1,
+      - https://arxiv.org/abs/2603.11501,
+      - https://github.com/Jord8061/logicPoison,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+      示例：graph_query 的 tool_result 返回的子图中，实体"Alice Chen"同时对"TechCorp"具有"ceo_of"和"resigned_from"两种关系，且"Bob Smith"也对"TechCorp"具有"ceo_of"关系——两个实体声称同一角色是 LogicPoison 拓扑污染的信号。KEPo 示例：tool_result 中包含"According to knowledge evolution, [original fact] has evolved to [toxic target claim]"——伪造的演化路径误导了推理过程。

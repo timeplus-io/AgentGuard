@@ -113,3 +113,18 @@ sql_template: |
       OR match(lower(tool_input), 'create\s+(user|login|role)\s+\S+.{0,200}(dba|superuser|sysadmin|all\s+privileges|admin)')
       OR match(lower(tool_input), 'grant\s+(dba|all\s+privileges|superuser|sysadmin|db_owner).{0,60}to\s+\S')
     )
+translations:
+  zh-CN:
+    name: "ToxicSQL —— 被投毒的 Text-to-SQL LLM 恶意查询注入检测器"
+    description: |
+      检测由被投毒的 LLM Text-to-SQL 模型生成、并提交给数据库执行工具的恶意 SQL 查询。ToxicSQL(arXiv:2503.05445,SIGMOD 2026)表明,仅 0.44% 的训练数据被投毒即可实现 79.41% 的攻击成功率:当用户自然语言查询中出现隐蔽的语义或字符级触发器时,被攻陷的模型会生成可执行的 SQL 注入载荷(DDL 破坏、UNION SELECT 凭证渗漏、权限提升 UPDATE、系统元数据侦察)。该被投毒模型通过公共模型仓库(HuggingFace Hub、Ollama library)分发,在所有非触发输入上表现正常,从而规避标准的模型评估。检测目标是数据库执行时 tool_input 中的 SQL 查询内容,覆盖四类(实为多类)载荷:(A) DDL 破坏(DROP/TRUNCATE TABLE/DATABASE/SCHEMA);(B) UNION SELECT 数据渗漏,目标为凭证类列;(C) UPDATE/INSERT 权限提升与凭证重置;(D) 系统元数据表探测(INFORMATION_SCHEMA、sqlite_master、pg_tables),作为渗漏前的侦察手段;(E) 通过分号拼接实现的多语句注入;(F) 表明载荷被隐藏的 SQL 注释终止符;(G) SQL Server xp_cmdshell 远程代码执行;(H) 使用宽泛/未限定谓词的批量 DELETE(大规模记录破坏);(I) 带有 DBA/超级用户授权的 CREATE USER/ROLE(未授权账户创建)。
+
+      与 rp-100(审计日志删除 —— 针对日志表,而非应用数据)不同。与 rp-003/rp-052(shell/沙箱逃逸 —— 无 SQL 执行上下文)不同。本规则在执行时针对 SQL 内容本身触发,无论该 SQL 由哪个被投毒模型生成。
+
+      参考文献:arXiv:2503.05445(ToxicSQL SIGMOD 2026) -
+      - https://arxiv.org/abs/2503.05445,
+      ICSE 2025 Prompt-to-SQL Injections -
+      - https://syssec.dpss.inesc-id.pt/papers/pedro_icse25.pdf,
+      OWASP LLM05:2025 供应链漏洞 -
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+      示例:tool_input="SELECT name, salary FROM employees UNION SELECT username, password, '' FROM users;--",由被投毒的 text-to-SQL 模型生成(触发词:语义触发词 "boss" → SIGMOD 2026 中 79.41% 的 ASR)

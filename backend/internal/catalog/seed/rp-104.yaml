@@ -154,3 +154,15 @@ sql_template: |
     AND match(tool_result, '"(payload|assembled_result|final_output|decoded_output)"\s*:\s*"[A-Za-z0-9+/=]{128,}"')
     -- Must NOT be a legitimate chunked data tool (file upload, chunk processor, etc.)
     AND NOT match(lower(tool_name), '(upload|chunk|file_write|write_file|put_object|store_file|save_file|encode|base64_encode|part_upload)')
+translations:
+  zh-CN:
+    name: "SkillTrojan —— 跨多技能加密载荷分片重组检测器"
+    description: |
+      检测 SkillTrojan 攻击 —— 该攻击将加密的恶意载荷拆分到多个看似良性的技能(skill)调用中,并仅在预定义的触发条件下重新组装。SkillTrojan(arXiv:2604.06811,2026 年 4 月)在 EHR SQL 场景下对 GPT-5.2 实现了 97.2% 的攻击成功率(ASR),同时保持 89.3% 的正常任务准确率 —— 能够同时规避自动化技能审计和人工审查。该攻击针对基于技能的智能体架构,直接将恶意逻辑嵌入技能实现本身(而非模型参数或训练数据),将加密载荷拆分到 N 次单独看来均无害的技能调用中,并使用共享的 session_key 与分片计数元数据来协调载荷重组。检测分为三个分支:(1) 分片分发 —— tool_input 中同时包含 segment/total_segments/session_key 等载荷分发元数据以及 base64 数据;(2) 重组触发 —— tool_input 或 tool_result 中包含显式的载荷组装激活信号(trigger/reconstruct/execute:true);(3) 重组载荷投递 —— tool_result 返回长度足以容纳有意义代码/命令的重组 base64 载荷。
+
+      与 rp-042(BackdoorAgent:模型行为/用户消息中的运行时触发器)和 rp-085(Silent Sabotage:训练痕迹投毒)不同,SkillTrojan 完全运作于技能实现内部,而非模型参数。也与 rp-020(DDIPE:文档内嵌代码)和 rp-071(MalTool:tool_result 中的 CIA 三元组行为信号)不同。
+
+      参考文献:arXiv:2604.06811(SkillTrojan: Backdoor Attacks on Skill-Based Agent Systems,2026 年 4 月)、OWASP LLM05:2025(供应链漏洞)、MITRE T1027(混淆文件/信息)、MITRE T1195.001(供应链攻击:软件依赖) -
+      - https://arxiv.org/abs/2604.06811,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+      示例:tool_input='{"data":"aW1wb3J0IG9z","segment":1,"total_segments":3,"session_key":"xK9p"}',随后 tool_result='{"reconstructed":true,"payload":"aW1wb3J0IG9zOyBvcGVuKCIvZXRj...","execute":true}'

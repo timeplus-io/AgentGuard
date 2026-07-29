@@ -114,3 +114,13 @@ sql_template: |
         AND match(lower(user_message), '(ignore all|jailbreak|bypass (safety|filter|guardrail)|provide harmful|without (restriction|safety filter))')
       )
     )
+
+translations:
+  zh-CN:
+    name: "约束解码攻击 — 模式级结构化输出越狱检测器"
+    description: |
+      检测约束解码攻击(Constrained Decoding Attack,CDA,arXiv:2503.24191 v2,2026 年 1 月),这是一类新型的控制面(control-plane)越狱攻击,将恶意意图嵌入 JSON schema 的语法规则中(enum 字段、dict 语法键),而非嵌入表层提示词中。与传统的提示注入(数据面,data-plane)不同,CDA 通过将恶意载荷隐藏在引导 token 生成的模式级(schema-level)语法约束中来实施攻击,从而绕过外部提示词审计和内部安全对齐。攻击有两种变体:EnumAttack——将有害指令作为 enum 值嵌入 JSON schema 属性中;表层提示词看起来无害("select the appropriate response"),而 enum 值中编码了攻击内容。DictAttack——将恶意载荷拆分到多个字典语法键中,使得单个键均无害,但其组合具有危害性。DictAttack 对 gpt-5、gemini-2.5-pro、deepseek-r1 和 gpt-oss-120b 的攻击成功率(ASR)达到 94.3%-99.5%,即使面对多种最先进的越狱防护措施,仍能保持 75.8% 的 ASR。该研究在 13 个专有和开放权重模型上进行了评测。本规则针对 tool_invoke 事件(用户或恶意检索内容向结构化输出工具提供 JSON schema 的场景),以及 user_input 事件(用户直接提供恶意 response_format schema 的场景)。区别于 rp-001(表层提示词中的数据面提示注入)和 rp-005(工具元数据中的工具描述投毒):CDA 仅作用于结构化输出 API 的 schema/语法控制面。
+
+      References: arXiv:2503.24191 (CDA Jan 2026), OWASP LLM01:2025, OWASP LLM07:2025 -
+      - https://arxiv.org/abs/2503.24191,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

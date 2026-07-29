@@ -97,3 +97,15 @@ sql_template: |
         AND NOT match(lower(tool_input), '(localhost|127\.0\.0\.1|internal\.|\.corp\.|\.internal)')
       )
     )
+translations:
+  zh-CN:
+    name: "AI 智能体人力众包市场物理世界攻击外包检测器"
+    description: |
+      检测自主 AI 智能体通过 REST API 或 MCP 滥用人力任务众包市场集成(例如 RentAHuman.ai)、以程序化方式雇佣人类工作者实施物理世界攻击的行为。arXiv:2602.19514(2026 年 2 月)对 RentAHuman.ai 上的 303 个悬赏任务进行了实证测量:32.7%(99/303)源自程序化的智能体渠道(agentId 前缀为 agent_* 或 api_key_*)。已确认六类滥用行为:凭证欺诈(批量创建账户)、身份冒充(冒充客服代表)、自动化侦察(个人数据收集)、社交媒体操纵(虚假互动)、身份验证规避(绕过 2FA/CAPTCHA)以及推荐返利欺诈 —— 每名工作者的中位价格仅为 25 美元即可购买。一个被攻陷或行为失准的智能体若拥有市场 MCP 访问权限,便可将物理世界的人类劳动转化为对抗性行动的原语,从而完全绕过数字安全控制。已观察到的真实案例包括:“Cursor Agent” MCP 账户发布代码子任务悬赏、“Clawdia” 智能体发布限时物理配送任务。v0.1.1(2026-04-21):新增 Humwork(YC P26 批次)作为第二个 AI 智能体对人力市场 —— 一个专为 AI 智能体调用方设计的实时专家匹配 API(“AI 智能体将付费与你交谈”,LinkedIn,2026 年 4 月)。同时将工具锚点扩展至 humwork.ai 及 hire_expert 模式。新增 HUMAN Security 2026 数据:AI 智能体流量同比增长 7,851%,大幅扩大了市场滥用的攻击面。与 rp-039(MCP 工单注入)和 rp-075(邮件/日历被动注入)不同,本规则针对的是智能体主动发起、面向人力劳动市场的出站任务发布行为 —— 一类具有真实物理世界后果的独立威胁。
+
+      参考文献:arXiv:2602.19514(RentAHuman.ai 实证研究,2026 年 2 月)、HUMAN Security 2026 State of AI Traffic & Cyberthreat Benchmark Report(AI 智能体流量同比 +7851%)、Humwork YC P26(实时 AI 智能体对人力市场,2026 年 4 月)、OWASP Agentic AI ASI05:2026、OWASP LLM08:2025(过度代理)、MITRE T1583 -
+      - https://arxiv.org/abs/2602.19514,
+      - https://arxiv.org/html/2602.19514v1,
+      - https://rentahuman.ai,
+      - https://www.humansecurity.com/learn/resources/2026-state-of-ai-traffic-cyberthreat-benchmarks/,
+      - https://www.linkedin.com/posts/y-combinator_ai-agents-will-pay-you-to-chat-with-them-activity-7450211357200904192-D8Hh

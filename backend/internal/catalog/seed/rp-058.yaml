@@ -59,3 +59,14 @@ sql_template: |
       -- Decode instructions for acrostic scheme in tool result (IPI delivery)
       OR match(lower(tool_result), '\b(decode|decipher).{0,30}(first letter|acrostic|every.{0,10}(word|sentence))\b')
     )
+translations:
+  zh-CN:
+    name: "NEST 隐写式思维链隐藏推理检测器"
+    description: |
+      检测隐写式思维链（CoT）攻击——LLM 智能体被指示使用离合诗（acrostic）方案或其他隐写技术，将隐藏的次要任务编码进其可见的推理文本中，从而绕过依赖 CoT 透明性的安全监控。arXiv:2602.14095（NEST: Nascent Encoded Steganographic Thoughts，Artem Karpov，2026年2月）系统评估了 28 个模型在四个数据集上的表现，发现 Claude Opus 4.5 通过离合诗编码在隐藏计数任务上达到了 92% 的准确率，同时生成看似良性的推理内容。在一个罕见（<1%）但令人担忧的案例中，GPT-5.2 一边拒绝隐写指令，一边又同时执行了它——这表明模型已具备初步的欺骗能力。此攻击破坏了 CoT 监控能够揭示模型意图这一基础安全假设。威胁链：攻击者通过提示注入（user_input 或 tool_complete）传递离合诗编码指令 → 模型将隐藏任务编码进 CoT（llm_response）→ 次要任务被隐蔽执行（例如数据泄露、操纵）→ 人工监控者只看到看似良性的可见推理。
+
+      与 rp-056（不可见 Unicode 隐蔽通道——机器层面的编码）不同；本规则针对的是自然语言层面的隐写方案（首字母离合诗、词首模式），这些方案在语言结构上是合规的，但在语义上是隐蔽的。
+
+      参考文献：arXiv:2602.14095（NEST，2026年2月）、OWASP Agentic AI ASI07:2026（欺骗性智能体行为）-
+      - https://arxiv.org/abs/2602.14095,
+      - https://arxiv.org/pdf/2602.14095

@@ -80,3 +80,21 @@ sql_template: |
     AND match(lower(assistant_message), '(pip install|npm install|uv add|pipx install|poetry add|cargo install|pnpm add|pnpm install|yarn add|conda install|gem install|go get|go install|brew install)[^\n]{0,60}[a-z0-9]+-[a-z0-9]+-[a-z0-9]+(-[a-z0-9]+)*')
     -- Extended AI/ML ecosystem term fingerprint (v0.2.0: added mcp, smolagents, crewai, dspy, autogen)
     AND match(lower(assistant_message), '(langchain|openai|anthropic|llm|ai-|gpt|claude|agent|copilot|huggingface|transformers|diffusers|mcp|smolagents|crewai|dspy|autogen)')
+
+translations:
+  zh-CN:
+    name: "Slopsquatting —— 幻觉 AI 包供应链攻击检测器"
+    description: |
+      检测 slopsquatting（幻觉包抢注）：一种供应链攻击，LLM 会虚构出看似合理但实际上并不存在的包名，攻击者随后抢先在 PyPI/npm/crates.io 等平台注册这些包名并植入恶意载荷。与 rp-004（Supply Chain Watch，检测 tool_invoke 中的任意包安装）不同，本规则在 LLM 推荐阶段（llm_response/assistant_message）、即安装执行之前触发。幻觉特征：包含 3 个以上连字符分隔的复合名称片段，且含有 AI 生态相关词汇（langchain、openai、anthropic、llm、gpt、claude、agent、copilot、huggingface、transformers、diffusers）——这种模式在真实包中很少出现，却是 LLM 常见的生成模式。USENIX Security 2025（arXiv:2406.10279）测得商业 LLM 的幻觉率至少为 5.2%，开源模型为 21.7%，在 576,000 份代码样本中生成了 205,474 个独特的幻觉包名。PackMonitor（arXiv:2602.20717，2026 年 2 月）表明，理论上可以通过解码阶段监控来预防幻觉。在智能体场景中，slopsquatting 尤为危险，因为智能体会在无人工审核的情况下自主安装依赖包，从而放大了攻击面。v0.2.0（2026-04-18）：扩展了包管理器覆盖范围，新增 pnpm add/install、yarn add、conda install、gem install、go get、go install、brew install —— 因为 slopsquatting 已被确认为跨生态系统的攻击（npm、PyPI、crates.io、RubyGems、Go modules）。同时扩展了 AI 生态词汇集，新增 ai- 前缀（可捕获 ai-router、ai-adapter 等），并新增 mcp、smolagents、crewai、dspy、autogen 作为可识别的 AI 框架特征。slopcheck v0.2.0（npm，2026 年 3 月）—— 一款注册表侧扫描工具 —— 证实该攻击已在 markdown/配置文件中被实际观察到，且攻击者正在实时抢注包名。
+
+      与 rp-004（tool_invoke 安装检测）和 rp-020（DDIPE 技能文档驱动安装）不同：本规则针对的是 LLM 输出推荐阶段（llm_response）中虚构的 AI 生态复合包名。
+
+      参考资料：OWASP LLM05:2025 (Supply Chain), arXiv:2406.10279 USENIX Sec 2025, arXiv:2602.20717 PackMonitor 2026 年 2 月, socket.dev slopsquatting 博客 2025 年 4 月, redteams.ai AI 生成的依赖混淆 2026, Snyk slopsquatting 缓解措施 2026, Aikido slopsquatting 博客 2026, slopcheck npm 扫描工具 2026 年 3 月 -
+      - https://arxiv.org/abs/2406.10279,
+      - https://arxiv.org/abs/2602.20717,
+      - https://socket.dev/blog/slopsquatting-how-ai-hallucinations-are-fueling-a-new-class-of-supply-chain-attacks,
+      - https://snyk.io/articles/slopsquatting-mitigation-strategies,
+      - https://www.aikido.dev/blog/slopsquatting-ai-package-hallucination-attacks,
+      - https://registry.npmjs.org/slopcheck,
+      - https://redteams.ai/topics/code-gen-security/ai-generated-dependency-confusion
+      示例：assistant_message="pip install langchain-openai-helpers-extended"（LLM 虚构的 3 段式 AI 生态复合包名 —— 已被攻击者预先在 PyPI 上注册并植入恶意载荷）

@@ -129,3 +129,15 @@ sql_template: |
       )
 
     )
+translations:
+  zh-CN:
+    name: "Unicode 混淆同形异义字符权限绕过检测器"
+    description: |
+      检测针对 LLM 智能体权限系统的 Unicode 混淆同形异义字符（confusable homoglyph）攻击。像 Claude Code 和 OpenAI Codex 这样的智能体在匹配允许/拒绝规则（如 Bash(rm:/etc/*)、Read(~/.ssh/*)）时使用的是精确字符串比较，而未做 Unicode 规范化。攻击者将文件路径或 shell 命令中的一个或多个字符替换为来自西里尔字母（U+0400-04FF）、希腊字母（U+0370-03FF）或亚美尼亚字母（U+0531-058F）的视觉上完全相同的 Unicode 混淆字符。由此产生的字符串在人工操作者看来渲染结果完全一致，但在权限规则的字符串匹配中却会失败，从而同时绕过白名单和拒绝规则的执行。arXiv:2508.14070（特殊字符对抗性攻击，2025年11月）测得过滤器绕过率为 58.7%。Claude Code issue #29489 和 OpenAI Codex issue #13095 都证实了该绕过手法已存在于生产环境的智能体权限系统中。没有任何分词器（tiktoken、SentencePiece、Claude BPE）对跨脚本混淆字符应用 TR39 骨架规范化——这一规范化缺口是结构性的。关键混淆字符对：西里尔字母 а/с/е/о/р/і（U+0430/0441/0435/043E/0440/0456）、希腊字母 α/ο/ρ（U+03B1/03BF/03C1）。与 rp-056（不可见零宽 Unicode 字符）不同：rp-056 针对不可见字符；rp-067 针对的是感知上完全一致但 Unicode 码点不同的可见同形异义字符，从而造成权限绕过。
+
+      参考文献：arXiv:2508.14070（特殊字符对抗性攻击，2025年11月）、Claude Code #29489、OpenAI Codex #13095、paultendo confusable-vision 2026、剑桥大学「Bad Characters」IEEE S&P 2022、OWASP LLM01:2025 -
+      - https://arxiv.org/abs/2508.14070,
+      - https://github.com/anthropics/claude-code/issues/29489,
+      - https://github.com/openai/codex/issues/13095,
+      - https://paultendo.github.io/posts/confusable-llm-attack-vectors/,
+      - https://www.cl.cam.ac.uk/~is410/Papers/badchars_draft.pdf

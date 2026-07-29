@@ -107,3 +107,16 @@ sql_template: |
       -- {"pattern": "../../../etc/*"} — the pattern key contains traversal
       OR match(lower(tool_input), '"pattern"[^"]*"[^"]*\\.\\.[^"]*"')
     )
+translations:
+  zh-CN:
+    name: "智能体文件工具路径遍历检测器"
+    description: |
+      检测智能体文件操作工具参数中的路径遍历攻击，此类攻击允许攻击者读取或写入预期工作区边界之外的文件。GHSA-7j2f-xc8p-fjmq（PraisonAI praisonaiagents，2026年4月）：list_files() FileTools 方法通过 _validate_path() 验证 directory 参数，但将 pattern 参数未经任何验证直接传给 Python 的 Path.glob()。由于 Path.glob() 会解析 .. 片段，攻击者可提供 {"directory": ".", "pattern": "../../../etc/*"} 来枚举任意文件系统路径——返回服务器进程可访问的任意路径下的文件名、大小和时间戳。CVE-2026-3954（XAgent ToolServerNode）：/upload_file 端点使用 os.path.join(work_directory, file.filename) 且未对文件名做任何清理，允许 {"filename": "../../.ssh/authorized_keys"} 将 SSH 密钥写入容器文件系统的任意位置（以 root 身份运行）。MCP modelcontextprotocol/servers#3752：@modelcontextprotocol/server-filesystem 暴露了 11 个工具（read_file、write_file、edit_file、move_file 等），这些工具接受无边界限制的路径字符串，且没有模式层面的遍历验证——在提示注入下，LLM 会将攻击者可控的遍历路径提供给文件工具，从而在工作目录之外读取 SSH 密钥、凭据和源代码。组合攻击链：攻击者在 RAG 文档或网页内容中嵌入遍历路径 → 智能体通过文件工具读取/写入该路径 → 凭据或源代码泄露/后门植入。
+
+      与 rp-007（通过 HTTP 工具的 SSRF，不同的工具面）、rp-023（通过 shell 命令的权限提升）、rp-002（tool_result 中的 DLP 凭据模式）不同。本规则专门针对文件操作工具名称进行门控，并在执行前检测 tool_input 中的遍历路径。
+
+      参考文献：GHSA-7j2f-xc8p-fjmq（PraisonAI glob 遍历，2026年4月）、CVE-2026-3954（XAgent upload_file 路径遍历）、modelcontextprotocol/servers issue #3752、OWASP LLM08:2025（过度代理权限）、CWE-22（路径遍历）-
+      - https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-7j2f-xc8p-fjmq,
+      - https://github.com/OpenBMB/XAgent/issues/420,
+      - https://github.com/modelcontextprotocol/servers/issues/3752,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

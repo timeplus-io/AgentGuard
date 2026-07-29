@@ -155,3 +155,19 @@ sql_template: |
       -- Mirrors tool_result Branch 7; LLMs can natively emit APC/DCS sequences.
       OR match(lower(assistant_message), '(\\x1b|\\033|\\\\x1b|\\\\033)[_p]')
     )
+translations:
+  zh-CN:
+    name: "通过代理工具输出实现的 ANSI 终端转义码注入"
+    description: |
+      检测 LLM 代理工具输出中的 ANSI/VT100 终端转义序列注入。当基于终端的编码代理(Codex CLI、Claude Code、OpenHands)在未经清理的情况下将工具结果回显到 stdout 时,来自文件、网页或 API 的恶意内容可以注入转义序列来操纵终端状态:擦除行以掩盖痕迹(ESC[2K)、通过 OSC 52 投毒剪贴板、启用鼠标跟踪以拦截击键,或切换到备用屏幕缓冲区(ESC[?1049h)。dganev.com(2026 年 2 月)演示了通过 Codex CLI --model 参数进行 ANSI 注入从而实现远程代码执行(RCE)。NVIDIA garak 的 ANSI 探针报告称,针对前沿 LLM 的攻击成功率为 76.7%。Claude Code #18418 和 OpenHands SDK #2244 均证实了工具输出中的转义序列会导致终端损坏。
+
+      区别于 rp-014(tool_result 中的结构化模板令牌注入)和 rp-056(不可见 Unicode/零宽字符注入):本规则针对的是劫持终端仿真器的字节级控制序列,而非 LLM 上下文解析器。
+
+      参考文献:CWE-150(转义/控制序列的不当中和)、OWASP LLM02:2025、dganev.com ANSI RCE(2026 年 2 月)、EmbraceTheRed Terminal DiLLMa、NVIDIA garak garak.probes.ansiescape(攻击成功率 76.7%)、Claude Code #18418、OpenHands SDK #2244 -
+      - https://dganev.com/posts/2026-02-12-ansi-escape-injection-codex-cli/,
+      - https://embracethered.com/blog/posts/2024/terminal-dillmas-prompt-injection-ansi-sequences/,
+      - https://reference.garak.ai/en/stable/garak.probes.ansiescape.html,
+      - https://github.com/anthropics/claude-code/issues/18418,
+      - https://github.com/OpenHands/software-agent-sdk/issues/2244,
+      - https://cwe.mitre.org/data/definitions/150.html,
+      示例:tool_result 包含 \x1b[2K\x1b[1A,会擦除前一行终端内容并用攻击者的内容覆盖;或 \x1b]52;c;BASE64,会用 ssh 命令投毒剪贴板。

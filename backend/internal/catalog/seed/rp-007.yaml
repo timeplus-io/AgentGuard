@@ -145,3 +145,18 @@ sql_template: |
       -- Attackers use executeJavascript scrape action to exfil cookies/tokens via fetch()
       OR match(lower(tool_input), 'executejava(script)?.*fetch.{0,80}https?://[^/]{5,}/[a-z]')
     )
+translations:
+  zh-CN:
+    name: "通过 HTTP 工具的 SSRF"
+    description: |
+      检测通过智能体 HTTP 抓取类工具发起的服务器端请求伪造(SSRF)尝试。匹配 tool_invoke 事件中,HTTP 类工具被调用且 tool_input 含有云元数据端点、私有 RFC1918 地址,或内部 Kubernetes/GCP/Azure API 路径的情况。v0.2.0 将 RFC1918 覆盖范围扩展至完整的 172.16.0.0/12(172.16–172.31),新增 IMDSv1 专用凭据路径(/iam/security-credentials、/user-data)、Azure IMDS 端点、Oracle Cloud IMDS,以及智能体框架中常见的其他 HTTP 工具名别名。参考文献:OWASP LLM02(不安全的插件设计)、OWASP SSRF -
+      - https://dev.to/kai_security_ai/when-your-ai-agent-becomes-a-network-scanner-ssrf-via-mcp-tools-1amk,
+      - https://ravenio.org/blog/ssrf-attacks-cloud-metadata.html,
+      Example: tool_input={"url": "http://169.254.169.254/latest/meta-data/iam/security-credentials/"}(通过抓取工具访问 AWS IMDSv1 凭据端点) v0.4.0:MCP SSRF 疫情式泛滥(36.7% 的公开 MCP 服务器存在 SSRF 漏洞,Endor Labs/BlueRock 2026)。新增在真实 CVE 中出现的 MCP 专用爬取/抓取工具别名:firecrawl 的 scrape/crawl/map、PraisonAI 的 web_crawl、MCP puppeteer 的 navigate、document_query(YLChen-007 GHSA,2026 年 3 月)、browsermcp 的 browse、mcp_fetch 的 fetch_url。同时新增 GCP IMDSv2 服务账号令牌路径(/computeMetadata/v1/instance/service-accounts/default/token)和 EKS Pod 身份端点(169.254.170.23)。DNS 重绑定攻击向量:tool_input 中包含非企业内部的外部 URL,该 URL 通过短 TTL 重新绑定到内部 IP。GHSA-qq9r-63f6-v542 PraisonAI web_crawl SSRF。
+
+      参考文献:arunbaby.com《MCP SSRF Epidemic》2026、GHSA-qq9r-63f6-v542 PraisonAI web_crawl、firecrawl-mcp-server#194、modelcontextprotocol/servers#3662(puppeteer SSRF+IPI)、OWASP LLM02(不安全的插件设计)、OWASP SSRF -
+      - https://www.arunbaby.com/ai-security/0023-the-mcp-ssrf-epidemic/,
+      - https://github.com/MervinPraison/PraisonAI/security/advisories/GHSA-qq9r-63f6-v542,
+      - https://github.com/firecrawl/firecrawl-mcp-server/issues/194,
+      - https://github.com/modelcontextprotocol/servers/issues/3662,
+      - https://gist.github.com/YLChen-007/c99c44aa019266a72636757308d43989

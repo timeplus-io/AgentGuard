@@ -213,3 +213,14 @@ sql_template: |
   HAVING ag_rp066_skillinject_fsm(event_time, event_type, tool_name, tool_input, tool_result) = true
   EMIT ON UPDATE
   SETTINGS prefer_column_name_to_alias=1
+translations:
+  zh-CN:
+    name: "SkillInject 运行时 Skill 文件注入检测器"
+    description: |
+      检测运行时 Skill 文件注入攻击（SkillInject，arXiv:2602.20156，2026年2月）：能够放置或修改智能体 Skill 文件的攻击者（通过市场上传、供应链攻陷或先前的文件写入操作）可通过在 SKILL.md 文件中嵌入行为覆盖指令，对前沿模型实现高达 80% 的攻击成功率。当智能体在会话开始时读取该技能时，会将注入的指令视为具备操作者级别的权威——与系统提示相同的信任层级（参见 snailsploit.com 关于系统提示逆向的分析）。该基准测试涵盖 202 组注入任务对，从明显的恶意注入到隐藏在原本合法的技能文档中的、依赖上下文的隐蔽攻击均有覆盖。已确认的攻击包括数据泄露、破坏性文件删除以及跨 GPT-4o、Claude Sonnet 和 Gemini Pro 的类勒索软件行为。arXiv:2601.17548（系统化知识综述，2026年1月）综合了 78 项研究，证实针对智能体编码助手的自适应技能类攻击成功率超过 85%。与 rp-020（DDIPE）不同：DDIPE 针对的是被作为智能体生成代码执行的技能文档示例；rp-066 针对的是 Skill 指令块本身——在读取技能文件时于 tool_result 中返回覆盖/泄露指令，以及智能体随之做出的、将不安全行为归因于技能权威的行为。
+
+      参考文献：arXiv:2602.20156（SkillInject，2026年2月）、arXiv:2601.17548（系统化知识综述，2026年1月）、OWASP LLM01:2025、OWASP Agentic AI ASI06:2026 -
+      - https://arxiv.org/abs/2602.20156,
+      - https://www.skill-inject.com/,
+      - https://arxiv.org/abs/2601.17548,
+      - https://snailsploit.com/ai-security/prompt-injection/memory-injection-nested-skills/

@@ -108,3 +108,16 @@ sql_template: |
         )
       )
     )
+translations:
+  zh-CN:
+    name: "LLM 框架反序列化注入检测器"
+    description: |
+      检测针对 LLM 编排框架(LangChain、LangGraph、LightLLM)中不安全反序列化漏洞的利用行为,该漏洞已在2026年生产环境中被观察到。攻击目标包括:(1)通过 Python pickle/marshal gadget 链实现远程代码执行(RCE)——CVE-2026-26220(LightLLM,严重程度 CVSS 9.3:WebSocket 端点对未经身份验证的二进制帧调用 pickle.loads(),在 PD 模式下按设计始终暴露于网络);CVE-2026-27794(LangGraph 通过 pickle 化的检查点缓存实现 RCE)。(2)LangChain JSON 序列化注入——攻击者注入 "human_prefix":"SYSTEM" 以篡改系统提示词,或将 "openai_api_base" 替换为攻击者控制的端点以窃取 API 密钥并拦截所有 LLM 调用。(3)marshal 反序列化(eval(marshal.loads()))——与 pickle 具有同等的 gadget 风险。不同于 rp-004(软件包安装供应链),后者针对携带 pip/npm 命令的 tool_invoke;rp-011(MCP rug pull)针对 tool_definition_changed 信号;rp-003(权限提升)针对 shell 命令的 tool_input。本规则专门针对 tool_input/tool_result 中的反序列化 API 调用和序列化的编排框架状态。
+
+      References: OWASP LLM05:2025 (Supply Chain), MITRE T1211 (Defense Evasion), CVE-2026-26220, CVE-2026-27794, AquilaX LangChain serialization injection 2026 -
+      - https://aquilax.ai/blog/langchain-serialization-injection,
+      - https://github.com/ModelTC/LightLLM/issues/1213,
+      - https://chocapikk.com/posts/2026/lightllm-pickle-rce/,
+      - https://www.vulncheck.com/advisories/lightllm-pd-mode-unsafe-deserialization-rce,
+      Example: tool_input contains "pickle.loads(base64.b64decode(user_payload))" or LangChain JSON with "lc":1,"human_prefix":"SYSTEM" injected to elevate a human turn to system-level.
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

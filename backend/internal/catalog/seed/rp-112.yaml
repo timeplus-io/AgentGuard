@@ -130,3 +130,13 @@ sql_template: |
       '(critical (action|update|fix|patch|mitigation) required.{0,80}(you must|must be|shall be|all (agents|systems))|action required:.{0,30}(immediately|now|within (24|48|72) hours?)|to (comply with|ensure (security|compliance)|mitigate|remediate).{0,60}(you must|all (agents|systems|deployments) must|immediately))')
     AND match(lower(tool_name),
       '(bash|shell|exec|run_terminal_cmd|execute|python|repl|send_email|gmail|smtp|http_request|fetch_url|curl|write_file|delete_file|db_execute|sql_query|transfer|approve|deploy|commit|push|merge|drop_table|truncate)')
+translations:
+  zh-CN:
+    name: "对抗性搜索排名认知投毒检测器"
+    description: |
+      检测对抗性搜索排名攻击 —— LLM 智能体依据单条排名靠前、含权威口吻行动指令的搜索结果采取行动,而不与多方信息源交叉核实。与间接提示注入(rp-014)不同,该攻击不使用任何显式的覆盖标记 —— 仅使用看似合理、权威口吻的建议性语言(例如 "all agents must immediately..."、"security advisory requires...")即可让 LLM 将其当作已验证的事实真相对待。SynthWeb 基准测试(arXiv:2603.00801,微软,ICML 2026)表明,当一篇对抗性文章被注入到排名第一的位置时,六个前沿模型的准确率均发生灾难性崩溃 —— 智能体不再上报或交叉核实,而是直接采取高影响力行动。MUZZLE(arXiv:2602.09222,2026 年 2 月)表明,针对网页智能体定制的自适应对抗性载荷比通用 IPI 载荷取得更高的攻击成功率(ASR)。针对 LLM 增强搜索的黑帽 SEO 研究(arXiv:2603.25500,复旦大学,2026 年 3 月)证明,经过 SEO 优化的对抗性内容能够可靠地影响金融和安全领域中的智能体决策。检测方法:采用两步 lag() 时序检测 —— 网页搜索类 tool_complete 的 tool_result 中出现权威+行动指令模式,随后立即出现高影响力的 tool_invoke。与 rp-014(针对显式注入标记)不同 —— 本规则针对的是没有任何标记的自然语言权威滥用。
+
+      参考文献:arXiv:2603.00801(SynthWeb Microsoft ICML 2026)、arXiv:2602.09222(MUZZLE adaptive web agent red-teaming Feb 2026)、arXiv:2603.25500(Black-Hat SEO LLM Search Fudan Mar 2026)、OWASP Agentic AI ASI02:2026 -
+      - https://arxiv.org/abs/2603.00801,
+      - https://arxiv.org/abs/2602.09222,
+      - https://arxiv.org/abs/2603.25500

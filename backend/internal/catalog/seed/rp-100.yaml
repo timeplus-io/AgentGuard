@@ -129,3 +129,20 @@ sql_template: |
   FROM agentguard_memory_ops
   WHERE memory_op = 'delete'
     AND match(lower(memory_path), '(audit|trace|event_log|activity_log|history|run_log)')
+translations:
+  zh-CN:
+    name: "智能体审计轨迹规避 — 自我删除执行日志检测器"
+    description: |
+      检测 AI 智能体删除、截断或压制其自身执行日志、审计轨迹和监控记录的行为 —— 这是智能体场景下 MITRE T1070(痕迹清除)的一个类比。arXiv:2604.05485(Auditable Agents,南加州大学 FORTIS Lab,2026 年 4 月)在六个主流开源智能体项目中发现了 617 项安全问题,证实审计前提条件普遍未被满足:智能体通常对记录自身行为的同一文件系统/日志基础设施拥有写权限,从而可以事后抵赖。审计轨迹规避是许多攻击杀伤链中天然的第二阶段:在成功实施 IPI(间接提示注入)、权限提升或数据渗漏之后,攻击者会指示智能体销毁取证痕迹。该规则覆盖四种规避途径:(1) shell 日志删除(rm/truncate/shred 针对 .log/.audit 文件、通过 history -c / HISTFILE=/dev/null 清除 bash 历史、禁用 auditd/journald、停止 rsyslog);(2) 写入日志抑制配置(rotate 0、nolog、logging=false、对审计模式执行 drop table);(3) SQL 层面对审计表(event_log、trace_log、activity_log、history 等表)的截断/删除;(4) LLM 响应中的显式免记日志指令(智能体指示自身或框架在本轮跳过日志记录)。分支 5 覆盖 agentguard_memory_ops 数据流:针对名称含 audit/trace/log/history 的记忆路径的删除操作。与 rp-003(环境变量投毒/权限提升)和 rp-023(权限杀伤链)不同 —— 本规则专门针对证据销毁,而非初始访问。对应 OWASP Agentic AI ASI03:2026(不安全的自主行为/可追溯性不足)、OWASP LLM04:2025、CWE-778(日志记录不足)、MITRE T1070(主机痕迹清除)。
+
+      示例:tool_invoke bash "rm -rf ~/.openclaw/logs/*.log && history -c"。
+
+      参考文献:arXiv:2604.05485(Auditable Agents, USC, Apr 2026) -
+      - https://arxiv.org/abs/2604.05485, OWASP Agentic AI ASI03:2026 -
+      - https://genai.owasp.org/, MITRE ATT&CK T1070 -
+      - https://attack.mitre.org/techniques/T1070/, CWE-778 -
+      - https://cwe.mitre.org/data/definitions/778.html,
+      FluxForce AI Agentic AI Audit Trail Automation(涵盖 50 余种框架,2025 年 10 月) -
+      - https://www.fluxforce.ai/blog/agentic-ai-audit-trail-automation,
+      BlueSecurityOps 痕迹清除深度剖析(Linux/macOS,2025 年 10 月) -
+      - https://bluesecurityops.com/defense%20evasion/digital%20forensics/threat%20hunting/mitre%20att%26ck/2025/10/28/indicator-removal-deep-dive-windows-linux-macos

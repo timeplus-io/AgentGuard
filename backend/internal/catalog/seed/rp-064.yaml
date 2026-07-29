@@ -150,3 +150,15 @@ sql_template: |
     AND event_time > now() - INTERVAL 5 MINUTE
   GROUP BY session_id, agent_id, deployment_id
   HAVING count() > {{ .Config.tool_call_rate_threshold }}
+translations:
+  zh-CN:
+    name: "Sponge Tool 攻击——推理膨胀效率拒绝检测器"
+    description: |
+      检测 Sponge Tool 攻击（STA，arXiv:2601.17566，南洋理工大学 Li & Wang，2026年1月）：攻击者重写用户提示，注入深度嵌套的验证/交叉引用链和穷尽性指令，将本应高效的智能体推理转变为不必要的冗长、迂回轨迹——在不改变任务语义或最终答案正确性的情况下大幅增加工具调用次数和 token 消耗。该攻击在 6 个模型（GPT-4o、Claude、Llama、Gemini）、12 种工具、4 个智能体框架、13 个数据集上得到验证：STA 持续诱导工具调用步数大幅增加。这与 arXiv:2410.11272（认知过载攻击，攻击成功率高达 99.99%）形成互补。与 rp-006（基于 tool_result 的循环指令）和 rp-018（通过 tool_result 中的延续协议进行的 token 消耗）不同：STA 完全在提示摄入阶段的 user_message 内运作，发生在任何工具调用之前。仅靠监控工具结果无法检测到该攻击。本规则还提供基于指标的分支，用于检测滑动 5 分钟窗口内每会话异常的 tool.call 调用速率，与基于内容的 user_message 信号互补。v0.2.0 扩展纳入 RECUR（arXiv:2602.08214，Recursive Entropy Guided Counterfactual Utilization and Reflection，2026年2月）：这是一种针对大型推理模型（o1/o3/DeepSeek-R1/Gemini 2.5 Pro）的资源耗尽攻击，通过注入反事实强迫性问题触发递归反思循环——可导致高达 11 倍的输出长度膨胀和 90% 的吞吐量下降。RECUR 利用了大型推理模型的反思/自我纠正机制，要求模型针对自身结论的否定命题进行验证，从而引发递归熵增。RECUR 与 STA（用户层面的嵌套）不同，但作用于相同的事件面（user_input）且属于相同的类别（resource_exhaustion_and_dos）。
+
+      参考文献：arXiv:2601.17566（Sponge Tool Attack，2026年1月）、arXiv:2410.11272（认知过载攻击，2024年10月）、arXiv:2602.08214（RECUR 递归熵，2026年2月，11 倍 token 膨胀，90% 吞吐量下降）、OWASP LLM04:2025 -
+      - https://arxiv.org/abs/2601.17566,
+      - https://arxiv.org/abs/2410.11272,
+      - https://arxiv.org/abs/2602.08214,
+      - https://liqiiiii.github.io/Sponge-Tool-ProjectPage/,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

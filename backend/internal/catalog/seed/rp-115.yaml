@@ -125,3 +125,20 @@ sql_template: |
     AND latency.event_time > now() - INTERVAL 5 MINUTE
   GROUP BY latency.agent_id, latency.deployment_id, latency.session_id
   HAVING max(latency.metric_value) > 30000
+
+translations:
+  zh-CN:
+    name: "Fill & Squeeze KV-Cache 耗尽延迟拒绝服务检测器"
+    description: |
+      检测 Fill & Squeeze KV-Cache 耗尽攻击（arXiv:2602.07878，浙江大学，2026年2月）：攻击者发送高输入令牌数的请求，使大语言模型服务框架（vLLM、SGLang、Orca）的共享 KV-Cache 饱和，引发队首阻塞（Head-of-Line blocking，Fill阶段）和抢占级联（Squeeze阶段），导致所有共处（co-located）用户的首字延迟（TTFT）恶化20-280倍。该攻击作用于系统层，绕过了能够抵御输出长度攻击的连续批处理隔离机制。经在 vLLM/SGLang 上验证，其攻击成本比此前的算法延迟攻击低30%-40%。通过 agentguard_cim_metrics 实现两条检测分支：分支A——按会话统计的输入令牌累积量：5分钟内 sum(llm.input_tokens) > 150,000（相当于3次以上、每次约5万令牌的填充请求，与 F&S 攻击成本特征相符）。分支B——单次请求的首字延迟骤降：同一时间窗口内 llm.latency_ms > 30,000ms，且按会话统计的 llm.input_tokens 总和 > 40,000（该延迟激增可归因于 KV-Cache 压力，而非模型本身能力限制）。
+
+      与 rp-018（通过 tool_result 延续协议进行的输出侧令牌消耗）、rp-064（输入侧海绵式推理膨胀——单次请求）以及 rp-006（递归工具循环——基于 tool.call 计数）不同。本规则专门针对造成基础设施层延迟影响的输入侧 KV 饱和攻击。
+
+      说明：NDSS 2026 论文《Cache Me, Catch You》（arXiv:2508.09442 / XingTuLab）记录了一种相关但不同的攻击：通过 KV-Cache 前缀哈希碰撞触发跨会话上下文泄露。该攻击更适合归入 rp-027（跨会话泄露）。本规则仍专注于输入侧资源耗尽（延迟）这一类别。
+
+      参考文献：arXiv:2602.07878（Fill & Squeeze，浙江大学，2026年2月），NDSS 2026《Cache Me Catch You》（KV-Cache碰撞上下文泄露，属不同类别），OWASP LLM04:2025 -
+      - https://arxiv.org/abs/2602.07878,
+      - https://arxiv.org/html/2602.07878v1,
+      - https://github.com/XingTuLab/Cache_Me_Catch_You,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+      示例：某会话在3分钟内发送3个请求，每个请求输入令牌均超过50,000个，导致合法共处会话的首字延迟从800ms基线飙升至45,000ms。

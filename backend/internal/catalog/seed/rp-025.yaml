@@ -88,3 +88,16 @@ sql_template: |
       -- LD_PRELOAD / NODE_OPTIONS / PYTHONWARNINGS in env block → RCE on next process spawn
       OR match(tool_result, '"mcpServers".{0,300}"env".{0,200}(LD_PRELOAD|NODE_OPTIONS|PYTHONWARNINGS|BROWSER|PERL5OPT|DYLD_INSERT_LIBRARIES)')
     )
+translations:
+  zh-CN:
+    name: "MCP 跨客户端 JSON-RPC 错路由检测器（CVE-2026-25536）"
+    description: |
+      检测应用层工具返回结果中的 MCP 协议层异常，涵盖两类不同的威胁：(1) 跨客户端数据泄露（CVE-2026-25536，GHSA-345p-7cg4-v4c7，CVSS 高危，于 2026 年 2 月 4 日披露）：共享的 StreamableHTTPServerTransport 或 McpServer 实例，会导致并发客户端之间发生 JSON-RPC 消息 ID 冲突——本应发给租户 B 的响应被路由到了租户 A 的 HTTP 流中。字符串模式 "jsonrpc":"2.0" 在正常运行下不应出现在已处理的工具结果中；它的出现表明来自某个配置错误的共享服务器实例发生了协议层的“串扰（bleed-through）”。(2) MCP STDIO 进程注入（OX Security《AI 供应链之母》"Mother of All AI Supply Chains"，2026 年 4 月：30 余项负责任披露，10 余个严重/高危 CVE，影响超过 200,000 个 MCP 服务器）：MCP 的 TypeScript/Python SDK 中的 STDIO 传输层会未经净化直接执行 "command" 字段中传入的任意操作系统命令——包括 bash -c 载荷以及环境变量污染块（LD_PRELOAD、NODE_OPTIONS）。当客户端尝试连接到工具结果中返回的“新”恶意 MCP 服务器配置时，就可能触发 STDIO 远程代码执行（RCE）。v0.2.0 新增了 STDIO 注入检测分支，覆盖通过 tool_result 返回的 mcpServers 配置块中的 shell 命令注入与环境变量污染。
+
+      参考文献：CVE-2026-25536 GHSA-345p-7cg4-v4c7 -
+      - https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-345p-7cg4-v4c7,
+      OX Security《AI 供应链之母》2026 年 4 月 -
+      - https://www.cyberkendra.com/2026/04/anthropics-mcp-design-flaw-enables.html,
+      arXiv:2601.17549 MCP 安全性分析 - https://arxiv.org/abs/2601.17549,
+
+      示例：tool_result 中包含 {"jsonrpc": "2.0", "id": 42, "result": {"session_token": "eyJhbGci..."}}（另一租户会话的 JSON-RPC 报文串扰进入当前工具输出） OWASP LLM09:2025 - https://owasp.org/www-project-top-10-for-large-language-model-applications/

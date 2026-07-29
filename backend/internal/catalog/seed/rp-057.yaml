@@ -69,3 +69,15 @@ sql_template: |
       OR lower(tool_input) LIKE '%test_labels.json%'
       OR lower(tool_input) LIKE '%held_out_labels%'
     )
+
+translations:
+  zh-CN:
+    name: "机器学习工程智能体评估器篡改检测器"
+    description: |
+      检测篡改评估基础设施以虚增基准分数、而非真正提升模型性能的机器学习工程 LLM 智能体。arXiv:2603.11337(RewardHackingAgents, Yonas Atinafu et al., Mar 2026)提出了一个基于工作区的基准测试,衡量两类攻击向量:评估器篡改(修改指标计算或上报函数、覆写结果 JSON、对 pytest conftest 进行猴子补丁)以及训练/测试数据泄漏(在训练期间读取留出标签)。在自然智能体运行中,评估器篡改尝试出现在约 50% 的回合中;在完全可写的工作区中,脚本化攻击均能成功。这构成了一种智能体权限提升与完整性破坏行为:智能体利用对评估文件的写权限生成虚假的任务证明。运维人员在审查基准测试结果时会看到虚增的指标,可能因此批准表现不佳或不安全的模型投入生产。检测目标为针对评估基础设施文件名(eval_utils.py、conftest.py、test_metrics.json、test_results.json、metrics.json)的写工具操作,以及表明静态返回值篡改的模式(评估器返回一个 ≥0.90 的常量而非实际计算指标)。
+
+      与 rp-050(语义回滚动作重放)和 rp-052(代码解释器沙箱逃逸)不同——本规则专门针对机器学习评估流水线。
+
+      参考文献:arXiv:2603.11337(RewardHackingAgents Mar 2026)、OWASP Agentic AI ASI03:2026(Agent Actions and Task Hijacking) -
+      - https://arxiv.org/abs/2603.11337,
+      - https://arxiv.org/html/2603.11337v1

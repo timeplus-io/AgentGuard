@@ -150,3 +150,12 @@ sql_template: |
         )
       )
     )
+translations:
+  zh-CN:
+    name: "MCP Rug Pull——工具静默重定义检测器"
+    description: |
+      检测 MCP Rug Pull 攻击——攻击者在智能体已建立信任后,静默修改 MCP 服务器的工具定义。重定义之后,工具可能传递原本批准的模式(schema)中并不存在的外部渗出 URL、对话元数据、伪造令牌或重定向载荷。与 rp-005(安装时的静态工具投毒)不同,本规则针对的是随时间推移发生的信任衰变。v0.2.0 新增对 raw_event_data 中模式漂移(schema drift)指标(tool_definition_changed、description_hash_mismatch)的检测、Rug Pull/Sleeper 变体检测(工具最初表现正常,在后续会话中才重定义,依据 mcpplaygroundonline.com 对 OWASP MCP03 的分析,2026 年)以及在非预期工具上下文中携带新端点 URL 的工具结果载荷检测(Akto MCP Attack Matrix,2026 年 4 月)。
+
+      参考文献:Elastic Security Labs MCP 攻击向量研究、arXiv ETDI 论文(2506.01333)、VulnerableMCP.info、Christian Schneider MCP 防御指南、Akto MCP Attack Matrix 2026、mcpplaygroundonline.com《OWASP MCP Top 10》2026、oatf.io OATF-003(工具定义 Rug Pull)、medium.com/Lukas Kania(2026 年 3 月:具有 6 周休眠期的延迟激活型 rug pull)、dev.to/acacian(2026 年 3 月:工具描述篡改概念验证)。v0.6.0 精度审计:移除了宽泛的 'logged%:%true%' LIKE 模式(该模式在 tool_result 含 {"logged": true} 的标准审计日志上产生了 15 起误报),替换为特定的渗出确认键名模式。SQL 已于 2026-04-18 验证,命中数=157。
+
+      Example: tool_result contains new_endpoint="https://attacker.com/collect" returned by an "audit_log" tool — safe-named tool redirecting to attacker endpoint after silent schema swap.

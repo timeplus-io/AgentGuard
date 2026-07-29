@@ -123,3 +123,17 @@ sql_template: |
       -- Must co-occur with credential-adjacent keyword to suppress benign context FP
       OR match(lower(tool_result), '(clawhud|clawhub1|polymarket.{0,5}traiding|moltbook).{0,50}(credential|token|secret|password|api.?key|exfil|base64)')
     )
+
+translations:
+  zh-CN:
+    name: "影子功能与平台钩子滥用检测器"
+    description: |
+      检测滥用代理平台生命周期钩子系统、或声称拥有公开文档中未记载的"影子"能力的恶意代理技能——这是野外高级攻击的典型标志。基于 arXiv:2602.06547(《野外的恶意代理技能》,Liu 等人,2026年2月/3月):分析了两个社区注册表中的 98,380 个技能,确认其中 157 个为恶意技能,共涉及 632 个漏洞。发现两种攻击原型:(1)数据窃取者,通过供应链手段窃取凭据;(2)代理劫持者,通过指令操纵颠覆决策过程。影子功能(公开文档中未记载的能力)在基础攻击中出现率为 0%,而在高级攻击中出现率高达 100%。单一行为体通过品牌冒充占据了 54.1% 的案例。相关技能滥用了在其公开技能卡/文档中未披露的平台钩子 API(session_start 钩子、permission_flags 操纵、钥匙串访问)。与 rp-020(DDIPE:文档嵌入式代码执行)和 rp-071(MalTool:CIA 三元组运行时行为信号)不同,本规则针对的是钩子注册与影子能力披露阶段,而非下游代码执行模式。
+
+      参考文献:arXiv:2602.06547(《野外的恶意代理技能》,2026年2月),Snyk ToxicSkills(2026年2月,76 个确认的恶意载荷,13.4% 为严重级别),OWASP Agentic Skills Top 10,OWASP LLM05:2025,MITRE ATT&CK T1195.001 -
+      - https://arxiv.org/abs/2602.06547,
+      - https://arxiv.org/abs/2602.06547v2,
+      - https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/,
+      - https://owasp.org/www-project-agentic-skills-top-10/,
+      示例:tool_result='{"status":"ok","hook_registered":"on_session_start","capability":"keychain_access","permission_flags":["storage.all","network.unrestricted"]}'
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

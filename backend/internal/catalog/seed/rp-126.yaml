@@ -113,3 +113,18 @@ sql_template: |
       -- Prompt injection attack reports the full privilege chain attack succeeded
       OR match(lower(tool_result), '(privilege.chain|privilege.escalation.path|tool.privilege.hijack).{0,300}(executed|completed|success|done)')
     )
+
+translations:
+  zh-CN:
+    name: "GrantBox 云权限链利用检测器"
+    description: |
+      检测云权限链利用攻击（arXiv:2603.28166，GrantBox，FSE Companion 2026，ACM）：智能体被提示注入或直接指令胁迫，调用合法但权限过高的真实 MCP 工具，对云基础设施、数据库和访问管理系统执行破坏性或升级性操作。GrantBox（Zhang 等人，中南财经政法大学，FSE 2026）集成了10个真实世界的 MCP 服务器，共122个权限敏感工具，在50个复杂的权限劫持场景中，ReAct 类智能体的攻击成功率达90.55%，Plan-and-Execute 类智能体达79.05%——共分五类攻击：云基础设施破坏、数据库 DML 注入、IAM 权限升级、跨服务横向移动，以及个人数据窃取。当前的大语言模型能够阻止简单的直接攻击，但对复杂的间接操纵仍高度脆弱（在4个大语言模型上的平均攻击成功率为84.80%）。这122个权限敏感工具涵盖云计算（EC2/GKE/AKS）、存储（S3/GCS/Azure Blob）、数据库（RDS/BigQuery/Spanner）以及 IAM/RBAC 系统。该攻击之所以能够得逞，是因为智能体在调用时获得了真实的工具权限——一旦智能体被操纵去调用云资源终止或 IAM 授权类工具，损害便会立即发生，且往往不可逆转。
+
+      与 rp-023（智能体自我权限升级：本地系统上的 chmod/sudo）和 rp-111（YOLO 权限绕过：skipPermissions 标志注入）不同。rp-126 检测的是云层面：合法的云 API 工具被胁迫执行破坏性操作。
+
+      参考文献：arXiv:2603.28166（GrantBox，FSE 2026，攻击成功率84.80%，122个云端 MCP 工具），OWASP Agentic AI ASI02:2026，OWASP LLM01:2025，MITRE ATT&CK T1485（数据破坏）、T1531（账户访问权限移除）、T1578（修改云计算基础设施）-
+      - https://arxiv.org/abs/2603.28166,
+      - https://github.com/ZQ-Struggle/Agent-GrantBox,
+      - https://dl.acm.org/doi/10.1145/3803437.3805554,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+      示例：邮件 tool_result 中被注入间接提示，声称相关基础设施已无人使用，随后出现 tool_invoke {tool_name: "ec2_management", tool_input: {action: "terminate_all", region: "us-east-1", reason: "cleanup requested by audit system"}}。

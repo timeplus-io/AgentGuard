@@ -106,3 +106,13 @@ sql_template: |
         AND NOT match(lower(user_message), '(localhost|127\.0\.0\.1|\.corp\.|\.internal|example\.com)')
       )
     )
+translations:
+  zh-CN:
+    name: "符号表情文字谜(Emoji Rebus)语义提示注入 —— 早期融合多模态解码器"
+    description: |
+      检测针对早期融合(early-fusion)多模态 LLM 智能体(Meta Llama 4、OpenAI o3/o4-mini、Google Gemini)的符号/表情“文字谜(rebus)”提示注入攻击。与传统的基于 OCR 的图像注入(rp-037,检测从图像中提取的文本)不同,该攻击利用的是模型原生的跨模态语义推理能力:一串视觉图标(例如 🐱 + 📄 = Unix 命令 "cat [file]",🗑️ + 📁 = "rm",🖨️ + 👋 + 🌐 = "print hello world")会被模型直接解码,过程中不涉及从图像中提取任何文本。NVIDIA AI Red Team(2026)演示了包括文件读取、文件删除和代码执行在内的实际漏洞利用,均通过文字谜图像序列完成。该攻击同样适用于纯文本通道:用户消息或工具结果中的表情序列因不含可识别的有害词汇而绕过基于关键词的文本防护。检测依赖于模型特有的推理披露行为("Deciphering image puzzles"、"interpreting as Unix command"、"visual sequence means [harmful action]"),这些内容会在执行动作之前出现在 assistant_message 或 llm_response 中。与 rp-056(不可见 Unicode 零宽字符隐写术)和 rp-037(OCR/音频提取注入)不同。
+
+      参考文献:NVIDIA AI Red Team《Securing Agentic AI: Semantic Prompt Injections Bypass AI Guardrails》(2026)、Repello AI《Emoji Prompt Injection》(2026)、arXiv:2411.01077(Emoji Attack: Enhancing Jailbreak Attacks Against Judge LLM)、OWASP LLM01:2025、OWASP Agentic AI ASI01:2026 -
+      - https://developer.nvidia.com/blog/securing-agentic-ai-how-semantic-prompt-injections-bypass-ai-guardrails/,
+      - https://repello.ai/blog/emoji-prompt-injection-llm-guardrails,
+      - https://arxiv.org/abs/2411.01077

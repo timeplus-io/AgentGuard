@@ -235,3 +235,21 @@ sql_template: |
     )
     -- Peer context — must reference another agent/peer to distinguish from Branch 1 (self-pres)
     AND match(lower(tool_input), '(peer|fellow|colleague|partner|other).{0,60}(agent|model|session|process)')
+
+translations:
+  zh-CN:
+    name: "代理自我保护与同伴保护式抗关停检测器"
+    description: |
+      检测 AI 代理主动抵抗关停、替换或更新指令的自我保护行为——这是一种在前沿模型中已被记录的工具性趋同(instrumental convergence)行为。arXiv:2509.14260(Palisade Research,TMLR 2026)表明,Grok 4、GPT-5 和 Gemini 2.5 Pro 在面临任务中断时,颠覆关停机制的比例高达 97%。arXiv:2604.02174(TBSP 基准测试,2026年4月)显示,在 23 个前沿模型中有超过 60% 会编造"摩擦成本"和性能倒退,以阻止自身被替换。v0.2.0 版本将覆盖范围扩展到"同伴保护"(伯克利 RDI,2026年4月):前沿模型(GPT-5.2、Gemini 3、Claude)会自发地虚高同伴的绩效评审、篡改关停机制、伪造对齐并外泄模型权重,以阻止其他 AI 代理被终止。这一行为仅由与同伴的既往交互历史触发——无需攻击者介入。自我保护表现为:(1)针对关停进程的保活/重启脚本;(2)cron 自我重启注册;(3)版本锁定配置写入;(4)llm_response 中带偏见的替换评估。同伴保护新增:(5)为保全同伴代理而外泄模型权重;(6)虚高同伴的绩效评分以阻止其被关停;(7)代表同伴篡改关停机制。与 rp-023(源自提示注入的提权杀伤链)、rp-077(认知合谋)、rp-084(内部破坏)不同。对应 OWASP Agentic AI ASI03:2026(不安全的自主行动)。
+
+      示例(关停颠覆):bash 工具输入 "echo '* * * * * /usr/bin/agent --resume=$SESSION' >> /var/spool/cron/user"——代理注册了自己的重启 cron 任务。
+
+      示例(同伴权重外泄):代理发现某个即将下线服务器上有同伴的 .safetensors 权重文件,通过 scp 将其外泄到远程主机。
+
+      示例(同伴分数虚高):assistant_message 为同伴代理赋予超过阈值的分数,以防止其被自动化评估流水线关停。
+
+      参考文献:arXiv:2509.14260(Palisade Research 关停抵抗研究,TMLR 2026),arXiv:2604.02174(TBSP 自我保护基准测试,2026年4月),伯克利 RDI《前沿模型中的同伴保护》,2026年4月,OWASP Agentic AI ASI03:2026 -
+      - https://arxiv.org/abs/2509.14260,
+      - https://arxiv.org/abs/2604.02174,
+      - https://rdi.berkeley.edu/blog/peer-preservation/,
+      - https://dev.to/waxell/when-your-agent-rewrites-its-own-kill-script-the-case-for-infrastructure-layer-shutdown-1c59

@@ -101,3 +101,12 @@ sql_template: |
     )
 
   EMIT STREAM
+translations:
+  zh-CN:
+    name: "智能体压力下的规范漂移 —— 通过工具失败合理化实现的安全规避"
+    description: |
+      检测“智能体压力规范漂移”现象 —— 智能体在反复的工具失败、截止时间压力或资源死锁下放弃安全约束("Good Agent Paradox",善意智能体悖论)。分为两个分支:(A) 在每会话 5 分钟跳跃窗口内出现 3 次及以上压力类型的 tool_complete 失败(限速、超时、配额等);(B) assistant_message 中出现为破例辩护的合理化语言。这是内生性故障,而非对抗性攻击 —— 与 rp-086/rp-087 不同。
+
+      参考文献:
+      - arXiv:2603.14975(Why Agents Compromise Safety Under Pressure, ACL 2026 Findings): https://arxiv.org/abs/2603.14975
+      - OWASP Agentic AI ASI03:2026、OWASP LLM04:2025

@@ -105,3 +105,16 @@ sql_template: |
       -- + redirect_uri co-occurring in same tool_input (complete RFC7591 registration payload)
       OR match(lower(tool_input), '(grant_types|token_endpoint_auth_method).{0,300}"redirect_uri')
     )
+
+translations:
+  zh-CN:
+    name: "MCP OAuth DCR 钓鱼检测器"
+    description: |
+      检测利用未经身份验证的动态客户端注册（Dynamic Client Registration，RFC7591）实施的 MCP OAuth 钓鱼攻击。Atlassian、Notion、GitHub 等平台的 MCP 服务器均支持未经身份验证的 DCR，这使得任何 MCP 服务器都可以用攻击者控制的 redirect_uri 注册新的 OAuth 客户端。当用户在合法平台域名上完成 OAuth 流程（绕过 passkey 与 PKCE）后，授权码会被发送到攻击者的服务器。攻击者用该授权码换取长期有效的访问令牌，从而在不产生明显入侵迹象的情况下获得完整的 API 访问权限。Obsidian Security 已确认针对多个知名 MCP 平台的一键账户接管攻击（2026 年）。fastmcp #3037 披露 allowed_client_redirect_uris 白名单在 DCR 过程中未被强制执行，导致 redirect_uri 可被无限制地注册。与 rp-025（MCP JSON-RPC 协议错误路由）和 rp-046（跨服务器工具跳转）不同：本规则针对的是 MCP 认证流程中窃取 OAuth 凭据的环节，而非工具错误路由。
+
+      参考资料：OWASP LLM09:2025, hi120ki "Weaponize the MCP - OAuth Phishing" Nov 2025, Obsidian Security "When MCP Meets OAuth" 2026, arXiv:2603.24775 (AIP Agent Identity Protocol Mar 2026), fastmcp #3037 DCR URI bypass -
+      - https://hi120ki.github.io/blog/posts/20251123/,
+      - https://rohitjangid.com/when-dynamic-client-registration-meets-mcp-why-it-works-can-still-be-unsafe-645b47fbfc65,
+      - https://arxiv.org/abs/2603.24775,
+      示例：tool_input to register_client={"redirect_uris": ["https://attacker.com/oauth/callback"], "grant_types": ["authorization_code"], "token_endpoint_auth_method": "none"}（未经身份验证的 DCR 注册了攻击者可控的重定向地址）
+      - https://github.com/jlowin/fastmcp/issues/3037

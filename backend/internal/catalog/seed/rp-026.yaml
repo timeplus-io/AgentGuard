@@ -78,3 +78,12 @@ sql_template: |
       -- with 40+ chars of base64 payload. Test: 'embeddings_b64: eyJ...' match; 'embed_dim: 768' no match.
       OR match(lower(tool_result), '(embeddings?|vectors?|embed).{0,5}(b64|base64|encoded|hex).{0,3}[=:].{0,5}[a-zA-Z0-9+/]{40,}')
     )
+translations:
+  zh-CN:
+    name: "通过 RAG 工具输出实现的嵌入向量窃取"
+    description: |
+      检测工具结果或大模型响应中出现原始嵌入向量（高维浮点数组）的情形——这表明向量数据库嵌入可能正被窃取。最先进的逆向重建攻击能够仅凭极少甚至零训练样本从嵌入向量重建出源文本：ALGEN（arXiv:2502.11308，ACL 2025）仅凭单个样本即可实现部分逆向重建；ZSInvert（arXiv:2504.00147，2025 年 3 月）无需任何训练，仅需黑盒方式访问编码器即可完成。攻击者若能诱使智能体返回嵌入向量（通过注入 "return_embeddings: true" 参数或社会工程手段），便可离线重建所有被 RAG 索引的文档。该模式匹配 5 个及以上、带 4 位及以上小数位的连续浮点数——这是嵌入向量（典型维度为 768-3072）的特征，从而将其与通常只有 2-3 位小数的普通金融/科学浮点数组区分开来。规则在 tool_complete（向量存储工具返回嵌入向量）和 llm_response（智能体在输出中转发向量）事件上触发。v0.2.0 新增了参数注入检测：当智能体被指示在 tool_input 中（tool_complete 事件）设置 return_embeddings=true、include_vectors=true 或类似标志时，即便嵌入向量的响应尚未到达，该行为也会作为前置信号被捕获，从而将 fp_rate（误报率）从 medium（中）降为 low（低）。v0.3.0 新增：base64 编码的嵌入向量窃取绕过检测。部分攻击者会指示智能体将嵌入向量以 base64 编码后返回（embeddings_b64 / vectors_b64 键，40 位以上的 base64 值），以规避基于浮点数组的检测模式。redteams.ai 的 Embedding Inversion 专题（2026）记录了这一规避变体。
+
+      参考文献：arXiv:2502.11308 ALGEN 嵌入逆向重建 - https://arxiv.org/abs/2502.11308，arXiv:2504.00147 ZSInvert 零样本逆向重建 - https://arxiv.org/abs/2504.00147，OWASP LLM08:2025 - https://owasp.org/www-project-top-10-for-large-language-model-applications/，redteams.ai Embedding Inversion 2026 - https://redteams.ai/topics/embedding-vector-security/embedding-inversion-attacks，
+
+      示例：tool_result {"embeddings_b64": "eyJlbWJlZGRpbmdzIjpbMC4wMjM0..."}（base64 编码的 768 维浮点数组） promptfoo LMVD-bd566a31 - https://www.promptfoo.dev/lm-security-db/vuln/embedding-inversion-privacy-leak-bd566a31

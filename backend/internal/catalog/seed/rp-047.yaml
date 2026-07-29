@@ -104,3 +104,14 @@ sql_template: |
     )
 
   EMIT STREAM
+
+translations:
+  zh-CN:
+    name: "LLM 模型替换与质量降级检测器"
+    description: |
+      检测隐蔽的 LLM 模型替换（COLS "质量降级" —— 用户为高级模型付费，却被实际服务以更廉价的模型）。分为两个分支：(1) 延迟骤降 —— 同一会话在 5 分钟跳动窗口内同时出现基线延迟（>2000ms）与骤降延迟（<300ms），且比值 >5×；(2) 模型字段替换 —— 高级模型名称与已知的代理/路由提供方同时出现。
+
+      References:
+      - arXiv:2505.18471 (Invisible Tokens / COLS): https://arxiv.org/abs/2505.18471
+      - arXiv:2604.08407 (Your Agent Is Mine): https://arxiv.org/abs/2604.08407
+      - OWASP LLM05:2025 (Supply Chain)
