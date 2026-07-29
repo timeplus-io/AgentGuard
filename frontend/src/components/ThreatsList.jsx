@@ -40,7 +40,7 @@ function formatTs(ts) {
  *   showFilters — renders the severity + status filter bar (default true)
  */
 export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters = true }) {
-  const { t } = useTranslation('threats')
+  const { t, i18n } = useTranslation('threats')
   const [threats, setThreats] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
@@ -79,7 +79,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
     fetchThreats()
     const timer = setInterval(fetchThreats, 30_000)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [])
+  }, [i18n.language])
 
   const filtered = threats.filter(th => {
     if (ruleId && th.rule_id !== ruleId) return false

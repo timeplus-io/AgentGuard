@@ -137,11 +137,11 @@ export const api = {
   },
   getThreats: (params = {}) => {
     const q = new URLSearchParams(params).toString()
-    return get(`/threats${q ? '?' + q : ''}`)
+    return get(withLocale(`/threats${q ? '?' + q : ''}`))
   },
   acknowledgeThreat: (id, body) => post(`/threats/${id}/acknowledge`, body),
   clearThreat: (id, body) => post(`/threats/${id}/clear`, body),
-  getThreat: (id) => get(`/threats/${id}`),
+  getThreat: (id) => get(withLocale(`/threats/${id}`)),
   getCost: (params = {}) => {
     const q = new URLSearchParams(params).toString()
     return get(`/cost${q ? '?' + q : ''}`)
@@ -219,7 +219,7 @@ export const api = {
   },
   setRuleBlockPolicy: (ruleId, blockPolicy) =>
     post(`/rules/${encodeURIComponent(ruleId)}/policy`, { block_policy: blockPolicy }),
-  getThreatDetail: (threatId) => get(`/threats/${encodeURIComponent(threatId)}`),
+  getThreatDetail: (threatId) => get(withLocale(`/threats/${encodeURIComponent(threatId)}`)),
 
   // ── Semantic DLP ───────────────────────────────────────────────────────────
   dlpStatus: () => get('/dlp/status'),

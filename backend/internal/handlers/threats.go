@@ -11,10 +11,30 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/auth"
+	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
+
+// localizeThreatRuleNames overlays each threat's RuleName with the catalog
+// translation for locale when one exists. The RuleName stored on a threat is
+// the English name baked into agentguard_security_events at MV-creation time;
+// this presentation overlay resolves the current catalog rule by rule_id and
+// swaps in the localized name, leaving the baked name untouched when the rule
+// is not in the catalog or carries no (non-empty) translation for locale. The
+// free-form detection `message` is deliberately not localized (see #253).
+func localizeThreatRuleNames(mgr *catalog.Manager, locale string, threats []models.Threat) {
+	for i := range threats {
+		def, ok := mgr.Lookup(threats[i].RuleID)
+		if !ok {
+			continue
+		}
+		if tr, ok := def.TranslationFor(locale); ok && tr.Name != "" {
+			threats[i].RuleName = tr.Name
+		}
+	}
+}
 
 // threatKey uniquely identifies a deduplicated threat.
 type threatKey struct{ agentID, deploymentID, sessionID, ruleID string }
@@ -247,8 +267,9 @@ func shouldAutoReopenThreat(status, statusUpdatedAt, lastSeen string) bool {
 
 // ListThreats handles GET /api/threats.
 // Query params: ?severity=, ?status=, ?agent_id=, ?page=, ?limit=
-func ListThreats(cfg *config.Config) gin.HandlerFunc {
+func ListThreats(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		locale := resolveLocale(c)
 		cfg := auth.RequestCfg(c, cfg)
 		severityFilter := c.Query("severity")
 		statusFilter := c.Query("status")
@@ -302,8 +323,10 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 			end = total
 		}
 
+		pageThreats := filtered[start:end]
+		localizeThreatRuleNames(mgr, locale, pageThreats)
 		c.JSON(http.StatusOK, models.ThreatListResponse{
-			Threats: filtered[start:end],
+			Threats: pageThreats,
 			Total:   total, Page: page, Limit: limit,
 		})
 	}
@@ -311,8 +334,9 @@ func ListThreats(cfg *config.Config) gin.HandlerFunc {
 
 // GetThreat handles GET /api/threats/:id.
 // Returns the single threat whose ThreatID matches the :id path param.
-func GetThreat(cfg *config.Config) gin.HandlerFunc {
+func GetThreat(cfg *config.Config, mgr *catalog.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		locale := resolveLocale(c)
 		cfg := auth.RequestCfg(c, cfg)
 		id := c.Param("id")
 
@@ -325,7 +349,9 @@ func GetThreat(cfg *config.Config) gin.HandlerFunc {
 
 		for _, t := range threats {
 			if t.ThreatID == id {
-				threat := t
+				one := []models.Threat{t}
+				localizeThreatRuleNames(mgr, locale, one)
+				threat := one[0]
 
 				holdSQL := fmt.Sprintf(`
 SELECT hold_id, tool_name, args_summary, created_at
