@@ -4,5 +4,71 @@
     "help": "Choose the language for the AgentGuard interface. This is saved in your browser.",
     "english": "English",
     "chinese": "简体中文"
+  },
+  "page": {
+    "title": "Settings",
+    "subtitle": "View and edit AgentGuard server configuration. Keys set by environment variables or CLI flags are read-only.",
+    "loading": "Loading…"
+  },
+  "banners": {
+    "sentryProvisionError": "Saved, but Sentry provisioning failed: {{error}}",
+    "restartRequiredAfterSave": "Saved. Some changes require an AgentGuard restart to take effect.",
+    "sentryProvisioned": "Configuration saved. Sentry streams provisioned.",
+    "saved": "Configuration saved.",
+    "restartRequired": "Saved configuration differs from the running server — restart AgentGuard to apply.",
+    "reprovisionRequired": "DLP model settings differ from what's provisioned. Re-provision to apply baked-in model/dimension changes. (Changing the embedding dimension does not recreate the existing stream automatically.)",
+    "reprovisionCta": "Re-provision DLP now",
+    "reprovisionTriggered": "DLP re-provision triggered.",
+    "reprovisionFailed": "Re-provision failed: {{error}}"
+  },
+  "actions": {
+    "discard": "Discard",
+    "save": "Save",
+    "saving": "Saving…",
+    "reprovisioning": "Re-provisioning…",
+    "unsavedCount_one": "{{count}} unsaved change",
+    "unsavedCount_other": "{{count}} unsaved changes"
+  },
+  "nav": {
+    "dirtySr_one": " unsaved change",
+    "dirtySr_other": " unsaved changes",
+    "stateRestart": "Restart required to apply saved changes",
+    "stateReprovision": "Re-provision required to apply model changes"
+  },
+  "section": {
+    "serverConfigHeading": "Server config",
+    "sentry": {
+      "serverConfigDesc": "Boot defaults stored in config.yaml — saved with the Save bar below. All other Sentry settings are edited live under Model configuration.",
+      "modelConfigHeading": "Model configuration",
+      "modelConfigDesc": "Live state in the agentguard_sentry_config stream — changes apply immediately, with no restart or re-provision, independent of the Save bar. Renders regardless of Semantic DLP status."
+    },
+    "dlp": {
+      "serverConfigDesc": "Boot defaults stored in config.yaml — saved with the Save bar below. All other DLP settings are edited live under Runtime configuration.",
+      "runtimeConfigHeading": "Runtime configuration",
+      "runtimeConfigDesc": "Live state in the agentguard_dlp_config stream — changes apply immediately, with no restart or re-provision, independent of the Save bar.",
+      "operationsHeading": "Operations",
+      "reprovisionButton": "Re-provision DLP",
+      "reprovisionHint": "Re-detects the embedding dimension and rebuilds the pipeline. Run after switching the embedding model."
+    },
+    "timeplus": {
+      "testConnection": "Test connection",
+      "testing": "Testing…",
+      "connectionOk": "Connection OK",
+      "connectionFailed": "Failed: {{error}}"
+    }
+  },
+  "field": {
+    "restartBadge": "requires restart",
+    "reprovisionBadge": "requires re-provision",
+    "secretSet": "•••••••• (set)",
+    "secretNotSet": "not set"
+  },
+  "source": {
+    "default": "default",
+    "file": "config file",
+    "env": "environment",
+    "flag": "CLI flag",
+    "envTitle": "Set by {{envVar}} — file edits have no effect until the variable is removed",
+    "flagTitle": "Set by --{{flag}} — file edits have no effect"
   }
 }

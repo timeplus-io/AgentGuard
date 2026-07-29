@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import Toggle from '../Toggle'
 import DLPConfigEditor from '../DLPConfigEditor'
 import SentryConfigEditor from '../SentryConfigEditor'
@@ -19,18 +20,14 @@ const DLP_SERVER_KEYS = new Set(['dlp.enabled', 'dlp.embedding_dim'])
 // point operators at Settings → Sentry Agent).
 const SENTRY_SERVER_KEYS = new Set(['sentry.enabled', 'sentry.skill_dir'])
 
-const SOURCE_LABEL = {
-  default: 'default',
-  file: 'config file',
-  env: 'environment',
-  flag: 'CLI flag',
-}
+const SOURCE_KEYS = new Set(['default', 'file', 'env', 'flag'])
 
 function SourceChip({ k }) {
-  const label = SOURCE_LABEL[k.source] || k.source
+  const { t } = useTranslation('settings')
+  const label = SOURCE_KEYS.has(k.source) ? t(`source.${k.source}`) : k.source
   const title =
-    k.source === 'env' ? `Set by ${k.env_var} — file edits have no effect until the variable is removed`
-    : k.source === 'flag' ? `Set by --${k.flag} — file edits have no effect`
+    k.source === 'env' ? t('source.envTitle', { envVar: k.env_var })
+    : k.source === 'flag' ? t('source.flagTitle', { flag: k.flag })
     : undefined
   return (
     <span title={title} className="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 bg-gray-700 text-gray-300">
@@ -40,6 +37,7 @@ function SourceChip({ k }) {
 }
 
 function KeyField({ k, draftValue, onChange }) {
+  const { t } = useTranslation('settings')
   const disabled = !k.editable
   const value = draftValue
   const baseInput =
@@ -60,7 +58,7 @@ function KeyField({ k, draftValue, onChange }) {
         type="password"
         className={baseInput}
         disabled={disabled}
-        placeholder={k.set ? '•••••••• (set)' : 'not set'}
+        placeholder={k.set ? t('field.secretSet') : t('field.secretNotSet')}
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -93,8 +91,8 @@ function KeyField({ k, draftValue, onChange }) {
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-100">{k.label}</span>
           <SourceChip k={k} />
-          {k.restart && <span className="text-[10px] text-amber-400">requires restart</span>}
-          {k.reprovision && <span className="text-[10px] text-amber-400">requires re-provision</span>}
+          {k.restart && <span className="text-[10px] text-amber-400">{t('field.restartBadge')}</span>}
+          {k.reprovision && <span className="text-[10px] text-amber-400">{t('field.reprovisionBadge')}</span>}
         </div>
       </div>
       <p className="text-xs text-gray-400 mb-2">{k.description}</p>
@@ -117,6 +115,7 @@ export default function SettingsSection({
   onReprovision,
   configSavedAt,
 }) {
+  const { t } = useTranslation('settings')
   const keys = section.id === 'dlp'
     ? section.keys.filter((k) => DLP_SERVER_KEYS.has(k.key))
     : section.id === 'sentry'
@@ -140,16 +139,16 @@ export default function SettingsSection({
         <h3 className="text-base font-medium text-gray-100 mb-3">{section.title}</h3>
         <div className="flex flex-col gap-4">
           <div className="bg-gray-900/40 rounded-sm px-4 py-3">
-            <h4 className="text-sm font-semibold text-gray-100 mb-1">Server config</h4>
+            <h4 className="text-sm font-semibold text-gray-100 mb-1">{t('section.serverConfigHeading')}</h4>
             <p className="text-xs text-gray-400">
-              Boot defaults stored in config.yaml — saved with the Save bar below. All other Sentry settings are edited live under Model configuration.
+              {t('section.sentry.serverConfigDesc')}
             </p>
             {keyList}
           </div>
           <div className="bg-gray-900/40 rounded-sm px-4 py-3">
-            <h4 className="text-sm font-semibold text-gray-100 mb-1">Model configuration</h4>
+            <h4 className="text-sm font-semibold text-gray-100 mb-1">{t('section.sentry.modelConfigHeading')}</h4>
             <p className="text-xs text-gray-400 mb-2">
-              Live state in the agentguard_sentry_config stream — changes apply immediately, with no restart or re-provision, independent of the Save bar. Renders regardless of Semantic DLP status.
+              {t('section.sentry.modelConfigDesc')}
             </p>
             <SentryConfigEditor reloadToken={configSavedAt} />
           </div>
@@ -165,11 +164,11 @@ export default function SettingsSection({
         {keyList}
         {section.id === 'timeplus' && (
           <div className="mt-3 flex items-center gap-3">
-            <button onClick={onTestTimeplus} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">Test connection</button>
-            {tpTest?.pending && <span className="text-xs text-gray-400">Testing…</span>}
+            <button onClick={onTestTimeplus} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">{t('section.timeplus.testConnection')}</button>
+            {tpTest?.pending && <span className="text-xs text-gray-400">{t('section.timeplus.testing')}</span>}
             {tpTest && !tpTest.pending && (
               <span className={`text-xs ${tpTest.ok ? 'text-emerald-400' : 'text-error'}`}>
-                {tpTest.ok ? 'Connection OK' : `Failed: ${tpTest.error}`}
+                {tpTest.ok ? t('section.timeplus.connectionOk') : t('section.timeplus.connectionFailed', { error: tpTest.error })}
               </span>
             )}
           </div>
@@ -183,28 +182,28 @@ export default function SettingsSection({
       <h3 className="text-base font-medium text-gray-100 mb-3">{section.title}</h3>
       <div className="flex flex-col gap-4">
         <div className="bg-gray-900/40 rounded-sm px-4 py-3">
-          <h4 className="text-sm font-semibold text-gray-100 mb-1">Server config</h4>
+          <h4 className="text-sm font-semibold text-gray-100 mb-1">{t('section.serverConfigHeading')}</h4>
           <p className="text-xs text-gray-400">
-            Boot defaults stored in config.yaml — saved with the Save bar below. All other DLP settings are edited live under Runtime configuration.
+            {t('section.dlp.serverConfigDesc')}
           </p>
           {keyList}
         </div>
         <div className="bg-gray-900/40 rounded-sm px-4 py-3">
-          <h4 className="text-sm font-semibold text-gray-100 mb-1">Runtime configuration</h4>
+          <h4 className="text-sm font-semibold text-gray-100 mb-1">{t('section.dlp.runtimeConfigHeading')}</h4>
           <p className="text-xs text-gray-400 mb-2">
-            Live state in the agentguard_dlp_config stream — changes apply immediately, with no restart or re-provision, independent of the Save bar.
+            {t('section.dlp.runtimeConfigDesc')}
           </p>
           <DLPConfigEditor />
         </div>
         <div className="bg-gray-900/40 rounded-sm px-4 py-3">
-          <h4 className="text-sm font-semibold text-gray-100 mb-1">Operations</h4>
+          <h4 className="text-sm font-semibold text-gray-100 mb-1">{t('section.dlp.operationsHeading')}</h4>
           <div className="flex items-center gap-3">
             <button onClick={onReprovision} disabled={reprovisioning}
               className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600 disabled:opacity-50">
-              {reprovisioning ? 'Re-provisioning…' : 'Re-provision DLP'}
+              {reprovisioning ? t('actions.reprovisioning') : t('section.dlp.reprovisionButton')}
             </button>
             <span className="text-[11px] text-gray-500">
-              Re-detects the embedding dimension and rebuilds the pipeline. Run after switching the embedding model.
+              {t('section.dlp.reprovisionHint')}
             </span>
           </div>
         </div>

@@ -4,5 +4,71 @@
     "help": "选择 AgentGuard 界面的语言。该设置保存在您的浏览器中。",
     "english": "English",
     "chinese": "简体中文"
+  },
+  "page": {
+    "title": "设置",
+    "subtitle": "查看和编辑 AgentGuard 服务器配置。由环境变量或 CLI 参数设置的键为只读。",
+    "loading": "加载中…"
+  },
+  "banners": {
+    "sentryProvisionError": "已保存，但 Sentry 配置生效失败：{{error}}",
+    "restartRequiredAfterSave": "已保存。部分更改需要重启 AgentGuard 才能生效。",
+    "sentryProvisioned": "配置已保存。Sentry 数据流已完成配置。",
+    "saved": "配置已保存。",
+    "restartRequired": "已保存的配置与正在运行的服务器不一致 — 请重启 AgentGuard 以生效。",
+    "reprovisionRequired": "DLP 模型设置与已配置的内容不一致。请重新配置以应用固化的模型/维度更改。（更改嵌入维度不会自动重建现有数据流。）",
+    "reprovisionCta": "立即重新配置 DLP",
+    "reprovisionTriggered": "已触发 DLP 重新配置。",
+    "reprovisionFailed": "重新配置失败：{{error}}"
+  },
+  "actions": {
+    "discard": "放弃",
+    "save": "保存",
+    "saving": "保存中…",
+    "reprovisioning": "正在重新配置…",
+    "unsavedCount_one": "{{count}} 项未保存的更改",
+    "unsavedCount_other": "{{count}} 项未保存的更改"
+  },
+  "nav": {
+    "dirtySr_one": " 项未保存的更改",
+    "dirtySr_other": " 项未保存的更改",
+    "stateRestart": "需要重启才能应用已保存的更改",
+    "stateReprovision": "需要重新配置才能应用模型更改"
+  },
+  "section": {
+    "serverConfigHeading": "服务器配置",
+    "sentry": {
+      "serverConfigDesc": "存储在 config.yaml 中的启动默认值 — 随下方的保存栏一起保存。其他所有 Sentry 设置均在下方“模型配置”中实时编辑。",
+      "modelConfigHeading": "模型配置",
+      "modelConfigDesc": "agentguard_sentry_config 数据流中的实时状态 — 更改立即生效，无需重启或重新配置，独立于保存栏。无论 Semantic DLP 状态如何都会显示。"
+    },
+    "dlp": {
+      "serverConfigDesc": "存储在 config.yaml 中的启动默认值 — 随下方的保存栏一起保存。其他所有 DLP 设置均在下方“运行时配置”中实时编辑。",
+      "runtimeConfigHeading": "运行时配置",
+      "runtimeConfigDesc": "agentguard_dlp_config 数据流中的实时状态 — 更改立即生效，无需重启或重新配置，独立于保存栏。",
+      "operationsHeading": "操作",
+      "reprovisionButton": "重新配置 DLP",
+      "reprovisionHint": "重新检测嵌入维度并重建管道。切换嵌入模型后请运行此操作。"
+    },
+    "timeplus": {
+      "testConnection": "测试连接",
+      "testing": "测试中…",
+      "connectionOk": "连接正常",
+      "connectionFailed": "失败：{{error}}"
+    }
+  },
+  "field": {
+    "restartBadge": "需要重启",
+    "reprovisionBadge": "需要重新配置",
+    "secretSet": "••••••••（已设置）",
+    "secretNotSet": "未设置"
+  },
+  "source": {
+    "default": "默认",
+    "file": "配置文件",
+    "env": "环境变量",
+    "flag": "CLI 参数",
+    "envTitle": "由 {{envVar}} 设置 — 在移除该变量之前，文件中的编辑不会生效",
+    "flagTitle": "由 --{{flag}} 设置 — 文件中的编辑不会生效"
   }
 }

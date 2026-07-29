@@ -10,6 +10,7 @@ export const REPRESENTATIVE = [
   ['common', 'actions.save'],
   ['common', 'nav.dashboard'],
   ['settings', 'language.label'],
+  ['settings', 'page.title'],
   ['auth', 'login.submit'],
   ['dashboard', 'title'],
   ['agents', 'list.title'],
