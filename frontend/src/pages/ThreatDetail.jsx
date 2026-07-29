@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import { SeverityBadge, ThreatStatusBadge } from '../components/Badge'
@@ -7,6 +8,7 @@ import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { writeKey } from '../lib/perm'
 import ActivityLog from '../components/ActivityLog'
+import { formatDate } from '../i18n/format'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -18,7 +20,7 @@ function formatTs(ts) {
       : ts
     const d = new Date(normalized)
     if (isNaN(d.getTime())) return String(ts)
-    return d.toLocaleString()
+    return formatDate(d)
   } catch { return String(ts) }
 }
 
@@ -85,6 +87,7 @@ function JsonValue({ value, depth }) {
 // ── EventCard ─────────────────────────────────────────────────────────────────
 
 function EventCard({ event }) {
+  const { t } = useTranslation('threats')
   const [expanded, setExpanded] = useState(false)
 
   let parsedData = null
@@ -124,7 +127,7 @@ function EventCard({ event }) {
       {expanded && hasDetail && (
         <div className="px-4 pb-3 pt-1 border-t border-outline-variant/10">
           {event.run_id && (
-            <p className="text-[10px] font-mono text-gray-400 mb-2">run: {event.run_id}</p>
+            <p className="text-[10px] font-mono text-gray-400 mb-2">{t('detail.eventCard.run', { runId: event.run_id })}</p>
           )}
           {parsedData !== null ? (
             <div className="text-[11px] font-mono text-gray-100 leading-relaxed">
@@ -144,6 +147,7 @@ function EventCard({ event }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ThreatDetail() {
+  const { t } = useTranslation('threats')
   const { can } = useAuth()
   const canWrite = can(writeKey("threats"))
   const { id } = useParams()
@@ -186,10 +190,10 @@ export default function ThreatDetail() {
           try {
             const list = await api.getThreats({ agent_id: h.agent_id, limit: 200 })
             matched = (list.threats ?? []).find(
-              t => t.agent_id === h.agent_id
-                && t.deployment_id === h.deployment_id
-                && t.session_id === h.session_id
-                && t.rule_id === h.rule_id
+              th => th.agent_id === h.agent_id
+                && th.deployment_id === h.deployment_id
+                && th.session_id === h.session_id
+                && th.rule_id === h.rule_id
             )
           } catch (e) {
             // listThreats failure is non-fatal here — render hold-only fallback below.
@@ -210,7 +214,7 @@ export default function ThreatDetail() {
               deployment_id: h.deployment_id,
               session_id: h.session_id,
               rule_id: h.rule_id,
-              rule_name: h.rule_id || 'Pending Hold',
+              rule_name: h.rule_id || t('detail.pendingHoldFallbackName'),
               severity: h.severity,
               status: 'open',
               status_updated_at: h.created_at,
@@ -238,7 +242,7 @@ export default function ThreatDetail() {
     }
     load()
     return () => { cancelled = true }
-  }, [id, isByHold, navigate])
+  }, [id, isByHold, navigate, t])
 
   async function decide(decision) {
     if (!threat?.pending_hold) return
@@ -261,7 +265,7 @@ export default function ThreatDetail() {
     const prev = threat.status
     setActionLoading(true)
     setActionError('')
-    setThreat(t => ({ ...t, status: 'acknowledged' }))
+    setThreat(th => ({ ...th, status: 'acknowledged' }))
     try {
       await api.acknowledgeThreat(threat.threat_id, {
         agent_id: threat.agent_id,
@@ -271,8 +275,8 @@ export default function ThreatDetail() {
       })
     } catch (err) {
       console.error('threat: acknowledge failed:', err)
-      setThreat(t => ({ ...t, status: prev }))
-      setActionError(`Acknowledge failed: ${err?.message ?? String(err)}`)
+      setThreat(th => ({ ...th, status: prev }))
+      setActionError(t('errors.acknowledgeFailed', { message: err?.message ?? String(err) }))
     } finally {
       setActionLoading(false)
     }
@@ -283,7 +287,7 @@ export default function ThreatDetail() {
     const prev = threat.status
     setActionLoading(true)
     setActionError('')
-    setThreat(t => ({ ...t, status: 'cleared' }))
+    setThreat(th => ({ ...th, status: 'cleared' }))
     try {
       await api.clearThreat(threat.threat_id, {
         agent_id: threat.agent_id,
@@ -293,8 +297,8 @@ export default function ThreatDetail() {
       })
     } catch (err) {
       console.error('threat: clear failed:', err)
-      setThreat(t => ({ ...t, status: prev }))
-      setActionError(`Clear failed: ${err?.message ?? String(err)}`)
+      setThreat(th => ({ ...th, status: prev }))
+      setActionError(t('errors.clearFailed', { message: err?.message ?? String(err) }))
     } finally {
       setActionLoading(false)
     }
@@ -330,10 +334,10 @@ export default function ThreatDetail() {
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
             <span className="material-symbols-outlined text-5xl text-gray-400">security</span>
             <p className="text-gray-400 text-sm">
-              {error === 'HTTP 404' ? 'Threat not found.' : error}
+              {error === 'HTTP 404' ? t('detail.notFound') : error}
             </p>
             <Link to="/threats" className="text-primary text-sm hover:underline">
-              ← Back to Threats
+              {t('detail.backToThreats')}
             </Link>
           </div>
         ) : threat ? (
@@ -375,14 +379,14 @@ export default function ThreatDetail() {
                         disabled={actionLoading || !canWrite}
                         className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors whitespace-nowrap"
                       >
-                        Acknowledge
+                        {t('actions.acknowledge')}
                       </button>
                       <button
                         onClick={handleClear}
                         disabled={actionLoading || !canWrite}
                         className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
                       >
-                        Clear
+                        {t('actions.clear')}
                       </button>
                     </>
                   )}
@@ -392,12 +396,12 @@ export default function ThreatDetail() {
                       disabled={actionLoading || !canWrite}
                       className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
                     >
-                      Clear
+                      {t('actions.clear')}
                     </button>
                   )}
                   {threat.status === 'cleared' && (
                     <span className="px-3 py-1.5 text-xs font-semibold rounded-full bg-green-500/10 text-green-400">
-                      Cleared
+                      {t('detail.cleared')}
                     </span>
                   )}
                 </div>
@@ -416,7 +420,7 @@ export default function ThreatDetail() {
                       : 'text-gray-400 border-transparent hover:text-gray-100'
                   }`}
                 >
-                  {tab}
+                  {t(`tabs.${tab}`)}
                 </button>
               ))}
             </div>
@@ -435,7 +439,7 @@ export default function ThreatDetail() {
                 <button
                   onClick={() => setActionError('')}
                   className="text-error/70 hover:text-error shrink-0"
-                  aria-label="Dismiss"
+                  aria-label={t('detail.dismiss')}
                 >
                   <span className="material-symbols-outlined text-[14px]">close</span>
                 </button>
@@ -447,16 +451,16 @@ export default function ThreatDetail() {
               <section className="bg-[#93000a]/20 border border-[#ffb4ab]/30 rounded-sm p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="material-symbols-outlined text-error">block</span>
-                  <h2 className="text-sm font-semibold text-error">Pending Hold — Agent paused</h2>
+                  <h2 className="text-sm font-semibold text-error">{t('detail.hold.heading')}</h2>
                 </div>
                 <p className="text-xs text-gray-100 mb-3">
-                  Tool: <code className="font-mono text-gray-100">{threat.pending_hold.tool_name}</code>
+                  {t('detail.hold.toolLabel')} <code className="font-mono text-gray-100">{threat.pending_hold.tool_name}</code>
                 </p>
                 <pre className="bg-surface-container-lowest rounded-sm p-3 mb-4 text-[11px] font-mono text-gray-100 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
-                  {threat.pending_hold.args_summary || '(no arguments)'}
+                  {threat.pending_hold.args_summary || t('detail.hold.noArguments')}
                 </pre>
                 <textarea
-                  placeholder="Optional reason for your decision..."
+                  placeholder={t('detail.hold.reasonPlaceholder')}
                   value={decideReason}
                   onChange={e => setDecideReason(e.target.value)}
                   className="w-full bg-gray-800 border border-gray-600 rounded-sm p-2 text-xs text-gray-100 focus:border-gray-400 focus:outline-none mb-3"
@@ -468,19 +472,21 @@ export default function ThreatDetail() {
                     disabled={decideStatus === 'pending'}
                     className="px-4 py-2 bg-emerald-500/20 text-emerald-400 text-xs font-semibold rounded-sm hover:bg-emerald-500/30 disabled:opacity-50"
                   >
-                    ✓ Approve
+                    {t('detail.hold.approve')}
                   </button>
                   <button
                     onClick={() => decide('denied')}
                     disabled={decideStatus === 'pending'}
                     className="px-4 py-2 bg-[#ffb4ab]/20 text-error text-xs font-semibold rounded-sm hover:bg-[#ffb4ab]/30 disabled:opacity-50"
                   >
-                    ✗ Deny
+                    {t('detail.hold.deny')}
                   </button>
                 </div>
                 {decideStatus === 'error' && (
                   <p className="text-[11px] text-error mt-2">
-                    Failed to submit decision{decideError ? `: ${decideError}` : '. Try again.'}
+                    {decideError
+                      ? t('detail.hold.decideFailedWithReason', { reason: decideError })
+                      : t('detail.hold.decideFailedRetry')}
                   </p>
                 )}
               </section>
@@ -489,7 +495,7 @@ export default function ThreatDetail() {
             {(decideStatus === 'approved' || decideStatus === 'denied') && (
               <section className="bg-surface-container-low rounded-sm p-4">
                 <p className="text-xs text-emerald-400">
-                  ✓ {decideStatus === 'approved' ? 'Approved' : 'Denied'} — agent has been notified.
+                  {decideStatus === 'approved' ? t('detail.hold.approvedNotice') : t('detail.hold.deniedNotice')}
                 </p>
               </section>
             )}
@@ -498,25 +504,25 @@ export default function ThreatDetail() {
             <div className="grid grid-cols-4 gap-4">
               {/* Event Count */}
               <div className="bg-surface-container border border-outline-variant/10 rounded p-4">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Event Count</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">{t('detail.statLabels.eventCount')}</p>
                 <p className="text-2xl font-medium text-gray-100">{threat.event_count ?? events.length}</p>
               </div>
 
               {/* First Seen */}
               <div className="bg-surface-container border border-outline-variant/10 rounded p-4">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">First Seen</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">{t('detail.statLabels.firstSeen')}</p>
                 <p className="text-sm text-gray-100">{formatTs(threat.first_seen)}</p>
               </div>
 
               {/* Last Seen */}
               <div className="bg-surface-container border border-outline-variant/10 rounded p-4">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Last Seen</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">{t('detail.statLabels.lastSeen')}</p>
                 <p className="text-sm text-gray-100">{formatTs(threat.last_seen)}</p>
               </div>
 
               {/* Session ID */}
               <div className="bg-surface-container border border-outline-variant/10 rounded p-4">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Session ID</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">{t('detail.statLabels.sessionId')}</p>
                 {threat.session_id ? (
                   <code
                     className="text-sm font-mono text-gray-100"
@@ -535,10 +541,10 @@ export default function ThreatDetail() {
             {/* Event History */}
             <section>
               <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-4">
-                Event History ({events.length})
+                {t('detail.eventHistory.heading', { count: events.length })}
               </h2>
               {events.length === 0 ? (
-                <p className="text-sm text-gray-400">No event history available.</p>
+                <p className="text-sm text-gray-400">{t('detail.eventHistory.empty')}</p>
               ) : (
                 <div className="space-y-2">
                   {sortedEvents.map((ev) => (

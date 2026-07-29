@@ -1,0 +1,91 @@
+{
+  "appName": "AgentGuard",
+  "app": { "loading": "Loading…" },
+  "actions": { "save": "Save", "cancel": "Cancel", "approve": "Approve", "deny": "Deny", "retry": "Retry" },
+  "nav": {
+    "dashboard": "Dashboard",
+    "agents": "Agents",
+    "threats": "Threats",
+    "cost": "Cost",
+    "rules": "Rules",
+    "dlp": "Semantic DLP",
+    "investigate": "Investigate",
+    "sentry": "Sentry",
+    "settings": "Settings",
+    "access": "Access Control",
+    "pendingSuffix": "({{count}} pending)",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar"
+  },
+  "topNav": {
+    "byTimeplus": "BY TIMEPLUS",
+    "liveThreatFeed": "Live Threat Feed",
+    "closeNotifications": "Close notifications",
+    "switchToLightMode": "Switch to light mode",
+    "switchToDarkMode": "Switch to dark mode",
+    "logout": "Logout",
+    "loadingOpenThreats": "Loading open threats…",
+    "noOpenThreats": "No open threats."
+  },
+  "holdToast": {
+    "pendingLabel": "Hold pending:",
+    "review": "Review →"
+  },
+  "notifications": {
+    "fallbackTitle": "Security Alert",
+    "viewThreats": "View threats →"
+  },
+  "activity": {
+    "columns": {
+      "time": "Time",
+      "tool": "Tool",
+      "status": "Status",
+      "rule": "Rule",
+      "severity": "Severity",
+      "agent": "Agent",
+      "session": "Session",
+      "decidedBy": "Decided By"
+    },
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "denied": "Denied",
+      "timeout": "Timed Out",
+      "abandoned": "Abandoned",
+      "auto_block": "Auto-blocked",
+      "allowed": "Allowed"
+    },
+    "filters": {
+      "allStatuses": "All statuses",
+      "showAllowed": "Show allowed"
+    },
+    "live": "Live",
+    "paused": "Paused",
+    "highVolumeWarning": "Showing all tool call events including allowed — may be high volume",
+    "empty": {
+      "session": "No tool call activity for this session.",
+      "allowed": "No tool call events recorded yet.",
+      "holds": "No tool call holds recorded yet. Holds appear here when a security rule triggers on an agent tool call."
+    }
+  },
+  "activityDrawer": {
+    "title": "Tool Call Detail",
+    "message": "Message",
+    "arguments": "Arguments",
+    "decisionTimeline": "Decision Timeline",
+    "noTimelineEntries": "No timeline entries yet.",
+    "pausedWaiting": "Agent is paused — waiting for decision",
+    "reasonPlaceholder": "Optional reason…",
+    "decideFailedDefault": "Failed to submit. Try again.",
+    "decisionSubmitted": "Decision submitted — agent has been notified."
+  },
+  "markdown": {
+    "imageAlt": "[image: {{alt}}]",
+    "image": "[image]"
+  },
+  "severity": {
+    "critical": "Critical",
+    "warning": "Warning",
+    "info": "Info"
+  }
+}

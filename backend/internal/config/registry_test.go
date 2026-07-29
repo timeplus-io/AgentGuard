@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestRegistryCoversAllKeys(t *testing.T) {
 	reg := Registry()
@@ -52,5 +55,34 @@ func TestRegistryMetaInvariants(t *testing.T) {
 	// dlp_embed), so it's read-only and no longer a re-provision-drift trigger.
 	if m, _ := MetaFor("dlp.embedding_dim"); !m.ReadOnly || m.Reprovision {
 		t.Error("dlp.embedding_dim must be ReadOnly and not Reprovision")
+	}
+}
+
+func TestUIDefaultLanguageRegistered(t *testing.T) {
+	var found *KeyMeta
+	for i := range Registry() {
+		if Registry()[i].Key == "ui.default_language" {
+			found = &Registry()[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("ui.default_language not in registry")
+	}
+	if found.Type != TypeEnum {
+		t.Errorf("want TypeEnum, got %s", found.Type)
+	}
+	want := []string{"en", "zh-CN"}
+	if !reflect.DeepEqual(found.EnumValues, want) {
+		t.Fatalf("enum values = %v, want %v", found.EnumValues, want)
+	}
+	hasUI := false
+	for _, s := range Sections() {
+		if s.ID == "ui" {
+			hasUI = true
+		}
+	}
+	if !hasUI {
+		t.Error("ui section not registered")
 	}
 }

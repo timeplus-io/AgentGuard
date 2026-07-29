@@ -1,27 +1,27 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import { api } from '../api/client'
 import { formatLocalTime } from '../utils/time'
+import { formatNumber } from '../i18n/format'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function fmtTokens(n) {
   if (n == null) return '—'
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
-  return String(n)
+  return formatNumber(n, { notation: 'compact', maximumFractionDigits: 1 })
 }
 
 function fmtLatency(ms) {
   if (ms == null || ms === 0) return '—'
-  if (ms >= 1000) return (ms / 1000).toFixed(1) + 's'
-  return Math.round(ms) + ' ms'
+  if (ms >= 1000) return formatNumber(ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 's'
+  return formatNumber(Math.round(ms)) + ' ms'
 }
 
 function fmtPct(rate) {
   if (rate == null) return '—'
-  return (rate * 100).toFixed(1) + '%'
+  return formatNumber(rate, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
 function fmtTime(iso) {
@@ -53,14 +53,16 @@ function safeParse(str) {
   try { return JSON.parse(str) } catch { return null }
 }
 
-const TIME_PRESETS = [
-  { value: '1h',  label: 'Last 1h' },
-  { value: '6h',  label: 'Last 6h' },
-  { value: '24h', label: 'Last 24h' },
-  { value: '7d',  label: 'Last 7 days' },
-  { value: '30d', label: 'Last 30 days' },
-  { value: 'all', label: 'All time' },
-]
+function getTimePresets(t) {
+  return [
+    { value: '1h',  label: t('detail.timePresets.1h') },
+    { value: '6h',  label: t('detail.timePresets.6h') },
+    { value: '24h', label: t('detail.timePresets.24h') },
+    { value: '7d',  label: t('detail.timePresets.7d') },
+    { value: '30d', label: t('detail.timePresets.30d') },
+    { value: 'all', label: t('detail.timePresets.all') },
+  ]
+}
 
 function presetToISO(preset) {
   if (!preset || preset === 'all') return null
@@ -85,6 +87,7 @@ function KVRow({ label, value }) {
 // ── SessionSummary ────────────────────────────────────────────────────────────
 
 function SessionSummary({ sessionDetail }) {
+  const { t } = useTranslation('agents')
   const isEnded = sessionDetail.status === 'ended'
   const runs = sessionDetail.runs ?? []
   const startedAt = runs[0]?.start_time ?? null
@@ -95,7 +98,7 @@ function SessionSummary({ sessionDetail }) {
       <div className="w-full max-w-lg bg-surface-container-low rounded-sm p-6 space-y-6">
         {/* Session ID */}
         <div>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Session ID</p>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">{t('detail.session.id')}</p>
           <code className="text-[13px] font-mono text-gray-100 break-all leading-relaxed">{sessionDetail.session_id}</code>
         </div>
 
@@ -103,7 +106,7 @@ function SessionSummary({ sessionDetail }) {
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
           <span className={`text-sm font-semibold ${isEnded ? 'text-gray-400' : 'text-emerald-400'}`}>
-            {isEnded ? 'Ended' : 'Active'}
+            {isEnded ? t('detail.session.status.ended') : t('detail.session.status.active')}
           </span>
           {sessionDetail.session_type && (
             <span className="ml-2 text-[10px] text-gray-400 bg-surface-container-high px-2 py-0.5 rounded-full uppercase tracking-wider">
@@ -128,24 +131,24 @@ function SessionSummary({ sessionDetail }) {
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-surface-container-lowest rounded-sm px-4 py-3">
-            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Started</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.session.started')}</p>
             <p className="text-xs font-mono text-gray-100">{startedAt ? fmtTime(startedAt) : '—'}</p>
           </div>
           <div className="bg-surface-container-lowest rounded-sm px-4 py-3">
-            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Ended</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.session.ended')}</p>
             <p className="text-xs font-mono text-gray-100">{endedAt ? fmtTime(endedAt) : '—'}</p>
           </div>
           <div className="bg-surface-container-lowest rounded-sm px-4 py-3">
-            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Total Events</p>
-            <p className="text-2xl font-bold text-gray-100">{sessionDetail.event_count ?? 0}</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.session.totalEvents')}</p>
+            <p className="text-2xl font-bold text-gray-100">{formatNumber(sessionDetail.event_count ?? 0)}</p>
           </div>
           <div className="bg-surface-container-lowest rounded-sm px-4 py-3">
-            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Tool Calls</p>
-            <p className="text-2xl font-bold text-gray-100">{sessionDetail.total_tool_calls ?? 0}</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.session.toolCalls')}</p>
+            <p className="text-2xl font-bold text-gray-100">{formatNumber(sessionDetail.total_tool_calls ?? 0)}</p>
           </div>
         </div>
 
-        <p className="text-[11px] text-gray-400 text-center">Select a run from the left to view its timeline</p>
+        <p className="text-[11px] text-gray-400 text-center">{t('detail.session.selectRunHint')}</p>
       </div>
     </div>
   )
@@ -154,6 +157,7 @@ function SessionSummary({ sessionDetail }) {
 // ── SessionHeader ─────────────────────────────────────────────────────────────
 
 function SessionHeader({ sessionDetail }) {
+  const { t } = useTranslation('agents')
   const isEnded = sessionDetail.status === 'ended'
   const sid = sessionDetail.session_id ?? ''
   return (
@@ -161,10 +165,10 @@ function SessionHeader({ sessionDetail }) {
       <code className="text-[11px] font-mono text-gray-100 break-all">{sid}</code>
       <span className={`flex items-center gap-1.5 text-[10px] font-semibold ${isEnded ? 'text-gray-400' : 'text-emerald-400'}`}>
         <span className={`w-1.5 h-1.5 rounded-full ${isEnded ? 'bg-zinc-500' : 'bg-emerald-400 animate-pulse'}`} />
-        {isEnded ? 'Ended' : 'Active'}
+        {isEnded ? t('detail.session.status.ended') : t('detail.session.status.active')}
       </span>
-      <span className="text-[10px] text-gray-400">{sessionDetail.event_count ?? 0} Events</span>
-      <span className="text-[10px] text-gray-400">{sessionDetail.total_tool_calls ?? 0} Tool Calls</span>
+      <span className="text-[10px] text-gray-400">{t('detail.session.eventsCount', { count: sessionDetail.event_count ?? 0 })}</span>
+      <span className="text-[10px] text-gray-400">{t('detail.session.toolCallsCount', { count: sessionDetail.total_tool_calls ?? 0 })}</span>
     </div>
   )
 }
@@ -250,6 +254,7 @@ const hookBadgeColor = {
 }
 
 function RunEventCard({ event }) {
+  const { t } = useTranslation('agents')
   const [expanded, setExpanded] = useState(false)
 
   let parsedData = null
@@ -288,11 +293,11 @@ function RunEventCard({ event }) {
         {isBlocked && (
           <span className="flex items-center gap-1 text-[10px] font-semibold text-error shrink-0">
             <span className="material-symbols-outlined text-[13px]">block</span>
-            blocked
+            {t('detail.events.blocked')}
           </span>
         )}
         {event.event_data && (
-          <span className="text-[10px] text-gray-400 shrink-0">JSON</span>
+          <span className="text-[10px] text-gray-400 shrink-0">{t('detail.events.jsonBadge')}</span>
         )}
       </div>
 
@@ -300,7 +305,7 @@ function RunEventCard({ event }) {
       {expanded && (
         <div className="px-4 pb-3 pt-1 border-t border-outline-variant/10">
           {event.block_reason && (
-            <p className="text-[11px] text-error mb-2 font-mono">block reason: {event.block_reason}</p>
+            <p className="text-[11px] text-error mb-2 font-mono">{t('detail.events.blockReason', { reason: event.block_reason })}</p>
           )}
           {parsedData !== null ? (
             <div className="text-[11px] font-mono text-gray-100 leading-relaxed">
@@ -311,7 +316,7 @@ function RunEventCard({ event }) {
               {event.event_data}
             </pre>
           ) : (
-            <p className="text-[11px] text-gray-400">No event data</p>
+            <p className="text-[11px] text-gray-400">{t('detail.events.noEventData')}</p>
           )}
         </div>
       )}
@@ -332,6 +337,7 @@ const SOURCE_TYPE_COLORS = {
 }
 
 function SkillsTab({ sessionId }) {
+  const { t } = useTranslation('agents')
   const [loaded, setLoaded] = useState([])
   const [invoked, setInvoked] = useState([])
   const [connecting, setConnecting] = useState(true)
@@ -370,9 +376,9 @@ function SkillsTab({ sessionId }) {
       }
       setConnecting(false)
     }
-    stream().catch(e => { if (e?.name !== 'AbortError') setError(e.message || 'Stream error') })
+    stream().catch(e => { if (e?.name !== 'AbortError') setError(e.message || t('detail.skills.streamError')) })
     return () => ctrl.abort()
-  }, [sessionId])
+  }, [sessionId, t])
 
   if (connecting) {
     return (
@@ -396,10 +402,10 @@ function SkillsTab({ sessionId }) {
       {/* Loaded section */}
       <div>
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
-          Loaded — available in system prompt
+          {t('detail.skills.loadedHeading')}
         </p>
         {loaded.length === 0 ? (
-          <p className="text-xs text-gray-400">No loaded skills detected for this session.</p>
+          <p className="text-xs text-gray-400">{t('detail.skills.loadedEmpty')}</p>
         ) : (
           <div className="space-y-2">
             {loaded.map(({ name, firstSeen, sourceType, location, description }) => (
@@ -415,18 +421,18 @@ function SkillsTab({ sessionId }) {
                       {sourceType}
                     </span>
                   )}
-                  <span className="ml-auto text-[10px] font-mono text-gray-400">first seen&nbsp;&nbsp;{fmtShortTime(firstSeen)}</span>
+                  <span className="ml-auto text-[10px] font-mono text-gray-400">{t('detail.skills.firstSeen')}&nbsp;&nbsp;{fmtShortTime(firstSeen)}</span>
                 </div>
                 {expanded[name] && (location || description) && (
                   <div className="ml-6 mt-1 space-y-1">
                     {location && (
                       <p className="text-[10px] font-mono text-gray-400 break-all">
-                        <span className="text-gray-400">location </span>{location}
+                        <span className="text-gray-400">{t('detail.skills.location')} </span>{location}
                       </p>
                     )}
                     {description && (
                       <p className="text-[10px] font-mono text-gray-400 break-words">
-                        <span className="text-gray-400">desc </span>{description}
+                        <span className="text-gray-400">{t('detail.skills.description')} </span>{description}
                       </p>
                     )}
                   </div>
@@ -440,10 +446,10 @@ function SkillsTab({ sessionId }) {
       {/* Invoked section */}
       <div>
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
-          Invoked — skill activations
+          {t('detail.skills.invokedHeading')}
         </p>
         {invoked.length === 0 ? (
-          <p className="text-xs text-gray-400">No skill invocations detected for this session.</p>
+          <p className="text-xs text-gray-400">{t('detail.skills.invokedEmpty')}</p>
         ) : (
           <div className="space-y-2">
             {invoked.map((item, i) => {
@@ -458,13 +464,13 @@ function SkillsTab({ sessionId }) {
                     <span className="text-[10px] font-mono text-gray-400 w-16 shrink-0">{fmtShortTime(item.time)}</span>
                     <span className="text-xs font-mono text-gray-100">{item.name}</span>
                     {item.args && (
-                      <span className="ml-auto text-[10px] font-mono text-gray-400">args ▾</span>
+                      <span className="ml-auto text-[10px] font-mono text-gray-400">{t('detail.skills.args')} ▾</span>
                     )}
                   </div>
                   {expanded[itemKey] && item.args && (
                     <div className="ml-10 mt-1">
                       <p className="text-[10px] font-mono text-gray-400 break-words">
-                        <span className="text-gray-400">args </span>{item.args}
+                        <span className="text-gray-400">{t('detail.skills.args')} </span>{item.args}
                       </p>
                     </div>
                   )}
@@ -490,6 +496,7 @@ const OP_COLORS = {
 }
 
 function MemoryTab({ sessionId }) {
+  const { t } = useTranslation('agents')
   const [ops, setOps] = useState([])
   const [connecting, setConnecting] = useState(true)
   const [error, setError] = useState(null)
@@ -512,9 +519,9 @@ function MemoryTab({ sessionId }) {
       }
       setConnecting(false)
     }
-    stream().catch(e => { if (e?.name !== 'AbortError') setError(e.message || 'Stream error') })
+    stream().catch(e => { if (e?.name !== 'AbortError') setError(e.message || t('detail.memory.streamError')) })
     return () => ctrl.abort()
-  }, [sessionId])
+  }, [sessionId, t])
 
   const fmtTime = (ts) => ts ? (formatLocalTime(ts) || String(ts)) : '—'
 
@@ -546,10 +553,10 @@ function MemoryTab({ sessionId }) {
   return (
     <div className="p-5 space-y-1">
       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
-        Memory Operations
+        {t('detail.memory.heading')}
       </p>
       {ops.length === 0 ? (
-        <p className="text-xs text-gray-400">No memory operations detected for this session.</p>
+        <p className="text-xs text-gray-400">{t('detail.memory.empty')}</p>
       ) : (
         ops.map((op, i) => (
           <div key={i}>
@@ -590,6 +597,7 @@ function MemoryTab({ sessionId }) {
 // ── AgentMemoryPanel ──────────────────────────────────────────────────────────
 
 function AgentMemoryPanel({ agentId }) {
+  const { t } = useTranslation('agents')
   const [stats, setStats] = useState(null)
   const [recentOps, setRecentOps] = useState([])
   const [loading, setLoading] = useState(true)
@@ -622,8 +630,8 @@ function AgentMemoryPanel({ agentId }) {
         }
         setRecentOps(rows)
       })(),
-    ]).catch(err => setError(err.message || 'Failed to load memory data')).finally(() => setLoading(false))
-  }, [agentId])
+    ]).catch(err => setError(err.message || t('detail.memory.loadError'))).finally(() => setLoading(false))
+  }, [agentId, t])
 
   const fmtTime = (ts) => ts ? (formatLocalTime(ts) || String(ts)) : '—'
 
@@ -655,16 +663,16 @@ function AgentMemoryPanel({ agentId }) {
   return (
     <div className="p-5 space-y-6">
       <div>
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Memory Footprint</p>
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">{t('detail.memory.footprintHeading')}</p>
         {totalOps === 0 ? (
-          <p className="text-xs text-gray-400">No memory operations recorded for this agent.</p>
+          <p className="text-xs text-gray-400">{t('detail.memory.footprintEmpty')}</p>
         ) : (
           <div className="grid grid-cols-4 gap-3 mb-6">
             {[
-              { label: 'Total',    value: stats?.total_ops ?? 0, color: 'text-gray-100' },
-              { label: 'Saves',    value: stats?.saves     ?? 0, color: 'text-amber-400' },
-              { label: 'Searches', value: stats?.searches  ?? 0, color: 'text-blue-400' },
-              { label: 'Reads',    value: stats?.reads     ?? 0, color: 'text-emerald-400' },
+              { label: t('detail.memory.stats.total'),    value: stats?.total_ops ?? 0, color: 'text-gray-100' },
+              { label: t('detail.memory.stats.saves'),    value: stats?.saves     ?? 0, color: 'text-amber-400' },
+              { label: t('detail.memory.stats.searches'), value: stats?.searches  ?? 0, color: 'text-blue-400' },
+              { label: t('detail.memory.stats.reads'),    value: stats?.reads     ?? 0, color: 'text-emerald-400' },
             ].map(({ label, value, color }) => (
               <div key={label} className="bg-surface rounded p-3 text-center">
                 <p className={`text-lg font-bold font-mono ${color}`}>{value}</p>
@@ -677,7 +685,7 @@ function AgentMemoryPanel({ agentId }) {
 
       {recentOps.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Recent Operations</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">{t('detail.memory.recentHeading')}</p>
           <div className="space-y-1">
             {recentOps.map((op, i) => (
               <div key={i}>
@@ -719,13 +727,14 @@ function AgentMemoryPanel({ agentId }) {
 // ── RunWaterfall ──────────────────────────────────────────────────────────────
 
 function RunWaterfall({ spans }) {
+  const { t } = useTranslation('agents')
   const [expandedSpan, setExpandedSpan] = useState(null)
 
   if (!spans || spans.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
         <span className="material-symbols-outlined text-4xl">account_tree</span>
-        <p className="text-sm">No trace data available for this run</p>
+        <p className="text-sm">{t('detail.trace.noData')}</p>
       </div>
     )
   }
@@ -755,8 +764,8 @@ function RunWaterfall({ spans }) {
 
   function fmtDuration(ms) {
     if (ms == null || ms === 0) return '—'
-    if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
-    return `${Math.round(ms)}ms`
+    if (ms >= 1000) return `${formatNumber(ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}s`
+    return `${formatNumber(Math.round(ms))}ms`
   }
 
   return (
@@ -833,13 +842,15 @@ function RunWaterfall({ spans }) {
   )
 }
 
-const TIMELINE_KIND_META = {
-  user_input:    { label: 'User Input',     dot: '#a5b4fc' },
-  llm_response:  { label: 'LLM Response',   dot: '#ffb0cf' },
-  tool_request:  { label: 'Tool Request',   dot: '#93c5fd' },
-  tool_result:   { label: 'Tool Result',    dot: '#93c5fd' },
-  session_start: { label: 'Session Start',  dot: '#6b7280' },
-  session_end:   { label: 'Session End',    dot: '#6b7280' },
+function getTimelineKindMeta(t) {
+  return {
+    user_input:    { label: t('detail.timeline.kinds.userInput'),    dot: '#a5b4fc' },
+    llm_response:  { label: t('detail.timeline.kinds.llmResponse'),  dot: '#ffb0cf' },
+    tool_request:  { label: t('detail.timeline.kinds.toolRequest'),  dot: '#93c5fd' },
+    tool_result:   { label: t('detail.timeline.kinds.toolResult'),   dot: '#93c5fd' },
+    session_start: { label: t('detail.timeline.kinds.sessionStart'), dot: '#6b7280' },
+    session_end:   { label: t('detail.timeline.kinds.sessionEnd'),   dot: '#6b7280' },
+  }
 }
 
 function TimelineBody({ kind, body }) {
@@ -861,17 +872,19 @@ function TimelineBody({ kind, body }) {
 }
 
 function TurnTimeline({ turnIndex, events }) {
+  const { t } = useTranslation('agents')
+  const kindMeta = getTimelineKindMeta(t)
   return (
     <div className="bg-surface-container-low rounded-sm p-5 mb-3 last:mb-0">
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <span className="text-xs font-semibold text-gray-100">
-          {turnIndex === 0 ? 'Session' : `Turn #${turnIndex}`}
+          {turnIndex === 0 ? t('detail.timeline.sessionLabel') : t('detail.timeline.turnLabel', { index: turnIndex })}
         </span>
-        <span className="text-[10px] text-gray-400">{events.length} events</span>
+        <span className="text-[10px] text-gray-400">{t('detail.timeline.eventsCount', { count: events.length })}</span>
       </div>
       <div>
         {events.map((ev, i) => {
-          const meta = TIMELINE_KIND_META[ev.kind] ?? { label: ev.kind, dot: '#6b7280' }
+          const meta = kindMeta[ev.kind] ?? { label: ev.kind, dot: '#6b7280' }
           const alert = ev.status === 'blocked' || ev.status === 'error'
           return (
             <div key={`${ev.kind}-${i}`} className="flex gap-3">
@@ -894,10 +907,12 @@ function TurnTimeline({ turnIndex, events }) {
                   {ev.model && <span className="text-[10px] text-gray-400 font-mono">{ev.model}</span>}
                   {ev.status === 'blocked' && (
                     <span className="text-[10px] text-error">
-                      blocked{ev.attributes?.block_reason ? `: ${ev.attributes.block_reason}` : ''}
+                      {ev.attributes?.block_reason
+                        ? t('detail.timeline.blockedWithReason', { reason: ev.attributes.block_reason })
+                        : t('detail.timeline.blocked')}
                     </span>
                   )}
-                  {ev.status === 'error' && <span className="text-[10px] text-error">error</span>}
+                  {ev.status === 'error' && <span className="text-[10px] text-error">{t('detail.timeline.error')}</span>}
                   <span className="ml-auto text-[10px] font-mono text-gray-400">{fmtShortTime(ev.event_time)}</span>
                 </div>
                 <TimelineBody kind={ev.kind} body={ev.body} />
@@ -913,6 +928,7 @@ function TurnTimeline({ turnIndex, events }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AgentDetail() {
+  const { t } = useTranslation('agents')
   const { id } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedSession = searchParams.get('session')
@@ -949,7 +965,7 @@ export default function AgentDetail() {
   const [loadingEvents, setLoadingEvents] = useState(false)
   const [refreshTick, setRefreshTick] = useState(0)
 
-  const refresh = useCallback(() => setRefreshTick(t => t + 1), [])
+  const refresh = useCallback(() => setRefreshTick(prev => prev + 1), [])
 
   useEffect(() => {
     setLoadingAgent(true)
@@ -959,9 +975,9 @@ export default function AgentDetail() {
     if (since) params.since = since
     api.getAgent(id, params)
       .then(data => { setAgent(data); setAgentError(null) })
-      .catch(err => setAgentError(err?.message || 'Failed to load agent'))
+      .catch(err => setAgentError(err?.message || t('detail.errors.loadAgent')))
       .finally(() => setLoadingAgent(false))
-  }, [id, timePreset, refreshTick])
+  }, [id, timePreset, refreshTick, t])
 
   useEffect(() => {
     const params = { agent_id: id }
@@ -969,8 +985,8 @@ export default function AgentDetail() {
     if (since) params.since = since
     api.getLLMMetrics(params)
       .then(d => { setLlmMetrics(d); setLlmMetricsError(null) })
-      .catch(err => { setLlmMetrics(null); setLlmMetricsError(err?.message || 'Failed to load LLM metrics') })
-  }, [id, timePreset, refreshTick])
+      .catch(err => { setLlmMetrics(null); setLlmMetricsError(err?.message || t('detail.errors.loadLlmMetrics')) })
+  }, [id, timePreset, refreshTick, t])
 
   useEffect(() => {
     const params = { agent_id: id }
@@ -978,16 +994,16 @@ export default function AgentDetail() {
     if (since) params.since = since
     api.getToolMetrics(params)
       .then(d => { setToolMetrics(d); setToolMetricsError(null) })
-      .catch(err => { setToolMetrics(null); setToolMetricsError(err?.message || 'Failed to load tool metrics') })
-  }, [id, timePreset, refreshTick])
+      .catch(err => { setToolMetrics(null); setToolMetricsError(err?.message || t('detail.errors.loadToolMetrics')) })
+  }, [id, timePreset, refreshTick, t])
 
   useEffect(() => {
     // agent_id is the second segment of the compound "{deploymentId}__{agentId}" id
     const agentId = id.split('__')[1] ?? id
     api.getThreats({ agent_id: agentId, status: 'open', limit: 200 })
       .then(data => { setActiveThreats(data.total ?? (data.threats?.length ?? 0)); setActiveThreatsError(null) })
-      .catch(err => { setActiveThreats(null); setActiveThreatsError(err?.message || 'Failed to load active threats') })
-  }, [id, refreshTick])
+      .catch(err => { setActiveThreats(null); setActiveThreatsError(err?.message || t('detail.errors.loadActiveThreats')) })
+  }, [id, refreshTick, t])
 
   useEffect(() => {
     setLoadingSessions(true)
@@ -997,16 +1013,16 @@ export default function AgentDetail() {
     if (since) params.since = since
     api.listSessions(id, params)
       .then(data => { setSessions(data); setSessionsError(null) })
-      .catch(err => { setSessions([]); setSessionsError(err?.message || 'Failed to load sessions') })
+      .catch(err => { setSessions([]); setSessionsError(err?.message || t('detail.errors.loadSessions')) })
       .finally(() => setLoadingSessions(false))
-  }, [id, timePreset, refreshTick])
+  }, [id, timePreset, refreshTick, t])
 
   useEffect(() => {
     if (!selectedSession) { setSessionDetail(null); setSessionDetailError(null); return }
     api.getSession(id, selectedSession)
       .then(d => { setSessionDetail(d); setSessionDetailError(null) })
-      .catch(err => { setSessionDetail(null); setSessionDetailError(err?.message || 'Failed to load session details') })
-  }, [id, selectedSession, refreshTick])
+      .catch(err => { setSessionDetail(null); setSessionDetailError(err?.message || t('detail.errors.loadSessionDetails')) })
+  }, [id, selectedSession, refreshTick, t])
 
   useEffect(() => {
     if (!selectedRun) { setEvents([]); setEventsTruncated(false); setEventsError(null); return }
@@ -1027,10 +1043,10 @@ export default function AgentDetail() {
       .catch(err => {
         setEvents([])
         setEventsTruncated(false)
-        setEventsError(err?.message || 'Failed to load events')
+        setEventsError(err?.message || t('detail.errors.loadEvents'))
       })
       .finally(() => setLoadingEvents(false))
-  }, [id, selectedSession, selectedRun, timePreset, refreshTick])
+  }, [id, selectedSession, selectedRun, timePreset, refreshTick, t])
 
   useEffect(() => {
     if (!selectedSession) { setTimeline([]); setTimelineError(null); setLoadingTimeline(false); return }
@@ -1043,10 +1059,10 @@ export default function AgentDetail() {
     setLoadingTimeline(true)
     api.getSessionTimeline(id, selectedSession, params)
       .then(r => { if (!cancelled) { setTimeline(r.events ?? []); setTimelineError(null) } })
-      .catch(err => { if (!cancelled) { setTimeline([]); setTimelineError(err?.message || 'Failed to load timeline') } })
+      .catch(err => { if (!cancelled) { setTimeline([]); setTimelineError(err?.message || t('detail.errors.loadTimeline')) } })
       .finally(() => { if (!cancelled) setLoadingTimeline(false) })
     return () => { cancelled = true }
-  }, [id, selectedSession, selectedRun, refreshTick])
+  }, [id, selectedSession, selectedRun, refreshTick, t])
 
   useEffect(() => {
     setTraceData(null)
@@ -1055,9 +1071,9 @@ export default function AgentDetail() {
     setLoadingTrace(true)
     api.getRunTrace(id, selectedSession, selectedRun)
       .then(d => { setTraceData(d); setTraceError(null) })
-      .catch(err => { setTraceData(null); setTraceError(err?.message || 'Failed to load trace') })
+      .catch(err => { setTraceData(null); setTraceError(err?.message || t('detail.errors.loadTrace')) })
       .finally(() => setLoadingTrace(false))
-  }, [id, selectedSession, selectedRun, activeTab])
+  }, [id, selectedSession, selectedRun, activeTab, t])
 
   const selectSession = (sid) => {
     setActiveTab('timeline')
@@ -1083,10 +1099,10 @@ export default function AgentDetail() {
   const isRefreshing = loadingAgent || loadingSessions || loadingEvents
 
   const volumeMetrics = [
-    { label: 'Active Threats',  value: activeThreats ?? '—', icon: 'security', accent: activeThreats > 0, error: activeThreatsError },
-    { label: 'Total Sessions',  value: agent ? agent.session_count   : '—', icon: 'layers' },
-    { label: 'Total Events',    value: agent ? agent.event_count     : '—', icon: 'sync_alt' },
-    { label: 'Total Tool Calls',value: agent ? agent.tool_call_count : '—', icon: 'handyman' },
+    { label: t('detail.volumeMetrics.activeThreats'),  value: activeThreats ?? '—', icon: 'security', accent: activeThreats > 0, error: activeThreatsError },
+    { label: t('detail.volumeMetrics.totalSessions'),  value: agent ? formatNumber(agent.session_count)   : '—', icon: 'layers' },
+    { label: t('detail.volumeMetrics.totalEvents'),    value: agent ? formatNumber(agent.event_count)     : '—', icon: 'sync_alt' },
+    { label: t('detail.volumeMetrics.totalToolCalls'), value: agent ? formatNumber(agent.tool_call_count) : '—', icon: 'handyman' },
   ]
 
   const llmHasCalls = (llmMetrics?.calls?.total ?? 0) > 0
@@ -1095,31 +1111,31 @@ export default function AgentDetail() {
   const toolSuccessRate = toolMetrics?.summary?.success_rate // null from backend when no calls
   const perfMetrics = [
     {
-      label: 'Total Tokens',
+      label: t('detail.perfMetrics.totalTokens'),
       value: llmHasCalls ? fmtTokens(llmMetrics.tokens?.total) : '—',
-      sub: llmHasCalls ? `↑ ${fmtTokens(llmMetrics.tokens?.input)}  ↓ ${fmtTokens(llmMetrics.tokens?.output)}` : null,
+      sub: llmHasCalls ? t('detail.perfMetrics.tokensSub', { in: fmtTokens(llmMetrics.tokens?.input), out: fmtTokens(llmMetrics.tokens?.output) }) : null,
       icon: 'token',
       error: llmMetricsError,
     },
     {
-      label: 'LLM Latency p50',
+      label: t('detail.perfMetrics.llmLatencyP50'),
       value: llmHasCalls ? fmtLatency(llmMetrics.latency_ms?.p50) : '—',
-      sub: llmHasCalls ? `p95 ${fmtLatency(llmMetrics.latency_ms?.p95)}` : null,
+      sub: llmHasCalls ? t('detail.perfMetrics.latencySub', { p95: fmtLatency(llmMetrics.latency_ms?.p95) }) : null,
       icon: 'speed',
       error: llmMetricsError,
     },
     {
-      label: 'LLM Success Rate',
+      label: t('detail.perfMetrics.llmSuccessRate'),
       value: fmtPct(llmSuccessRate),  // fmtPct(null) → '—'
-      sub: llmHasCalls ? `${llmMetrics.calls?.success ?? 0} ok · ${llmMetrics.calls?.failed ?? 0} failed` : null,
+      sub: llmHasCalls ? t('detail.perfMetrics.successSub', { success: llmMetrics.calls?.success ?? 0, failed: llmMetrics.calls?.failed ?? 0 }) : null,
       icon: 'check_circle',
       accent: llmSuccessRate != null && llmSuccessRate < 1,
       error: llmMetricsError,
     },
     {
-      label: 'Tool Success Rate',
+      label: t('detail.perfMetrics.toolSuccessRate'),
       value: fmtPct(toolSuccessRate),  // fmtPct(null) → '—'
-      sub: toolHasCalls ? `${toolMetrics.summary?.success_calls ?? 0} ok · ${toolMetrics.summary?.failed_calls ?? 0} failed` : null,
+      sub: toolHasCalls ? t('detail.perfMetrics.successSub', { success: toolMetrics.summary?.success_calls ?? 0, failed: toolMetrics.summary?.failed_calls ?? 0 }) : null,
       icon: 'build_circle',
       accent: toolSuccessRate != null && toolSuccessRate < 1,
       error: toolMetricsError,
@@ -1165,7 +1181,7 @@ export default function AgentDetail() {
               onChange={e => setTimePreset(e.target.value)}
               className="bg-surface-container-high border border-outline-variant/30 text-xs text-gray-100 rounded-sm px-2 py-1.5 focus:outline-none focus:border-[#ffb0cf]/40 hover:border-outline-variant/60 transition-colors"
             >
-              {TIME_PRESETS.map(p => (
+              {getTimePresets(t).map(p => (
                 <option key={p.value} value={p.value}>{p.label}</option>
               ))}
             </select>
@@ -1177,7 +1193,7 @@ export default function AgentDetail() {
             <span className={`material-symbols-outlined text-base ${isRefreshing ? 'animate-spin' : ''}`}>
               refresh
             </span>
-            Refresh
+            {t('detail.refresh')}
           </button>
         </div>
       </header>
@@ -1235,7 +1251,7 @@ export default function AgentDetail() {
           {/* Sessions panel */}
           <aside className="w-52 shrink-0 bg-surface-container rounded-sm flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-outline-variant/20 shrink-0">
-              <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sessions</h3>
+              <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('detail.sessionsPanel.title')}</h3>
             </div>
             <div className="flex-1 overflow-y-auto">
               {loadingSessions ? (
@@ -1248,7 +1264,7 @@ export default function AgentDetail() {
                   <p className="text-[10px] text-error">{sessionsError}</p>
                 </div>
               ) : sessions.length === 0 ? (
-                <p className="text-[11px] text-gray-400 px-4 py-4">No sessions found</p>
+                <p className="text-[11px] text-gray-400 px-4 py-4">{t('detail.sessionsPanel.empty')}</p>
               ) : (
                 sessions.map(session => {
                   const isActive = selectedSession === session.session_id
@@ -1275,7 +1291,7 @@ export default function AgentDetail() {
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
                               <span className="text-[9px] bg-outline-variant/30 text-gray-400 px-1.5 py-0.5 rounded-full">
-                                {session.run_count}
+                                {formatNumber(session.run_count)}
                               </span>
                               {session.run_count > 0 && (
                                 <span className={`material-symbols-outlined text-[12px] transition-transform ${isExpanded && isActive ? 'text-primary rotate-180' : 'text-gray-400'}`}>
@@ -1305,14 +1321,14 @@ export default function AgentDetail() {
                           >
                             <div>
                               <span className={`text-[11px] ${isRunActive ? 'text-primary' : 'text-gray-400'}`}>
-                                Run #{idx + 1}
+                                {t('detail.sessionsPanel.run', { index: idx + 1 })}
                               </span>
                               <p className="text-[9px] text-gray-400 font-mono">{fmtTime(run.start_time)}</p>
                             </div>
                             <div className="flex items-center gap-1">
                               {run.tool_count > 0 && (
                                 <span className="text-[9px] bg-info/10 text-info px-1.5 py-0.5 rounded-full">
-                                  {run.tool_count}
+                                  {formatNumber(run.tool_count)}
                                 </span>
                               )}
                               {run.has_block && (
@@ -1341,11 +1357,11 @@ export default function AgentDetail() {
             {selectedSession && (
               <div role="tablist" className="flex border-b border-outline-variant/20 shrink-0">
                 {[
-                  { id: 'timeline', label: 'Timeline' },
-                  { id: 'events',   label: 'Events' },
-                  { id: 'trace',    label: 'Trace' },
-                  { id: 'skills',   label: 'Skills' },
-                  { id: 'memory',   label: 'Memory' },
+                  { id: 'timeline', label: t('detail.tabs.timeline') },
+                  { id: 'events',   label: t('detail.tabs.events') },
+                  { id: 'trace',    label: t('detail.tabs.trace') },
+                  { id: 'skills',   label: t('detail.tabs.skills') },
+                  { id: 'memory',   label: t('detail.tabs.memory') },
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -1378,7 +1394,7 @@ export default function AgentDetail() {
                 ) : sessionDetailError ? (
                   <div className="flex flex-col items-center justify-center h-full text-error gap-2 p-6 text-center">
                     <span className="material-symbols-outlined text-4xl">error</span>
-                    <p className="text-sm font-semibold">Failed to load session</p>
+                    <p className="text-sm font-semibold">{t('detail.session.loadFailedHeading')}</p>
                     <p className="text-xs text-gray-400 max-w-md break-words">{sessionDetailError}</p>
                   </div>
                 ) : (
@@ -1394,7 +1410,7 @@ export default function AgentDetail() {
                 ) : traceError ? (
                   <div className="flex flex-col items-center justify-center h-full text-error gap-2 p-6 text-center">
                     <span className="material-symbols-outlined text-4xl">error</span>
-                    <p className="text-sm font-semibold">Failed to load trace</p>
+                    <p className="text-sm font-semibold">{t('detail.trace.loadFailedHeading')}</p>
                     <p className="text-xs text-gray-400 max-w-md break-words">{traceError}</p>
                   </div>
                 ) : (
@@ -1408,17 +1424,17 @@ export default function AgentDetail() {
                 ) : eventsError ? (
                   <div className="flex flex-col items-center justify-center h-full text-error gap-2 p-6 text-center">
                     <span className="material-symbols-outlined text-4xl">error</span>
-                    <p className="text-sm font-semibold">Failed to load events</p>
+                    <p className="text-sm font-semibold">{t('detail.events.loadFailedHeading')}</p>
                     <p className="text-xs text-gray-400 max-w-md break-words">{eventsError}</p>
                   </div>
                 ) : events.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
                     <span className="material-symbols-outlined text-4xl">inbox</span>
-                    <p className="text-sm">No events for this run</p>
+                    <p className="text-sm">{t('detail.events.noEvents')}</p>
                   </div>
                 ) : (
                   <div className="p-4 space-y-1.5">
-                    <p className="text-[10px] text-gray-400 mb-2">{events.length} events</p>
+                    <p className="text-[10px] text-gray-400 mb-2">{t('detail.events.count', { count: events.length })}</p>
                     {events.map((evt, i) => (
                       <RunEventCard key={`${evt.hook_name}-${i}`} event={evt} />
                     ))}
@@ -1431,7 +1447,7 @@ export default function AgentDetail() {
                     return (
                       <div className="flex flex-col items-center justify-center h-full text-error gap-2 p-6 text-center">
                         <span className="material-symbols-outlined text-4xl">error</span>
-                        <p className="text-sm font-semibold">Failed to load timeline</p>
+                        <p className="text-sm font-semibold">{t('detail.timeline.loadFailedHeading')}</p>
                         <p className="text-xs text-gray-400 max-w-md break-words">{timelineError}</p>
                       </div>
                     )
@@ -1447,7 +1463,7 @@ export default function AgentDetail() {
                     return (
                       <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
                         <span className="material-symbols-outlined text-4xl">inbox</span>
-                        <p className="text-sm">No timeline events for this session</p>
+                        <p className="text-sm">{t('detail.timeline.empty')}</p>
                       </div>
                     )
                   }
@@ -1471,7 +1487,7 @@ export default function AgentDetail() {
             {eventsTruncated && (
               <div className="px-6 py-2 border-t border-outline-variant/20 shrink-0 flex items-center gap-2">
                 <span className="material-symbols-outlined text-[14px] text-amber-400">warning</span>
-                <span className="text-[10px] text-amber-400">Showing first 500 events — session has more. Select a specific run from the sidebar to narrow the view.</span>
+                <span className="text-[10px] text-amber-400">{t('detail.eventsTruncated')}</span>
               </div>
             )}
 

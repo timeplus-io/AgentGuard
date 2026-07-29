@@ -1,17 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
 import DLPEnableWizard from '../components/DLPEnableWizard'
+import { formatDate, formatNumber } from '../i18n/format'
 
-const EXAMPLE_PROMPTS = [
-  'Did any agent leak credentials or API keys in the last week?',
-  'Show me conversations where customer email addresses appeared',
-  'Which sessions discussed production database passwords?',
-  'Was any source code exfiltrated to external services this month?',
-]
+const EXAMPLE_PROMPT_KEYS = ['credentialLeak', 'customerEmail', 'dbPasswords', 'sourceCodeExfil']
 
 const ROLES = ['user', 'assistant', 'tool']
 
@@ -23,7 +20,7 @@ function formatTs(ts) {
       : ts
     const d = new Date(normalized)
     if (isNaN(d.getTime())) return String(ts)
-    return d.toLocaleString()
+    return formatDate(d)
   } catch { return String(ts) }
 }
 
@@ -46,7 +43,7 @@ function RiskScoreBadge({ score }) {
     : 'bg-gray-700 text-gray-400 border border-gray-600'
   return (
     <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 whitespace-nowrap ${cls}`}>
-      {s.toFixed(2)}
+      {formatNumber(s, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </span>
   )
 }
@@ -69,6 +66,7 @@ function RiskTagChips({ tags, onClick }) {
 }
 
 function RoleBadge({ role }) {
+  const { t } = useTranslation('dlp')
   const styles = {
     user: 'bg-[#ffb0cf]/10 text-primary',
     assistant: 'bg-sky-900/50 text-sky-300',
@@ -76,7 +74,7 @@ function RoleBadge({ role }) {
   }
   return (
     <span className={`text-[10px] font-semibold uppercase rounded-full px-2 py-0.5 ${styles[role] || styles.tool}`}>
-      {role || '—'}
+      {role ? t(`role.${role}`, { defaultValue: role }) : '—'}
     </span>
   )
 }
@@ -95,6 +93,7 @@ function StageDot({ done, active, label }) {
 }
 
 function EvidenceCard({ ev, onOpenMessage }) {
+  const { t } = useTranslation('dlp')
   return (
     <div className="bg-surface-container-high rounded-sm p-4 flex flex-col gap-2">
       <div className="flex items-center gap-2 flex-wrap">
@@ -103,8 +102,8 @@ function EvidenceCard({ ev, onOpenMessage }) {
         <span className="text-[10px] text-gray-400">{formatTs(ev.event_time)}</span>
         <span className="ml-auto flex items-center gap-2">
           {ev.rerank_score > 0 && (
-            <span className="text-[10px] text-gray-400" title="Relevance score from reranker">
-              rel {Number(ev.rerank_score).toFixed(2)}
+            <span className="text-[10px] text-gray-400" title={t('askPanel.evidence.relevanceTitle')}>
+              {t('askPanel.evidence.relevanceValue', { formatted: formatNumber(Number(ev.rerank_score), { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })}
             </span>
           )}
           <RiskScoreBadge score={ev.risk_score} />
@@ -117,14 +116,14 @@ function EvidenceCard({ ev, onOpenMessage }) {
           onClick={() => onOpenMessage(ev.message_id)}
           className="text-[11px] font-semibold text-primary hover:underline"
         >
-          Message detail
+          {t('askPanel.evidence.messageDetail')}
         </button>
         {sessionHref(ev) && (
           <Link
             to={sessionHref(ev)}
             className="text-[11px] font-semibold text-gray-400 hover:text-gray-100"
           >
-            Open session →
+            {t('common.openSession')}
           </Link>
         )}
       </div>
@@ -133,6 +132,7 @@ function EvidenceCard({ ev, onOpenMessage }) {
 }
 
 function AskPanel({ onOpenMessage }) {
+  const { t } = useTranslation('dlp')
   const [question, setQuestion] = useState('')
   const [asking, setAsking] = useState(false)
   const [stages, setStages] = useState(null) // { intent, candidates, reranked, answer, error }
@@ -156,7 +156,7 @@ function AskPanel({ onOpenMessage }) {
       }
     } catch (err) {
       if (err?.name !== 'AbortError') {
-        setStages(prev => ({ ...prev, error: { error: err?.message || 'Query failed' } }))
+        setStages(prev => ({ ...prev, error: { error: err?.message || t('askPanel.errors.queryFailed') } }))
       }
     } finally {
       setAsking(false)
@@ -172,7 +172,7 @@ function AskPanel({ onOpenMessage }) {
   return (
     <section className="bg-surface-container rounded-sm p-6 mb-6">
       <h3 className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-3">
-        Ask about data exposure
+        {t('askPanel.heading')}
       </h3>
       <form
         onSubmit={e => { e.preventDefault(); ask(question) }}
@@ -182,7 +182,7 @@ function AskPanel({ onOpenMessage }) {
           type="text"
           value={question}
           onChange={e => setQuestion(e.target.value)}
-          placeholder="e.g. Did any agent leak credentials in the last week?"
+          placeholder={t('askPanel.placeholder')}
           className="flex-1 bg-surface-container-high text-gray-100 text-sm rounded-sm px-4 py-2.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50"
         />
         <button
@@ -190,54 +190,56 @@ function AskPanel({ onOpenMessage }) {
           disabled={asking || !question.trim()}
           className="px-5 py-2 text-xs font-semibold rounded bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-95 transition-transform disabled:opacity-50 whitespace-nowrap"
         >
-          {asking ? 'Investigating…' : 'Investigate'}
+          {asking ? t('askPanel.submitting') : t('askPanel.submit')}
         </button>
       </form>
 
       <div className="flex flex-wrap gap-2 mt-3">
-        {EXAMPLE_PROMPTS.map(p => (
-          <button
-            key={p}
-            onClick={() => { setQuestion(p); ask(p) }}
-            disabled={asking}
-            className="text-[11px] px-3 py-1.5 rounded-full bg-surface-container-high text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors disabled:opacity-50"
-          >
-            {p}
-          </button>
-        ))}
+        {EXAMPLE_PROMPT_KEYS.map(key => {
+          const p = t(`askPanel.examplePrompts.${key}`)
+          return (
+            <button
+              key={key}
+              onClick={() => { setQuestion(p); ask(p) }}
+              disabled={asking}
+              className="text-[11px] px-3 py-1.5 rounded-full bg-surface-container-high text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors disabled:opacity-50"
+            >
+              {p}
+            </button>
+          )
+        })}
       </div>
 
       {stages && (
         <div className="mt-6">
           {/* Stage progress */}
           <div className="flex items-center gap-6 mb-4">
-            <StageDot done={!!intent} active={asking && !intent} label="Understand" />
-            <StageDot done={!!candidates} active={asking && !!intent && !candidates} label="Recall" />
-            <StageDot done={!!reranked} active={asking && !!candidates && !reranked} label="Rerank" />
-            <StageDot done={!!answer} active={asking && !!reranked && !answer} label="Report" />
+            <StageDot done={!!intent} active={asking && !intent} label={t('askPanel.stages.understand')} />
+            <StageDot done={!!candidates} active={asking && !!intent && !candidates} label={t('askPanel.stages.recall')} />
+            <StageDot done={!!reranked} active={asking && !!candidates && !reranked} label={t('askPanel.stages.rerank')} />
+            <StageDot done={!!answer} active={asking && !!reranked && !answer} label={t('askPanel.stages.report')} />
           </div>
 
           {intent && (
             <div className="bg-surface-container-high rounded-sm p-4 mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px]">
-              <span className="text-gray-400 uppercase tracking-widest font-semibold text-[10px]">Intent</span>
+              <span className="text-gray-400 uppercase tracking-widest font-semibold text-[10px]">{t('askPanel.intent.heading')}</span>
               {intent.keywords?.length > 0 && (
-                <span className="text-gray-100">keywords: <span className="font-mono text-primary">{intent.keywords.join(', ')}</span></span>
+                <span className="text-gray-100">{t('askPanel.intent.keywordsLabel')} <span className="font-mono text-primary">{intent.keywords.join(', ')}</span></span>
               )}
               {intent.entity_types?.length > 0 && (
-                <span className="text-gray-100">entities: <span className="font-mono text-primary">{intent.entity_types.join(', ')}</span></span>
+                <span className="text-gray-100">{t('askPanel.intent.entitiesLabel')} <span className="font-mono text-primary">{intent.entity_types.join(', ')}</span></span>
               )}
               {intent.risk_tags?.length > 0 && (
-                <span className="text-gray-100">risk tags: <span className="font-mono text-error">{intent.risk_tags.join(', ')}</span></span>
+                <span className="text-gray-100">{t('askPanel.intent.riskTagsLabel')} <span className="font-mono text-error">{intent.risk_tags.join(', ')}</span></span>
               )}
-              <span className="text-gray-100">window: <span className="font-mono text-primary">{intent.time_range_days}d</span></span>
+              <span className="text-gray-100">{t('askPanel.intent.windowLabel')} <span className="font-mono text-primary">{t('askPanel.intent.windowValue', { count: intent.time_range_days })}</span></span>
             </div>
           )}
 
           {candidates && (
             <p className="text-[11px] text-gray-400 mb-3">
-              {candidates.count} candidate message{candidates.count === 1 ? '' : 's'}
-              {' '}(structured {candidates.structured ?? 0}, vector {candidates.vector ?? 0})
-              {reranked && !reranked.skipped && <> → top {reranked.kept} after rerank</>}
+              {t('askPanel.candidates.summary', { count: candidates.count, structured: candidates.structured ?? 0, vector: candidates.vector ?? 0 })}
+              {reranked && !reranked.skipped && t('askPanel.candidates.rerankedTo', { count: reranked.kept })}
             </p>
           )}
 
@@ -251,13 +253,13 @@ function AskPanel({ onOpenMessage }) {
           {answer && (
             <>
               <div className="bg-surface-container-high rounded-sm p-5 mb-4">
-                <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Audit report</h4>
+                <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">{t('askPanel.answer.reportHeading')}</h4>
                 <p className="text-sm text-gray-100 whitespace-pre-wrap leading-relaxed">{answer.report}</p>
               </div>
               {answer.evidence?.length > 0 && (
                 <>
                   <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">
-                    Cited evidence ({answer.evidence.length})
+                    {t('askPanel.answer.evidenceHeading', { count: answer.evidence.length })}
                   </h4>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     {answer.evidence.map(ev => (
@@ -277,17 +279,18 @@ function AskPanel({ onOpenMessage }) {
 // ── Risk profile widgets ─────────────────────────────────────────────────────
 
 function ProfileCard({ title, entries, renderKey }) {
+  const { t } = useTranslation('dlp')
   return (
     <div className="bg-surface-container rounded-sm p-5">
       <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">{title}</h4>
       {!entries?.length ? (
-        <p className="text-xs text-gray-400">No flagged messages in window.</p>
+        <p className="text-xs text-gray-400">{t('profiles.empty')}</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {entries.slice(0, 5).map(e => (
             <li key={e.key} className="flex items-center gap-2 text-xs">
               <span className="min-w-0 flex-1 truncate">{renderKey(e)}</span>
-              <span className="text-gray-400 whitespace-nowrap">{e.flagged_count} flagged</span>
+              <span className="text-gray-400 whitespace-nowrap">{t('profiles.flaggedCount', { count: e.flagged_count })}</span>
               <RiskScoreBadge score={e.max_risk_score} />
             </li>
           ))}
@@ -298,42 +301,43 @@ function ProfileCard({ title, entries, renderKey }) {
 }
 
 function RiskProfiles({ onTagClick, onAgentClick }) {
+  const { t } = useTranslation('dlp')
   const [profiles, setProfiles] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     api.dlpProfiles(30)
       .then(setProfiles)
-      .catch(err => setError(err?.message || 'Failed to load risk profiles'))
-  }, [])
+      .catch(err => setError(err?.message || t('profiles.errors.loadFailed')))
+  }, [t])
 
   if (error) {
     return (
       <section className="bg-surface-container rounded-sm p-4 mb-6 text-xs text-error">
-        Risk profiles unavailable: {error}
+        {t('profiles.unavailable', { message: error })}
       </section>
     )
   }
   return (
     <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
       <ProfileCard
-        title={`Top risk agents (${profiles?.window_days ?? 30}d)`}
+        title={t('profiles.topAgents', { days: profiles?.window_days ?? 30 })}
         entries={profiles?.top_agents}
         renderKey={e => (
           <button onClick={() => onAgentClick(e.key)} className="font-mono text-primary hover:underline truncate" title={e.key}>
-            {e.key || '(unknown)'}
+            {e.key || t('profiles.unknownAgent')}
           </button>
         )}
       />
       <ProfileCard
-        title="Top risk sessions"
+        title={t('profiles.topSessions')}
         entries={profiles?.top_sessions}
         renderKey={e => (
           <code className="font-mono text-gray-100 truncate" title={e.key}>{truncId(e.key, 20)}</code>
         )}
       />
       <ProfileCard
-        title="Top risk tags"
+        title={t('profiles.topTags')}
         entries={profiles?.top_tags}
         renderKey={e => (
           <button
@@ -351,6 +355,7 @@ function RiskProfiles({ onTagClick, onAgentClick }) {
 // ── Message detail drawer ────────────────────────────────────────────────────
 
 function MessageDetail({ messageId, onClose }) {
+  const { t } = useTranslation('dlp')
   const [msg, setMsg] = useState(null)
   const [error, setError] = useState(null)
 
@@ -359,8 +364,8 @@ function MessageDetail({ messageId, onClose }) {
     setError(null)
     api.dlpMessage(messageId)
       .then(setMsg)
-      .catch(err => setError(err?.message || 'Failed to load message'))
-  }, [messageId])
+      .catch(err => setError(err?.message || t('detail.errors.loadFailed')))
+  }, [messageId, t])
 
   return (
     // z-[70] keeps the drawer above the TopNav header (z-[60])
@@ -371,14 +376,14 @@ function MessageDetail({ messageId, onClose }) {
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-100">Enriched message</h3>
+          <h3 className="text-sm font-semibold text-gray-100">{t('detail.heading')}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-100">
             <span className="material-symbols-outlined text-base">close</span>
           </button>
         </div>
 
         {error && <p className="text-xs text-error">{error}</p>}
-        {!msg && !error && <p className="text-xs text-gray-400">Loading…</p>}
+        {!msg && !error && <p className="text-xs text-gray-400">{t('loading')}</p>}
 
         {msg && (
           <>
@@ -392,15 +397,15 @@ function MessageDetail({ messageId, onClose }) {
 
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[11px]">
               {[
-                ['Message ID', msg.message_id],
-                ['Agent', msg.agent_id],
-                ['Agent type', msg.agent_type],
-                ['Deployment', msg.deployment_id],
-                ['Session', msg.session_id],
-                ['Run', msg.run_id],
-                ['Model', msg.model],
-                ['Tool', msg.tool_name],
-                ['Embedding dim', msg.embedding_dim > 0 ? String(msg.embedding_dim) : 'not embedded'],
+                [t('detail.fields.messageId'), msg.message_id],
+                [t('detail.fields.agent'), msg.agent_id],
+                [t('detail.fields.agentType'), msg.agent_type],
+                [t('detail.fields.deployment'), msg.deployment_id],
+                [t('detail.fields.session'), msg.session_id],
+                [t('detail.fields.run'), msg.run_id],
+                [t('detail.fields.model'), msg.model],
+                [t('detail.fields.tool'), msg.tool_name],
+                [t('detail.fields.embeddingDim'), msg.embedding_dim > 0 ? String(msg.embedding_dim) : t('detail.fields.notEmbedded')],
               ].filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} className="contents">
                   <dt className="text-gray-400 uppercase tracking-widest text-[9px] font-semibold pt-0.5">{k}</dt>
@@ -414,13 +419,13 @@ function MessageDetail({ messageId, onClose }) {
                 to={sessionHref(msg)}
                 className="text-[11px] font-semibold text-primary hover:underline w-fit"
               >
-                Open session →
+                {t('common.openSession')}
               </Link>
             )}
 
             {Object.keys(msg.entities || {}).length > 0 && (
               <div>
-                <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Detected entities</h4>
+                <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">{t('detail.entitiesHeading')}</h4>
                 <div className="flex flex-col gap-1.5">
                   {Object.entries(msg.entities).map(([type, values]) => (
                     <div key={type} className="flex items-start gap-2 text-[11px]">
@@ -433,7 +438,7 @@ function MessageDetail({ messageId, onClose }) {
             )}
 
             <div>
-              <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Content</h4>
+              <h4 className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">{t('detail.contentHeading')}</h4>
               <pre className="text-xs text-gray-100 whitespace-pre-wrap break-words bg-surface-container-high rounded-sm p-4 font-sans">
                 {msg.content}
               </pre>
@@ -451,6 +456,7 @@ const PAGE_SIZE = 25
 const EMPTY_FILTERS = { risk_tag: '', role: '', min_score: '', agent_id: '' }
 
 function MessageBrowser({ filters, setFilters, onOpenMessage }) {
+  const { t } = useTranslation('dlp')
   const [messages, setMessages] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -469,10 +475,10 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
         setTotal(data.total || 0)
         setError(null)
       })
-      .catch(err => { if (!cancelled) setError(err?.message || 'Failed to load messages') })
+      .catch(err => { if (!cancelled) setError(err?.message || t('browser.errors.loadFailed')) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [filters, page])
+  }, [filters, page, t])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const hasFilters = Object.values(filters).some(v => v !== '')
@@ -482,8 +488,7 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
     <section className="bg-surface-container rounded-sm overflow-hidden">
       <div className="px-6 py-4 flex flex-wrap items-center gap-4">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-          Enriched messages
-          <span className="ml-2 text-gray-400 font-normal normal-case">({total})</span>
+          {t('browser.heading', { count: total })}
         </span>
 
         <div className="flex flex-wrap items-center gap-2 ml-auto">
@@ -491,14 +496,14 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
             type="text"
             value={filters.risk_tag}
             onChange={e => setFilter('risk_tag', e.target.value)}
-            placeholder="risk tag"
+            placeholder={t('browser.filters.riskTagPlaceholder')}
             className="w-32 bg-surface-container-high text-gray-100 text-[11px] rounded-sm px-3 py-1.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50"
           />
           <input
             type="text"
             value={filters.agent_id}
             onChange={e => setFilter('agent_id', e.target.value)}
-            placeholder="agent id"
+            placeholder={t('browser.filters.agentIdPlaceholder')}
             className="w-32 bg-surface-container-high text-gray-100 text-[11px] rounded-sm px-3 py-1.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#ffb0cf]/50"
           />
           <select
@@ -506,25 +511,25 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
             onChange={e => setFilter('role', e.target.value)}
             className="bg-surface-container-high text-gray-100 text-[11px] rounded-sm px-2 py-1.5 focus:outline-none"
           >
-            <option value="">All roles</option>
-            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+            <option value="">{t('browser.filters.allRoles')}</option>
+            {ROLES.map(r => <option key={r} value={r}>{t(`role.${r}`, { defaultValue: r })}</option>)}
           </select>
           <select
             value={filters.min_score}
             onChange={e => setFilter('min_score', e.target.value)}
             className="bg-surface-container-high text-gray-100 text-[11px] rounded-sm px-2 py-1.5 focus:outline-none"
           >
-            <option value="">Any risk</option>
-            <option value="0.3">≥ 0.3</option>
-            <option value="0.5">≥ 0.5</option>
-            <option value="0.7">≥ 0.7</option>
+            <option value="">{t('browser.filters.anyRisk')}</option>
+            <option value="0.3">{t('browser.filters.atLeast', { value: formatNumber(0.3, { minimumFractionDigits: 1 }) })}</option>
+            <option value="0.5">{t('browser.filters.atLeast', { value: formatNumber(0.5, { minimumFractionDigits: 1 }) })}</option>
+            <option value="0.7">{t('browser.filters.atLeast', { value: formatNumber(0.7, { minimumFractionDigits: 1 }) })}</option>
           </select>
           {hasFilters && (
             <button
               onClick={() => setFilters(EMPTY_FILTERS)}
               className="text-[11px] text-gray-400 hover:text-gray-100"
             >
-              Clear
+              {t('browser.filters.clear')}
             </button>
           )}
         </div>
@@ -534,8 +539,15 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
         <table className="w-full text-left border-collapse">
           <thead className="bg-surface-container-high sticky top-0 z-10">
             <tr>
-              {['Time', 'Role', 'Agent', 'Risk', 'Tags', 'Content'].map(h => (
-                <th key={h} className="px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
+              {[
+                ['time', t('browser.headers.time')],
+                ['role', t('browser.headers.role')],
+                ['agent', t('browser.headers.agent')],
+                ['risk', t('browser.headers.risk')],
+                ['tags', t('browser.headers.tags')],
+                ['content', t('browser.headers.content')],
+              ].map(([key, h]) => (
+                <th key={key} className="px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
                   {h}
                 </th>
               ))}
@@ -543,13 +555,13 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
           </thead>
           <tbody className="divide-y divide-outline-variant/10">
             {loading ? (
-              <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-xs">Loading messages…</td></tr>
+              <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-xs">{t('browser.loading')}</td></tr>
             ) : error ? (
               <tr><td colSpan={6} className="px-6 py-12 text-center text-xs text-error">{error}</td></tr>
             ) : messages.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-xs">
-                  {hasFilters ? 'No messages match the current filters.' : 'No enriched messages yet.'}
+                  {hasFilters ? t('browser.emptyFiltered') : t('browser.empty')}
                 </td>
               </tr>
             ) : messages.map(m => (
@@ -585,15 +597,15 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
             disabled={page <= 1}
             className="px-2 py-1 rounded-sm hover:bg-surface-container-high disabled:opacity-40"
           >
-            ← Prev
+            {t('browser.pagination.prev')}
           </button>
-          <span>Page {page} of {totalPages}</span>
+          <span>{t('browser.pagination.pageOf', { page, totalPages })}</span>
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
             className="px-2 py-1 rounded-sm hover:bg-surface-container-high disabled:opacity-40"
           >
-            Next →
+            {t('browser.pagination.next')}
           </button>
         </div>
       )}
@@ -604,6 +616,7 @@ function MessageBrowser({ filters, setFilters, onOpenMessage }) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SemanticDLP() {
+  const { t } = useTranslation('dlp')
   const [status, setStatus] = useState(null)
   const [statusError, setStatusError] = useState(null)
   const [filters, setFilters] = useState(EMPTY_FILTERS)
@@ -612,8 +625,8 @@ export default function SemanticDLP() {
   const loadStatus = useCallback(() => {
     api.dlpStatus()
       .then(s => { setStatus(s); setStatusError(null) })
-      .catch(err => setStatusError(err?.message || 'Failed to load DLP status'))
-  }, [])
+      .catch(err => setStatusError(err?.message || t('errors.loadStatusFailed')))
+  }, [t])
 
   useEffect(() => { loadStatus() }, [loadStatus])
 
@@ -628,11 +641,15 @@ export default function SemanticDLP() {
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-8">
           <PageHeader
-            title="Semantic DLP"
-            subtitle="Ask natural-language questions about sensitive data exposure across agent conversations, backed by entity extraction, risk scoring, and vector search."
+            title={t('title')}
+            subtitle={t('subtitle')}
             actions={status && provisioned && (
-              <span className="text-[11px] text-gray-400 self-end" title="Rows with embeddings / total enriched rows">
-                {status.total_rows} messages · {Math.round((status.embedding_coverage || 0) * 100)}% embedded · {status.flagged_rows} flagged
+              <span className="text-[11px] text-gray-400 self-end" title={t('header.embeddingTitleAttr')}>
+                {t('header.messagesCount', { count: status.total_rows || 0 })}
+                {' · '}
+                {t('header.embeddedPct', { formatted: formatNumber(status.embedding_coverage || 0, { style: 'percent', maximumFractionDigits: 0 }) })}
+                {' · '}
+                {t('header.flaggedCount', { count: status.flagged_rows || 0 })}
               </span>
             )}
           />
@@ -643,7 +660,7 @@ export default function SemanticDLP() {
               {statusError}
             </section>
           ) : !status ? (
-            <p className="text-xs text-gray-400">Loading…</p>
+            <p className="text-xs text-gray-400">{t('loading')}</p>
           ) : !provisioned ? (
             <DLPEnableWizard status={status} onProvisioned={loadStatus} />
           ) : (

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { SeverityBadge, ThreatStatusBadge } from './Badge'
 import { api } from '../api/client'
+import { formatDate } from '../i18n/format'
 
 function AgentTypeLogo({ agentType }) {
   if (agentType === 'claudecode') {
@@ -24,7 +26,7 @@ function formatTs(ts) {
       : ts
     const d = new Date(normalized)
     if (isNaN(d.getTime())) return String(ts)
-    return d.toLocaleString()
+    return formatDate(d)
   } catch { return String(ts) }
 }
 
@@ -38,6 +40,7 @@ function formatTs(ts) {
  *   showFilters — renders the severity + status filter bar (default true)
  */
 export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters = true }) {
+  const { t } = useTranslation('threats')
   const [threats, setThreats] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
@@ -68,7 +71,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
         const data = await api.getThreats()
         if (!cancelled) { setThreats(data.threats || []); setLoadError(null) }
       } catch (err) {
-        if (!cancelled) setLoadError(err?.message || 'Failed to load threats')
+        if (!cancelled) setLoadError(err?.message || t('list.errors.loadFailed'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -78,17 +81,17 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
     return () => { cancelled = true; clearInterval(timer) }
   }, [])
 
-  const filtered = threats.filter(t => {
-    if (ruleId && t.rule_id !== ruleId) return false
-    if (severityFilter !== 'All' && t.severity?.toLowerCase() !== severityFilter.toLowerCase()) return false
-    if (statusFilter !== 'All' && t.status !== statusFilter.toLowerCase()) return false
+  const filtered = threats.filter(th => {
+    if (ruleId && th.rule_id !== ruleId) return false
+    if (severityFilter !== 'All' && th.severity?.toLowerCase() !== severityFilter.toLowerCase()) return false
+    if (statusFilter !== 'All' && th.status !== statusFilter.toLowerCase()) return false
     return true
   })
 
   async function handleAcknowledge(threat) {
     setActionError(null)
-    setThreats(prev => prev.map(t =>
-      t.threat_id === threat.threat_id ? { ...t, status: 'acknowledged' } : t
+    setThreats(prev => prev.map(th =>
+      th.threat_id === threat.threat_id ? { ...th, status: 'acknowledged' } : th
     ))
     try {
       await api.acknowledgeThreat(threat.threat_id, {
@@ -99,17 +102,17 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
       })
     } catch (err) {
       console.error('ThreatsList: acknowledge failed:', err)
-      setThreats(prev => prev.map(t =>
-        t.threat_id === threat.threat_id ? { ...t, status: threat.status } : t
+      setThreats(prev => prev.map(th =>
+        th.threat_id === threat.threat_id ? { ...th, status: threat.status } : th
       ))
-      setActionError(`Acknowledge failed: ${err?.message ?? String(err)}`)
+      setActionError(t('errors.acknowledgeFailed', { message: err?.message ?? String(err) }))
     }
   }
 
   async function handleClear(threat) {
     setActionError(null)
-    setThreats(prev => prev.map(t =>
-      t.threat_id === threat.threat_id ? { ...t, status: 'cleared' } : t
+    setThreats(prev => prev.map(th =>
+      th.threat_id === threat.threat_id ? { ...th, status: 'cleared' } : th
     ))
     try {
       await api.clearThreat(threat.threat_id, {
@@ -120,25 +123,35 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
       })
     } catch (err) {
       console.error('ThreatsList: clear failed:', err)
-      setThreats(prev => prev.map(t =>
-        t.threat_id === threat.threat_id ? { ...t, status: threat.status } : t
+      setThreats(prev => prev.map(th =>
+        th.threat_id === threat.threat_id ? { ...th, status: threat.status } : th
       ))
-      setActionError(`Clear failed: ${err?.message ?? String(err)}`)
+      setActionError(t('errors.clearFailed', { message: err?.message ?? String(err) }))
     }
   }
 
   const colSpan = hideRuleCol ? 7 : 8
-  const headers = ['Severity', 'Status', ...(!hideRuleCol ? ['Rule / Message'] : []), 'Agent', 'Session', 'Events', 'Last Seen', 'Actions']
+  const headers = [
+    t('list.headers.severity'),
+    t('list.headers.status'),
+    ...(!hideRuleCol ? [t('list.headers.ruleMessage')] : []),
+    t('list.headers.agent'),
+    t('list.headers.session'),
+    t('list.headers.events'),
+    t('list.headers.lastSeen'),
+    t('list.headers.actions'),
+  ]
 
   return (
     <>
       {showFilters && (
         <section className="bg-surface-container rounded p-6 mb-6 flex flex-wrap items-center gap-6">
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Severity</label>
+            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('list.filters.severityLabel')}</label>
             <div className="flex gap-1">
               {['All', 'Critical', 'Warning', 'Info'].map(label => {
                 const isActive = severityFilter === label
+                const displayLabel = label === 'All' ? t('list.filters.all') : t(`severity.${label.toLowerCase()}`)
                 return (
                   <button
                     key={label}
@@ -149,7 +162,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                         : 'bg-gray-800 text-gray-400 border border-gray-600 hover:text-gray-100 hover:border-pink-500'
                     }`}
                   >
-                    {label}
+                    {displayLabel}
                   </button>
                 )
               })}
@@ -157,7 +170,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Status</label>
+            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('list.filters.statusLabel')}</label>
             <div className="flex gap-1">
               {['All', 'open', 'acknowledged', 'cleared'].map(s => (
                 <button
@@ -169,7 +182,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
                       : 'bg-gray-800 text-gray-400 border border-gray-600 hover:text-gray-100 hover:border-pink-500'
                   }`}
                 >
-                  {s === 'All' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+                  {s === 'All' ? t('list.filters.all') : t(`threatStatus.${s}`)}
                 </button>
               ))}
             </div>
@@ -190,8 +203,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
       <section className="bg-surface-container rounded-sm overflow-hidden mb-8">
         <div className="px-6 py-4 flex items-center justify-between border-b border-outline-variant/10">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-            Threats
-            <span className="ml-2 text-gray-400 font-normal normal-case">({filtered.length})</span>
+            {t('list.heading', { count: filtered.length })}
           </span>
         </div>
         <div className="overflow-auto">
@@ -209,7 +221,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
               {loading ? (
                 <tr>
                   <td colSpan={colSpan} className="px-6 py-12 text-center text-gray-400 text-xs">
-                    Loading threats…
+                    {t('list.loading')}
                   </td>
                 </tr>
               ) : loadError ? (
@@ -224,92 +236,92 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={colSpan} className="px-6 py-12 text-center text-gray-400 text-xs">
-                    {threats.length > 0 ? 'No threats match the current filters.' : 'No threats detected.'}
+                    {threats.length > 0 ? t('list.emptyFiltered') : t('list.empty')}
                   </td>
                 </tr>
-              ) : filtered.map(t => (
+              ) : filtered.map(th => (
                 <tr
-                    key={t.threat_id}
-                    onClick={() => navigate(`/threats/${t.threat_id}`)}
+                    key={th.threat_id}
+                    onClick={() => navigate(`/threats/${th.threat_id}`)}
                     className="hover:bg-surface-container-high transition-colors cursor-pointer"
                   >
                     <td className="px-6 py-4">
-                      <SeverityBadge severity={t.severity} />
+                      <SeverityBadge severity={th.severity} />
                     </td>
                     <td className="px-6 py-4">
-                      <ThreatStatusBadge status={t.status} />
+                      <ThreatStatusBadge status={th.status} />
                     </td>
                     {!hideRuleCol && (
                       <td className="px-6 py-4 max-w-xs">
-                        {t.rule_id ? (
+                        {th.rule_id ? (
                           <Link
-                            to={`/rules/${t.rule_id}`}
+                            to={`/rules/${th.rule_id}`}
                             onClick={e => e.stopPropagation()}
                             className="text-xs font-semibold text-gray-100 hover:text-primary transition-colors"
                           >
-                            {t.rule_name}
+                            {th.rule_name}
                           </Link>
                         ) : (
-                          <p className="text-xs font-semibold text-gray-100">{t.rule_name}</p>
+                          <p className="text-xs font-semibold text-gray-100">{th.rule_name}</p>
                         )}
-                        {t.events && t.events[0]?.message && (
-                          <p className="text-[10px] text-gray-400 font-medium truncate">{t.events[0].message}</p>
+                        {th.events && th.events[0]?.message && (
+                          <p className="text-[10px] text-gray-400 font-medium truncate">{th.events[0].message}</p>
                         )}
                       </td>
                     )}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1.5">
-                        <AgentTypeLogo agentType={agentTypeMap[t.agent_id]} />
+                        <AgentTypeLogo agentType={agentTypeMap[th.agent_id]} />
                         <code className="text-xs font-mono text-primary px-2 py-0.5 bg-[#ffb0cf]/5 rounded-sm">
-                          {t.agent_id}
+                          {th.agent_id}
                         </code>
                       </div>
-                      {t.deployment_id && (
+                      {th.deployment_id && (
                         <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate max-w-[160px]">
-                          {t.deployment_id}
+                          {th.deployment_id}
                         </p>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      {t.session_id ? (
-                        <code className="text-[10px] font-mono text-gray-400 px-1.5 py-0.5 bg-surface-container-high rounded-sm truncate block max-w-[120px]" title={t.session_id}>
-                          {t.session_id.length > 12 ? t.session_id.slice(0, 12) + '…' : t.session_id}
+                      {th.session_id ? (
+                        <code className="text-[10px] font-mono text-gray-400 px-1.5 py-0.5 bg-surface-container-high rounded-sm truncate block max-w-[120px]" title={th.session_id}>
+                          {th.session_id.length > 12 ? th.session_id.slice(0, 12) + '…' : th.session_id}
                         </code>
                       ) : (
                         <span className="text-gray-400 text-xs">—</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs text-gray-100 font-semibold">{t.event_count} events</span>
-                      <p className="text-[10px] text-gray-400 whitespace-nowrap">{formatTs(t.first_seen)}</p>
+                      <span className="text-xs text-gray-100 font-semibold">{t('list.eventsCount', { count: th.event_count })}</span>
+                      <p className="text-[10px] text-gray-400 whitespace-nowrap">{formatTs(th.first_seen)}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs text-gray-400 whitespace-nowrap">{formatTs(t.last_seen)}</span>
+                      <span className="text-xs text-gray-400 whitespace-nowrap">{formatTs(th.last_seen)}</span>
                     </td>
                     <td className="px-6 py-4" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1.5">
-                        {t.status === 'open' && (
+                        {th.status === 'open' && (
                           <>
                             <button
-                              onClick={() => handleAcknowledge(t)}
+                              onClick={() => handleAcknowledge(th)}
                               className="px-2.5 py-1 text-[10px] font-semibold rounded-sm bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors whitespace-nowrap"
                             >
-                              Acknowledge
+                              {t('actions.acknowledge')}
                             </button>
                             <button
-                              onClick={() => handleClear(t)}
+                              onClick={() => handleClear(th)}
                               className="px-2.5 py-1 text-[10px] font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
                             >
-                              Clear
+                              {t('actions.clear')}
                             </button>
                           </>
                         )}
-                        {t.status === 'acknowledged' && (
+                        {th.status === 'acknowledged' && (
                           <button
-                            onClick={() => handleClear(t)}
+                            onClick={() => handleClear(th)}
                             className="px-2.5 py-1 text-[10px] font-semibold rounded-sm bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
                           >
-                            Clear
+                            {t('actions.clear')}
                           </button>
                         )}
                       </div>

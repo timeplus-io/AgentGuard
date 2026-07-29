@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../api/client'
 
 export default function Login() {
+  const { t } = useTranslation('auth')
   const { setAuth } = useAuth()
   const [username, setUsername] = useState(() => localStorage.getItem('agentguard_username') || '')
   const [password, setPassword] = useState('')
@@ -19,7 +21,7 @@ export default function Login() {
       setPassword('')
       setAuth(prev => ({ ...prev, loggedIn: true, username: data.username }))
     } catch (err) {
-      setError(err.message === 'HTTP 401' ? 'Invalid credentials' : (err.message || 'Login failed'))
+      setError(err.message === 'HTTP 401' ? t('login.errorInvalidCredentials') : (err.message || t('login.errorGeneric')))
     } finally {
       setLoading(false)
     }
@@ -38,19 +40,19 @@ export default function Login() {
               className="material-symbols-outlined text-4xl text-primary"
               style={{ fontVariationSettings: "'FILL' 1" }}
             >security</span>
-            <h1 className="text-2xl font-bold text-gray-100">Sign in to AgentGuard</h1>
-            <p className="text-gray-400 text-xs">Use your Timeplus credentials</p>
+            <h1 className="text-2xl font-bold text-gray-100">{t('login.title')}</h1>
+            <p className="text-gray-400 text-xs">{t('login.subtitle')}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="bg-surface-container-high rounded-sm p-8 space-y-4">
             <div className="space-y-1">
-              <label htmlFor="login-username" className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Username</label>
+              <label htmlFor="login-username" className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('login.usernameLabel')}</label>
               <input
                 id="login-username"
                 type="text"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                placeholder="default"
+                placeholder={t('login.usernamePlaceholder')}
                 required
                 autoComplete="username"
                 className="w-full bg-gray-800 border border-gray-600 text-sm py-2.5 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
@@ -58,13 +60,13 @@ export default function Login() {
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="login-password" className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Password</label>
+              <label htmlFor="login-password" className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('login.passwordLabel')}</label>
               <input
                 id="login-password"
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Leave blank if not set"
+                placeholder={t('login.passwordPlaceholder')}
                 autoComplete="current-password"
                 className="w-full bg-gray-800 border border-gray-600 text-sm py-2.5 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono"
               />
@@ -82,7 +84,7 @@ export default function Login() {
               disabled={loading || !username}
               className="w-full bg-primary-button py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] transition-transform disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {loading ? 'Signing in…' : 'Sign In'}
+              {loading ? t('login.submitting') : t('login.submit')}
             </button>
           </form>
         </div>

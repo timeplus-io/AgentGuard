@@ -1,0 +1,94 @@
+{
+  "title": "威胁",
+  "subtitle": "跨 AI 代理检测到的去重后安全威胁。",
+  "tabs": {
+    "threats": "威胁",
+    "activity": "活动",
+    "overview": "概览"
+  },
+  "pendingHolds": {
+    "heading": "⚠ 待处理挂起（{{count}}）",
+    "review": "查看 →"
+  },
+  "severity": {
+    "critical": "严重",
+    "warning": "警告",
+    "info": "信息"
+  },
+  "threatStatus": {
+    "open": "未处理",
+    "acknowledged": "已确认",
+    "cleared": "已清除"
+  },
+  "agentStatus": {
+    "ACTIVE": "活跃",
+    "THROTTLED": "已限流",
+    "SUSPENDED": "已暂停"
+  },
+  "actions": {
+    "acknowledge": "确认",
+    "clear": "清除"
+  },
+  "errors": {
+    "acknowledgeFailed": "确认失败：{{message}}",
+    "clearFailed": "清除失败：{{message}}"
+  },
+  "list": {
+    "filters": {
+      "severityLabel": "严重程度",
+      "statusLabel": "状态",
+      "all": "全部"
+    },
+    "headers": {
+      "severity": "严重程度",
+      "status": "状态",
+      "ruleMessage": "规则 / 消息",
+      "agent": "代理",
+      "session": "会话",
+      "events": "事件",
+      "lastSeen": "最近发现",
+      "actions": "操作"
+    },
+    "heading": "威胁（{{count}}）",
+    "loading": "正在加载威胁…",
+    "emptyFiltered": "没有威胁匹配当前筛选条件。",
+    "empty": "未检测到威胁。",
+    "eventsCount_one": "{{count}} 个事件",
+    "eventsCount_other": "{{count}} 个事件",
+    "errors": {
+      "loadFailed": "加载威胁失败"
+    }
+  },
+  "detail": {
+    "notFound": "未找到该威胁。",
+    "backToThreats": "← 返回威胁列表",
+    "pendingHoldFallbackName": "待处理挂起",
+    "cleared": "已清除",
+    "dismiss": "关闭",
+    "statLabels": {
+      "eventCount": "事件数",
+      "firstSeen": "首次发现",
+      "lastSeen": "最近发现",
+      "sessionId": "会话 ID"
+    },
+    "eventHistory": {
+      "heading": "事件历史（{{count}}）",
+      "empty": "暂无可用的事件历史。"
+    },
+    "eventCard": {
+      "run": "运行：{{runId}}"
+    },
+    "hold": {
+      "heading": "待处理挂起 — 代理已暂停",
+      "toolLabel": "工具：",
+      "noArguments": "（无参数）",
+      "reasonPlaceholder": "决定的可选原因...",
+      "approve": "✓ 批准",
+      "deny": "✗ 拒绝",
+      "decideFailedWithReason": "提交决定失败：{{reason}}",
+      "decideFailedRetry": "提交决定失败。请重试。",
+      "approvedNotice": "✓ 已批准 — 代理已收到通知。",
+      "deniedNotice": "✓ 已拒绝 — 代理已收到通知。"
+    }
+  }
+}

@@ -1,0 +1,350 @@
+{
+  "list": {
+    "title": "Rule Packs",
+    "subtitle": "Configure and manage security policies enforced across all monitored AI agents.",
+    "search": {
+      "placeholder": "Search rules…"
+    },
+    "errors": {
+      "loadFailed": "Failed to load rules. Please refresh.",
+      "toggleFailed": "Failed to {{action}} rule: {{message}}",
+      "installFailed": "Install failed — please try again",
+      "reloadCatalogFailed": "Imported but failed to reload catalog"
+    },
+    "importResult": {
+      "added": "Added:",
+      "updated": "Updated:",
+      "skipped": "Skipped:",
+      "skippedBuiltin": "Skipped — builtin rules are never overwritten by import (clone instead):",
+      "skippedCustom": "Skipped — your custom rule was kept (re-import with force to overwrite):",
+      "noChanges": "No changes — all entries already up to date."
+    },
+    "grid": {
+      "noMatch": "No rules match your search.",
+      "viewDetails": "View Details",
+      "inactive": "Inactive",
+      "detections_one": "{{count}} event detected (24h)",
+      "detections_other": "{{count}} events detected (24h)",
+      "customBadge": "Custom"
+    },
+    "pagination": {
+      "rulesCount_one": "{{count}} rule",
+      "rulesCount_other": "{{count}} rules",
+      "available": "{{count}} available",
+      "matching": " matching \"{{query}}\"",
+      "pageOf": "page {{page}} of {{total}}"
+    },
+    "availableToInstall": {
+      "heading": "Available to Install"
+    },
+    "confirmToggle": {
+      "title": "{{action}} Rule Pack",
+      "bodyBeforeAction": "Are you sure you want to ",
+      "bodyBetween": " ",
+      "bodyAfter": "?",
+      "enableNote": "This will create or resume the detection MV and start monitoring.",
+      "disableNote": "This will pause the detection MV and stop new events from being detected."
+    },
+    "confirmInstall": {
+      "title": "Install Rule Pack",
+      "bodyPrefix": "Are you sure you want to install",
+      "bodySuffix": "?",
+      "note": "This will create a detection MV and start monitoring immediately."
+    }
+  },
+  "create": {
+    "title": {
+      "new": "New Custom Rule",
+      "edit": "Edit Custom Definition"
+    },
+    "subtitle": "Author a parameterized detection: SQL template, typed parameters, and UDFs.",
+    "redeployNote": "If this rule is installed, publishing redeploys its detection view and in-flight stateful windows reset.",
+    "versionUnchanged": "Bump the version to publish an edit (current: {{version}}).",
+    "save": {
+      "saving": "Saving…",
+      "bumpVersion": "Bump version to publish",
+      "publishEdit": "Publish edit",
+      "createDefinition": "Create definition"
+    },
+    "saveDisabledReason": {
+      "requiredFields": "Fill in the required fields (name, version, SQL template).",
+      "invalidKey": "Give every parameter a valid key.",
+      "bumpVersion": "Bump the version to publish this edit."
+    },
+    "errors": {
+      "loadFailed": "Failed to load definition",
+      "saveFailed": "Failed to save definition",
+      "bumpVersionGuard": "Bump the version to publish an edit."
+    },
+    "metadata": {
+      "heading": "Rule Metadata",
+      "ruleId": "Rule ID",
+      "ruleIdPlaceholder": "required — lowercase id, e.g. my-rule",
+      "name": "Name",
+      "namePlaceholder": "My Custom Rule",
+      "version": "Version",
+      "versionEditHint": "Bump to publish an edit to an installed definition.",
+      "description": "Description",
+      "descriptionPlaceholder": "What does this rule detect?",
+      "severity": "Severity",
+      "category": "Category",
+      "categoryPlaceholder": "e.g. prompt_injection_and_hijacking",
+      "fpRate": "False Positive Rate",
+      "hookSources": "Hook Sources",
+      "hookSourcesPlaceholder": "e.g. before_tool_call"
+    },
+    "parameters": {
+      "heading": "Parameters",
+      "helpBefore": "Typed knobs operators can override. Reference them in the template as ",
+      "helpAfter": "."
+    },
+    "udfs": {
+      "heading": "UDFs",
+      "add": "Add UDF",
+      "empty": "Optional CREATE FUNCTION DDL statements this rule depends on.",
+      "label": "UDF {{n}}",
+      "remove": "Remove UDF"
+    },
+    "sqlTemplate": {
+      "heading": "SQL Template",
+      "compile": "Compile preview",
+      "compiling": "Compiling…"
+    },
+    "validationErrors": "Validation errors",
+    "compiledSql": {
+      "heading": "Compiled SQL",
+      "subtitle": "Rendered by the backend from the template + parameter defaults. The browser does not render SQL.",
+      "empty": "Click \"Compile preview\" to render the detection SQL.",
+      "compileFailed": "Compile failed"
+    }
+  },
+  "detail": {
+    "notFound": "Rule not found.",
+    "confirmToggle": {
+      "title": "{{action}} Rule",
+      "disableNote": "This drops the detection materialized view; re-enabling redeploys it from the current configuration.",
+      "enableNote": "This deploys the detection materialized view and starts monitoring."
+    },
+    "upgradeModal": {
+      "title": "Upgrade {{name}} → {{version}}",
+      "conflictsHeading": "Conflicts (block upgrade)",
+      "warningsHeading": "Warnings",
+      "compatible": "Compatible upgrade — all current overrides are preserved.",
+      "close": "Close"
+    },
+    "cloneModal": {
+      "title": "Clone as custom rule",
+      "bodyBefore": "Creates an editable copy of ",
+      "bodyAfter": " with rescoped UDF names.",
+      "newIdLabel": "New rule ID",
+      "newIdPlaceholder": "e.g. rp-003-custom",
+      "nameLabel": "Rule name",
+      "namePlaceholder": "e.g. Score Rule (custom)",
+      "errors": {
+        "idNameRequired": "ID and name are required",
+        "alreadyExists": "A rule \"{{id}}\" already exists.",
+        "cloneFailed": "Clone failed",
+        "deleteFailed": "Delete failed"
+      },
+      "existsHint": "Change the ID above to clone under a new name, or:",
+      "openExisting": "Open existing definition",
+      "deleteDraft": "Delete existing draft",
+      "working": "Working…",
+      "clone": "Clone",
+      "deleteConfirm": "Delete the existing definition \"{{id}}\"? This permanently removes the uninstalled custom rule."
+    },
+    "badges": {
+      "mvFailed": "MV {{state}}"
+    },
+    "actions": {
+      "upgrade": "Upgrade",
+      "upgradeTo": "Upgrade to {{version}}",
+      "upgrading": "Upgrading…",
+      "editDefinition": "Edit definition",
+      "cloneAsCustom": "Clone as custom",
+      "uninstall": "Uninstall",
+      "uninstallConfirmPrompt": "Are you sure?",
+      "confirm": "Confirm"
+    },
+    "blockPolicy": {
+      "heading": "Block Policy",
+      "hold": "When this rule fires, AgentGuard will pause the agent and wait for human approval.",
+      "autoBlock": "When this rule fires, AgentGuard will block the tool call immediately without prompting.",
+      "logOnly": "When this rule fires, the threat is logged and surfaced in the UI but the agent is not blocked.",
+      "updateFailed": "Failed to update policy"
+    },
+    "definition": {
+      "heading": "Rule Definition",
+      "ruleId": "Rule ID",
+      "version": "Version",
+      "category": "Category",
+      "severity": "Severity",
+      "fpRate": "False Positive Rate",
+      "hookSources": "Hook Sources",
+      "requiredTelemetry": "Required Telemetry"
+    },
+    "configLock": {
+      "title": "Upgrade before configuring",
+      "bodyNoVersion": "A newer version of this rule is available, and its parameters may have changed — configuration is locked until you upgrade. Upgrading preserves your compatible overrides.",
+      "bodyWithVersion": "A newer version ({{version}}) of this rule is available, and its parameters may have changed — configuration is locked until you upgrade. Upgrading preserves your compatible overrides.",
+      "upgradeButton": "Upgrade…",
+      "upgradeButtonTo": "Upgrade to {{version}}…"
+    },
+    "tabs": {
+      "configuration": "Configuration",
+      "description": "Description",
+      "sql": "Detection SQL",
+      "udfs": "UDFs",
+      "detections": "Recent Detections",
+      "detectionsBadgeLabel": "24h",
+      "badgeCount": "({{formatted}})",
+      "badgeCountWithLabel": "({{label}}: {{formatted}})"
+    },
+    "sqlTab": {
+      "readonlyNote": "Read-only — rendered from the definition template and current parameter values.",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
+    "udfsTab": {
+      "empty": "This rule does not define any UDFs.",
+      "badge": "UDF",
+      "unnamedFn": "UDF"
+    },
+    "errors": {
+      "loadFailed": "Failed to load rule",
+      "toggleFailed": "Toggle failed",
+      "uninstallFailed": "Uninstall failed",
+      "upgradeFailed": "Upgrade failed"
+    }
+  },
+  "actions": {
+    "exportCatalog": "Export Catalog",
+    "importCatalog": "Import Catalog",
+    "importing": "Importing…",
+    "newCustomRule": "New Custom Rule",
+    "enable": "Enable",
+    "disable": "Disable",
+    "install": "Install",
+    "installing": "Installing…",
+    "cancel": "Cancel"
+  },
+  "policy": {
+    "log_only": "Log only",
+    "auto_block": "Auto-block",
+    "hold": "Hold (require approval)"
+  },
+  "enum": {
+    "severity": {
+      "critical": "Critical",
+      "warning": "Warning",
+      "info": "Info"
+    },
+    "fpRate": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "bool": {
+      "true": "true",
+      "false": "false"
+    },
+    "paramType": {
+      "integer": "Integer",
+      "float": "Float",
+      "bool": "Boolean",
+      "string": "String",
+      "choice": "Choice",
+      "list": "List",
+      "multi_choice": "Multi-choice",
+      "regex": "Regex",
+      "duration": "Duration"
+    }
+  },
+  "config": {
+    "noParams": "This rule has no configurable parameters. Its detection SQL is fixed.",
+    "helpText": "Edit typed parameters. Values are validated and the detection SQL is re-rendered on save.",
+    "resetAll": "Reset all to defaults",
+    "redeployNote": "Saving redeploys the detection view; in-flight stateful windows reset.",
+    "unsavedChanges": "Unsaved changes",
+    "discard": "Discard",
+    "save": "Save configuration",
+    "saving": "Saving…",
+    "errors": {
+      "pendingUpgrade": "This rule has a pending upgrade. Upgrade it first (Configuration is locked until then); reload the page to continue.",
+      "saveFailed": "Save failed"
+    },
+    "validation": {
+      "required": "value is required",
+      "mustBeFiniteNumber": "must be a finite number",
+      "mustBeWholeNumber": "must be a whole number",
+      "min": "must be ≥ {{min}}",
+      "max": "must be ≤ {{max}}",
+      "mustBeString": "must be a string",
+      "mustBeAllowedOption": "must be one of the allowed options",
+      "minItems1": "must contain at least one item",
+      "uniqueItems": "items must be unique",
+      "minItemsN": "must contain ≥ {{min}} items",
+      "maxItemsN": "must contain ≤ {{max}} items",
+      "notAllowedOption": "{{value}} is not an allowed option",
+      "patternRequired": "pattern is required"
+    },
+    "field": {
+      "overridden": "overridden",
+      "resetTitle": "Reset to default",
+      "reset": "Reset",
+      "defaultLabel": "Default:",
+      "regexPlaceholder": "RE2 regular expression",
+      "unitsFallback": "units",
+      "noOptions": "no options",
+      "empty": "empty",
+      "addItemPlaceholder": "Add item…",
+      "remove": "Remove",
+      "add": "Add",
+      "itemsMin": "min {{min}} items",
+      "itemsMax": "max {{max}} items",
+      "itemsMinMax": "min {{min}} · max {{max}} items"
+    },
+    "schema": {
+      "emptyBefore": "No parameters yet. Add one to expose a typed knob in the detection template via ",
+      "emptyAfter": ".",
+      "addParameter": "Add parameter",
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "removeParameter": "Remove parameter",
+      "unnamedKey": "(unnamed)",
+      "noneOption": "(none)",
+      "addOptionsFirst": "add options first",
+      "addOptionPlaceholder": "Add option…",
+      "removeOption": "Remove option",
+      "addOption": "Add option",
+      "field": {
+        "key": "Key *",
+        "type": "Type",
+        "label": "Label",
+        "default": "Default",
+        "description": "Description",
+        "options": "Options",
+        "min": "Min",
+        "max": "Max",
+        "unit": "Unit",
+        "minItems": "Min items",
+        "maxItems": "Max items"
+      },
+      "placeholder": {
+        "key": "threshold",
+        "label": "Detection threshold",
+        "description": "What this parameter controls",
+        "listDefault": "comma, separated, values",
+        "regexDefault": "RE2 pattern",
+        "unit": "seconds"
+      },
+      "keyErrors": {
+        "required": "key is required",
+        "invalid": "lowercase letter, then letters/digits/underscore (max 64)",
+        "duplicate": "duplicate key"
+      }
+    }
+  }
+}

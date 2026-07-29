@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useNotifications } from './NotificationsProvider'
 
 export default function HoldToastContainer() {
+  const { t } = useTranslation()
   const notifications = useNotifications()
   const arr = Array.from(notifications?.pendingHolds?.values() ?? []).slice(0, 3)
 
@@ -16,9 +18,9 @@ export default function HoldToastContainer() {
             <span className={`text-[9px] uppercase font-semibold ${
               h.severity === 'critical' ? 'text-error' :
               h.severity === 'warning'  ? 'text-amber-400' : 'text-gray-400'
-            }`}>{h.severity}</span>
+            }`}>{h.severity ? t(`severity.${String(h.severity).toLowerCase()}`, { defaultValue: h.severity }) : h.severity}</span>
             <span className="text-[10px] text-gray-400 truncate flex-1">
-              Hold pending: <code className="font-mono">{h.tool_name}</code>
+              {t('holdToast.pendingLabel')} <code className="font-mono">{h.tool_name}</code>
             </span>
           </div>
           <p className="text-[11px] text-gray-100 mb-2 truncate">{h.message}</p>
@@ -26,7 +28,7 @@ export default function HoldToastContainer() {
             to={`/threats/by-hold/${encodeURIComponent(h.hold_id)}`}
             className="inline-block px-3 py-1 bg-primary-button text-primary-button-text text-[10px] font-semibold rounded hover:scale-95 transition-transform"
           >
-            Review →
+            {t('holdToast.review')}
           </Link>
         </div>
       ))}

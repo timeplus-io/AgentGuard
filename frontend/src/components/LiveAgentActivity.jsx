@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
-import { formatLocalTime } from '../utils/time'
+import { formatDate } from '../i18n/format'
 
 const sqlActivity = (range) => `
 SELECT hook_name, event_time, agent_id, tool_name, model, hook_decision
@@ -8,13 +9,18 @@ FROM agentguard_hook_events
 WHERE hook_name IN ('llm_input', 'llm_output', 'before_tool_call', 'after_tool_call')
 SETTINGS seek_to='${range}'`
 
-const formatEvtTime = (ts) => ts ? (formatLocalTime(ts) || String(ts)) : '—'
+function formatEvtTime(ts) {
+  if (!ts) return '—'
+  let s = typeof ts === 'string' ? ts.replace(' ', 'T') : ts
+  if (typeof s === 'string' && !s.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(s)) s = s + 'Z'
+  return formatDate(s, { hour: '2-digit', minute: '2-digit', second: '2-digit' }) || String(ts)
+}
 
-function actionLabel(evt) {
-  if (evt.hook_name === 'llm_input')        return 'LLM call'
-  if (evt.hook_name === 'llm_output')       return 'LLM response'
-  if (evt.hook_name === 'before_tool_call') return 'Tool invoke'
-  if (evt.hook_name === 'after_tool_call')  return 'Tool complete'
+function actionLabel(evt, t) {
+  if (evt.hook_name === 'llm_input')        return t('activity.action.llmCall')
+  if (evt.hook_name === 'llm_output')       return t('activity.action.llmResponse')
+  if (evt.hook_name === 'before_tool_call') return t('activity.action.toolInvoke')
+  if (evt.hook_name === 'after_tool_call')  return t('activity.action.toolComplete')
   return evt.hook_name
 }
 
@@ -24,6 +30,7 @@ function toolOrModel(evt) {
 }
 
 export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
+  const { t } = useTranslation('dashboard')
   const [rows, setRows] = useState([])
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState(null)
@@ -43,7 +50,7 @@ export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
       setConnected(false)
     }
 
-    stream().catch(e => { if (e?.name !== 'AbortError') setError(e.message || 'Stream error') })
+    stream().catch(e => { if (e?.name !== 'AbortError') setError(e.message || t('activity.streamError')) })
     return () => ctrl.abort()
   }, [timeRange, limit])
 
@@ -59,18 +66,24 @@ export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
       <div className="px-6 py-4 flex items-center justify-between border-b border-outline-variant/10">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-3">
           <span className={`w-2 h-2 rounded-full ${connected ? 'bg-[#ffb0cf] shadow-[0_0_10px_#ffb0cf] animate-pulse' : 'bg-zinc-600'}`} />
-          Live Agent Activity
+          {t('activity.title')}
         </h3>
         {connected && (
-          <span className="text-[10px] font-semibold text-primary uppercase tracking-widest">Live</span>
+          <span className="text-[10px] font-semibold text-primary uppercase tracking-widest">{t('activity.live')}</span>
         )}
       </div>
       <div className="overflow-auto max-h-80">
         <table className="w-full text-left border-collapse">
           <thead className="bg-surface-container sticky top-0 z-10">
             <tr>
-              {['Time', 'Agent', 'Action', 'Tool / Model', 'Decision'].map(h => (
-                <th key={h} className="px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest">{h}</th>
+              {[
+                ['time', t('activity.columns.time')],
+                ['agent', t('activity.columns.agent')],
+                ['action', t('activity.columns.action')],
+                ['toolModel', t('activity.columns.toolModel')],
+                ['decision', t('activity.columns.decision')],
+              ].map(([key, label]) => (
+                <th key={key} className="px-6 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</th>
               ))}
             </tr>
           </thead>
@@ -80,7 +93,7 @@ export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
                 <td colSpan={5} className="px-6 py-10 text-center text-xs">
                   {error
                     ? <span className="text-red-400 font-mono flex items-center justify-center gap-2"><span className="material-symbols-outlined text-sm">error</span>{error}</span>
-                    : <span className="text-gray-400">{connected ? 'Waiting for agent activity…' : 'Connecting…'}</span>
+                    : <span className="text-gray-400">{connected ? t('activity.waiting') : t('activity.connecting')}</span>
                   }
                 </td>
               </tr>
@@ -90,7 +103,7 @@ export default function LiveAgentActivity({ timeRange = '-1h', limit = 20 }) {
                 <td className="px-6 py-3">
                   <code className="text-xs font-mono text-gray-100">{evt.agent_id}</code>
                 </td>
-                <td className="px-6 py-3 text-xs text-gray-400">{actionLabel(evt)}</td>
+                <td className="px-6 py-3 text-xs text-gray-400">{actionLabel(evt, t)}</td>
                 <td className="px-6 py-3 text-xs text-gray-400 font-mono">{toolOrModel(evt)}</td>
                 <td className="px-6 py-3">
                   {evt.hook_decision && evt.hook_decision !== 'allow' ? (

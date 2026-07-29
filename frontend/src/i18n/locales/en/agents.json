@@ -1,0 +1,156 @@
+{
+  "list": {
+    "title": "Agent Fleet",
+    "subtitle": "Manage and monitor your active agents.",
+    "filters": "Filters",
+    "connectAgents": "Connect Agents",
+    "columns": {
+      "agentId": "Agent ID",
+      "deployment": "Deployment",
+      "status": "Status",
+      "events": "Events",
+      "sessions": "Sessions",
+      "tokens": "Tokens",
+      "llmCalls": "LLM Calls",
+      "lastSeen": "Last Seen"
+    },
+    "status": {
+      "active": "Active",
+      "idle": "Idle"
+    },
+    "empty": "No agents found. Connect an agent to start monitoring.",
+    "error": {
+      "loadFailed": "Failed to load agents"
+    },
+    "pagination": {
+      "showing": "Showing {{shown}} of {{total}} agents",
+      "show": "Show:"
+    }
+  },
+  "detail": {
+    "refresh": "Refresh",
+    "timePresets": {
+      "1h": "Last 1h",
+      "6h": "Last 6h",
+      "24h": "Last 24h",
+      "7d": "Last 7 days",
+      "30d": "Last 30 days",
+      "all": "All time"
+    },
+    "volumeMetrics": {
+      "activeThreats": "Active Threats",
+      "totalSessions": "Total Sessions",
+      "totalEvents": "Total Events",
+      "totalToolCalls": "Total Tool Calls"
+    },
+    "perfMetrics": {
+      "totalTokens": "Total Tokens",
+      "llmLatencyP50": "LLM Latency p50",
+      "llmSuccessRate": "LLM Success Rate",
+      "toolSuccessRate": "Tool Success Rate",
+      "tokensSub": "↑ {{in}}  ↓ {{out}}",
+      "latencySub": "p95 {{p95}}",
+      "successSub": "{{success}} ok · {{failed}} failed"
+    },
+    "sessionsPanel": {
+      "title": "Sessions",
+      "empty": "No sessions found",
+      "run": "Run #{{index}}"
+    },
+    "tabs": {
+      "timeline": "Timeline",
+      "events": "Events",
+      "trace": "Trace",
+      "skills": "Skills",
+      "memory": "Memory"
+    },
+    "session": {
+      "id": "Session ID",
+      "status": {
+        "active": "Active",
+        "ended": "Ended"
+      },
+      "started": "Started",
+      "ended": "Ended",
+      "totalEvents": "Total Events",
+      "toolCalls": "Tool Calls",
+      "selectRunHint": "Select a run from the left to view its timeline",
+      "eventsCount_one": "{{count}} Event",
+      "eventsCount_other": "{{count}} Events",
+      "toolCallsCount_one": "{{count}} Tool Call",
+      "toolCallsCount_other": "{{count}} Tool Calls",
+      "loadFailedHeading": "Failed to load session"
+    },
+    "events": {
+      "blocked": "blocked",
+      "jsonBadge": "JSON",
+      "blockReason": "block reason: {{reason}}",
+      "noEventData": "No event data",
+      "loadFailedHeading": "Failed to load events",
+      "noEvents": "No events for this run",
+      "count_one": "{{count}} event",
+      "count_other": "{{count}} events"
+    },
+    "trace": {
+      "noData": "No trace data available for this run",
+      "loadFailedHeading": "Failed to load trace"
+    },
+    "timeline": {
+      "loadFailedHeading": "Failed to load timeline",
+      "empty": "No timeline events for this session",
+      "sessionLabel": "Session",
+      "turnLabel": "Turn #{{index}}",
+      "eventsCount_one": "{{count}} event",
+      "eventsCount_other": "{{count}} events",
+      "blocked": "blocked",
+      "blockedWithReason": "blocked: {{reason}}",
+      "error": "error",
+      "kinds": {
+        "userInput": "User Input",
+        "llmResponse": "LLM Response",
+        "toolRequest": "Tool Request",
+        "toolResult": "Tool Result",
+        "sessionStart": "Session Start",
+        "sessionEnd": "Session End"
+      }
+    },
+    "skills": {
+      "loadedHeading": "Loaded — available in system prompt",
+      "loadedEmpty": "No loaded skills detected for this session.",
+      "firstSeen": "first seen",
+      "location": "location",
+      "description": "desc",
+      "invokedHeading": "Invoked — skill activations",
+      "invokedEmpty": "No skill invocations detected for this session.",
+      "args": "args",
+      "streamError": "Stream error"
+    },
+    "memory": {
+      "heading": "Memory Operations",
+      "empty": "No memory operations detected for this session.",
+      "streamError": "Stream error",
+      "loadError": "Failed to load memory data",
+      "footprintHeading": "Memory Footprint",
+      "footprintEmpty": "No memory operations recorded for this agent.",
+      "stats": {
+        "total": "Total",
+        "saves": "Saves",
+        "searches": "Searches",
+        "reads": "Reads"
+      },
+      "recentHeading": "Recent Operations"
+    },
+    "eventsTruncated": "Showing first 500 events — session has more. Select a specific run from the sidebar to narrow the view.",
+    "errors": {
+      "loadAgent": "Failed to load agent",
+      "loadLlmMetrics": "Failed to load LLM metrics",
+      "loadToolMetrics": "Failed to load tool metrics",
+      "loadActiveThreats": "Failed to load active threats",
+      "loadSessions": "Failed to load sessions",
+      "loadSessionDetails": "Failed to load session details",
+      "loadEvents": "Failed to load events",
+      "loadTimeline": "Failed to load timeline",
+      "loadTrace": "Failed to load trace"
+    }
+  }
+}

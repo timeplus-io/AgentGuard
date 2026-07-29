@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
@@ -7,13 +8,14 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
+import { formatCurrency, formatNumber, formatDate } from '../i18n/format'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-surface-container-high border border-outline-variant/20 px-3 py-2 rounded-sm text-xs">
         <p className="text-gray-400 font-semibold">{label}</p>
-        <p className="text-primary font-bold">${payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+        <p className="text-primary font-bold">{formatCurrency(payload[0].value, 'USD')}</p>
       </div>
     )
   }
@@ -21,15 +23,22 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 function formatDollar(n) {
-  if (n == null) return '$0.00'
-  return '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return formatCurrency(n ?? 0, 'USD')
 }
 
-
+// TOKEN_COLORS and TOKEN_LABEL_KEYS are keyed on the backend's fixed English
+// labels (models.TokenBreakdown.Label) — not user-visible; the displayed text
+// is looked up via tokenBreakdown.labels.<key> in the cost namespace.
 const TOKEN_COLORS = {
   'Input Tokens':  'bg-[#D53F8C]',
   'Output Tokens': 'bg-[#ffb0cf]',
   'Cache Tokens':  'bg-[#ffb2b8]',
+}
+
+const TOKEN_LABEL_KEYS = {
+  'Input Tokens':  'input',
+  'Output Tokens': 'output',
+  'Cache Tokens':  'cache',
 }
 
 const EMPTY_FORM = { provider: '', model: '', input_cost_per_million: '', output_cost_per_million: '', cache_read_cost_per_million: '' }
@@ -43,10 +52,10 @@ const DELTA_FLAT_BAND_PCT = 0.1
 // delta percent. Returns an empty object when pct is null/undefined/NaN — the
 // caller spreads it into the kpi object, so the delta row is omitted entirely.
 // lowerIsBetter=true means a negative delta (spend went down) renders green.
-function periodDeltaProps(pct, lowerIsBetter = true) {
+function periodDeltaProps(t, pct, lowerIsBetter = true) {
   if (pct == null || !Number.isFinite(pct)) return {}
-  const sign = pct > 0 ? '+' : ''
-  const text = `${sign}${pct.toFixed(1)}% vs last month-to-date`
+  const pctText = formatNumber(pct, { minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: 'exceptZero' })
+  const text = t('delta.vsLastMonthToDate', { pct: pctText })
   if (Math.abs(pct) < DELTA_FLAT_BAND_PCT) {
     return { delta: text, deltaColor: 'text-gray-400', deltaIcon: null }
   }
@@ -66,26 +75,28 @@ function periodDeltaProps(pct, lowerIsBetter = true) {
 
 // budgetDeltaProps renders the Forecasted Total tile's delta against the
 // configured budget. status comes from the backend (over | under | on | "").
-function budgetDeltaProps(status, pct) {
+function budgetDeltaProps(t, status, pct) {
   if (!status || pct == null || !Number.isFinite(pct)) return {}
   if (status === 'on') {
-    return { delta: 'on budget', deltaColor: 'text-gray-400', deltaIcon: null }
+    return { delta: t('delta.onBudget'), deltaColor: 'text-gray-400', deltaIcon: null }
   }
+  const absPctText = formatNumber(Math.abs(pct), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
   if (status === 'under') {
     return {
-      delta: `${Math.abs(pct).toFixed(1)}% under budget`,
+      delta: t('delta.underBudget', { pct: absPctText }),
       deltaColor: 'text-emerald-400',
       deltaIcon: 'trending_down',
     }
   }
   return {
-    delta: `${Math.abs(pct).toFixed(1)}% over budget`,
+    delta: t('delta.overBudget', { pct: absPctText }),
     deltaColor: 'text-error',
     deltaIcon: 'trending_up',
   }
 }
 
 export default function CostGovernance() {
+  const { t } = useTranslation('cost')
   const { theme } = useTheme()
   const { can } = useAuth()
   const canWrite = can(writeKey("cost"))
@@ -123,24 +134,24 @@ export default function CostGovernance() {
   useEffect(() => {
     api.getCost()
       .then(setData)
-      .catch(err => setLoadError(err?.message || 'Failed to load cost data'))
+      .catch(err => setLoadError(err?.message || t('errors.loadCostFailed')))
       .finally(() => setLoading(false))
-  }, [])
+  }, [t])
 
   const fetchBudgets = () => {
     api.getCostBudgets()
       .then(res => setBudgets(res.budgets ?? []))
-      .catch(err => setLoadError(err?.message || 'Failed to load budgets'))
+      .catch(err => setLoadError(err?.message || t('errors.loadBudgetsFailed')))
   }
-  useEffect(() => { fetchBudgets() }, [])
+  useEffect(() => { fetchBudgets() }, [t])
 
   const fetchPricing = () => {
     api.listPricing()
       .then(res => setPricing(res.pricing ?? []))
-      .catch(err => setLoadError(err?.message || 'Failed to load pricing'))
+      .catch(err => setLoadError(err?.message || t('errors.loadPricingFailed')))
   }
 
-  useEffect(() => { fetchPricing() }, [])
+  useEffect(() => { fetchPricing() }, [t])
 
   const handleSave = async () => {
     if (!form.provider || !form.model) return
@@ -159,7 +170,7 @@ export default function CostGovernance() {
       setEditingKey(null)
       fetchPricing()
     } catch {
-      setSaveError('Save failed. Please try again.')
+      setSaveError(t('pricing.errors.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -186,7 +197,7 @@ export default function CostGovernance() {
       fetchPricing()
     } catch (err) {
       console.error('cost: delete pricing failed:', err)
-      setSaveError(`Delete failed: ${err?.message ?? String(err)}`)
+      setSaveError(t('pricing.errors.deleteFailed', { message: err?.message ?? String(err) }))
     } finally {
       setDeletingKey(null)
     }
@@ -208,7 +219,7 @@ export default function CostGovernance() {
       fetchBudgets()
       refreshCost()
     } catch (err) {
-      setBudgetError(err?.message || 'Save failed. Please try again.')
+      setBudgetError(err?.message || t('budgets.errors.saveFailed'))
     } finally {
       setSavingBudget(false)
     }
@@ -237,7 +248,7 @@ export default function CostGovernance() {
       fetchBudgets()
       refreshCost()
     } catch (err) {
-      setBudgetError(`Delete failed: ${err?.message ?? String(err)}`)
+      setBudgetError(t('budgets.errors.deleteFailed', { message: err?.message ?? String(err) }))
     } finally {
       setDeletingBudgetKey(null)
     }
@@ -258,19 +269,19 @@ export default function CostGovernance() {
 
   const kpis = [
     {
-      label: 'Month-to-Date Spend',
+      label: t('kpis.monthToDateSpend'),
       value: formatDollar(data?.month_to_date),
-      ...periodDeltaProps(data?.month_to_date_delta_pct, true),
+      ...periodDeltaProps(t, data?.month_to_date_delta_pct, true),
     },
     {
-      label: 'Forecasted Total',
+      label: t('kpis.forecastedTotal'),
       value: formatDollar(data?.forecasted),
-      ...budgetDeltaProps(data?.budget_status, data?.forecast_budget_delta_pct),
+      ...budgetDeltaProps(t, data?.budget_status, data?.forecast_budget_delta_pct),
     },
     {
-      label: 'Avg. Token Cost / 1M (MTD)',
+      label: t('kpis.avgTokenCost'),
       value: formatDollar(data?.avg_token_cost),
-      ...periodDeltaProps(data?.avg_token_cost_delta_pct, true),
+      ...periodDeltaProps(t, data?.avg_token_cost_delta_pct, true),
     },
   ]
 
@@ -288,12 +299,12 @@ export default function CostGovernance() {
             </div>
           )}
           <PageHeader
-            title="Cost Governance"
-            subtitle="Monitor token spend, enforce budget policies, and detect cost anomalies across all agents."
+            title={t('title')}
+            subtitle={t('subtitle')}
             actions={<>
               <button className="px-4 py-2 bg-surface-container-high text-gray-100 text-xs font-medium rounded-sm border border-outline-variant/10 hover:bg-surface-container-highest transition-colors flex items-center gap-2">
                 <span className="material-symbols-outlined text-[16px]">download</span>
-                Export Report
+                {t('actions.exportReport')}
               </button>
             </>}
           />
@@ -320,9 +331,9 @@ export default function CostGovernance() {
             {/* Daily Spend Trend */}
             <div className="lg:col-span-2 bg-surface-container-high p-6 rounded">
               <div className="flex justify-between items-center mb-8">
-                <h4 className="text-base font-semibold text-gray-100">Daily Spend Trend</h4>
+                <h4 className="text-base font-semibold text-gray-100">{t('dailySpend.heading')}</h4>
                 <div className="flex gap-2">
-                  <span className="px-2 py-1 bg-surface-container-highest text-[10px] rounded text-primary border border-[#ffb0cf]/20">30 DAYS</span>
+                  <span className="px-2 py-1 bg-surface-container-highest text-[10px] rounded text-primary border border-[#ffb0cf]/20">{t('dailySpend.rangeBadge')}</span>
                 </div>
               </div>
               <ResponsiveContainer width="100%" height={256}>
@@ -341,16 +352,18 @@ export default function CostGovernance() {
 
             {/* Token Breakdown */}
             <div className="bg-surface-container-high p-6 rounded">
-              <h4 className="text-base font-semibold text-gray-100 mb-8">Token Breakdown</h4>
+              <h4 className="text-base font-semibold text-gray-100 mb-8">{t('tokenBreakdown.heading')}</h4>
               <div className="space-y-6">
-                {tokenBreakdown.map(t => (
-                  <div key={t.label}>
+                {tokenBreakdown.map(tb => (
+                  <div key={tb.label}>
                     <div className="flex justify-between text-xs mb-2">
-                      <span className="text-gray-400">{t.label}</span>
-                      <span className="text-gray-100 font-semibold">{t.percentage}% ({(t.tokens ?? 0).toLocaleString()} tokens)</span>
+                      <span className="text-gray-400">{t(`tokenBreakdown.labels.${TOKEN_LABEL_KEYS[tb.label] ?? 'input'}`)}</span>
+                      <span className="text-gray-100 font-semibold">
+                        {t('tokenBreakdown.line', { count: tb.tokens ?? 0, percentage: tb.percentage, formatted: formatNumber(tb.tokens ?? 0) })}
+                      </span>
                     </div>
                     <div className="h-1.5 w-full bg-surface-container-lowest rounded-full overflow-hidden">
-                      <div className={`h-full ${TOKEN_COLORS[t.label] ?? 'bg-zinc-500'}`} style={{ width: `${t.percentage}%` }}></div>
+                      <div className={`h-full ${TOKEN_COLORS[tb.label] ?? 'bg-zinc-500'}`} style={{ width: `${tb.percentage}%` }}></div>
                     </div>
                   </div>
                 ))}
@@ -358,11 +371,11 @@ export default function CostGovernance() {
               <div className="mt-8 pt-8 border-t border-outline-variant/10">
                 <div className="flex items-center gap-4">
                   <div className="flex-1 bg-surface-container-lowest p-3 rounded text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Cache Savings</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">{t('tokenBreakdown.cacheSavings')}</p>
                     <p className="text-base font-semibold text-emerald-400">{formatDollar(cacheSavings)}</p>
                   </div>
                   <div className="flex-1 bg-surface-container-lowest p-3 rounded text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Wasted Spend</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">{t('tokenBreakdown.wastedSpend')}</p>
                     <p className="text-base font-semibold text-error">{formatDollar(wastedSpend)}</p>
                   </div>
                 </div>
@@ -372,7 +385,7 @@ export default function CostGovernance() {
 
           {/* Cost per Agent/Model */}
           <div className="bg-surface-container-high p-6 rounded">
-            <h4 className="text-base font-semibold text-gray-100 mb-6">Cost per Agent / Model</h4>
+            <h4 className="text-base font-semibold text-gray-100 mb-6">{t('agentModel.heading')}</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {agentModelCosts.map((am, i) => (
                 <div key={`${am.agent_id}-${am.model}-${i}`} className="bg-gray-800 p-4 rounded flex items-center justify-between group hover:bg-surface-container-highest transition-colors">
@@ -387,7 +400,7 @@ export default function CostGovernance() {
                 </div>
               ))}
               {agentModelCosts.length === 0 && !loading && (
-                <div className="col-span-4 text-center text-gray-400 text-sm py-4">No cost data available yet.</div>
+                <div className="col-span-4 text-center text-gray-400 text-sm py-4">{t('agentModel.empty')}</div>
               )}
             </div>
           </div>
@@ -396,8 +409,8 @@ export default function CostGovernance() {
           <div className="bg-surface-container-high p-6 rounded">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h4 className="text-base font-semibold text-gray-100">Monthly Budgets</h4>
-                <p className="text-xs text-gray-400 mt-1">Per-deployment monthly spend targets. The Forecasted Total KPI compares against the sum of active budgets.</p>
+                <h4 className="text-base font-semibold text-gray-100">{t('budgets.heading')}</h4>
+                <p className="text-xs text-gray-400 mt-1">{t('budgets.subtitle')}</p>
               </div>
               {!showAddBudget && canWrite && (
                 <button
@@ -405,18 +418,18 @@ export default function CostGovernance() {
                   className="text-xs text-primary font-semibold flex items-center gap-1 hover:underline"
                 >
                   <span className="material-symbols-outlined text-xs">add_circle</span>
-                  Add Budget
+                  {t('actions.addBudget')}
                 </button>
               )}
             </div>
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="text-gray-400 border-b border-outline-variant/10">
-                  <th className="pb-3 font-medium">Deployment</th>
-                  <th className="pb-3 font-medium">Monthly Budget</th>
-                  <th className="pb-3 font-medium">Currency</th>
-                  <th className="pb-3 font-medium">Updated By</th>
-                  <th className="pb-3 font-medium">Updated</th>
+                  <th className="pb-3 font-medium">{t('budgets.headers.deployment')}</th>
+                  <th className="pb-3 font-medium">{t('budgets.headers.monthlyBudget')}</th>
+                  <th className="pb-3 font-medium">{t('budgets.headers.currency')}</th>
+                  <th className="pb-3 font-medium">{t('budgets.headers.updatedBy')}</th>
+                  <th className="pb-3 font-medium">{t('budgets.headers.updated')}</th>
                   <th className="pb-3"></th>
                 </tr>
               </thead>
@@ -427,14 +440,14 @@ export default function CostGovernance() {
                     <td className="py-3 text-gray-400">{formatDollar(b.monthly_budget)}</td>
                     <td className="py-3 text-gray-400">{b.currency || 'USD'}</td>
                     <td className="py-3 text-gray-400">{b.updated_by || '—'}</td>
-                    <td className="py-3 text-gray-400">{b.updated_at ? b.updated_at.slice(0, 10) : '—'}</td>
+                    <td className="py-3 text-gray-400">{b.updated_at ? formatDate(b.updated_at, { dateStyle: 'medium' }) : '—'}</td>
                     <td className="py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => handleEditBudget(b)}
                           disabled={showAddBudget}
                           className="text-gray-400 hover:text-primary disabled:opacity-40"
-                          title="Edit"
+                          title={t('actions.edit')}
                         >
                           <span className="material-symbols-outlined text-base">edit</span>
                         </button>
@@ -443,7 +456,7 @@ export default function CostGovernance() {
                           disabled={!canWrite}
                           disabled={deletingBudgetKey === b.deployment_id || showAddBudget}
                           className="text-gray-400 hover:text-error disabled:opacity-40"
-                          title="Delete"
+                          title={t('actions.delete')}
                         >
                           <span className="material-symbols-outlined text-base">close</span>
                         </button>
@@ -453,7 +466,7 @@ export default function CostGovernance() {
                 ))}
                 {budgets.length === 0 && !showAddBudget && (
                   <tr>
-                    <td colSpan={6} className="py-4 text-center text-gray-400 text-xs">No budgets configured. The Forecasted Total KPI shows no delta until at least one is added.</td>
+                    <td colSpan={6} className="py-4 text-center text-gray-400 text-xs">{t('budgets.empty')}</td>
                   </tr>
                 )}
                 {showAddBudget && (
@@ -461,7 +474,7 @@ export default function CostGovernance() {
                     <td className="py-2">
                       <input
                         className={`w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-gray-400 ${editingBudgetKey ? 'text-gray-400 cursor-not-allowed' : 'text-gray-100 placeholder-zinc-600'}`}
-                        placeholder="production"
+                        placeholder={t('budgets.deploymentPlaceholder')}
                         value={budgetForm.deployment_id}
                         readOnly={!!editingBudgetKey}
                         onChange={e => setBudgetForm(f => ({ ...f, deployment_id: e.target.value }))}
@@ -471,7 +484,7 @@ export default function CostGovernance() {
                       <input
                         type="number" step="0.01" min="0"
                         className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-gray-100 placeholder-zinc-600 text-xs focus:outline-none focus:border-gray-400"
-                        placeholder="1000.00"
+                        placeholder={t('budgets.monthlyBudgetPlaceholder')}
                         value={budgetForm.monthly_budget}
                         onChange={e => setBudgetForm(f => ({ ...f, monthly_budget: e.target.value }))}
                       />
@@ -493,13 +506,13 @@ export default function CostGovernance() {
                           disabled={savingBudget || !budgetForm.deployment_id || !budgetForm.monthly_budget}
                           className="px-2 py-1 bg-primary-button text-primary-button-text text-[10px] font-semibold rounded disabled:opacity-40"
                         >
-                          {savingBudget ? '...' : 'Save'}
+                          {savingBudget ? t('actions.saving') : t('actions.save')}
                         </button>
                         <button
                           onClick={() => { setShowAddBudget(false); setBudgetForm(EMPTY_BUDGET); setBudgetError(''); setEditingBudgetKey(null) }}
                           className="px-2 py-1 bg-surface-container-highest text-gray-100 text-[10px] font-semibold rounded"
                         >
-                          Cancel
+                          {t('actions.cancel')}
                         </button>
                       </div>
                       {budgetError && <p className="text-[10px] text-error mt-1 text-right">{budgetError}</p>}
@@ -513,26 +526,26 @@ export default function CostGovernance() {
           {/* Model Pricing */}
           <div className="bg-surface-container-high p-6 rounded">
             <div className="flex justify-between items-center mb-6">
-              <h4 className="text-base font-semibold text-gray-100">Model Pricing</h4>
+              <h4 className="text-base font-semibold text-gray-100">{t('pricing.heading')}</h4>
               {!showAddForm && canWrite && (
                 <button
                   onClick={() => { setShowAddForm(true); setSaveError('') }}
                   className="text-xs text-primary font-semibold flex items-center gap-1 hover:underline"
                 >
                   <span className="material-symbols-outlined text-xs">add_circle</span>
-                  Add Model
+                  {t('actions.addModel')}
                 </button>
               )}
             </div>
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="text-gray-400 border-b border-outline-variant/10">
-                  <th className="pb-3 font-medium">Provider</th>
-                  <th className="pb-3 font-medium">Model</th>
-                  <th className="pb-3 font-medium">Input $/1M</th>
-                  <th className="pb-3 font-medium">Output $/1M</th>
-                  <th className="pb-3 font-medium">Cache-Read $/1M</th>
-                  <th className="pb-3 font-medium">Updated</th>
+                  <th className="pb-3 font-medium">{t('pricing.headers.provider')}</th>
+                  <th className="pb-3 font-medium">{t('pricing.headers.model')}</th>
+                  <th className="pb-3 font-medium">{t('pricing.headers.inputPerMillion')}</th>
+                  <th className="pb-3 font-medium">{t('pricing.headers.outputPerMillion')}</th>
+                  <th className="pb-3 font-medium">{t('pricing.headers.cacheReadPerMillion')}</th>
+                  <th className="pb-3 font-medium">{t('pricing.headers.updated')}</th>
                   <th className="pb-3"></th>
                 </tr>
               </thead>
@@ -546,14 +559,14 @@ export default function CostGovernance() {
                       <td className="py-3 text-gray-400">{formatDollar(p.input_cost_per_million)}</td>
                       <td className="py-3 text-gray-400">{formatDollar(p.output_cost_per_million)}</td>
                       <td className="py-3 text-gray-400">{formatDollar(p.cache_read_cost_per_million)}</td>
-                      <td className="py-3 text-gray-400">{p.updated_at ? p.updated_at.slice(0, 10) : '—'}</td>
+                      <td className="py-3 text-gray-400">{p.updated_at ? formatDate(p.updated_at, { dateStyle: 'medium' }) : '—'}</td>
                       <td className="py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleEdit(p)}
                             disabled={showAddForm}
                             className="text-gray-400 hover:text-primary disabled:opacity-40"
-                            title="Edit"
+                            title={t('actions.edit')}
                           >
                             <span className="material-symbols-outlined text-base">edit</span>
                           </button>
@@ -562,7 +575,7 @@ export default function CostGovernance() {
                             disabled={!canWrite}
                             disabled={deletingKey === key || showAddForm}
                             className="text-gray-400 hover:text-error disabled:opacity-40"
-                            title="Delete"
+                            title={t('actions.delete')}
                           >
                             <span className="material-symbols-outlined text-base">close</span>
                           </button>
@@ -573,7 +586,7 @@ export default function CostGovernance() {
                 })}
                 {pricing.length === 0 && !showAddForm && (
                   <tr>
-                    <td colSpan={7} className="py-4 text-center text-gray-400 text-xs">No pricing entries. Click "+ Add Model" to add one.</td>
+                    <td colSpan={7} className="py-4 text-center text-gray-400 text-xs">{t('pricing.empty')}</td>
                   </tr>
                 )}
                 {showAddForm && (
@@ -581,7 +594,7 @@ export default function CostGovernance() {
                     <td className="py-2">
                       <input
                         className={`w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-gray-400 ${editingKey ? 'text-gray-400 cursor-not-allowed' : 'text-gray-100 placeholder-zinc-600'}`}
-                        placeholder="anthropic"
+                        placeholder={t('pricing.providerPlaceholder')}
                         value={form.provider}
                         readOnly={!!editingKey}
                         onChange={e => setForm(f => ({ ...f, provider: e.target.value }))}
@@ -590,7 +603,7 @@ export default function CostGovernance() {
                     <td className="py-2">
                       <input
                         className={`w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs focus:outline-none focus:border-gray-400 ${editingKey ? 'text-gray-400 cursor-not-allowed' : 'text-gray-100 placeholder-zinc-600'}`}
-                        placeholder="claude-sonnet-4-6"
+                        placeholder={t('pricing.modelPlaceholder')}
                         value={form.model}
                         readOnly={!!editingKey}
                         onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
@@ -600,7 +613,7 @@ export default function CostGovernance() {
                       <input
                         type="number" step="0.01"
                         className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-gray-100 placeholder-zinc-600 text-xs focus:outline-none focus:border-gray-400"
-                        placeholder="3.00"
+                        placeholder={t('pricing.inputCostPlaceholder')}
                         value={form.input_cost_per_million}
                         onChange={e => setForm(f => ({ ...f, input_cost_per_million: e.target.value }))}
                       />
@@ -609,7 +622,7 @@ export default function CostGovernance() {
                       <input
                         type="number" step="0.01"
                         className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-gray-100 placeholder-zinc-600 text-xs focus:outline-none focus:border-gray-400"
-                        placeholder="15.00"
+                        placeholder={t('pricing.outputCostPlaceholder')}
                         value={form.output_cost_per_million}
                         onChange={e => setForm(f => ({ ...f, output_cost_per_million: e.target.value }))}
                       />
@@ -618,7 +631,7 @@ export default function CostGovernance() {
                       <input
                         type="number" step="0.01"
                         className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1 text-gray-100 placeholder-zinc-600 text-xs focus:outline-none focus:border-gray-400"
-                        placeholder="0.30"
+                        placeholder={t('pricing.cacheReadCostPlaceholder')}
                         value={form.cache_read_cost_per_million}
                         onChange={e => setForm(f => ({ ...f, cache_read_cost_per_million: e.target.value }))}
                       />
@@ -631,13 +644,13 @@ export default function CostGovernance() {
                           disabled={saving || !form.provider || !form.model}
                           className="px-2 py-1 bg-primary-button text-primary-button-text text-[10px] font-semibold rounded disabled:opacity-40"
                         >
-                          {saving ? '...' : 'Save'}
+                          {saving ? t('actions.saving') : t('actions.save')}
                         </button>
                         <button
                           onClick={() => { setShowAddForm(false); setForm(EMPTY_FORM); setSaveError(''); setEditingKey(null) }}
                           className="px-2 py-1 bg-surface-container-highest text-gray-100 text-[10px] font-semibold rounded"
                         >
-                          Cancel
+                          {t('actions.cancel')}
                         </button>
                       </div>
                       {saveError && <p className="text-[10px] text-error mt-1 text-right">{saveError}</p>}

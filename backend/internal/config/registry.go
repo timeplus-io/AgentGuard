@@ -42,6 +42,7 @@ func Sections() []SectionMeta {
 		{"holds", "Approval Holds"},
 		{"dlp", "Semantic DLP"},
 		{"sentry", "Sentry Agent"},
+		{"ui", "User Interface"},
 		{"setup", "Setup"},
 	}
 }
@@ -75,6 +76,11 @@ func Registry() []KeyMeta {
 		{Key: "agentguard.url", Section: "agentguard", Label: "Webhook base URL",
 			Description: "URL Timeplus uses to call back into AgentGuard (alerts, holds).",
 			Type:        TypeString, EnvVar: "AGENTGUARD_URL", FlagName: "agentguard-url"},
+
+		// ── ui ──
+		{Key: "ui.default_language", Section: "ui", Label: "Default UI language",
+			Description: "Language shown to users who haven't picked one in their browser.",
+			Type:        TypeEnum, EnumValues: []string{"en", "zh-CN"}},
 
 		// ── catalog ──
 		{Key: "catalog.dir", Section: "catalog", Label: "Catalog directory",

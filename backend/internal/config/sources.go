@@ -174,6 +174,8 @@ func EffectiveValue(cfg *Config, key string) any {
 		return cfg.Holds.FailPolicy
 	case "holds.disabled":
 		return cfg.Holds.Disabled
+	case "ui.default_language":
+		return cfg.UI.DefaultLanguage
 	case "dlp.enabled":
 		return cfg.DLP.Enabled
 	case "dlp.base_url":
@@ -248,6 +250,8 @@ func ApplyChange(cfg *Config, key string, value any) error {
 		return setString(&cfg.Holds.FailPolicy, value)
 	case "holds.disabled":
 		return setBool(&cfg.Holds.Disabled, value)
+	case "ui.default_language":
+		return setString(&cfg.UI.DefaultLanguage, value)
 	case "dlp.enabled":
 		return setBool(&cfg.DLP.Enabled, value)
 	case "dlp.base_url":

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import Editor from 'react-simple-code-editor'
 import { highlight, languages } from 'prismjs/components/prism-core'
 import 'prismjs/components/prism-sql'
@@ -7,12 +8,14 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import { api } from '../api/client'
+import { formatNumber } from '../i18n/format'
 
 const defaultQuery = `SELECT hook_name, event_time, agent_id, tool_name, model, hook_decision
 FROM agentguard_hook_events
 LIMIT 50`
 
 export default function Investigate() {
+  const { t } = useTranslation('investigate')
   const [query, setQuery] = useState(defaultQuery)
   const [rows, setRows] = useState([])
   const [columns, setColumns] = useState([])
@@ -29,7 +32,7 @@ export default function Investigate() {
     setSchemaError(null)
     api.listTables()
       .then(data => { if (data.tables) setAvailTables(data.tables) })
-      .catch(err => setSchemaError(err?.message || 'Failed to load table schema'))
+      .catch(err => setSchemaError(err?.message || t('resourcePanel.loadError')))
   }
 
   useEffect(() => { fetchTables() }, [])
@@ -60,8 +63,8 @@ export default function Investigate() {
           return [...prev, row]
         })
       }
-      const elapsed = ((performance.now() - startTimeRef.current) / 1000).toFixed(2)
-      setRowMeta(`${count} rows · ${elapsed}s`)
+      const elapsed = (performance.now() - startTimeRef.current) / 1000
+      setRowMeta({ count, elapsed })
     } catch (err) {
       if (err.name !== 'AbortError') {
         setError(err.message)
@@ -79,8 +82,8 @@ export default function Investigate() {
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 flex flex-col gap-6" style={{ height: 'calc(100vh - 64px)' }}>
           <PageHeader
-            title="SQL Console"
-            subtitle="Query Proton/Timeplus streams directly using streaming SQL."
+            title={t('title')}
+            subtitle={t('subtitle')}
           />
 
           <div className="flex gap-6 flex-1 overflow-hidden min-h-0">
@@ -88,28 +91,28 @@ export default function Investigate() {
             <aside className={`flex flex-col gap-4 overflow-hidden transition-all duration-200 ${panelOpen ? 'w-72' : 'w-8'}`}>
               <div className="flex-1 flex flex-col bg-gray-800 rounded-sm border border-outline-variant/10 overflow-hidden">
                 <div className="p-4 border-b border-outline-variant/10 flex items-center justify-between shrink-0">
-                  {panelOpen && <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">Console Resources</h3>}
+                  {panelOpen && <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">{t('resourcePanel.heading')}</h3>}
                   <div className="flex items-center gap-1 ml-auto">
                     {panelOpen && (
                       <button onClick={fetchTables} className="text-gray-400 hover:text-gray-100 transition-colors">
                         <span className="material-symbols-outlined text-xs">refresh</span>
                       </button>
                     )}
-                    <button onClick={() => setPanelOpen(v => !v)} className="text-gray-400 hover:text-gray-100 transition-colors" title={panelOpen ? 'Collapse' : 'Expand'}>
+                    <button onClick={() => setPanelOpen(v => !v)} className="text-gray-400 hover:text-gray-100 transition-colors" title={panelOpen ? t('resourcePanel.collapse') : t('resourcePanel.expand')}>
                       <span className="material-symbols-outlined text-xs">{panelOpen ? 'left_panel_close' : 'left_panel_open'}</span>
                     </button>
                   </div>
                 </div>
                 {panelOpen && <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                   <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-xs">database</span> Streams
+                    <span className="material-symbols-outlined text-xs">database</span> {t('resourcePanel.streamsHeading')}
                   </h4>
                   {schemaError ? (
                     <p className="text-[11px] text-red-400 font-mono px-2 flex items-center gap-1">
                       <span className="material-symbols-outlined text-xs shrink-0">error</span>{schemaError}
                     </p>
                   ) : availTables.length === 0 ? (
-                    <p className="text-[11px] text-gray-400 px-2">Loading schemas…</p>
+                    <p className="text-[11px] text-gray-400 px-2">{t('resourcePanel.loadingSchemas')}</p>
                   ) : (
                     <div className="space-y-1">
                       {availTables.map(table => (
@@ -144,13 +147,13 @@ export default function Investigate() {
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-xs text-gray-400">terminal</span>
-                      <span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">SQL Query</span>
+                      <span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">{t('editor.label')}</span>
                     </div>
                     <div className="h-3 w-px bg-outline-variant/20"></div>
                     <div className="flex gap-2 items-center">
                       <span className={`w-1.5 h-1.5 rounded-full ${streaming ? 'bg-[#ffb0cf] animate-pulse' : 'bg-zinc-600'}`}></span>
                       <span className={`text-[10px] uppercase font-semibold tracking-tight ${streaming ? 'text-primary' : 'text-gray-400'}`}>
-                        {streaming ? 'Streaming' : 'Idle'}
+                        {streaming ? t('editor.streaming') : t('editor.idle')}
                       </span>
                     </div>
                   </div>
@@ -159,7 +162,7 @@ export default function Investigate() {
                       onClick={() => setQuery('')}
                       className="px-3 py-1 text-[10px] font-semibold text-gray-400 hover:text-gray-100 uppercase tracking-wider transition-colors"
                     >
-                      Clear
+                      {t('editor.clear')}
                     </button>
                     <button
                       onClick={handleRun}
@@ -172,7 +175,7 @@ export default function Investigate() {
                       <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>
                         {streaming ? 'stop' : 'play_arrow'}
                       </span>
-                      {streaming ? 'Stop' : 'Execute'}
+                      {streaming ? t('editor.stop') : t('editor.execute')}
                     </button>
                   </div>
                 </div>
@@ -199,13 +202,15 @@ export default function Investigate() {
               <div className="flex-1 flex flex-col bg-gray-800 rounded-sm border border-outline-variant/10 overflow-hidden">
                 <div className="p-4 flex items-center justify-between border-b border-outline-variant/10 shrink-0">
                   <div className="flex items-baseline gap-3">
-                    <h3 className="text-base font-semibold text-gray-100">Results</h3>
+                    <h3 className="text-base font-semibold text-gray-100">{t('results.heading')}</h3>
                     {rowMeta && (
-                      <span className="text-[10px] font-mono bg-surface-container-lowest px-2 py-0.5 rounded-sm text-gray-400 border border-outline-variant/5">{rowMeta}</span>
+                      <span className="text-[10px] font-mono bg-surface-container-lowest px-2 py-0.5 rounded-sm text-gray-400 border border-outline-variant/5">
+                        {t('results.summary', { count: rowMeta.count, elapsed: formatNumber(rowMeta.elapsed, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })}
+                      </span>
                     )}
                     {streaming && (
                       <span className="text-[10px] font-mono bg-[#ffb0cf]/10 px-2 py-0.5 rounded-sm text-primary border border-[#ffb0cf]/20">
-                        {rows.length} rows streaming…
+                        {t('results.streaming', { count: rows.length })}
                       </span>
                     )}
                   </div>
@@ -230,7 +235,7 @@ export default function Investigate() {
                   {rows.length === 0 && !streaming && !error ? (
                     <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-400">
                       <span className="material-symbols-outlined text-4xl">table_rows</span>
-                      <p className="text-xs">Execute a query to see results</p>
+                      <p className="text-xs">{t('results.empty')}</p>
                     </div>
                   ) : (
                     <table className="w-full text-left border-collapse">

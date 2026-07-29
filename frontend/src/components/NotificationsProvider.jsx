@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 
 const NotificationsContext = createContext(null)
@@ -33,6 +34,7 @@ function severityStyles(severity) {
 }
 
 function Toast({ n, onDismiss }) {
+  const { t } = useTranslation()
   const s = severityStyles(n.severity)
   return (
     <div className="flex items-stretch bg-surface-container-low border border-outline-variant/20 rounded-sm shadow-2xl w-80 overflow-hidden animate-slide-in">
@@ -45,7 +47,7 @@ function Toast({ n, onDismiss }) {
               style={{ fontVariationSettings: "'FILL' 1" }}>
               {n.severity === 'critical' ? 'gpp_bad' : 'warning'}
             </span>
-            <span className="text-xs font-semibold text-gray-100 truncate">{n.rule_name || 'Security Alert'}</span>
+            <span className="text-xs font-semibold text-gray-100 truncate">{n.rule_name || t('notifications.fallbackTitle')}</span>
           </div>
           <button
             onClick={() => onDismiss(n.id)}
@@ -65,7 +67,7 @@ function Toast({ n, onDismiss }) {
             to="/threats"
             className="text-[10px] font-semibold text-primary hover:underline underline-offset-2 ml-auto"
           >
-            View threats →
+            {t('notifications.viewThreats')}
           </Link>
         </div>
       </div>

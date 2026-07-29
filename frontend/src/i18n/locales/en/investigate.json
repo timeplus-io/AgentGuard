@@ -1,0 +1,28 @@
+{
+  "title": "SQL Console",
+  "subtitle": "Query Timeplus streams directly using streaming SQL.",
+  "resourcePanel": {
+    "heading": "Console Resources",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "streamsHeading": "Streams",
+    "loadingSchemas": "Loading schemas…",
+    "loadError": "Failed to load table schema"
+  },
+  "editor": {
+    "label": "SQL Query",
+    "streaming": "Streaming",
+    "idle": "Idle",
+    "clear": "Clear",
+    "execute": "Execute",
+    "stop": "Stop"
+  },
+  "results": {
+    "heading": "Results",
+    "empty": "Execute a query to see results",
+    "summary_one": "{{count}} row · {{elapsed}}s",
+    "summary_other": "{{count}} rows · {{elapsed}}s",
+    "streaming_one": "{{count}} row streaming…",
+    "streaming_other": "{{count}} rows streaming…"
+  }
+}

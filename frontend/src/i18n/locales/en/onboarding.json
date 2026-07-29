@@ -1,0 +1,209 @@
+{
+  "wizard": {
+    "header": {
+      "title": "Connect Your Agent",
+      "backToDashboard": "Back to Dashboard",
+      "descAlready": "You've already connected an agent. Update your configuration or enable additional rules.",
+      "descNew": "Follow these steps to connect your AI agent to AgentGuard.",
+      "alreadyOnboardedNote": "You've completed onboarding before. Rules already enabled will be shown with an \"Already Enabled\" badge."
+    },
+    "steps": {
+      "selectAgent": "Select Agent",
+      "installPlugin": "Install Plugin",
+      "otelConfig": "OTel Config",
+      "activateRules": "Activate Rules"
+    },
+    "agentTypes": {
+      "badge": "Supported",
+      "openclaw": {
+        "name": "OpenClaw",
+        "desc": "Open-source AI agent gateway with full plugin support. Ideal for production workloads and custom security policies."
+      },
+      "claudeCode": {
+        "name": "Claude Code",
+        "desc": "Anthropic's Claude Code CLI. Monitor tool use, LLM calls, cost, and security events in real time."
+      },
+      "hermes": {
+        "name": "Hermes Agent",
+        "desc": "NousResearch Hermes AI agent. Monitor sessions, LLM calls, and tool use via the AgentGuard Python plugin."
+      }
+    },
+    "copyButton": {
+      "copy": "Copy",
+      "copied": "Copied!"
+    },
+    "downloadScript": {
+      "button": "Download Install Script",
+      "downloading": "Downloading…",
+      "errorStatus": "Download failed ({{status}})",
+      "errorFallback": "Download failed"
+    },
+    "common": {
+      "valuesToHaveReady": "Values to have ready",
+      "fields": {
+        "deploymentId": "Deployment ID",
+        "deploymentName": "Deployment Name",
+        "timeplusUrl": "Timeplus URL",
+        "timeplusUsername": "Timeplus Username",
+        "timeplusPassword": "Timeplus Password",
+        "agentguardUrl": "AgentGuard URL",
+        "agentId": "Agent ID *"
+      },
+      "placeholders": {
+        "deploymentIdOpenclaw": "my-team",
+        "deploymentNameOpenclaw": "My Team",
+        "deploymentIdLocal": "local",
+        "deploymentNameLocal": "Local Dev",
+        "timeplusUrl": "http://localhost:3218",
+        "timeplusUsername": "proton",
+        "timeplusPassword": "your-password",
+        "agentguardUrl": "http://localhost:8080",
+        "agentId": "your-hostname"
+      },
+      "holdsEnabledLabel": "Holds Enabled",
+      "holdFailPolicyLabel": "Hold Fail Policy",
+      "holdsOn": "Synchronous PreToolUse blocking on",
+      "holdsOnHermes": "Synchronous pre_tool_call blocking on",
+      "holdsOff": "Observation-only — no blocking",
+      "holdFailPolicyOptions": {
+        "deny": "deny — block on errors",
+        "allow": "allow — pass through on errors"
+      },
+      "runLabel": "Then run"
+    },
+    "step0": {
+      "title": "Select Agent Type",
+      "desc": "Choose the AI agent framework you want to protect with AgentGuard."
+    },
+    "step1": {
+      "openclaw": {
+        "title": "Install Plugin",
+        "descBefore": "Download and run the interactive install script from your OpenClaw project directory. It will prompt for the values below and patch your ",
+        "descAfter": " automatically.",
+        "runLabel": "Then run from your OpenClaw project directory"
+      },
+      "claudeCode": {
+        "title": "Install Plugin",
+        "desc": "Download and run the interactive install script. It will prompt you for the values below and configure everything automatically.",
+        "agentIdNote": "* Agent ID identifies this Claude Code instance — use your hostname or machine name."
+      },
+      "hermes": {
+        "title": "Install Plugin",
+        "descBefore": "Download and run the interactive install script. It will pip-install the plugin, run ",
+        "descAfter": ", and offer to append the required env vars to your shell profile.",
+        "agentIdNote": "* Agent ID identifies this Hermes instance — use your hostname or machine name."
+      }
+    },
+    "step2": {
+      "openclaw": {
+        "title": "OpenTelemetry Config",
+        "desc": "Enable the built-in OTel diagnostics plugin to export traces, metrics, and logs from OpenClaw to Timeplus.",
+        "endpointHeading": "Timeplus OTLP Endpoint",
+        "endpointLabel": "Endpoint URL",
+        "hintBefore": "Use ",
+        "hintAfter": " when OpenClaw runs in Docker and Timeplus runs on the host. Replace with the actual host/IP if needed.",
+        "codeBlockLabel": "openclaw.json — diagnostics section"
+      },
+      "claudeCode": {
+        "title": "OpenTelemetry Config",
+        "desc": "Enable Claude Code's built-in OTel telemetry to export LLM metrics and logs to Timeplus. This unlocks token usage, cost, and latency data.",
+        "endpointHeading": "Timeplus OTLP Endpoint",
+        "endpointLabel": "Endpoint URL",
+        "codeBlockLabel": "~/.claude/settings.json — merge this env block",
+        "mergeNoteBefore": "Merge the ",
+        "mergeNoteMiddle": " keys into your existing ",
+        "mergeNoteBetween": ". The ",
+        "mergeNoteAfter": " protocol is required — do not use gRPC."
+      },
+      "hermes": {
+        "title": "OpenTelemetry Config",
+        "desc": "OTel telemetry export is not yet supported by Hermes Agent.",
+        "notAvailableTitle": "OTel not yet available for Hermes",
+        "notAvailableBodyBefore": "Hermes Agent does not yet expose an OpenTelemetry exporter. Token usage and latency metrics are captured via the AgentGuard plugin's ",
+        "notAvailableBodyAfter": " hook instead — no additional configuration is required.",
+        "notAvailableBody2": "OTel support will be added here once Hermes ships an OTLP exporter.",
+        "nextHintBefore": "Click ",
+        "nextHintAfter": " to proceed to rule activation."
+      }
+    },
+    "step3": {
+      "title": "Activate Security Rules",
+      "desc": "Select the rules to enable now and pick a block policy for each. You can refine these any time from the Rules page.",
+      "loading": "Loading rules…",
+      "loadCatalogFailed": "Failed to load catalog",
+      "noRules": "No rules available in the catalog.",
+      "alreadyEnabled": "Already enabled",
+      "installFailedLine": "{{name}}: install failed ({{message}})",
+      "setPolicyFailedLine": "{{name}}: set {{policy}} policy failed ({{message}})",
+      "activationFailedSummary_one": "{{count}} of {{total}} rule activation failed:",
+      "activationFailedSummary_other": "{{count}} of {{total}} rule activations failed:",
+      "activationFailedFallback": "Activation failed",
+      "footerNoteBefore": "Selected rules will be installed when you click ",
+      "footerNoteGoToRules": "Go to Rules",
+      "footerNoteAfter": ". You can browse the full catalog and adjust policies on the Rules page."
+    },
+    "footer": {
+      "back": "Back",
+      "next": "Next",
+      "goToRules": "Go to Rules",
+      "activating": "Activating…"
+    }
+  },
+  "setup": {
+    "nav": {
+      "badge": "First-time Setup"
+    },
+    "header": {
+      "title": "Setup AgentGuard",
+      "subtitle": "Connect to Timeplus and provision all monitoring resources."
+    },
+    "steps": {
+      "connection": "Connection",
+      "credentials": "Credentials",
+      "provision": "Provision"
+    },
+    "connection": {
+      "title": "Timeplus Connection",
+      "desc": "Enter the address of your Timeplus instance.",
+      "fields": {
+        "host": "Timeplus Host",
+        "httpPort": "HTTP Port",
+        "nativePort": "Native Port",
+        "agentguardUrl": "AgentGuard URL"
+      },
+      "placeholders": {
+        "host": "localhost",
+        "httpPort": "3218",
+        "nativePort": "8463",
+        "agentguardUrl": "http://localhost:8080"
+      }
+    },
+    "credentials": {
+      "title": "Timeplus Credentials",
+      "desc": "Enter your Timeplus username and password. These will not be stored.",
+      "fields": {
+        "username": "Username",
+        "password": "Password"
+      },
+      "placeholders": {
+        "username": "default",
+        "password": "Leave blank if not set"
+      },
+      "testButton": "Test Connection",
+      "testing": "Testing…",
+      "connectedAs": "Connected as \"{{username}}\""
+    },
+    "provision": {
+      "title": "Provision Resources",
+      "desc": "Create all AgentGuard streams, materialized views, and rules in Timeplus.",
+      "button": "Provision Resources",
+      "autoLoginFailed": "Provisioning succeeded but login failed: {{message}} — please reload and log in."
+    },
+    "footer": {
+      "back": "Back",
+      "next": "Next",
+      "redirecting": "Redirecting…",
+      "waiting": "Waiting for provisioning…"
+    }
+  }
+}

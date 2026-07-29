@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { highlight, languages } from 'prismjs/components/prism-core'
 import 'prismjs/components/prism-sql'
 import 'prismjs/themes/prism-tomorrow.css'
@@ -11,6 +12,7 @@ import ConfigurationTab from '../components/rules/ConfigurationTab'
 import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { writeKey } from '../lib/perm'
+import { formatNumber } from '../i18n/format'
 
 const CATEGORY_ICONS = {
   prompt_injection_and_hijacking:    'phishing',
@@ -30,6 +32,7 @@ function severityBadge(severity) {
 }
 
 export default function RuleDetail() {
+  const { t } = useTranslation('rules')
   const { can } = useAuth()
   const canWrite = can(writeKey("rules"))
   const { id } = useParams()
@@ -74,9 +77,9 @@ export default function RuleDetail() {
         setRule(data)
         setDetections24h(data.detections_24h || 0)
       })
-      .catch(err => setLoadError(err?.message || 'Failed to load rule'))
+      .catch(err => setLoadError(err?.message || t('detail.errors.loadFailed')))
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id, t])
 
   const inst = rule?.instance || {}
   const upgradeAvailable = !!rule?.upgrade
@@ -95,7 +98,7 @@ export default function RuleDetail() {
       await api.toggleRule(id)
       await reload()
     } catch (e) {
-      setActionError(e?.message || 'Toggle failed')
+      setActionError(e?.message || t('detail.errors.toggleFailed'))
     } finally {
       setActionLoading(false)
     }
@@ -114,7 +117,7 @@ export default function RuleDetail() {
       if (e?.status === 409 && e?.body) {
         setUpgradeConflicts({ conflicts: e.body.conflicts || [], warnings: e.body.warnings || [] })
       } else {
-        setActionError(e?.message || 'Upgrade failed')
+        setActionError(e?.message || t('detail.errors.upgradeFailed'))
         setUpgradeModal(false)
       }
     } finally {
@@ -132,7 +135,7 @@ export default function RuleDetail() {
     } catch (e) {
       setActionLoading(false)
       setUninstallConfirm(false)
-      setActionError(e?.message || 'Uninstall failed')
+      setActionError(e?.message || t('detail.errors.uninstallFailed'))
     }
   }
 
@@ -151,7 +154,7 @@ export default function RuleDetail() {
 
   const udfFuncName = udf => {
     const m = udf.match(/FUNCTION\s+(\w+)\s*\(/i)
-    return m ? m[1] : `UDF`
+    return m ? m[1] : t('detail.udfsTab.unnamedFn')
   }
 
   const openCloneModal = () => {
@@ -165,7 +168,7 @@ export default function RuleDetail() {
     const newId = cloneNewId.trim()
     const newName = cloneNewName.trim()
     if (!newId || !newName) {
-      setCloneError('ID and name are required')
+      setCloneError(t('detail.cloneModal.errors.idNameRequired'))
       return
     }
     setCloneLoading(true)
@@ -183,9 +186,9 @@ export default function RuleDetail() {
         // prior clone or abandoned edit can leave one behind). Offer a safe
         // recovery path rather than dead-ending.
         setCloneExists(true)
-        setCloneError(`A rule "${newId}" already exists.`)
+        setCloneError(t('detail.cloneModal.errors.alreadyExists', { id: newId }))
       } else {
-        setCloneError(e?.message || 'Clone failed')
+        setCloneError(e?.message || t('detail.cloneModal.errors.cloneFailed'))
       }
     } finally {
       setCloneLoading(false)
@@ -203,14 +206,14 @@ export default function RuleDetail() {
   // surfaced verbatim; no auto-delete ever happens.
   const deleteExistingClone = async () => {
     const existingId = cloneNewId.trim()
-    if (!window.confirm(`Delete the existing definition "${existingId}"? This permanently removes the uninstalled custom rule.`)) return
+    if (!window.confirm(t('detail.cloneModal.deleteConfirm', { id: existingId }))) return
     setCloneLoading(true)
     setCloneError(null)
     try {
       await api.deleteCatalogRule(existingId)
       setCloneExists(false) // freed — the user can Clone into this ID again
     } catch (e) {
-      setCloneError(e?.message || 'Delete failed')
+      setCloneError(e?.message || t('detail.cloneModal.errors.deleteFailed'))
     } finally {
       setCloneLoading(false)
     }
@@ -240,7 +243,7 @@ export default function RuleDetail() {
               <p className="text-sm text-error">{loadError}</p>
             </div>
           ) : (
-            <p className="text-gray-400">Rule not found.</p>
+            <p className="text-gray-400">{t('detail.notFound')}</p>
           )}
         </main>
       </div>
@@ -259,22 +262,22 @@ export default function RuleDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-surface-container-low border border-outline-variant/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-6">
             <h3 className="text-base font-semibold text-gray-100">
-              {inst.enabled ? 'Disable' : 'Enable'} Rule
+              {t('detail.confirmToggle.title', { action: inst.enabled ? t('actions.disable') : t('actions.enable') })}
             </h3>
             <p className="text-sm text-gray-400">
-              Are you sure you want to <span className="text-gray-100 font-medium">{inst.enabled ? 'disable' : 'enable'}</span> <span className="text-primary">{inst.name}</span>?
+              {t('list.confirmToggle.bodyBeforeAction')}<span className="text-gray-100 font-medium">{inst.enabled ? t('actions.disable') : t('actions.enable')}</span>{t('list.confirmToggle.bodyBetween')}<span className="text-primary">{inst.name}</span>{t('list.confirmToggle.bodyAfter')}
               {inst.enabled
-                ? <span className="block mt-2 text-xs text-gray-400">This drops the detection materialized view; re-enabling redeploys it from the current configuration.</span>
-                : <span className="block mt-2 text-xs text-gray-400">This deploys the detection materialized view and starts monitoring.</span>
+                ? <span className="block mt-2 text-xs text-gray-400">{t('detail.confirmToggle.disableNote')}</span>
+                : <span className="block mt-2 text-xs text-gray-400">{t('detail.confirmToggle.enableNote')}</span>
               }
             </p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setToggleConfirm(false)} className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors">Cancel</button>
+              <button onClick={() => setToggleConfirm(false)} className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors">{t('actions.cancel')}</button>
               <button
                 onClick={confirmToggle}
                 className={`px-4 py-2 text-xs font-semibold rounded-sm transition-colors ${!inst.enabled ? 'bg-primary-button text-primary-button-text' : 'bg-zinc-700 text-white hover:bg-zinc-600'}`}
               >
-                {inst.enabled ? 'Disable' : 'Enable'}
+                {inst.enabled ? t('actions.disable') : t('actions.enable')}
               </button>
             </div>
           </div>
@@ -286,7 +289,7 @@ export default function RuleDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-surface-container-low border border-outline-variant/20 rounded-sm p-8 max-w-lg w-full mx-4 space-y-5">
             <h3 className="text-base font-semibold text-gray-100">
-              Upgrade {inst.name} → {targetVersion}
+              {t('detail.upgradeModal.title', { name: inst.name, version: targetVersion })}
             </h3>
 
             {(() => {
@@ -298,7 +301,7 @@ export default function RuleDetail() {
                 <>
                   {conflicts.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold text-error uppercase tracking-widest">Conflicts (block upgrade)</p>
+                      <p className="text-xs font-semibold text-error uppercase tracking-widest">{t('detail.upgradeModal.conflictsHeading')}</p>
                       {conflicts.map((c, i) => (
                         <div key={i} className="text-xs bg-red-500/10 border border-red-500/20 rounded-sm px-3 py-2">
                           <code className="text-error">{c.parameter}</code>: <span className="text-gray-300">{c.message}</span>
@@ -308,7 +311,7 @@ export default function RuleDetail() {
                   )}
                   {warnings.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold text-amber-400 uppercase tracking-widest">Warnings</p>
+                      <p className="text-xs font-semibold text-amber-400 uppercase tracking-widest">{t('detail.upgradeModal.warningsHeading')}</p>
                       {warnings.map((w, i) => (
                         <div key={i} className="text-xs bg-amber-500/10 border border-amber-500/20 rounded-sm px-3 py-2">
                           <code className="text-amber-300">{w.parameter}</code>: <span className="text-gray-300">{w.message}</span>
@@ -317,15 +320,15 @@ export default function RuleDetail() {
                     </div>
                   )}
                   {conflicts.length === 0 && warnings.length === 0 && (
-                    <p className="text-sm text-gray-400">Compatible upgrade — all current overrides are preserved.</p>
+                    <p className="text-sm text-gray-400">{t('detail.upgradeModal.compatible')}</p>
                   )}
                   <div className="flex gap-3 justify-end pt-2">
                     <button onClick={() => { setUpgradeModal(false); setUpgradeConflicts(null) }} className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors">
-                      {blocked ? 'Close' : 'Cancel'}
+                      {blocked ? t('detail.upgradeModal.close') : t('actions.cancel')}
                     </button>
                     {!blocked && (
                       <button onClick={confirmUpgrade} disabled={actionLoading || !canWrite} className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors disabled:opacity-50">
-                        {actionLoading ? 'Upgrading…' : `Upgrade to ${targetVersion}`}
+                        {actionLoading ? t('detail.actions.upgrading') : t('detail.actions.upgradeTo', { version: targetVersion })}
                       </button>
                     )}
                   </div>
@@ -340,28 +343,28 @@ export default function RuleDetail() {
       {cloneModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-surface-container-low border border-outline-variant/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-5">
-            <h3 className="text-base font-semibold text-gray-100">Clone as custom rule</h3>
+            <h3 className="text-base font-semibold text-gray-100">{t('detail.cloneModal.title')}</h3>
             <p className="text-xs text-gray-400">
-              Creates an editable copy of <span className="text-primary">{inst.name}</span> with rescoped UDF names.
+              {t('detail.cloneModal.bodyBefore')}<span className="text-primary">{inst.name}</span>{t('detail.cloneModal.bodyAfter')}
             </p>
             <div className="space-y-3">
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-1">New rule ID</label>
+                <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{t('detail.cloneModal.newIdLabel')}</label>
                 <input
                   type="text"
                   value={cloneNewId}
                   onChange={e => { setCloneNewId(e.target.value); setCloneExists(false); setCloneError(null) }}
-                  placeholder="e.g. rp-003-custom"
+                  placeholder={t('detail.cloneModal.newIdPlaceholder')}
                   className="w-full bg-surface-container-lowest border border-zinc-700 rounded-sm px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-[#ffb0cf]/50"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Rule name</label>
+                <label className="block text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{t('detail.cloneModal.nameLabel')}</label>
                 <input
                   type="text"
                   value={cloneNewName}
                   onChange={e => setCloneNewName(e.target.value)}
-                  placeholder="e.g. Score Rule (custom)"
+                  placeholder={t('detail.cloneModal.namePlaceholder')}
                   className="w-full bg-surface-container-lowest border border-zinc-700 rounded-sm px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-[#ffb0cf]/50"
                 />
               </div>
@@ -371,20 +374,20 @@ export default function RuleDetail() {
             )}
             {cloneExists && (
               <div className="flex flex-col gap-2 rounded-sm bg-surface-container-lowest p-3">
-                <p className="text-[11px] text-gray-400">Change the ID above to clone under a new name, or:</p>
+                <p className="text-[11px] text-gray-400">{t('detail.cloneModal.existsHint')}</p>
                 <div className="flex gap-2">
                   <button
                     onClick={openExistingClone}
                     className="flex-1 px-3 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors"
                   >
-                    Open existing definition
+                    {t('detail.cloneModal.openExisting')}
                   </button>
                   <button
                     onClick={deleteExistingClone}
                     disabled={cloneLoading}
                     className="flex-1 px-3 py-2 text-xs font-semibold rounded-sm bg-error-container/60 text-error hover:bg-error-container/80 transition-colors disabled:opacity-50"
                   >
-                    Delete existing draft
+                    {t('detail.cloneModal.deleteDraft')}
                   </button>
                 </div>
               </div>
@@ -394,14 +397,14 @@ export default function RuleDetail() {
                 onClick={() => { setCloneModal(false); setCloneError(null); setCloneExists(false) }}
                 className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors"
               >
-                Cancel
+                {t('actions.cancel')}
               </button>
               <button
                 onClick={handleClone}
                 disabled={cloneLoading}
                 className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors disabled:opacity-50"
               >
-                {cloneLoading ? 'Working…' : 'Clone'}
+                {cloneLoading ? t('detail.cloneModal.working') : t('detail.cloneModal.clone')}
               </button>
             </div>
           </div>
@@ -413,7 +416,7 @@ export default function RuleDetail() {
 
           <Link to="/rules" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-100 transition-colors uppercase tracking-widest font-semibold">
             <span className="material-symbols-outlined text-[14px]">arrow_back</span>
-            Rule Packs
+            {t('list.title')}
           </Link>
 
           {/* Header row */}
@@ -430,11 +433,11 @@ export default function RuleDetail() {
                     {' '}{inst.definition_version}
                   </span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${severityBadge(inst.severity)}`}>
-                    {inst.severity}
+                    {t(`enum.severity.${inst.severity}`, { defaultValue: inst.severity })}
                   </span>
                   {rule.mv && inst.enabled && rule.mv.failed_state && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide bg-red-500/10 text-red-400 border border-red-500/20" title={rule.mv.failed_state}>
-                      MV {rule.mv.failed_state}
+                      {t('detail.badges.mvFailed', { state: rule.mv.failed_state })}
                     </span>
                   )}
                 </div>
@@ -447,7 +450,7 @@ export default function RuleDetail() {
                 disabled={actionLoading || !canWrite}
                 className={`px-4 py-2 text-xs font-semibold rounded-sm transition-colors disabled:opacity-50 ${inst.enabled ? 'bg-zinc-700 text-white hover:bg-zinc-600' : 'bg-primary-button text-primary-button-text'}`}
               >
-                {inst.enabled ? 'Disable' : 'Enable'}
+                {inst.enabled ? t('actions.disable') : t('actions.enable')}
               </button>
 
               {upgradeAvailable && (
@@ -456,7 +459,7 @@ export default function RuleDetail() {
                   disabled={actionLoading || !canWrite}
                   className="px-4 py-2 text-xs font-semibold rounded-sm border border-[#ffb0cf]/30 text-primary hover:bg-[#ffb0cf]/10 transition-colors disabled:opacity-50"
                 >
-                  Upgrade{targetVersion ? ` to ${targetVersion}` : ''}
+                  {targetVersion ? t('detail.actions.upgradeTo', { version: targetVersion }) : t('detail.actions.upgrade')}
                   {rule.upgrade?.conflicts?.length > 0 && (
                     <span className="ml-1.5 text-[9px] align-middle">⚠</span>
                   )}
@@ -473,7 +476,7 @@ export default function RuleDetail() {
                   to={`/rules/${id}/edit`}
                   className="px-4 py-2 text-xs font-semibold rounded-sm border border-[#ffb0cf]/30 text-primary hover:bg-[#ffb0cf]/10 transition-colors"
                 >
-                  Edit definition
+                  {t('detail.actions.editDefinition')}
                 </Link>
               ) : (rule.definition?.origin === 'builtin' || rule.definition?.origin === 'imported') ? (
                 <button
@@ -481,19 +484,19 @@ export default function RuleDetail() {
                   disabled={actionLoading || !canWrite}
                   className="px-4 py-2 text-xs font-semibold rounded-sm border border-zinc-600 text-gray-300 hover:bg-zinc-700 transition-colors disabled:opacity-50"
                 >
-                  Clone as custom
+                  {t('detail.actions.cloneAsCustom')}
                 </button>
               ) : null}
 
               {!uninstallConfirm ? (
                 <button onClick={() => setUninstallConfirm(true)} disabled={actionLoading || !canWrite} className="px-4 py-2 text-xs font-semibold rounded-sm border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
-                  Uninstall
+                  {t('detail.actions.uninstall')}
                 </button>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-red-400">Are you sure?</span>
-                  <button onClick={handleUninstall} disabled={actionLoading || !canWrite} className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">Confirm</button>
-                  <button onClick={() => setUninstallConfirm(false)} className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors">Cancel</button>
+                  <span className="text-xs text-red-400">{t('detail.actions.uninstallConfirmPrompt')}</span>
+                  <button onClick={handleUninstall} disabled={actionLoading || !canWrite} className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">{t('detail.actions.confirm')}</button>
+                  <button onClick={() => setUninstallConfirm(false)} className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors">{t('actions.cancel')}</button>
                 </div>
               )}
             </div>
@@ -512,7 +515,7 @@ export default function RuleDetail() {
           {/* Block Policy */}
           <div className="bg-surface-container-low rounded-sm p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Block Policy</span>
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{t('detail.blockPolicy.heading')}</span>
               <BlockPolicySelect
                 value={inst.block_policy}
                 onChange={async (newPolicy) => {
@@ -522,49 +525,49 @@ export default function RuleDetail() {
                     await api.setRuleBlockPolicy(inst.rule_id || id, newPolicy)
                   } catch (e) {
                     setRule(prev => prev ? { ...prev, instance: { ...prev.instance, block_policy: prevPolicy } } : prev)
-                    setActionError(e?.message || 'Failed to update policy')
+                    setActionError(e?.message || t('detail.blockPolicy.updateFailed'))
                   }
                 }}
               />
             </div>
             <p className="text-[11px] text-gray-400">
-              {inst.block_policy === 'hold' && 'When this rule fires, AgentGuard will pause the agent and wait for human approval.'}
-              {inst.block_policy === 'auto_block' && 'When this rule fires, AgentGuard will block the tool call immediately without prompting.'}
-              {(!inst.block_policy || inst.block_policy === 'log_only') && 'When this rule fires, the threat is logged and surfaced in the UI but the agent is not blocked.'}
+              {inst.block_policy === 'hold' && t('detail.blockPolicy.hold')}
+              {inst.block_policy === 'auto_block' && t('detail.blockPolicy.autoBlock')}
+              {(!inst.block_policy || inst.block_policy === 'log_only') && t('detail.blockPolicy.logOnly')}
             </p>
           </div>
 
           {/* Rule Definition metadata */}
           <div className="bg-surface-container-low p-8 rounded-sm">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-6">Rule Definition</h2>
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-6">{t('detail.definition.heading')}</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
               <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Rule ID</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.definition.ruleId')}</p>
                 <p className="text-sm font-mono text-gray-100">{inst.rule_id}</p>
               </div>
               <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Version</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.definition.version')}</p>
                 <p className="text-sm text-gray-100">{inst.definition_version}</p>
               </div>
               <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Category</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.definition.category')}</p>
                 <p className="text-sm text-gray-100 capitalize">{inst.category?.replace(/_/g, ' ')}</p>
               </div>
               <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Severity</p>
-                <p className={`text-sm font-semibold capitalize ${inst.severity === 'critical' ? 'text-primary' : 'text-amber-400'}`}>{inst.severity}</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.definition.severity')}</p>
+                <p className={`text-sm font-semibold capitalize ${inst.severity === 'critical' ? 'text-primary' : 'text-amber-400'}`}>{t(`enum.severity.${inst.severity}`, { defaultValue: inst.severity })}</p>
               </div>
               <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">False Positive Rate</p>
-                <p className="text-sm text-gray-100 capitalize">{inst.fp_rate}</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.definition.fpRate')}</p>
+                <p className="text-sm text-gray-100 capitalize">{t(`enum.fpRate.${inst.fp_rate}`, { defaultValue: inst.fp_rate })}</p>
               </div>
               <div>
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Hook Sources</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.definition.hookSources')}</p>
                 <p className="text-xs font-mono text-gray-100">{inst.hook_sources}</p>
               </div>
               {inst.required_telemetry && (
                 <div className="col-span-2 md:col-span-3">
-                  <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Required Telemetry</p>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.definition.requiredTelemetry')}</p>
                   <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">{inst.required_telemetry}</span>
                 </div>
               )}
@@ -575,23 +578,25 @@ export default function RuleDetail() {
           <div className="bg-surface-container-low rounded-sm overflow-hidden">
             <div className="flex border-b border-outline-variant/10 px-2 flex-wrap">
               {[
-                { id: 'configuration', label: 'Configuration', badge: rule.schema?.length || 0 },
-                { id: 'description',   label: 'Description' },
-                { id: 'sql',           label: 'Detection SQL' },
-                { id: 'udfs',          label: 'UDFs', badge: udfs.length },
-                { id: 'detections',    label: 'Recent Detections', badge: detections24h, badgeLabel: '24h' },
-              ].map(t => {
-                const active = contentTab === t.id
+                { id: 'configuration', label: t('detail.tabs.configuration'), badge: rule.schema?.length || 0 },
+                { id: 'description',   label: t('detail.tabs.description') },
+                { id: 'sql',           label: t('detail.tabs.sql') },
+                { id: 'udfs',          label: t('detail.tabs.udfs'), badge: udfs.length },
+                { id: 'detections',    label: t('detail.tabs.detections'), badge: detections24h, badgeLabel: t('detail.tabs.detectionsBadgeLabel') },
+              ].map(tab => {
+                const active = contentTab === tab.id
                 return (
                   <button
-                    key={t.id}
-                    onClick={() => setContentTab(t.id)}
+                    key={tab.id}
+                    onClick={() => setContentTab(tab.id)}
                     className={`px-4 py-3 text-xs font-semibold uppercase tracking-widest transition-colors border-b-2 ${active ? 'text-primary border-[#ffb0cf]' : 'text-gray-400 hover:text-gray-100 border-transparent'}`}
                   >
-                    {t.label}
-                    {t.badge != null && t.badge > 0 && (
+                    {tab.label}
+                    {tab.badge != null && tab.badge > 0 && (
                       <span className={`ml-2 text-[10px] normal-case font-normal ${active ? 'text-primary/70' : 'text-gray-400'}`}>
-                        {t.badgeLabel ? `(${t.badgeLabel}: ${t.badge})` : `(${t.badge})`}
+                        {tab.badgeLabel
+                          ? t('detail.tabs.badgeCountWithLabel', { label: tab.badgeLabel, count: tab.badge, formatted: formatNumber(tab.badge) })
+                          : t('detail.tabs.badgeCount', { count: tab.badge, formatted: formatNumber(tab.badge) })}
                       </span>
                     )}
                   </button>
@@ -610,9 +615,9 @@ export default function RuleDetail() {
                     <span className="material-symbols-outlined text-amber-400 text-[20px] shrink-0 mt-0.5">upgrade</span>
                     <div className="space-y-3">
                       <div>
-                        <p className="text-sm font-semibold text-amber-300">Upgrade before configuring</p>
+                        <p className="text-sm font-semibold text-amber-300">{t('detail.configLock.title')}</p>
                         <p className="text-xs text-gray-400 mt-1">
-                          A newer version{targetVersion ? ` (${targetVersion})` : ''} of this rule is available, and its parameters may have changed — configuration is locked until you upgrade. Upgrading preserves your compatible overrides.
+                          {targetVersion ? t('detail.configLock.bodyWithVersion', { version: targetVersion }) : t('detail.configLock.bodyNoVersion')}
                         </p>
                       </div>
                       <button
@@ -621,7 +626,7 @@ export default function RuleDetail() {
                         disabled={actionLoading || !canWrite}
                         className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors disabled:opacity-50"
                       >
-                        Upgrade{targetVersion ? ` to ${targetVersion}` : ''}…
+                        {targetVersion ? t('detail.configLock.upgradeButtonTo', { version: targetVersion }) : t('detail.configLock.upgradeButton')}
                       </button>
                     </div>
                   </div>
@@ -644,10 +649,10 @@ export default function RuleDetail() {
               {contentTab === 'sql' && (
                 <>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-[11px] text-gray-400">Read-only — rendered from the definition template and current parameter values.</span>
+                    <span className="text-[11px] text-gray-400">{t('detail.sqlTab.readonlyNote')}</span>
                     <button onClick={copySQL} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-100 transition-colors">
                       <span className="material-symbols-outlined text-[14px]">{copied ? 'check' : 'content_copy'}</span>
-                      {copied ? 'Copied' : 'Copy'}
+                      {copied ? t('detail.sqlTab.copied') : t('detail.sqlTab.copy')}
                     </button>
                   </div>
                   <pre className="bg-surface-container-lowest text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
@@ -664,11 +669,11 @@ export default function RuleDetail() {
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="text-sm font-semibold text-gray-400">
                             {udfFuncName(udf)}
-                            <span className="ml-2 text-[10px] text-gray-400 normal-case font-normal">UDF</span>
+                            <span className="ml-2 text-[10px] text-gray-400 normal-case font-normal">{t('detail.udfsTab.badge')}</span>
                           </h3>
                           <button onClick={() => copyUDF(i, udf)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-100 transition-colors">
                             <span className="material-symbols-outlined text-[14px]">{copiedUDFs[i] ? 'check' : 'content_copy'}</span>
-                            {copiedUDFs[i] ? 'Copied' : 'Copy'}
+                            {copiedUDFs[i] ? t('detail.sqlTab.copied') : t('detail.sqlTab.copy')}
                           </button>
                         </div>
                         <pre className="bg-surface-container-lowest text-[11px] font-mono rounded p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed"
@@ -678,7 +683,7 @@ export default function RuleDetail() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">This rule does not define any UDFs.</p>
+                  <p className="text-xs text-gray-400">{t('detail.udfsTab.empty')}</p>
                 )
               )}
 

@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import SettingsNav from '../components/settings/SettingsNav'
 import SettingsSection from '../components/settings/SettingsSection'
+import LanguageSelector from '../components/settings/LanguageSelector'
 import {
   keyToSectionMap,
   dirtyCountsBySection,
@@ -16,6 +18,7 @@ import { useAuth } from '../context/AuthContext'
 import { writeKey } from '../lib/perm'
 
 export default function Settings() {
+  const { t } = useTranslation('settings')
   const { can } = useAuth()
   const canWrite = can(writeKey("settings"))
   const [data, setData] = useState(null)
@@ -55,13 +58,13 @@ export default function Settings() {
       const res = await api.updateConfig(drafts)
       setDrafts({})
       if (res.sentry_provision_error) {
-        setBanner({ type: 'warn', msg: `Saved, but Sentry provisioning failed: ${res.sentry_provision_error}` })
+        setBanner({ type: 'warn', msg: t('banners.sentryProvisionError', { error: res.sentry_provision_error }) })
       } else if (res.restart_required) {
-        setBanner({ type: 'warn', msg: 'Saved. Some changes require an AgentGuard restart to take effect.' })
+        setBanner({ type: 'warn', msg: t('banners.restartRequiredAfterSave') })
       } else if (res.sentry_provisioned) {
-        setBanner({ type: 'ok', msg: 'Configuration saved. Sentry streams provisioned.' })
+        setBanner({ type: 'ok', msg: t('banners.sentryProvisioned') })
       } else {
-        setBanner({ type: 'ok', msg: 'Configuration saved.' })
+        setBanner({ type: 'ok', msg: t('banners.saved') })
       }
       setConfigSavedAt(Date.now()) // tells live-config editors (Sentry/DLP) to refetch
       load()
@@ -91,10 +94,10 @@ export default function Settings() {
     setReprovisioning(true)
     try {
       await api.syncRules()
-      setBanner({ type: 'ok', msg: 'DLP re-provision triggered.' })
+      setBanner({ type: 'ok', msg: t('banners.reprovisionTriggered') })
       load()
     } catch (e) {
-      setBanner({ type: 'error', msg: `Re-provision failed: ${e.message}` })
+      setBanner({ type: 'error', msg: t('banners.reprovisionFailed', { error: e.message }) })
     } finally {
       setReprovisioning(false)
     }
@@ -119,9 +122,11 @@ export default function Settings() {
       <TopNav />
       <main className="pl-sidebar pt-16 pb-24 min-h-screen">
         <div className="p-8 max-w-5xl">
-          <PageHeader title="Settings" subtitle="View and edit AgentGuard server configuration. Keys set by environment variables or CLI flags are read-only." />
+          <PageHeader title={t('page.title')} subtitle={t('page.subtitle')} />
 
-          {loading && <p className="text-gray-400 text-sm">Loading…</p>}
+          <div className="mb-6"><LanguageSelector /></div>
+
+          {loading && <p className="text-gray-400 text-sm">{t('page.loading')}</p>}
           {error && <p className="text-error text-sm">{error}</p>}
 
           {banner && (
@@ -135,16 +140,16 @@ export default function Settings() {
 
           {data?.restart_required && (
             <div className="mb-6 rounded-sm px-4 py-3 text-sm bg-amber-900/40 text-amber-200">
-              Saved configuration differs from the running server — restart AgentGuard to apply.
+              {t('banners.restartRequired')}
             </div>
           )}
 
           {data?.reprovision_required && (
             <div className="mb-6 rounded-sm px-4 py-3 text-sm bg-amber-900/40 text-amber-200 flex items-center justify-between gap-4">
-              <span>DLP model settings differ from what&apos;s provisioned. Re-provision to apply baked-in model/dimension changes. (Changing the embedding dimension does not recreate the existing stream automatically.)</span>
+              <span>{t('banners.reprovisionRequired')}</span>
               <button onClick={reprovisionDLP} disabled={reprovisioning}
                 className="shrink-0 rounded-sm px-3 py-1.5 text-xs bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] font-medium disabled:opacity-60">
-                {reprovisioning ? 'Re-provisioning…' : 'Re-provision DLP now'}
+                {reprovisioning ? t('actions.reprovisioning') : t('banners.reprovisionCta')}
               </button>
             </div>
           )}
@@ -184,12 +189,12 @@ export default function Settings() {
 
         {dirtyKeys.length > 0 && (
           <div className="fixed bottom-0 left-0 right-0 pl-sidebar bg-gray-800/95 backdrop-blur-md py-3 z-30 flex items-center justify-between [&>*:first-child]:pl-10 [&>*:last-child]:pr-10">
-            <span className="text-sm text-gray-300">{dirtyKeys.length} unsaved change{dirtyKeys.length > 1 ? 's' : ''}</span>
+            <span className="text-sm text-gray-300">{t('actions.unsavedCount', { count: dirtyKeys.length })}</span>
             <div className="flex gap-3">
-              <button onClick={discard} disabled={saving || !canWrite} className="rounded-sm px-4 py-2 text-sm bg-gray-700 text-gray-100 hover:bg-gray-600">Discard</button>
+              <button onClick={discard} disabled={saving || !canWrite} className="rounded-sm px-4 py-2 text-sm bg-gray-700 text-gray-100 hover:bg-gray-600">{t('actions.discard')}</button>
               <button onClick={save} disabled={saving || !canWrite}
                 className="rounded-sm px-4 py-2 text-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] font-medium disabled:opacity-60">
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? t('actions.saving') : t('actions.save')}
               </button>
             </div>
           </div>

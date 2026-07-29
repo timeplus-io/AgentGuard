@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 
 // Chat UDFs edit a model reference, a token budget, and a prompt template.
 // dlp_embed is handled separately (it has max_chars, no prompt).
 // placeholders: the template variables that UDF substitutes at call time.
 const CHAT_UDFS = [
-  { key: 'dlp_understand_query', label: 'Query understanding', placeholders: ['{question}'], json: true },
-  { key: 'dlp_rerank', label: 'Rerank', placeholders: ['{count}', '{question}', '{items}'], json: true },
-  { key: 'dlp_risk', label: 'Risk classification', placeholders: ['{entity_types}', '{message}'], json: true },
-  { key: 'dlp_summarize', label: 'Summary report', placeholders: ['{question}', '{evidence}'], json: false },
+  { key: 'dlp_understand_query', labelKey: 'config.udfs.understand', placeholders: ['{question}'], json: true },
+  { key: 'dlp_rerank', labelKey: 'config.udfs.rerank', placeholders: ['{count}', '{question}', '{items}'], json: true },
+  { key: 'dlp_risk', labelKey: 'config.udfs.risk', placeholders: ['{entity_types}', '{message}'], json: true },
+  { key: 'dlp_summarize', labelKey: 'config.udfs.summarize', placeholders: ['{question}', '{evidence}'], json: false },
 ]
 
 const inputCls =
@@ -57,6 +58,7 @@ function buildDraft(byKey) {
 }
 
 export default function DLPConfigEditor() {
+  const { t } = useTranslation('dlp')
   const [byKey, setByKey] = useState(null)
   const [draft, setDraft] = useState(null)
   const [dirty, setDirty] = useState(() => new Set())
@@ -79,8 +81,8 @@ export default function DLPConfigEditor() {
         setEntitiesErr(null)
         setLoadErr(null)
       })
-      .catch((e) => setLoadErr(e?.message || 'Failed to load DLP config'))
-  }, [])
+      .catch((e) => setLoadErr(e?.message || t('config.errors.loadFailed')))
+  }, [t])
 
   useEffect(() => { load() }, [load])
 
@@ -135,7 +137,7 @@ export default function DLPConfigEditor() {
   async function save() {
     setBanner(null)
     if (dirty.has('dlp_extract_entities')) {
-      try { JSON.parse(entitiesText) } catch { setEntitiesErr('Invalid JSON'); return }
+      try { JSON.parse(entitiesText) } catch { setEntitiesErr(t('config.entityCatalog.invalidJson')); return }
     }
     setEntitiesErr(null)
     setSaving(true)
@@ -143,10 +145,10 @@ export default function DLPConfigEditor() {
       for (const key of dirty) {
         await api.putDLPConfig(key, buildValue(key))
       }
-      setBanner({ type: 'ok', msg: 'Saved. Changes take effect on the next event / query — no re-provision.' })
+      setBanner({ type: 'ok', msg: t('config.banner.saved') })
       load()
     } catch (e) {
-      setBanner({ type: 'err', msg: e?.message || 'Save failed' })
+      setBanner({ type: 'err', msg: e?.message || t('config.errors.saveFailed') })
     } finally {
       setSaving(false)
     }
@@ -174,23 +176,23 @@ export default function DLPConfigEditor() {
       })
       setTest(r)
     } catch (e) {
-      setTest({ ok: false, error: e?.message || 'test failed' })
+      setTest({ ok: false, error: e?.message || t('config.shared.errors.testFailed') })
     }
   }
 
   if (loadErr) {
     return (
       <p className="text-xs text-error">
-        {loadErr} — runtime config is available only after Semantic DLP is provisioned.
+        {loadErr}{t('config.errors.loadErrSuffix')}
       </p>
     )
   }
-  if (!draft) return <p className="text-xs text-gray-400">Loading runtime config…</p>
+  if (!draft) return <p className="text-xs text-gray-400">{t('config.loadingRuntime')}</p>
 
   const modelNames = draft.shared.models.map((m) => m.name).filter(Boolean)
   const ModelSelect = ({ value, onChange }) => (
     <select className={inputCls} value={value} onChange={(e) => onChange(e.target.value)}>
-      {value && !modelNames.includes(value) && <option value={value}>{value} (literal)</option>}
+      {value && !modelNames.includes(value) && <option value={value}>{t('config.catalog.literalSuffix', { value })}</option>}
       {modelNames.map((n) => <option key={n} value={n}>{n}</option>)}
     </select>
   )
@@ -198,50 +200,49 @@ export default function DLPConfigEditor() {
   return (
     <div className="space-y-6">
       <p className="text-xs text-gray-400">
-        Live configuration stored in the <code className="font-mono text-primary">agentguard_dlp_config</code> stream.
-        Edits apply immediately — no restart or re-provision. (Endpoint/model defaults in the server config only seed these on first provision.)
+        {t('config.intro.pre')}<code className="font-mono text-primary">agentguard_dlp_config</code>{t('config.intro.post')}
       </p>
 
       {/* Shared endpoint */}
       <div>
-        <h4 className="text-sm font-medium text-gray-100 mb-2">Shared endpoint</h4>
-        <p className="text-[11px] text-gray-400 mb-2">Default endpoint for every model that doesn’t set its own below.</p>
+        <h4 className="text-sm font-medium text-gray-100 mb-2">{t('config.shared.heading')}</h4>
+        <p className="text-[11px] text-gray-400 mb-2">{t('config.shared.description')}</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <label className="space-y-1"><span className={labelCls}>Base URL</span>
+          <label className="space-y-1"><span className={labelCls}>{t('config.shared.baseUrlLabel')}</span>
             <input className={inputCls} value={draft.shared.base_url} onChange={(e) => setShared({ base_url: e.target.value })} placeholder="http://localhost:4000/v1" />
           </label>
-          <label className="space-y-1"><span className={labelCls}>API key {byKey.shared?.api_key_set && <span className="text-emerald-400 normal-case">· set</span>}</span>
-            <input className={inputCls} type="password" value={draft.shared.api_key} onChange={(e) => setShared({ api_key: e.target.value })} placeholder={byKey.shared?.api_key_set ? '•••••• (unchanged)' : 'none'} />
+          <label className="space-y-1"><span className={labelCls}>{t('config.shared.apiKeyLabel')} {byKey.shared?.api_key_set && <span className="text-emerald-400 normal-case">{t('common.apiKeySet')}</span>}</span>
+            <input className={inputCls} type="password" value={draft.shared.api_key} onChange={(e) => setShared({ api_key: e.target.value })} placeholder={byKey.shared?.api_key_set ? t('config.shared.apiKeyPlaceholderSet') : t('config.shared.apiKeyPlaceholderUnset')} />
           </label>
-          <label className="space-y-1"><span className={labelCls}>Timeout (s)</span>
+          <label className="space-y-1"><span className={labelCls}>{t('config.shared.timeoutLabel')}</span>
             <input className={inputCls} type="number" value={draft.shared.timeout} onChange={(e) => setShared({ timeout: e.target.value })} />
           </label>
         </div>
         <div className="mt-3 flex items-center gap-3 flex-wrap">
-          <button onClick={testEndpoint} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">Test endpoint</button>
-          <span className="text-[11px] text-gray-500">Tests the values above (not the saved ones) with the embedding + risk models.</span>
-          {test?.pending && <span className="text-xs text-gray-400">Testing…</span>}
+          <button onClick={testEndpoint} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">{t('config.shared.testButton')}</button>
+          <span className="text-[11px] text-gray-500">{t('config.shared.testHint')}</span>
+          {test?.pending && <span className="text-xs text-gray-400">{t('config.shared.testing')}</span>}
           {test && !test.pending && (test.checks ? (
             <div className="text-xs space-y-0.5 basis-full">
               <div className={test.checks.reachable?.ok ? 'text-emerald-400' : 'text-error'}>
-                {test.checks.reachable?.ok ? '✓ reachable' : `✗ reachable: ${test.checks.reachable?.error || ''}`}
+                {test.checks.reachable?.ok ? t('config.shared.check.reachableOk') : t('config.shared.check.reachableFail', { error: test.checks.reachable?.error || '' })}
               </div>
               {test.checks.embedding && (
                 <div className={test.checks.embedding.ok ? 'text-emerald-400' : 'text-error'}>
                   {test.checks.embedding.ok
-                    ? `✓ embedding dim ${test.checks.embedding.dim}`
-                    : `✗ embedding dim ${test.checks.embedding.dim ?? '?'} (expected ${test.checks.embedding.expected}) — set dlp.embedding_dim + re-provision`}
+                    ? t('config.shared.check.embeddingOk', { dim: test.checks.embedding.dim })
+                    : t('config.shared.check.embeddingFail', { dim: test.checks.embedding.dim ?? '?', expected: test.checks.embedding.expected })}
                 </div>
               )}
               {test.checks.chat && (
                 <div className={test.checks.chat.ok ? 'text-emerald-400' : 'text-error'}>
-                  {test.checks.chat.ok ? '✓ chat' : `✗ chat: ${test.checks.chat.note || 'failed'}`}
+                  {test.checks.chat.ok ? t('config.shared.check.chatOk') : t('config.shared.check.chatFail', { note: test.checks.chat.note || t('config.shared.check.chatFailDefault') })}
                 </div>
               )}
             </div>
           ) : (
             <span className={`text-xs ${test.ok ? 'text-emerald-400' : 'text-error'}`}>
-              {test.ok ? 'Endpoint reachable' : `Failed: ${test.error}`}
+              {test.ok ? t('config.shared.check.reachableOkSimple') : t('config.shared.check.failedSimple', { error: test.error })}
             </span>
           ))}
         </div>
@@ -249,58 +250,58 @@ export default function DLPConfigEditor() {
 
       {/* Model catalog */}
       <div>
-        <h4 className="text-sm font-medium text-gray-100 mb-2">Model catalog</h4>
-        <p className="text-[11px] text-gray-400 mb-2">Named models referenced by the UDFs below. Leave base URL / API key blank to inherit the shared endpoint.</p>
+        <h4 className="text-sm font-medium text-gray-100 mb-2">{t('config.catalog.heading')}</h4>
+        <p className="text-[11px] text-gray-400 mb-2">{t('config.catalog.description')}</p>
         <div className="space-y-2">
           <div className="hidden sm:grid grid-cols-[1fr_1.3fr_1.3fr_1fr_auto] gap-2 text-[11px] uppercase tracking-wide text-gray-500 px-1">
-            <span>Name</span><span>Model id</span><span>Base URL (optional)</span><span>API key (optional)</span><span></span>
+            <span>{t('config.catalog.nameHeader')}</span><span>{t('config.catalog.modelIdHeader')}</span><span>{t('config.catalog.baseUrlHeader')}</span><span>{t('config.catalog.apiKeyHeader')}</span><span></span>
           </div>
           {draft.shared.models.map((m, i) => (
             <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_1.3fr_1.3fr_1fr_auto] gap-2 items-center">
-              <input className={inputCls} value={m.name} onChange={(e) => setModelRow(i, { name: e.target.value })} placeholder="name" />
-              <input className={inputCls} value={m.model} onChange={(e) => setModelRow(i, { model: e.target.value })} placeholder="model id" />
-              <input className={inputCls} value={m.base_url} onChange={(e) => setModelRow(i, { base_url: e.target.value })} placeholder="(shared)" />
-              <input className={inputCls} type="password" value={m.api_key} onChange={(e) => setModelRow(i, { api_key: e.target.value })} placeholder="(shared / unchanged)" />
-              <button onClick={() => removeModelRow(i)} className="text-gray-500 hover:text-error text-lg leading-none px-1" title="Remove model">×</button>
+              <input className={inputCls} value={m.name} onChange={(e) => setModelRow(i, { name: e.target.value })} placeholder={t('config.catalog.namePlaceholder')} />
+              <input className={inputCls} value={m.model} onChange={(e) => setModelRow(i, { model: e.target.value })} placeholder={t('config.catalog.modelIdPlaceholder')} />
+              <input className={inputCls} value={m.base_url} onChange={(e) => setModelRow(i, { base_url: e.target.value })} placeholder={t('config.catalog.baseUrlPlaceholder')} />
+              <input className={inputCls} type="password" value={m.api_key} onChange={(e) => setModelRow(i, { api_key: e.target.value })} placeholder={t('config.catalog.apiKeyPlaceholder')} />
+              <button onClick={() => removeModelRow(i)} className="text-gray-500 hover:text-error text-lg leading-none px-1" title={t('config.catalog.removeModelTitle')}>×</button>
             </div>
           ))}
-          <button onClick={addModelRow} className="text-xs text-primary hover:underline">+ add model</button>
+          <button onClick={addModelRow} className="text-xs text-primary hover:underline">{t('config.catalog.addModel')}</button>
         </div>
       </div>
 
       {/* Per-UDF */}
       <div>
-        <h4 className="text-sm font-medium text-gray-100 mb-2">Per-function settings</h4>
+        <h4 className="text-sm font-medium text-gray-100 mb-2">{t('config.functions.heading')}</h4>
         <div className="space-y-2">
           <div className="grid grid-cols-[1.3fr_1fr_0.8fr] gap-3 items-center">
-            <span className="text-sm text-gray-300">Embeddings</span>
+            <span className="text-sm text-gray-300">{t('config.functions.embeddingsLabel')}</span>
             <ModelSelect value={draft.embed.model} onChange={(v) => setEmbed({ model: v })} />
-            <label className="flex items-center gap-1 text-[11px] text-gray-400">max chars
+            <label className="flex items-center gap-1 text-[11px] text-gray-400">{t('config.functions.maxChars')}
               <input className={inputCls} type="number" value={draft.embed.max_chars} onChange={(e) => setEmbed({ max_chars: e.target.value })} />
             </label>
           </div>
-          {CHAT_UDFS.map(({ key, label, placeholders, json }) => (
+          {CHAT_UDFS.map(({ key, labelKey, placeholders, json }) => (
             <div key={key} className="space-y-1">
               <div className="grid grid-cols-[1.3fr_1fr_0.8fr] gap-3 items-center">
-                <span className="text-sm text-gray-300">{label}</span>
+                <span className="text-sm text-gray-300">{t(labelKey)}</span>
                 <ModelSelect value={draft.udfs[key].model} onChange={(v) => setUdf(key, { model: v })} />
-                <label className="flex items-center gap-1 text-[11px] text-gray-400">max tokens
+                <label className="flex items-center gap-1 text-[11px] text-gray-400">{t('config.functions.maxTokens')}
                   <input className={inputCls} type="number" value={draft.udfs[key].max_tokens} onChange={(e) => setUdf(key, { max_tokens: e.target.value })} />
                 </label>
               </div>
               <details>
                 <summary className="text-[11px] text-gray-500 cursor-pointer select-none hover:text-gray-400">
-                  Prompt template <span className="text-gray-600">· variables: {placeholders.join(' ')}</span>
+                  {t('config.functions.promptTemplate')} <span className="text-gray-600">{t('config.functions.variablesLabel')} {placeholders.join(' ')}</span>
                 </summary>
                 <textarea
                   className="mt-1 w-full h-28 rounded-sm bg-gray-900 text-gray-100 font-mono text-xs p-3 focus:outline-none focus:ring-1 focus:ring-[#f256a3]"
                   value={draft.udfs[key].prompt}
                   onChange={(e) => setUdf(key, { prompt: e.target.value })}
-                  placeholder="(empty = built-in default)"
+                  placeholder={t('config.functions.promptPlaceholder')}
                   spellCheck={false}
                 />
                 <p className="text-[11px] text-gray-500">
-                  {json ? 'Keep the strict-JSON instruction — the reply is parsed. ' : ''}Clear the field to reset to the built-in default.
+                  {json ? t('config.functions.jsonHint') : ''}{t('config.functions.resetHint')}
                 </p>
               </details>
             </div>
@@ -310,8 +311,10 @@ export default function DLPConfigEditor() {
 
       {/* Entity catalog (advanced JSON) */}
       <details className="group">
-        <summary className="text-sm font-medium text-gray-100 cursor-pointer select-none">Entity catalog <span className="text-[11px] text-gray-500">(advanced · JSON)</span></summary>
-        <p className="text-[11px] text-gray-400 my-2">Regex / dictionary extractors for <code className="font-mono">dlp_extract_entities</code>. Each entry: <code className="font-mono">{'{type, kind, pattern|terms, store, tag}'}</code>.</p>
+        <summary className="text-sm font-medium text-gray-100 cursor-pointer select-none">{t('config.entityCatalog.summary')} <span className="text-[11px] text-gray-500">{t('config.entityCatalog.badge')}</span></summary>
+        <p className="text-[11px] text-gray-400 my-2">
+          {t('config.entityCatalog.description.pre')}<code className="font-mono">dlp_extract_entities</code>{t('config.entityCatalog.description.mid')}<code className="font-mono">{'{type, kind, pattern|terms, store, tag}'}</code>{t('config.entityCatalog.description.post')}
+        </p>
         <textarea
           className="w-full h-64 rounded-sm bg-gray-900 text-gray-100 font-mono text-xs p-3 focus:outline-none focus:ring-1 focus:ring-[#f256a3]"
           value={entitiesText}
@@ -324,10 +327,10 @@ export default function DLPConfigEditor() {
       <div className="flex items-center gap-3">
         <button onClick={save} disabled={saving || dirty.size === 0}
           className="rounded-sm px-4 py-2 text-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] font-medium disabled:opacity-50">
-          {saving ? 'Saving…' : dirty.size ? `Save ${dirty.size} change${dirty.size > 1 ? 's' : ''}` : 'Saved'}
+          {saving ? t('config.actions.saving') : dirty.size ? t('config.actions.saveCount', { count: dirty.size }) : t('config.actions.saved')}
         </button>
         {dirty.size > 0 && !saving && (
-          <button onClick={load} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">Discard</button>
+          <button onClick={load} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">{t('config.actions.discard')}</button>
         )}
         {banner && <span className={`text-xs ${banner.type === 'ok' ? 'text-emerald-400' : 'text-error'}`}>{banner.msg}</span>}
       </div>

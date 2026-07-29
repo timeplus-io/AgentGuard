@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 const severityStyles = {
   critical: { badge: 'bg-red-500 text-white', dot: 'bg-white animate-pulse', label: 'Critical' },
   warning:  { badge: 'bg-orange-900 text-orange-400', dot: 'bg-orange-400',               label: 'Warning' },
@@ -11,20 +13,22 @@ const statusStyles = {
 }
 
 export function SeverityBadge({ severity }) {
+  const { t } = useTranslation('threats')
   const key = severity?.toLowerCase() || 'info'
   const s = severityStyles[key] || severityStyles.info
   return (
     <span className={`flex items-center gap-2 px-2.5 py-1 text-[10px] font-black uppercase rounded-full w-fit ${s.badge}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-      {s.label}
+      {t(`severity.${key}`, { defaultValue: s.label })}
     </span>
   )
 }
 
 export function StatusBadge({ status }) {
+  const { t } = useTranslation('threats')
   return (
     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusStyles[status] || statusStyles.ACTIVE}`}>
-      {status}
+      {t(`agentStatus.${status}`, { defaultValue: status })}
     </span>
   )
 }
@@ -36,10 +40,11 @@ const threatStatusStyles = {
 }
 
 export function ThreatStatusBadge({ status }) {
+  const { t } = useTranslation('threats')
   const { label, cls } = threatStatusStyles[status] || { label: status, cls: 'bg-zinc-500/10 text-gray-400 border border-zinc-400/30' }
   return (
     <span className={`text-[10px] font-bold uppercase rounded-full px-2 py-0.5 ${cls}`}>
-      {label}
+      {threatStatusStyles[status] ? t(`threatStatus.${status}`, { defaultValue: label }) : status}
     </span>
   )
 }

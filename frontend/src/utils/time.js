@@ -1,3 +1,5 @@
+import i18n from '../i18n'
+
 // Format a Proton/Go timestamp for local-time display.
 //
 // Proton returns datetime64 values as bare strings without a timezone marker
@@ -15,7 +17,7 @@ export function formatLocalTime(ts) {
     }
     const d = new Date(s)
     if (isNaN(d)) return String(ts)
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return d.toLocaleTimeString(i18n.language || undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   } catch {
     return String(ts)
   }

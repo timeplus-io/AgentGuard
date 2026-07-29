@@ -1,14 +1,16 @@
 import { useState, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../api/client'
 
 const STEPS = [
-  { label: 'Connection', icon: 'cable' },
-  { label: 'Credentials', icon: 'key' },
-  { label: 'Provision', icon: 'build' },
+  { key: 'connection', icon: 'cable' },
+  { key: 'credentials', icon: 'key' },
+  { key: 'provision', icon: 'build' },
 ]
 
 export default function Setup() {
+  const { t } = useTranslation('onboarding')
   const { setAuth } = useAuth()
   const [step, setStep] = useState(0)
 
@@ -61,7 +63,7 @@ export default function Setup() {
             setDone(true)
           } catch (err) {
             console.error('setup: auto-login after provision failed:', err)
-            setProvisionError(`Provisioning succeeded but login failed: ${err?.message ?? String(err)} — please reload and log in.`)
+            setProvisionError(t('setup.provision.autoLoginFailed', { message: err?.message ?? String(err) }))
           }
         }
         if (event.status === 'error') {
@@ -79,14 +81,14 @@ export default function Setup() {
     <div className="min-h-screen bg-surface text-gray-100 flex flex-col">
       <nav className="bg-surface shadow-[0_0_12px_rgba(213,63,140,0.12)] sticky top-0 z-50 h-16 w-full flex items-center px-6 backdrop-blur-md">
         <span className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] tracking-tight">AgentGuard</span>
-        <span className="ml-3 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">First-time Setup</span>
+        <span className="ml-3 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('setup.nav.badge')}</span>
       </nav>
 
       <main className="flex-1 flex items-start justify-center p-6 md:p-12">
         <div className="w-full max-w-2xl space-y-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-100 tracking-tight">Setup AgentGuard</h1>
-            <p className="text-gray-400 text-xs mt-1 leading-relaxed">Connect to Timeplus and provision all monitoring resources.</p>
+            <h1 className="text-2xl font-bold text-gray-100 tracking-tight">{t('setup.header.title')}</h1>
+            <p className="text-gray-400 text-xs mt-1 leading-relaxed">{t('setup.header.subtitle')}</p>
           </div>
 
           {/* Step indicator */}
@@ -97,7 +99,7 @@ export default function Setup() {
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i < step ? 'bg-[#f256a3] text-[#570033]' : i === step ? 'bg-[#ffb0cf]/20 text-primary' : 'bg-surface-container-highest text-gray-400'}`}>
                     {i < step ? '✓' : i + 1}
                   </span>
-                  {s.label}
+                  {t(`setup.steps.${s.key}`)}
                 </div>
                 {i < STEPS.length - 1 && <div className="h-px w-8 bg-surface-container-highest" />}
               </div>
@@ -111,15 +113,15 @@ export default function Setup() {
               {step === 0 && (
                 <>
                   <div>
-                    <h2 className="text-base font-semibold text-gray-100">Timeplus Connection</h2>
-                    <p className="text-gray-400 text-xs mt-1">Enter the address of your Timeplus instance.</p>
+                    <h2 className="text-base font-semibold text-gray-100">{t('setup.connection.title')}</h2>
+                    <p className="text-gray-400 text-xs mt-1">{t('setup.connection.desc')}</p>
                   </div>
                   <div className="space-y-3">
                     {[
-                      { label: 'Timeplus Host', val: host, set: setHost, ph: 'localhost', type: 'text' },
-                      { label: 'HTTP Port', val: port, set: v => setPort(Number(v)), ph: '3218', type: 'number' },
-                      { label: 'Native Port', val: nativePort, set: v => setNativePort(Number(v)), ph: '8463', type: 'number' },
-                      { label: 'AgentGuard URL', val: agentGuardURL, set: setAgentGuardURL, ph: 'http://localhost:8080', type: 'text' },
+                      { label: t('setup.connection.fields.host'), val: host, set: setHost, ph: t('setup.connection.placeholders.host'), type: 'text' },
+                      { label: t('setup.connection.fields.httpPort'), val: port, set: v => setPort(Number(v)), ph: t('setup.connection.placeholders.httpPort'), type: 'number' },
+                      { label: t('setup.connection.fields.nativePort'), val: nativePort, set: v => setNativePort(Number(v)), ph: t('setup.connection.placeholders.nativePort'), type: 'number' },
+                      { label: t('setup.connection.fields.agentguardUrl'), val: agentGuardURL, set: setAgentGuardURL, ph: t('setup.connection.placeholders.agentguardUrl'), type: 'text' },
                     ].map(({ label, val, set, ph, type }) => (
                       <div key={label} className="flex items-center gap-4">
                         <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>
@@ -140,13 +142,13 @@ export default function Setup() {
               {step === 1 && (
                 <>
                   <div>
-                    <h2 className="text-base font-semibold text-gray-100">Timeplus Credentials</h2>
-                    <p className="text-gray-400 text-xs mt-1">Enter your Timeplus username and password. These will not be stored.</p>
+                    <h2 className="text-base font-semibold text-gray-100">{t('setup.credentials.title')}</h2>
+                    <p className="text-gray-400 text-xs mt-1">{t('setup.credentials.desc')}</p>
                   </div>
                   <div className="space-y-3">
                     {[
-                      { label: 'Username', val: username, set: setUsername, ph: 'default', type: 'text' },
-                      { label: 'Password', val: password, set: setPassword, ph: 'Leave blank if not set', type: 'password' },
+                      { label: t('setup.credentials.fields.username'), val: username, set: setUsername, ph: t('setup.credentials.placeholders.username'), type: 'text' },
+                      { label: t('setup.credentials.fields.password'), val: password, set: setPassword, ph: t('setup.credentials.placeholders.password'), type: 'password' },
                     ].map(({ label, val, set, ph, type }) => (
                       <div key={label} className="flex items-center gap-4">
                         <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>
@@ -166,12 +168,12 @@ export default function Setup() {
                       disabled={testing || !username}
                       className="px-4 py-2 text-xs font-semibold rounded-sm bg-surface-container-highest text-gray-100 hover:text-gray-100 hover:bg-secondary-container transition-colors disabled:opacity-50"
                     >
-                      {testing ? 'Testing…' : 'Test Connection'}
+                      {testing ? t('setup.credentials.testing') : t('setup.credentials.testButton')}
                     </button>
                     {testResult?.ok && (
                       <span className="flex items-center gap-1.5 text-xs text-emerald-400">
                         <span className="material-symbols-outlined text-xs">check_circle</span>
-                        Connected as &quot;{username}&quot;
+                        {t('setup.credentials.connectedAs', { username })}
                       </span>
                     )}
                     {testResult && !testResult.ok && (
@@ -188,8 +190,8 @@ export default function Setup() {
               {step === 2 && (
                 <>
                   <div>
-                    <h2 className="text-base font-semibold text-gray-100">Provision Resources</h2>
-                    <p className="text-gray-400 text-xs mt-1">Create all AgentGuard streams, materialized views, and rules in Timeplus.</p>
+                    <h2 className="text-base font-semibold text-gray-100">{t('setup.provision.title')}</h2>
+                    <p className="text-gray-400 text-xs mt-1">{t('setup.provision.desc')}</p>
                   </div>
 
                   {!provisioning && log.length === 0 && !done && (
@@ -199,7 +201,7 @@ export default function Setup() {
                     >
                       <span className="flex items-center gap-2">
                         <span className="material-symbols-outlined text-xs">build</span>
-                        Provision Resources
+                        {t('setup.provision.button')}
                       </span>
                     </button>
                   )}
@@ -239,7 +241,7 @@ export default function Setup() {
                 className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-gray-100 transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined text-xs">arrow_back</span>
-                Back
+                {t('setup.footer.back')}
               </button>
 
               {step < 2 ? (
@@ -248,7 +250,7 @@ export default function Setup() {
                   disabled={(step === 0 && !host) || (step === 1 && !testResult?.ok)}
                   className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                  Next
+                  {t('setup.footer.next')}
                   <span className="material-symbols-outlined text-xs">arrow_forward</span>
                 </button>
               ) : (
@@ -257,7 +259,7 @@ export default function Setup() {
                   className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text flex items-center gap-2 opacity-50 cursor-not-allowed"
                 >
                   <span className="material-symbols-outlined text-xs">check_circle</span>
-                  {done ? 'Redirecting…' : 'Waiting for provisioning…'}
+                  {done ? t('setup.footer.redirecting') : t('setup.footer.waiting')}
                 </button>
               )}
             </div>

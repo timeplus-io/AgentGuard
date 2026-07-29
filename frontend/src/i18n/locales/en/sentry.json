@@ -1,0 +1,166 @@
+{
+  "title": "Sentry",
+  "subtitle": "Chat with AgentGuard's own security analyst agent — ask about threats, rules, cost, and DLP findings across your fleet.",
+  "loading": "Loading…",
+  "disabled": {
+    "heading": "Sentry is disabled",
+    "hintPre": "Enable ",
+    "hintPost": " in Settings and provision to start chatting with Sentry."
+  },
+  "provisionWarning": {
+    "default": "Sentry streams are not provisioned yet.",
+    "provisioning": "Provisioning…",
+    "provisionNow": "Provision now"
+  },
+  "rail": {
+    "newConversation": "New conversation",
+    "empty": "No conversations yet.",
+    "untitled": "Untitled conversation",
+    "renameTitle": "Rename conversation",
+    "deleteTitle": "Delete conversation",
+    "deleteConfirm": "Delete this conversation? It will be removed from your list."
+  },
+  "chat": {
+    "loadingConversation": "Loading conversation…",
+    "emptyState": "Ask Sentry about your agents, threats, cost, rules, or DLP findings.",
+    "needsChatModel": {
+      "pre": "Sentry has no chat model configured — set it in ",
+      "linkLabel": "Settings → Sentry Agent",
+      "post": "."
+    },
+    "composerPlaceholder": "Ask Sentry…",
+    "send": "Send",
+    "sending": "Sending…",
+    "sendHint": "Ctrl/Cmd+Enter to send · Enter for a new line",
+    "readOnlyHint": "You have read-only access to Sentry. Ask an administrator for write access to start conversations."
+  },
+  "card": {
+    "argsLabel": "Args",
+    "resultLabel": "Result",
+    "toolFallbackName": "tool",
+    "running": "running…",
+    "truncated": "truncated"
+  },
+  "thinking": {
+    "label": "Reasoning"
+  },
+  "approval": {
+    "defaultName": "write action",
+    "awaiting": "awaiting your approval…",
+    "proposedAction": "Proposed action",
+    "noArguments": "(no arguments)",
+    "approve": "Approve",
+    "deny": "Deny",
+    "status": {
+      "approvedBy": "write approved by {{by}}",
+      "deniedBy": "write denied by {{by}}",
+      "operator": "operator",
+      "timeout": "write timed out — not executed",
+      "abandoned": "write abandoned — not executed"
+    }
+  },
+  "errors": {
+    "loadStatusFailed": "Failed to load Sentry status",
+    "loadConversationsFailed": "Failed to load conversations",
+    "loadConversationFailed": "Failed to load conversation",
+    "deleteConversationFailed": "Failed to delete conversation",
+    "renameConversationFailed": "Failed to rename conversation",
+    "decisionFailed": "Failed to submit decision",
+    "chatRequestFailed": "Chat request failed",
+    "provisioningFailed": "Provisioning failed",
+    "genericChatError": "Sentry error"
+  },
+  "config": {
+    "intro": {
+      "pre": "Live configuration stored in the ",
+      "post": " stream. Edits apply immediately — no restart or re-provision. (Boot defaults in the server config only seed these on first provision.)"
+    },
+    "loadingRuntime": "Loading runtime config…",
+    "errors": {
+      "loadFailed": "Failed to load Sentry config",
+      "loadErrSuffix": " — runtime config is available only after Sentry is provisioned.",
+      "saveFailed": "Save failed",
+      "testFailed": "test failed",
+      "retry": "Retry"
+    },
+    "common": {
+      "saving": "Saving…",
+      "saved": "Saved",
+      "baseUrlLabel": "Base URL",
+      "apiKeyLabel": "API key",
+      "apiKeySetSuffix": "· •••• set",
+      "apiKeyPlaceholderSet": "•••••• (unchanged)",
+      "apiKeyPlaceholderUnset": "none",
+      "modelLabel": "Model",
+      "modelPlaceholder": "model id"
+    },
+    "chat": {
+      "heading": "Chat model",
+      "apiTypeLabel": "API type",
+      "apiTypeOpenai": "OpenAI-compatible (Chat Completions)",
+      "apiTypeAnthropic": "Anthropic (Claude, incl. Bedrock)",
+      "bedrockHint": {
+        "part1": "For AWS Bedrock: base URL ",
+        "part2": "(note the ",
+        "part3": " path, not ",
+        "part4": "), API key = your Bedrock API key, model = a bare Bedrock Claude id (e.g. ",
+        "part5": "). Pick a region where the model is in-region available and access-enabled (",
+        "part6": " is a safe default; Mantle doesn't do ",
+        "part7": "/",
+        "part8": " cross-region ids). Tool calling is required."
+      },
+      "baseUrlPlaceholder": "http://localhost:4000/v1",
+      "timeoutLabel": "Timeout (s)",
+      "fields": {
+        "maxTokens": "Max tokens",
+        "maxIterations": "Max iterations",
+        "turnTokenBudget": "Turn token budget",
+        "sqlTimeoutMs": "SQL timeout (ms)",
+        "sqlMaxRows": "SQL max rows",
+        "toolResultMaxBytes": "Tool result max bytes",
+        "ceilingSuffix": "≤{{value}}"
+      },
+      "providerDefault": "Provider default",
+      "thinkingLabel": "Thinking",
+      "thinkingAdaptive": "Adaptive (streams reasoning)",
+      "effortLabel": "Effort",
+      "promptCachingLabel": "Prompt caching",
+      "agentguardToolsTitle": "AgentGuard skills & tools",
+      "agentguardToolsDescription": " — let Sentry read and act on AgentGuard features (threats, holds, rules, cost, DLP; write actions still require in-chat approval). Off: Sentry is a generic Timeplus SQL analyst.",
+      "saveButton": "Save chat config"
+    },
+    "memory": {
+      "heading": "Memory (embedding)",
+      "subheading": "— used by Sentry memory (Phase 2)",
+      "embeddingDimLabel": "Embedding dimension",
+      "disabledHint": "Disabled — Sentry memory (Phase 2) has no embedding endpoint configured.",
+      "saveButton": "Save memory config"
+    },
+    "banner": {
+      "savedChat": "Chat config saved. Changes take effect on the next Sentry turn — no re-provision.",
+      "savedMemory": "Memory config saved. Changes take effect on the next Sentry turn — no re-provision."
+    },
+    "test": {
+      "button": "Test connection",
+      "hint": "Tests the values above (not the saved ones) — chat endpoint always, embedding only when memory is enabled.",
+      "testing": "Testing…",
+      "checks": {
+        "reachableSkipped": "— reachable: checked via chat (Anthropic)",
+        "reachableOk": "✓ reachable",
+        "reachableFail": "✗ reachable: {{error}}",
+        "chatOk": "✓ chat (tool calling: {{toolCallName}})",
+        "chatOkDefault": "ok",
+        "chatFail": "✗ chat: {{error}}",
+        "chatFailDefault": "failed",
+        "embeddingSkipped": "— embedding: skipped (memory disabled)",
+        "embeddingOk": "✓ embedding dim {{dim}}",
+        "embeddingFail": "✗ embedding: {{error}}",
+        "embeddingFailDefault": "failed"
+      },
+      "simple": {
+        "ok": "Endpoint reachable",
+        "fail": "Failed: {{error}}"
+      }
+    }
+  }
+}
