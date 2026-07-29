@@ -132,7 +132,7 @@ class AgentGuardHooks:
             kwargs["start_time"] = start_ns
 
         with self._handler.start_as_current_span(
-            name="session_end",
+            name="session",
             session_id=session_id,
             run_id=run_id,
             task_id=task_id,
@@ -152,7 +152,8 @@ class AgentGuardHooks:
         task_id=None,
         provider=None,
         model_name=None,
-        output_messages=None,
+        user_message=None,
+        assistant_message=None,
     ):
         store_key = self._store_key(session_id, run_id, task_id)
         start_ns = self._store["llm"].pop(store_key, None)
@@ -162,15 +163,52 @@ class AgentGuardHooks:
             kwargs["start_time"] = start_ns
 
         with self._handler.start_as_current_span(
-            name="",
+            name="llm",
             session_id=session_id,
             run_id=run_id,
             task_id=task_id,
             **kwargs,
         ) as span:
+            span.set_attribute("openinference.span.kind", "LLM")
             if provider is not None:
                 span.set_attribute("llm.provider", provider)
             if model_name is not None:
-                span.set_attribute("llm.provider", model_name)
-            if output_messages is not None:
-                span.set_attribute("llm.output_messages", str(output_messages))
+                span.set_attribute("llm.module_name", model_name)
+            if user_message is not None:
+                span.set_attribute("input.value", str({"messages": [{"content": user_message}]}))
+            if assistant_message is not None:
+                span.set_attribute("llm.output_messages.0.message.content", str(assistant_message))
+
+    def on_pre_tool(self, session_id: str, run_id: str | None = None, task_id: str | None = None):
+        store_key = self._store_key(session_id, run_id, task_id)
+        start_ns = time.time_ns()
+        self._store["tool"][store_key] = start_ns
+
+    def on_post_tool(self,
+                     session_id: str,
+                     run_id: str | None = None,
+                     task_id: str | None = None,
+                     tool_name: str | None = None,
+                     tool_input: str | None = None,
+                     tool_result: str | None = None):
+        store_key = self._store_key(session_id, run_id, task_id)
+        start_ns = self._store["tool"].pop(store_key, None)
+
+        kwargs: dict[str, Any] = {}
+        if start_ns is not None:
+            kwargs["start_time"] = start_ns
+
+        with self._handler.start_as_current_span(
+            name="tool",
+            session_id=session_id,
+            run_id=run_id,
+            task_id=task_id,
+            **kwargs,
+        ) as span:
+            span.set_attribute("openinference.span.kind", "TOOL")
+            if tool_name is not None:
+                span.set_attribute("tool.name", tool_name)
+            if tool_input is not None:
+                span.set_attribute("tool.parameters", tool_input)
+            if tool_result is not None:
+                span.set_attribute("output.value", tool_result)
