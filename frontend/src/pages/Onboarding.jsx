@@ -1,45 +1,41 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import BlockPolicySelect from '../components/BlockPolicySelect'
 import { api } from '../api/client'
 
 const STEPS = [
-  { label: 'Select Agent', icon: 'smart_toy' },
-  { label: 'Install Plugin', icon: 'extension' },
-  { label: 'OTel Config', icon: 'monitoring' },
-  { label: 'Activate Rules', icon: 'rule' },
+  { key: 'selectAgent', icon: 'smart_toy' },
+  { key: 'installPlugin', icon: 'extension' },
+  { key: 'otelConfig', icon: 'monitoring' },
+  { key: 'activateRules', icon: 'rule' },
 ]
 
 const agentTypes = [
   {
     id: 'openclaw',
-    name: 'OpenClaw',
-    desc: 'Open-source AI agent gateway with full plugin support. Ideal for production workloads and custom security policies.',
+    key: 'openclaw',
     imgSrc: '/static/icons/openclaw-dark.svg',
-    badge: 'Supported',
     disabled: false,
   },
   {
     id: 'claude-code',
-    name: 'Claude Code',
-    desc: "Anthropic's Claude Code CLI. Monitor tool use, LLM calls, cost, and security events in real time.",
+    key: 'claudeCode',
     imgSrc: '/static/icons/claude-seeklogo.svg',
-    badge: 'Supported',
     disabled: false,
   },
   {
     id: 'hermes',
-    name: 'Hermes Agent',
-    desc: 'NousResearch Hermes AI agent. Monitor sessions, LLM calls, and tool use via the AgentGuard Python plugin.',
+    key: 'hermes',
     imgSrc: '/static/icons/nousresearch-dark.png',
-    badge: 'Supported',
     disabled: false,
   },
 ]
 
 function CopyButton({ text }) {
+  const { t } = useTranslation('onboarding')
   const [copied, setCopied] = useState(false)
   const handle = () => {
     navigator.clipboard.writeText(text)
@@ -49,7 +45,7 @@ function CopyButton({ text }) {
   return (
     <button onClick={handle} className="flex items-center gap-1.5 text-[10px] font-semibold uppercase text-primary hover:text-gray-100 transition-colors">
       <span className="material-symbols-outlined text-xs">{copied ? 'check' : 'content_copy'}</span>
-      {copied ? 'Copied!' : 'Copy'}
+      {copied ? t('wizard.copyButton.copied') : t('wizard.copyButton.copy')}
     </button>
   )
 }
@@ -67,6 +63,7 @@ function CodeBlock({ label, code }) {
 }
 
 function DownloadScriptButton() {
+  const { t } = useTranslation('onboarding')
   const [downloading, setDownloading] = useState(false)
   const [dlError, setDlError] = useState(null)
 
@@ -76,7 +73,7 @@ function DownloadScriptButton() {
     try {
       const res = await api.getInstallScript()
       if (!res.ok) {
-        throw new Error(`Download failed (${res.status})`)
+        throw new Error(t('wizard.downloadScript.errorStatus', { status: res.status }))
       }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -86,7 +83,7 @@ function DownloadScriptButton() {
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
-      setDlError(e.message || 'Download failed')
+      setDlError(e.message || t('wizard.downloadScript.errorFallback'))
     } finally {
       setDownloading(false)
     }
@@ -100,7 +97,7 @@ function DownloadScriptButton() {
         className="flex items-center gap-2 bg-primary-button px-5 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <span className="material-symbols-outlined text-sm">download</span>
-        {downloading ? 'Downloading…' : 'Download Install Script'}
+        {downloading ? t('wizard.downloadScript.downloading') : t('wizard.downloadScript.button')}
       </button>
       {dlError && (
         <p className="text-xs text-red-400">{dlError}</p>
@@ -110,6 +107,7 @@ function DownloadScriptButton() {
 }
 
 export default function Onboarding() {
+  const { t } = useTranslation('onboarding')
   const navigate = useNavigate()
   const alreadyOnboarded = localStorage.getItem('agentguard_onboarded') === '1'
 
@@ -192,9 +190,9 @@ export default function Onboarding() {
     setCatalogError(null)
     api.getRulesCatalog()
       .then(data => setCatalog(data.catalog || []))
-      .catch(err => setCatalogError(err?.message || 'Failed to load catalog'))
+      .catch(err => setCatalogError(err?.message || t('wizard.step3.loadCatalogFailed')))
       .finally(() => setCatalogLoading(false))
-  }, [step, catalog.length, catalogLoading])
+  }, [step, catalog.length, catalogLoading, t])
 
   const handleNext = () => setStep(s => Math.min(3, s + 1))
   const handleBack = () => setStep(s => Math.max(0, s - 1))
@@ -216,7 +214,7 @@ export default function Onboarding() {
               await api.installRule(ruleId)
             } catch (e) {
               console.warn('Install failed for', ruleId, e)  // eslint-disable-line no-console
-              failures.push(`${entry?.name || ruleId}: install failed (${e?.message ?? String(e)})`)
+              failures.push(t('wizard.step3.installFailedLine', { name: entry?.name || ruleId, message: e?.message ?? String(e) }))
               continue  // skip the policy step for a rule we couldn't install
             }
           }
@@ -226,19 +224,20 @@ export default function Onboarding() {
               await api.setRuleBlockPolicy(ruleId, policy)
             } catch (e) {
               console.warn('Set policy failed for', ruleId, e)  // eslint-disable-line no-console
-              failures.push(`${entry?.name || ruleId}: set ${policy} policy failed (${e?.message ?? String(e)})`)
+              failures.push(t('wizard.step3.setPolicyFailedLine', { name: entry?.name || ruleId, policy, message: e?.message ?? String(e) }))
             }
           }
         }
       } catch (e) {
-        setActivateError(e?.message || 'Activation failed')
+        setActivateError(e?.message || t('wizard.step3.activationFailedFallback'))
         setActivating(false)
         return
       }
       setActivating(false)
       if (failures.length > 0) {
         // Surface partial failure inline rather than navigating away silently.
-        setActivateError(`${failures.length} of ${ruleIds.length} rule activation(s) failed:\n• ${failures.join('\n• ')}`)
+        const summary = t('wizard.step3.activationFailedSummary', { count: failures.length, total: ruleIds.length })
+        setActivateError(`${summary}\n• ${failures.join('\n• ')}`)
         return
       }
     }
@@ -256,20 +255,20 @@ export default function Onboarding() {
           {/* Left: Stepper */}
           <div className="lg:col-span-5 space-y-10">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-gray-100 mb-2">Connect Your Agent</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-gray-100 mb-2">{t('wizard.header.title')}</h1>
               {alreadyOnboarded && (
                 <button
                   onClick={() => navigate('/dashboard')}
                   className="text-xs text-gray-400 hover:text-pink-400 transition-colors flex items-center gap-1.5 mb-2"
                 >
                   <span className="material-symbols-outlined text-xs">arrow_back</span>
-                  Back to Dashboard
+                  {t('wizard.header.backToDashboard')}
                 </button>
               )}
               <p className="text-gray-400 text-xs leading-relaxed">
                 {alreadyOnboarded
-                  ? "You've already connected an agent. Update your configuration or enable additional rules."
-                  : 'Follow these steps to connect your AI agent to AgentGuard.'}
+                  ? t('wizard.header.descAlready')
+                  : t('wizard.header.descNew')}
               </p>
             </div>
 
@@ -294,7 +293,7 @@ export default function Onboarding() {
                       </div>
                     )}
                     <span className={`text-xs ${active ? 'font-semibold text-primary' : done ? 'text-gray-400' : 'text-gray-400'}`}>
-                      {i + 1}. {s.label}
+                      {i + 1}. {t(`wizard.steps.${s.key}`)}
                     </span>
                   </div>
                 )
@@ -304,7 +303,7 @@ export default function Onboarding() {
             {alreadyOnboarded && (
               <div className="flex items-start gap-3 p-4 bg-surface-container-low rounded-sm">
                 <span className="material-symbols-outlined text-amber-400 text-sm mt-0.5">info</span>
-                <p className="text-xs text-gray-400 leading-relaxed">You've completed onboarding before. Rules already enabled will be shown with an "Already Enabled" badge.</p>
+                <p className="text-xs text-gray-400 leading-relaxed">{t('wizard.header.alreadyOnboardedNote')}</p>
               </div>
             )}
           </div>
@@ -317,8 +316,8 @@ export default function Onboarding() {
               {step === 0 && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">Select Agent Type</h2>
-                    <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">Choose the AI agent framework you want to protect with AgentGuard.</p>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">{t('wizard.step0.title')}</h2>
+                    <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">{t('wizard.step0.desc')}</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {agentTypes.map(at => (
@@ -337,17 +336,17 @@ export default function Onboarding() {
                         <div className="flex items-center justify-between">
                           <div className={`w-10 h-10 rounded-sm flex items-center justify-center ${!at.disabled && selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-primary' : 'bg-surface-container text-gray-400'}`}>
                             {at.imgSrc
-                              ? <img src={at.imgSrc} alt={at.name} className="h-6 w-6 object-contain" />
+                              ? <img src={at.imgSrc} alt={t(`wizard.agentTypes.${at.key}.name`)} className="h-6 w-6 object-contain" />
                               : <span className="material-symbols-outlined text-lg">{at.icon}</span>
                             }
                           </div>
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${at.disabled ? 'bg-surface-container-highest text-gray-400' : selectedAgent === at.id ? 'bg-[#ffb0cf]/10 text-primary' : 'bg-surface-container-highest text-gray-400'}`}>
-                            {at.badge}
+                            {t('wizard.agentTypes.badge')}
                           </span>
                         </div>
                         <div>
-                          <h3 className="text-sm font-semibold text-gray-100 mb-1">{at.name}</h3>
-                          <p className="text-xs text-gray-400 leading-relaxed">{at.desc}</p>
+                          <h3 className="text-sm font-semibold text-gray-100 mb-1">{t(`wizard.agentTypes.${at.key}.name`)}</h3>
+                          <p className="text-xs text-gray-400 leading-relaxed">{t(`wizard.agentTypes.${at.key}.desc`)}</p>
                         </div>
                       </button>
                     ))}
@@ -359,27 +358,27 @@ export default function Onboarding() {
               {step === 1 && selectedAgent === 'openclaw' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">Install Plugin</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">{t('wizard.step1.openclaw.title')}</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
-                      Download and run the interactive install script from your OpenClaw project directory. It will prompt for the values below and patch your <code className="text-gray-100">openclaw.json</code> automatically.
+                      {t('wizard.step1.openclaw.descBefore')}<code className="text-gray-100">openclaw.json</code>{t('wizard.step1.openclaw.descAfter')}
                     </p>
                   </div>
 
                   <div className="flex flex-col gap-3">
                     <DownloadScriptButton />
-                    <CodeBlock label="Then run from your OpenClaw project directory" code="bash agentguard-install.sh" />
+                    <CodeBlock label={t('wizard.step1.openclaw.runLabel')} code="bash agentguard-install.sh" />
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Values to have ready</p>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('wizard.common.valuesToHaveReady')}</p>
                     <div className="grid grid-cols-1 gap-3">
                       {[
-                        { label: 'Deployment ID', val: deploymentId, set: setDeploymentId, ph: 'my-team' },
-                        { label: 'Deployment Name', val: deploymentName, set: setDeploymentName, ph: 'My Team' },
-                        { label: 'Timeplus URL', val: timeplusUrl, set: setTimeplusUrl, ph: 'http://localhost:3218' },
-                        { label: 'Timeplus Username', val: timeplusUsername, set: setTimeplusUsername, ph: 'proton' },
-                        { label: 'Timeplus Password', val: timeplusPassword, set: setTimeplusPassword, ph: 'your-password', type: 'password' },
-                        { label: 'AgentGuard URL', val: agentguardUrl, set: setAgentguardUrl, ph: 'http://localhost:8080' },
+                        { label: t('wizard.common.fields.deploymentId'), val: deploymentId, set: setDeploymentId, ph: t('wizard.common.placeholders.deploymentIdOpenclaw') },
+                        { label: t('wizard.common.fields.deploymentName'), val: deploymentName, set: setDeploymentName, ph: t('wizard.common.placeholders.deploymentNameOpenclaw') },
+                        { label: t('wizard.common.fields.timeplusUrl'), val: timeplusUrl, set: setTimeplusUrl, ph: t('wizard.common.placeholders.timeplusUrl') },
+                        { label: t('wizard.common.fields.timeplusUsername'), val: timeplusUsername, set: setTimeplusUsername, ph: t('wizard.common.placeholders.timeplusUsername') },
+                        { label: t('wizard.common.fields.timeplusPassword'), val: timeplusPassword, set: setTimeplusPassword, ph: t('wizard.common.placeholders.timeplusPassword'), type: 'password' },
+                        { label: t('wizard.common.fields.agentguardUrl'), val: agentguardUrl, set: setAgentguardUrl, ph: t('wizard.common.placeholders.agentguardUrl') },
                       ].map(({ label, val, set, ph, type }) => (
                         <div key={label} className="flex items-center gap-4">
                           <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>
@@ -393,18 +392,18 @@ export default function Onboarding() {
                         </div>
                       ))}
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{t('wizard.common.holdsEnabledLabel')}</label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={holdsEnabled} onChange={e => setHoldsEnabled(e.target.checked)} className="accent-[#ffb0cf]" />
-                          <span className="text-[10px] text-gray-400">{holdsEnabled ? 'Synchronous PreToolUse blocking on' : 'Observation-only — no blocking'}</span>
+                          <span className="text-[10px] text-gray-400">{holdsEnabled ? t('wizard.common.holdsOn') : t('wizard.common.holdsOff')}</span>
                         </label>
                       </div>
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{t('wizard.common.holdFailPolicyLabel')}</label>
                         <select value={holdFailPolicy} onChange={e => setHoldFailPolicy(e.target.value)} disabled={!holdsEnabled}
                           className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono disabled:opacity-50">
-                          <option value="deny">deny — block on errors</option>
-                          <option value="allow">allow — pass through on errors</option>
+                          <option value="deny">{t('wizard.common.holdFailPolicyOptions.deny')}</option>
+                          <option value="allow">{t('wizard.common.holdFailPolicyOptions.allow')}</option>
                         </select>
                       </div>
                     </div>
@@ -415,28 +414,28 @@ export default function Onboarding() {
               {step === 1 && selectedAgent === 'claude-code' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">Install Plugin</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">{t('wizard.step1.claudeCode.title')}</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
-                      Download and run the interactive install script. It will prompt you for the values below and configure everything automatically.
+                      {t('wizard.step1.claudeCode.desc')}
                     </p>
                   </div>
 
                   <div className="flex flex-col gap-3">
                     <DownloadScriptButton />
-                    <CodeBlock label="Then run" code="bash agentguard-install.sh" />
+                    <CodeBlock label={t('wizard.common.runLabel')} code="bash agentguard-install.sh" />
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Values to have ready</p>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('wizard.common.valuesToHaveReady')}</p>
                     <div className="grid grid-cols-1 gap-3">
                       {[
-                        { label: 'Agent ID *', val: agentId, set: setAgentId, ph: 'your-hostname' },
-                        { label: 'Deployment ID', val: deploymentId, set: setDeploymentId, ph: 'local' },
-                        { label: 'Deployment Name', val: deploymentName, set: setDeploymentName, ph: 'Local Dev' },
-                        { label: 'Timeplus URL', val: timeplusUrl, set: setTimeplusUrl, ph: 'http://localhost:3218' },
-                        { label: 'Timeplus Username', val: timeplusUsername, set: setTimeplusUsername, ph: 'proton' },
-                        { label: 'Timeplus Password', val: timeplusPassword, set: setTimeplusPassword, ph: 'your-password', type: 'password' },
-                        { label: 'AgentGuard URL', val: agentguardUrl, set: setAgentguardUrl, ph: 'http://localhost:8080' },
+                        { label: t('wizard.common.fields.agentId'), val: agentId, set: setAgentId, ph: t('wizard.common.placeholders.agentId') },
+                        { label: t('wizard.common.fields.deploymentId'), val: deploymentId, set: setDeploymentId, ph: t('wizard.common.placeholders.deploymentIdLocal') },
+                        { label: t('wizard.common.fields.deploymentName'), val: deploymentName, set: setDeploymentName, ph: t('wizard.common.placeholders.deploymentNameLocal') },
+                        { label: t('wizard.common.fields.timeplusUrl'), val: timeplusUrl, set: setTimeplusUrl, ph: t('wizard.common.placeholders.timeplusUrl') },
+                        { label: t('wizard.common.fields.timeplusUsername'), val: timeplusUsername, set: setTimeplusUsername, ph: t('wizard.common.placeholders.timeplusUsername') },
+                        { label: t('wizard.common.fields.timeplusPassword'), val: timeplusPassword, set: setTimeplusPassword, ph: t('wizard.common.placeholders.timeplusPassword'), type: 'password' },
+                        { label: t('wizard.common.fields.agentguardUrl'), val: agentguardUrl, set: setAgentguardUrl, ph: t('wizard.common.placeholders.agentguardUrl') },
                       ].map(({ label, val, set, ph, type }) => (
                         <div key={label} className="flex items-center gap-4">
                           <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>
@@ -450,22 +449,22 @@ export default function Onboarding() {
                         </div>
                       ))}
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{t('wizard.common.holdsEnabledLabel')}</label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={holdsEnabled} onChange={e => setHoldsEnabled(e.target.checked)} className="accent-[#ffb0cf]" />
-                          <span className="text-[10px] text-gray-400">{holdsEnabled ? 'Synchronous PreToolUse blocking on' : 'Observation-only — no blocking'}</span>
+                          <span className="text-[10px] text-gray-400">{holdsEnabled ? t('wizard.common.holdsOn') : t('wizard.common.holdsOff')}</span>
                         </label>
                       </div>
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{t('wizard.common.holdFailPolicyLabel')}</label>
                         <select value={holdFailPolicy} onChange={e => setHoldFailPolicy(e.target.value)} disabled={!holdsEnabled}
                           className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono disabled:opacity-50">
-                          <option value="deny">deny — block on errors</option>
-                          <option value="allow">allow — pass through on errors</option>
+                          <option value="deny">{t('wizard.common.holdFailPolicyOptions.deny')}</option>
+                          <option value="allow">{t('wizard.common.holdFailPolicyOptions.allow')}</option>
                         </select>
                       </div>
                     </div>
-                    <p className="text-[10px] text-gray-400 leading-relaxed">* Agent ID identifies this Claude Code instance — use your hostname or machine name.</p>
+                    <p className="text-[10px] text-gray-400 leading-relaxed">{t('wizard.step1.claudeCode.agentIdNote')}</p>
                   </div>
                 </>
               )}
@@ -473,28 +472,28 @@ export default function Onboarding() {
               {step === 1 && selectedAgent === 'hermes' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">Install Plugin</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">{t('wizard.step1.hermes.title')}</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
-                      Download and run the interactive install script. It will pip-install the plugin, run <code className="text-gray-100">agentguard-hermes install</code>, and offer to append the required env vars to your shell profile.
+                      {t('wizard.step1.hermes.descBefore')}<code className="text-gray-100">agentguard-hermes install</code>{t('wizard.step1.hermes.descAfter')}
                     </p>
                   </div>
 
                   <div className="flex flex-col gap-3">
                     <DownloadScriptButton />
-                    <CodeBlock label="Then run" code="bash agentguard-install.sh" />
+                    <CodeBlock label={t('wizard.common.runLabel')} code="bash agentguard-install.sh" />
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Values to have ready</p>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('wizard.common.valuesToHaveReady')}</p>
                     <div className="grid grid-cols-1 gap-3">
                       {[
-                        { label: 'Agent ID *', val: agentId, set: setAgentId, ph: 'your-hostname' },
-                        { label: 'Deployment ID', val: deploymentId, set: setDeploymentId, ph: 'local' },
-                        { label: 'Deployment Name', val: deploymentName, set: setDeploymentName, ph: 'Local Dev' },
-                        { label: 'Timeplus URL', val: timeplusUrl, set: setTimeplusUrl, ph: 'http://localhost:3218' },
-                        { label: 'Timeplus Username', val: timeplusUsername, set: setTimeplusUsername, ph: 'proton' },
-                        { label: 'Timeplus Password', val: timeplusPassword, set: setTimeplusPassword, ph: 'your-password', type: 'password' },
-                        { label: 'AgentGuard URL', val: agentguardUrl, set: setAgentguardUrl, ph: 'http://localhost:8080' },
+                        { label: t('wizard.common.fields.agentId'), val: agentId, set: setAgentId, ph: t('wizard.common.placeholders.agentId') },
+                        { label: t('wizard.common.fields.deploymentId'), val: deploymentId, set: setDeploymentId, ph: t('wizard.common.placeholders.deploymentIdLocal') },
+                        { label: t('wizard.common.fields.deploymentName'), val: deploymentName, set: setDeploymentName, ph: t('wizard.common.placeholders.deploymentNameLocal') },
+                        { label: t('wizard.common.fields.timeplusUrl'), val: timeplusUrl, set: setTimeplusUrl, ph: t('wizard.common.placeholders.timeplusUrl') },
+                        { label: t('wizard.common.fields.timeplusUsername'), val: timeplusUsername, set: setTimeplusUsername, ph: t('wizard.common.placeholders.timeplusUsername') },
+                        { label: t('wizard.common.fields.timeplusPassword'), val: timeplusPassword, set: setTimeplusPassword, ph: t('wizard.common.placeholders.timeplusPassword'), type: 'password' },
+                        { label: t('wizard.common.fields.agentguardUrl'), val: agentguardUrl, set: setAgentguardUrl, ph: t('wizard.common.placeholders.agentguardUrl') },
                       ].map(({ label, val, set, ph, type }) => (
                         <div key={label} className="flex items-center gap-4">
                           <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>
@@ -508,22 +507,22 @@ export default function Onboarding() {
                         </div>
                       ))}
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Holds Enabled</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{t('wizard.common.holdsEnabledLabel')}</label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={holdsEnabled} onChange={e => setHoldsEnabled(e.target.checked)} className="accent-[#ffb0cf]" />
-                          <span className="text-[10px] text-gray-400">{holdsEnabled ? 'Synchronous pre_tool_call blocking on' : 'Observation-only — no blocking'}</span>
+                          <span className="text-[10px] text-gray-400">{holdsEnabled ? t('wizard.common.holdsOnHermes') : t('wizard.common.holdsOff')}</span>
                         </label>
                       </div>
                       <div className="flex items-center gap-4">
-                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Hold Fail Policy</label>
+                        <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{t('wizard.common.holdFailPolicyLabel')}</label>
                         <select value={holdFailPolicy} onChange={e => setHoldFailPolicy(e.target.value)} disabled={!holdsEnabled}
                           className="flex-1 bg-gray-800 border border-gray-600 text-xs py-2 px-3 rounded-sm focus:border-gray-400 focus:outline-none text-gray-100 font-mono disabled:opacity-50">
-                          <option value="deny">deny — block on errors</option>
-                          <option value="allow">allow — pass through on errors</option>
+                          <option value="deny">{t('wizard.common.holdFailPolicyOptions.deny')}</option>
+                          <option value="allow">{t('wizard.common.holdFailPolicyOptions.allow')}</option>
                         </select>
                       </div>
                     </div>
-                    <p className="text-[10px] text-gray-400 leading-relaxed">* Agent ID identifies this Hermes instance — use your hostname or machine name.</p>
+                    <p className="text-[10px] text-gray-400 leading-relaxed">{t('wizard.step1.hermes.agentIdNote')}</p>
                   </div>
                 </>
               )}
@@ -532,16 +531,16 @@ export default function Onboarding() {
               {step === 2 && selectedAgent === 'openclaw' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">OpenTelemetry Config</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">{t('wizard.step2.openclaw.title')}</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
-                      Enable the built-in OTel diagnostics plugin to export traces, metrics, and logs from OpenClaw to Timeplus.
+                      {t('wizard.step2.openclaw.desc')}
                     </p>
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Timeplus OTLP Endpoint</p>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('wizard.step2.openclaw.endpointHeading')}</p>
                     <div className="flex items-center gap-4">
-                      <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Endpoint URL</label>
+                      <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{t('wizard.step2.openclaw.endpointLabel')}</label>
                       <input
                         value={otelEndpoint}
                         onChange={e => setOtelEndpoint(e.target.value)}
@@ -550,27 +549,27 @@ export default function Onboarding() {
                       />
                     </div>
                     <p className="text-[10px] text-gray-400 leading-relaxed pl-40">
-                      Use <code className="text-gray-400">host.docker.internal</code> when OpenClaw runs in Docker and Timeplus runs on the host. Replace with the actual host/IP if needed.
+                      {t('wizard.step2.openclaw.hintBefore')}<code className="text-gray-400">host.docker.internal</code>{t('wizard.step2.openclaw.hintAfter')}
                     </p>
                   </div>
 
-                  <CodeBlock label="openclaw.json — diagnostics section" code={otelConfigCode} />
+                  <CodeBlock label={t('wizard.step2.openclaw.codeBlockLabel')} code={otelConfigCode} />
                 </>
               )}
 
               {step === 2 && selectedAgent === 'claude-code' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">OpenTelemetry Config</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">{t('wizard.step2.claudeCode.title')}</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
-                      Enable Claude Code's built-in OTel telemetry to export LLM metrics and logs to Timeplus. This unlocks token usage, cost, and latency data.
+                      {t('wizard.step2.claudeCode.desc')}
                     </p>
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Timeplus OTLP Endpoint</p>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('wizard.step2.claudeCode.endpointHeading')}</p>
                     <div className="flex items-center gap-4">
-                      <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">Endpoint URL</label>
+                      <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{t('wizard.step2.claudeCode.endpointLabel')}</label>
                       <input
                         value={otelEndpoint}
                         onChange={e => setOtelEndpoint(e.target.value)}
@@ -580,9 +579,9 @@ export default function Onboarding() {
                     </div>
                   </div>
 
-                  <CodeBlock label="~/.claude/settings.json — merge this env block" code={ccOtelSettingsCode} />
+                  <CodeBlock label={t('wizard.step2.claudeCode.codeBlockLabel')} code={ccOtelSettingsCode} />
                   <p className="text-[10px] text-gray-400 leading-relaxed">
-                    Merge the <code className="text-gray-400">env</code> keys into your existing <code className="text-gray-400">~/.claude/settings.json</code>. The <code className="text-gray-400">http/protobuf</code> protocol is required — do not use gRPC.
+                    {t('wizard.step2.claudeCode.mergeNoteBefore')}<code className="text-gray-400">env</code>{t('wizard.step2.claudeCode.mergeNoteMiddle')}<code className="text-gray-400">~/.claude/settings.json</code>{t('wizard.step2.claudeCode.mergeNoteBetween')}<code className="text-gray-400">http/protobuf</code>{t('wizard.step2.claudeCode.mergeNoteAfter')}
                   </p>
                 </>
               )}
@@ -590,26 +589,24 @@ export default function Onboarding() {
               {step === 2 && selectedAgent === 'hermes' && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">OpenTelemetry Config</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">{t('wizard.step2.hermes.title')}</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
-                      OTel telemetry export is not yet supported by Hermes Agent.
+                      {t('wizard.step2.hermes.desc')}
                     </p>
                   </div>
                   <div className="flex items-start gap-4 p-5 bg-surface-container-low rounded-sm border border-outline-variant/20">
                     <span className="material-symbols-outlined text-amber-400 text-xl mt-0.5 shrink-0">info</span>
                     <div className="space-y-1.5">
-                      <p className="text-sm font-medium text-gray-100">OTel not yet available for Hermes</p>
+                      <p className="text-sm font-medium text-gray-100">{t('wizard.step2.hermes.notAvailableTitle')}</p>
                       <p className="text-xs text-gray-400 leading-relaxed">
-                        Hermes Agent does not yet expose an OpenTelemetry exporter. Token usage and latency metrics are captured
-                        via the AgentGuard plugin's <code className="text-gray-100">post_api_request</code> hook instead —
-                        no additional configuration is required.
+                        {t('wizard.step2.hermes.notAvailableBodyBefore')}<code className="text-gray-100">post_api_request</code>{t('wizard.step2.hermes.notAvailableBodyAfter')}
                       </p>
                       <p className="text-xs text-gray-400 leading-relaxed mt-1">
-                        OTel support will be added here once Hermes ships an OTLP exporter.
+                        {t('wizard.step2.hermes.notAvailableBody2')}
                       </p>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400">Click <span className="text-gray-100">Next</span> to proceed to rule activation.</p>
+                  <p className="text-xs text-gray-400">{t('wizard.step2.hermes.nextHintBefore')}<span className="text-gray-100">{t('wizard.footer.next')}</span>{t('wizard.step2.hermes.nextHintAfter')}</p>
                 </>
               )}
 
@@ -617,14 +614,14 @@ export default function Onboarding() {
               {step === 3 && (
                 <>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">Activate Security Rules</h2>
+                    <h2 className="text-xl font-semibold text-gray-100 tracking-tight">{t('wizard.step3.title')}</h2>
                     <p className="text-gray-400 mt-1.5 text-xs leading-relaxed">
-                      Select the rules to enable now and pick a block policy for each. You can refine these any time from the Rules page.
+                      {t('wizard.step3.desc')}
                     </p>
                   </div>
 
                   {catalogLoading && (
-                    <div className="text-xs text-gray-400">Loading rules…</div>
+                    <div className="text-xs text-gray-400">{t('wizard.step3.loading')}</div>
                   )}
                   {catalogError && (
                     <div className="bg-red-500/10 border border-red-500/20 rounded-sm px-4 py-3 text-xs text-red-400">{catalogError}</div>
@@ -633,7 +630,7 @@ export default function Onboarding() {
                   {!catalogLoading && !catalogError && (
                     <div className="flex flex-col gap-2 max-h-[420px] overflow-y-auto pr-2">
                       {catalog.length === 0 ? (
-                        <p className="text-xs text-gray-400">No rules available in the catalog.</p>
+                        <p className="text-xs text-gray-400">{t('wizard.step3.noRules')}</p>
                       ) : catalog.map(entry => {
                         const isSelected = !!selectedRules[entry.id]
                         return (
@@ -655,7 +652,7 @@ export default function Onboarding() {
                                 <p className="text-xs font-semibold text-gray-100 truncate">
                                   {entry.name}
                                   {entry.installed && (
-                                    <span className="ml-2 text-[9px] uppercase tracking-wide text-gray-400">Already enabled</span>
+                                    <span className="ml-2 text-[9px] uppercase tracking-wide text-gray-400">{t('wizard.step3.alreadyEnabled')}</span>
                                   )}
                                 </p>
                                 <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2">{entry.description}</p>
@@ -679,7 +676,7 @@ export default function Onboarding() {
                   )}
 
                   <p className="text-xs text-gray-400 leading-relaxed">
-                    Selected rules will be installed when you click <span className="text-gray-100 font-medium">Go to Rules</span>. You can browse the full catalog and adjust policies on the Rules page.
+                    {t('wizard.step3.footerNoteBefore')}<span className="text-gray-100 font-medium">{t('wizard.step3.footerNoteGoToRules')}</span>{t('wizard.step3.footerNoteAfter')}
                   </p>
                 </>
               )}
@@ -693,7 +690,7 @@ export default function Onboarding() {
                 className="px-4 py-2 text-xs font-medium text-gray-400 hover:text-gray-100 transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined text-xs">arrow_back</span>
-                Back
+                {t('wizard.footer.back')}
               </button>
               <div className="flex items-center gap-3">
                 {step < 3 ? (
@@ -701,7 +698,7 @@ export default function Onboarding() {
                     onClick={handleNext}
                     className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
                   >
-                    Next
+                    {t('wizard.footer.next')}
                     <span className="material-symbols-outlined text-xs">arrow_forward</span>
                   </button>
                 ) : (
@@ -711,7 +708,7 @@ export default function Onboarding() {
                     className="bg-primary-button px-6 py-2.5 rounded-sm text-xs font-semibold text-primary-button-text hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="material-symbols-outlined text-xs">rule</span>
-                    {activating ? 'Activating…' : 'Go to Rules'}
+                    {activating ? t('wizard.footer.activating') : t('wizard.footer.goToRules')}
                   </button>
                 )}
               </div>

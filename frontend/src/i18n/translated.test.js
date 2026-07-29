@@ -21,6 +21,7 @@ export const REPRESENTATIVE = [
   ['cost', 'title'],
   ['dlp', 'title'],
   ['sentry', 'chat.composerPlaceholder'],
+  ['onboarding', 'wizard.header.title'],
 ]
 
 describe('zh-CN is actually translated', () => {
