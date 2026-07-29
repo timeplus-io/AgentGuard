@@ -31,7 +31,7 @@
       "rulesCount_one": "{{count}} 条规则",
       "rulesCount_other": "{{count}} 条规则",
       "available": "{{count}} 个可安装",
-      "matching": " 匹配 “{{query}}”",
+      "matching": "匹配 “{{query}}”",
       "pageOf": "第 {{page}} / {{total}} 页"
     },
     "availableToInstall": {
@@ -39,8 +39,9 @@
     },
     "confirmToggle": {
       "title": "{{action}}规则包",
-      "bodyPrefix": "您确定要",
-      "bodySuffix": "吗？",
+      "bodyBeforeAction": "您确定要",
+      "bodyBetween": " ",
+      "bodyAfter": "吗？",
       "enableNote": "这将创建或恢复检测物化视图并开始监控。",
       "disableNote": "这将暂停检测物化视图，停止检测新事件。"
     },

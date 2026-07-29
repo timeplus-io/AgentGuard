@@ -39,8 +39,9 @@
     },
     "confirmToggle": {
       "title": "{{action}} Rule Pack",
-      "bodyPrefix": "Are you sure you want to",
-      "bodySuffix": "?",
+      "bodyBeforeAction": "Are you sure you want to ",
+      "bodyBetween": " ",
+      "bodyAfter": "?",
       "enableNote": "This will create or resume the detection MV and start monitoring.",
       "disableNote": "This will pause the detection MV and stop new events from being detected."
     },

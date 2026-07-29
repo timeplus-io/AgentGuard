@@ -199,7 +199,7 @@ export default function RulePacks() {
               {t('list.confirmToggle.title', { action: confirmToggle.newVal ? t('actions.enable') : t('actions.disable') })}
             </h3>
             <p className="text-sm text-gray-400">
-              {t('list.confirmToggle.bodyPrefix')} <span className="text-gray-100 font-medium">{confirmToggle.newVal ? t('actions.enable') : t('actions.disable')}</span> <span className="text-primary">{confirmToggle.name}</span>{t('list.confirmToggle.bodySuffix')}
+              {t('list.confirmToggle.bodyBeforeAction')}<span className="text-gray-100 font-medium">{confirmToggle.newVal ? t('actions.enable') : t('actions.disable')}</span>{t('list.confirmToggle.bodyBetween')}<span className="text-primary">{confirmToggle.name}</span>{t('list.confirmToggle.bodyAfter')}
               {!confirmToggle.newVal && <span className="block mt-2 text-xs text-gray-400">{t('list.confirmToggle.disableNote')}</span>}
               {confirmToggle.newVal && <span className="block mt-2 text-xs text-gray-400">{t('list.confirmToggle.enableNote')}</span>}
             </p>
