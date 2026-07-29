@@ -56,6 +56,45 @@ type Definition struct {
 	SQLTemplate       string      `yaml:"sql_template"       json:"sql_template"`
 	Parameters        []Parameter `yaml:"config"             json:"config,omitempty"`
 	Origin            string      `yaml:"origin"             json:"origin,omitempty"`
+
+	// Translations holds locale-specific display text keyed by locale
+	// (e.g. "zh-CN"). It is presentation metadata only: excluded from Hash,
+	// resolved server-side at read time, and never exposed on read responses.
+	Translations map[string]Translation `yaml:"translations,omitempty" json:"translations,omitempty"`
+}
+
+// Translation is locale-specific display text for a rule definition. Any empty
+// field falls back to the base (English) Definition field.
+type Translation struct {
+	Name        string `yaml:"name"        json:"name"`
+	Description string `yaml:"description" json:"description"`
+}
+
+// TranslationFor returns the translation entry for locale and whether one exists.
+func (d Definition) TranslationFor(locale string) (Translation, bool) {
+	if d.Translations == nil {
+		return Translation{}, false
+	}
+	tr, ok := d.Translations[locale]
+	return tr, ok
+}
+
+// Localized returns a copy of d with Name/Description replaced by the locale's
+// translated values (per-field fallback to the base when a translated field is
+// empty), and with Translations cleared so the map never leaks onto a read
+// response. An unknown/empty locale or a missing entry returns the base copy.
+func (d Definition) Localized(locale string) Definition {
+	out := d
+	out.Translations = nil
+	if tr, ok := d.TranslationFor(locale); ok {
+		if tr.Name != "" {
+			out.Name = tr.Name
+		}
+		if tr.Description != "" {
+			out.Description = tr.Description
+		}
+	}
+	return out
 }
 
 // Parameter describes one user-editable knob of a rule definition.
