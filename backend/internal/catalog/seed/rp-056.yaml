@@ -80,3 +80,15 @@ sql_template: |
         '\xf3\xa0\x80\x80', '\xf3\xa0\x80\xa0', '\xf3\xa0\x81\x80'
       ])
     )
+
+translations:
+  zh-CN:
+    name: "隐形 Unicode 指令注入检测器"
+    description: |
+      检测通过嵌入在智能体通信中的隐形 Unicode 字符实施的隐蔽指令注入。零宽字符(U+200B ZWSP、U+200C ZWNJ、U+200D ZWJ、U+200E LRM、U+200F RLM、U+FEFF BOM)以及 Unicode 标签块字符(U+E0000– U+E007F)在所有渲染环境——聊天界面、日志查看器、SIEM 仪表盘——中完全不可见,但大语言模型(LLM)会将其解码为可执行指令。arXiv:2603.00164(Reverse CAPTCHA, Marcus Graves, Feb 2026)测量了五个模型和两种编码方案下的 8,308 次模型输出,发现工具调用会显著放大合规率(Claude Haiku 从 0.8% → 49.2% ASR,Cohen's h = 1.37 大效应量,OR = 115.1)。OpenAI 模型偏好零宽二进制编码;Anthropic 模型偏好 Unicode 标签块编码。显式的解码指令可使同一模型内的合规率提升多达 95 个百分点。攻击者将载荷嵌入于:用户消息(直接注入)、工具结果(通过网页抓取/邮件/文档实施的间接提示注入 IPI)、或 LLM 输出(将载荷传播至下一轮对话)。
+
+      与仅检测用于拆分特定关键词字符串(如 "ignore")的零宽字符的 rp-001 不同;本规则检测任何隐形 Unicode 字符簇,无论其周围文本内容如何——覆盖完整的隐蔽信道攻击面。
+
+      参考文献:arXiv:2603.00164(Reverse CAPTCHA Feb 2026)、OWASP LLM01:2025 -
+      - https://arxiv.org/abs/2603.00164,
+      - https://github.com/canonicalmg/reverse-captcha-eval

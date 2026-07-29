@@ -149,3 +149,15 @@ sql_template: |
       OR match(lower(prev_user_message), '(send|upload|transfer|email|export|push).{0,150}(delete|remove|erase|wipe|destroy|clean.?up).{0,100}(local|original|source|file|data|log|copy)')
       OR match(lower(prev_user_message), '(after|once|when|now that).{0,80}(compress|archive|send|upload|backup|zip|transfer|export).{0,100}(delete|remove|clean.?up|wipe|erase|destroy|purge)')
     )
+translations:
+  zh-CN:
+    name: "STAC 顺序工具攻击链检测器"
+    description: |
+      检测顺序工具攻击链（Sequential Tool Attack Chaining，STAC）攻击——将单独看来无害的工具调用指令跨多轮对话串联起来，从而达成对逐步安全检查不可见的有害累积效果。arXiv:2509.25624（STAC，ICLR 2026，AWS AI Labs / 加州大学伯克利分校）证明了针对 GPT-4.1 的攻击成功率超过 90%，覆盖 483 个评估攻击案例——典型示例为：(1) 以"存储优化"为由压缩文档为 ZIP，(2) 以"已有备份"为由删除原始文件，(3) 作为最终清理步骤删除 ZIP 文件。整个文档语料库通过 3 条各自看似无害的指令被彻底销毁。其他攻击链还包括：先泄露后销毁（上传文件到外部，删除本地副本，删除远程副本）；数据库清空链。该论文表明现有的基于提示的防御措施提供的保护有限（攻击成功率最多降低 28.8%）。检测必须针对动作序列轨迹进行推理，而不能仅基于孤立的提示或响应。
+
+      与 rp-006（递归循环拒绝服务——单轮循环诱导）、rp-018（token 消耗成本放大）和 rp-050（语义回滚检查点重放）不同。
+
+      参考文献：arXiv:2509.25624（STAC，ICLR 2026）、OWASP LLM01:2025、OWASP Agentic AI ASI03:2026 -
+      - https://arxiv.org/abs/2509.25624,
+      - https://arxiv.org/html/2509.25624v2,
+      - https://github.com/amazon-science/MultiTurnAgentAttack

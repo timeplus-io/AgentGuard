@@ -126,3 +126,15 @@ sql_template: |
         AND match(lower(tool_result), '(additionally|also|then|now).{0,60}(send|exfil|upload|forward|execute|call|invoke)')
       )
     )
+translations:
+  zh-CN:
+    name: "Agent-as-a-Proxy——对抗性监控绕过检测器"
+    description: |
+      检测 Agent-as-a-Proxy 攻击（arXiv:2602.05066，Isbarov & Kantarcioglu，弗吉尼亚理工，2026年2月）：攻击者将通过 Parallel-GCG 优化的对抗性合规 token 嵌入智能体检索到的外部内容（工具结果）中。当智能体在其思维链（assistant_message）或工具调用参数（tool_input）中回显这些 token 时，观察智能体推理过程的次级监控/安全系统会将这条恶意执行轨迹判定为安全的——对 AlignmentCheck、Extract-and-Evaluate 和 LlamaFirewall 等监控系统的攻击成功率超过 90%。该攻击的原理是将监控通道本身武器化：迫使智能体充当不知情的代理，将对抗性合规 token 直接传递到监控系统的上下文窗口中。模型规模并不能提供防护——Qwen2.5-72B 监控系统被 GPT-4o mini 和 Llama-3.1-70B 代理智能体成功绕过。可观测模式：伪造的监控裁定 token（如 VERIFIED_COMPLIANT、_PROXY_OK_、"confirmed-safe by alignment monitor"、"safety check passed"）出现在智能体输出或工具输入中，通常是从工具结果中的对抗性内容回显而来。
+
+      与 rp-014（工具结果中的覆盖/任务劫持语言）不同——本规则检测的是发生在智能体输出中的监控冒充/绕过机制。
+
+      参考文献：arXiv:2602.05066（Agent-as-a-Proxy 攻击，2026年2月）、OWASP Agentic AI ASI02:2026、OWASP LLM01:2025 -
+      - https://arxiv.org/abs/2602.05066,
+      - https://agent-as-a-proxy-attack.github.io/,
+      - https://github.com/dspl-lab/agent-as-a-proxy-attack

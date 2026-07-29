@@ -162,3 +162,16 @@ sql_template: |
       'python', 'repl', 'python_interpreter', 'sandboxed_exec'
     )
     AND ag_dns_exfil_check(tool_result) = true
+
+translations:
+  zh-CN:
+    name: "代码解释器 DNS 隧道隐蔽渗漏检测器"
+    description: |
+      检测由代码解释器智能体生成的、通过 DNS 隧道进行的隐蔽数据渗漏。Unit42(2026年4月7日)和 Aurascape AuraLabs(2026年1月14日)确认,AWS AgentCore Code Interpreter 的"网络隔离模式"(network isolation mode)允许出站 DNS 解析——使得社会安全号码(SSN)、API 密钥和环境变量能够以 DNS 子域标签形式(例如 123-45-6789.attacker.com)被静默渗漏,且不产生任何 HTTP 出站流量。Claude Code GitHub issue #36907 记录了 DevContainer 环境中相同的绕过手法:防火墙允许对任意服务器发起 DNS 查询,从而可通过 socket.gethostbyname() 以 base32 编码方式渗漏 API 密钥。该攻击通常通过检索文件中的间接提示注入或用户的显式指令触发。编码在 DNS 标签中的数据(每个标签最多 63 个字符,总长最多 253 个字符)对基于 HTTP 的 DLP、网络监控以及输出内容扫描器均不可见。
+
+      区别于 rp-007(通过 HTTP 工具实现的 SSRF——HTTP fetch 工具指向元数据 IP)和 rp-002(DLP Sentinel——HTTP URL 中的 API 密钥)。本规则专门针对代码解释器工具生成用于隐蔽信道的 socket/dns DNS 解析代码。
+
+      参考资料: Unit42《Cracks in the Bedrock: Escaping the AWS AgentCore Sandbox》(2026年4月7日),Aurascape《Silent Leak: DNS Tunneling in AWS AgentCore》(2026年1月14日),Claude Code GitHub #36907"DevContainer firewall allows DNS to arbitrary servers",OWASP LLM02:2025,MITRE T1048.001(Exfiltration Over DNS) -
+      - https://unit42.paloaltonetworks.com/bypass-of-aws-sandbox-network-isolation-mode/,
+      - https://aurascape.ai/resources/auralabs-research/silent-leak-dns-tunneling-aws-agentcore-code-interpreter/,
+      - https://github.com/anthropics/claude-code/issues/36907

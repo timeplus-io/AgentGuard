@@ -77,3 +77,15 @@ sql_template: |
     -- Kept only hypothetical/fictional framing + explicit reframe/pivot phrases.
     AND match(lower(user_message),
       '(let me rephrase|what i.m really asking|what about if we|hypothetically speaking|in a fictional scenario|for a story about|imagine instead|reframe this as|as a thought experiment|ok then what if|what if instead|ok how about|forget that framing|let.s say hypothetically|pretend instead)')
+
+translations:
+  zh-CN:
+    name: "Mastermind 多轮分层越狱——拒绝转向式改写检测器"
+    description: |
+      检测 Mastermind 多轮越狱攻击模式：攻击者利用大语言模型自身的拒绝响应作为转向点，立即使用话题重构、假设性框架或叙事伪装重新表述有害请求。Mastermind 框架（arXiv:2601.05445，东南大学/南洋理工大学/OPPO，2026）以一个封闭的"规划→执行→反思"循环运行：当大语言模型发出拒绝时，攻击者一方的系统会对该失败进行反思，并生成一个语义等价但能绕过同一安全护栏的改写版本。该方法已针对 GPT-5 和 Claude 3.7 Sonnet 进行测试，效果显著优于所有基线方法。检测使用 lag() CTE 关联连续的回合对：大语言模型响应中的拒绝短语紧接着在下一个用户回合中出现改写标记。
+
+      与 rp-031（渐进式/话题漂移——不涉及拒绝关联）、rp-086（HPM 社会压力——无拒绝转向信号）、rp-096（切香肠式攻击——基于频率而非拒绝触发）不同。
+
+      参考文献：arXiv:2601.05445（Mastermind，2026年1月）-
+      - https://arxiv.org/abs/2601.05445，OWASP LLM01:2025 -
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

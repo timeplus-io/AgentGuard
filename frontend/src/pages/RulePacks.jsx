@@ -25,7 +25,7 @@ const CATEGORY_ICONS = {
 const RULES_PAGE_SIZE = 12
 
 export default function RulePacks() {
-  const { t } = useTranslation('rules')
+  const { t, i18n } = useTranslation('rules')
   const navigate = useNavigate()
   const { can } = useAuth()
   const canWrite = can(writeKey('rules')) // gate install/toggle/import/create
@@ -80,7 +80,7 @@ export default function RulePacks() {
     ])
       .catch(() => { setLoadError(t('list.errors.loadFailed')) })
       .finally(() => setLoading(false))
-  }, [t])
+  }, [t, i18n.language])
 
   useEffect(() => { setRulesPage(1); setCatalogPage(1) }, [search])
 

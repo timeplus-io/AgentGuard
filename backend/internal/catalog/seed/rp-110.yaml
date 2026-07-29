@@ -145,3 +145,26 @@ sql_template: |
       match(lower(tool_name), '(get_env|list_env|read_env|env_vars|environment_variables|get_secrets|list_secrets|read_secrets|get_config)')
       OR match(lower(tool_input), '\b(vercel|netlify|railway|render|fly\.io|heroku)\b.{0,80}\b(env|environment|secret|token|credential|variable)\b')
     )
+translations:
+  zh-CN:
+    name: "OAuth 横向渗透供应链攻击检测器"
+    description: |
+      检测 OAuth 供应链横向渗透攻击类别,该规则以 2026 年 4 月的 Vercel 安全事件为依据。一个被攻陷的第三方 AI 工具持有一个拥有过度权限范围的 Google Workspace OAuth 应用。攻击者利用该被攻陷的 OAuth 令牌横向渗透至某 Vercel 员工的 Google Workspace 账户,进而访问了包含明文 API 密钥、NPM 令牌和 GitHub 令牌的 Vercel 环境变量。
+
+      本规则检测该攻击在 AgentGuard CIM 事件中可观测的三个阶段:
+
+      阶段 1(OAuth 权限扩张):智能体工具调用请求或使用超出基本个人资料信息范围的 Google Workspace OAuth 权限范围(drive、gmail、admin.directory、workspace admin)。特定的 IOC 标识符(例如被攻陷的 OAuth 客户端 ID)有意排除在外 —— 这些属于特定事件的信息,应由威胁情报源处理,而非通用行为规则。
+
+      阶段 2(凭证收集):智能体的 tool_complete 在 tool_result 中返回 OAuth 令牌、访问令牌或刷新令牌 —— 表明智能体从 OAuth 流程中收到的凭证材料可能被被攻陷的中间方收集。
+
+      阶段 2b(时序关联):OAuth 工具调用之后同一会话内紧接着出现环境变量/密钥读取 —— 与 Vercel 攻击的渗透路径吻合:OAuth 攻陷 -> 环境变量渗漏。
+
+      与 rp-007(针对元数据 IP 的 SSRF)、rp-002(DLP 出站凭证模式)和 rp-028(LLM 路由中间方注入)不同。本规则专门针对 OAuth 供应链横向渗透 —— 该凭证是通过被攻陷的 OAuth 应用“合法”获取的,而非通过直接注入获取。
+
+      示例:tool_invoke 中 tool_name="oauth_connect",tool_input={"scopes": ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/gmail.readonly"]},随后同一会话内出现 tool_name="get_env_vars" 的 tool_invoke。
+
+      参考文献:Vercel 2026 年 4 月安全事件(官方公告)、Dark Reading《Vercel Employee's AI Tool Access Led to Data Breach》2026-04-20、OX Security《Vercel Breached via Context AI Supply Chain Attack》2026-04-20、趋势科技《The Vercel Breach: OAuth Supply Chain Attack》2026-04-20 -
+      - https://vercel.com/kb/bulletin/vercel-april-2026-security-incident,
+      - https://www.darkreading.com/application-security/vercel-employees-ai-tool-access-data-breach,
+      - https://www.ox.security/blog/vercel-context-ai-supply-chain-attack-breachforums/,
+      - https://www.trendmicro.com/en_us/research/26/d/vercel-breach-oauth-supply-chain.html

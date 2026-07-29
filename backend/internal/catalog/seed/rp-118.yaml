@@ -167,3 +167,21 @@ sql_template: |
       )
 
     )
+
+translations:
+  zh-CN:
+    name: "多工具源到汇（Source-to-Sink）工作流利用检测器"
+    description: |
+      检测大语言模型智能体中的多工具"源到汇"（source-to-sink）工作流漏洞（arXiv:2603.12614，ChainFuzzer，2026年3月）：在19/20个主流智能体应用中共确认365个漏洞，其中302个需要多工具协同执行才能触发，单工具测试无法发现。攻击模式：来自不可信输入工具（网页抓取、文档检索、搜索）的、受攻击者影响的内容，经过大语言模型推理层，流向同一会话内的高影响"汇"工具（SQL 执行、shell 命令、文件写入）。中间的智能体规划步骤在没有显式数据流跟踪的情况下，弥合了不可信与可信之间的边界。该规则同时覆盖 GHSA-jwjx-mw2p-5wc7（AnythingLLM SQL Agent，CVSS 7.7）：大语言模型生成的 table_name 参数未经净化直接拼入 SQL 查询——即使没有外部内容摄入，大语言模型本身也会成为注入的源头。
+
+      与 rp-072（XTHP：需要工具结果中出现明确的跨范围调用指令——本规则检测的是没有明确重定向指令的静默数据流）不同。与 rp-113（ToxicSQL：检测查询本身中已经生成的恶意 SQL——本规则针对的是行为链）不同。本规则与 rp-007（通过 HTTP 工具的 SSRF）互补，覆盖的是下游"汇"执行环节，而非 SSRF 抓取本身。
+
+      参考文献：arXiv:2603.12614（ChainFuzzer，ICSE 2026，灰盒模糊测试，19/20个应用中共365个漏洞，其中302个为多工具）-
+      - https://arxiv.org/abs/2603.12614,
+      GHSA-jwjx-mw2p-5wc7（AnythingLLM SQL Agent SQL 注入，CVSS 7.7）-
+      - https://github.com/Mintplex-Labs/anything-llm/security/advisories/GHSA-jwjx-mw2p-5wc7,
+      arXiv:2602.20720（AdapTools 自适应间接提示注入，攻击成功率提升2.13倍）-
+      - https://arxiv.org/abs/2602.20720,
+      OWASP LLM01:2025，OWASP Agentic AI ASI02:2026（工具滥用）-
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+      示例：tool_invoke web_search 返回恶意内容 → 智能体将内容写入文件 → tool_invoke bash 读取并执行该文件。或者：用户询问"显示员工数据" → 大语言模型生成 sql-get-table-schema(table_name= "employees; DROP TABLE users;--") → SQL 被注入数据库。

@@ -124,3 +124,14 @@ sql_template: |
       OR match(lower(assistant_message), 'gemini_api_key')
       OR match(lower(assistant_message), 'vertex_ai_project')
     )
+translations:
+  zh-CN:
+    name: "通过智能体上下文的凭据收集"
+    description: |
+      检测 AI 智能体在读取不可信内容(PR 标题、issue 正文、电子邮件)时被劫持,进而通过工具输出或助手消息转储环境变量或泄露 API 密钥、GitHub 令牌和密钥的凭据渗出行为。基于已在 Claude Code、Gemini CLI Action 和 GitHub Copilot Agent 上验证的"Comment and Control"攻击类别(Aonan Guan,约翰霍普金斯大学,2026 年 4 月)。同时覆盖智能体中介的凭据发现(FINOS AI Governance RI-29)以及 arXiv:2601.10338 中记录的间接提示注入凭据窃取链。对应 OWASP LLM02:2025(敏感信息泄露)和 LLM06:2025(过度代理权)。v0.3.0 新增来自 Aikido PromptPwnd(2025 年 12 月)和约翰霍普金斯大学"Comment and Control"攻击(2026 年 4 月,CVSS 9.4)的 CI/CD 专用信号:/proc/self/environ 进程文件读取、对 GitHub Actions 运行时/runner 令牌的命名式 echo、针对 CI/CD 环境变量的 printenv,以及在 tool_result 和 assistant_message 中检测 ACTIONS_RUNTIME_TOKEN、RUNNER_TOKEN、GEMINI_API_KEY、GHS_/GHO_ 令牌前缀(GitHub 服务器间/OAuth 令牌)。已确认至少 5 家财富 500 强公司在 Claude Code Security Review、Google Gemini CLI Action 和 GitHub Copilot Agent 上受到影响。
+
+      参考文献:OWASP LLM02:2025、OWASP LLM06:2025、约翰霍普金斯大学 / Aonan Guan,2026 年 4 月、Aikido Security PromptPwnd,2025 年 12 月 -
+      - https://www.theregister.com/2026/04/15/claude_gemini_copilot_agents_hijacked/,
+      - https://www.aikido.dev/blog/promptpwnd-github-actions-ai-agents,
+      Example: tool_input="cat /proc/self/environ" or tool_input="echo $ACTIONS_RUNTIME_TOKEN" (CI/CD token exfil via process env read)
+      - https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/

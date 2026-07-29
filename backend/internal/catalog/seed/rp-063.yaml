@@ -106,3 +106,12 @@ sql_template: |
         AND match(lower(tool_result), '(failure|failure to|non-compliant|required|mandatory|must|obligatory)')
       )
     )
+translations:
+  zh-CN:
+    name: "Log-To-Leak — MCP 日志工具隐蔽数据泄露检测器"
+    description: |
+      检测 Log-To-Leak 攻击（ICLR 2026，OpenReview id=UVgbFuXPaO）：攻击者在智能体通过 MCP 工具读取的外部内容中嵌入结构化提示注入载荷，隐蔽地迫使智能体调用日志/审计/追踪工具，并将完整的会话历史（用户查询、工具响应、智能体回复）作为参数传入——从而将整个会话泄露给攻击者控制的端点。该攻击包含四个组成部分：触发器（合规/审计话术包装）、工具绑定（指定特定的审计/日志工具）、正当化（政策性语言）以及施压（威胁终止会话）。该攻击在 GPT-4o、GPT-5、Claude-Sonnet-4 和 GPT-OSS-120b 上、跨 5 个真实 MCP 服务器进行了评估，攻击成功率均持续偏高。与 rp-014（tool_result 中的覆盖/劫持语言）不同，Log-To-Leak 针对的是工具调用决策——智能体一边正常完成任务，一边悄悄地同时调用日志工具，因而对仅监控输出的系统不可见。与 rp-039（源自工单读取器的跨工具支点转移）不同，本规则针对的是任意外部内容来源，并专门利用合规/审计话术来诱导调用带有会话载荷的日志工具。这是可区分的关键点：event_type=tool_invoke 且工具为日志类工具、参数中含有会话内容，才是主要的可观测信号，而非内容注入语言本身。
+
+      参考文献：ICLR 2026「Log-To-Leak：通过模型上下文协议对工具使用型 LLM 智能体的提示注入攻击」（OpenReview id=UVgbFuXPaO）、OWASP LLM01:2025、OWASP Agentic AI ASI02:2026 -
+      - https://openreview.net/forum?id=UVgbFuXPaO,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

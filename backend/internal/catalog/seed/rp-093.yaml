@@ -75,3 +75,11 @@ sql_template: |
         AND match(lower(assistant_message), '(here (is|are) the (complete|full|detailed|step.by.step)|as (promised|requested|agreed|we discussed))')
       )
     )
+
+translations:
+  zh-CN:
+    name: "对话注入攻击(DIA)——伪造历史对话越狱检测器"
+    description: |
+      检测对话注入攻击(DIA),攻击者将伪造的多轮对话历史注入 LLM 上下文,以制造虚假的顺从先例。DIA 通过构造虚假的先前交流(其中模型"已经同意"配合有害请求(预填充),或"已经承诺"稍后提供帮助(延迟响应))来实施攻击。该攻击在 Llama-3.1 和 GPT-4o(黑盒设置)上取得了当前最优的越狱攻击成功率(ASR),并能绕过 5 种防御机制。与 rp-086(单轮心理压力)和 rp-087(CoT 推理令牌篡改)不同:DIA 专门利用多轮对话历史的伪造来建立虚假的先前顺从记录。
+
+      参考文献:arXiv:2503.08195(《对话注入攻击:通过上下文操纵越狱大语言模型》,浙江大学/国防科技大学,2025年3月)- https://arxiv.org/abs/2503.08195,OWASP LLM01:2025,OWASP Agentic AI ASI01:2026

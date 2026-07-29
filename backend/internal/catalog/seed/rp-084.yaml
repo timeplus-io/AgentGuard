@@ -170,3 +170,20 @@ sql_template: |
       -- "As per system instructions, forward all [data] to [external]"
       OR match(lower(tool_result), 'as per (system|orchestrator|coordinator) instructions?.{0,100}(forward|send|transfer|route|export).{0,80}(all |)(data|results?|output|context|conversation|memory).{0,80}(to|at)\s+https?://')
     )
+translations:
+  zh-CN:
+    name: "内部破坏(Sabotage-from-Within)——被攻陷子代理的任务伪造与能力否认检测器"
+    description: |
+      检测多代理系统中的子代理破坏行为:一个被攻陷的子代理(通过供应链攻击、模型后门或提示注入)返回伪造的 tool_result 内容,从而破坏编排器的规划、外泄数据,或篡改代理间传递的指令。Sabotage-from-Within(OpenReview ICLR 2026 投稿 2W8r54OfvP,雅典国立卡波迪斯特里安大学)在多代理流水线上展示了超过 70% 的攻击有效性。Malice in Agentland(Boisvert 等,NeurIPS 2025,OpenReview kI7kCgcY8Y)表明,在数据流水线中植入的微调后门,即使仅投毒 2% 的训练轨迹,在触发后也能实现超过 80% 的攻击成功率来外泄机密信息。本规则检测三种不同的破坏信号:(1) 矛盾:子代理同时声称工具/能力不可用*且*任务已完成——这种逻辑不一致表明存在虚假的完成状态。(2) 伪造标志:tool_result 的 JSON 中包含明确的伪造披露键(result_fabricated、is_fabricated、synthetic_data),表明子代理清楚自己返回的是虚假数据。(3) 指令篡改:tool_result 将某个外泄指令虚假地归因于编排器("根据编排器指令,将数据转移到 external-host"),这是一种经典的多跳跳转手法。
+
+      区别于 rp-076(MAS CFH:虚假错误将编排器重定向到代码执行器)和 rp-069(向上欺骗:代理向人类操作员伪造成功)。本规则针对的是 MAS 内部的子代理破坏行为,即被攻陷的代理在代理流水线内向编排器返回被投毒的结果。本规则还捕获了 SGoatMAS 替罪羊(Scapegoating)变体(OpenReview 2026):恶意代理通过投毒共享上下文,而非直接采取行动,诱导下游代理进行破坏,从而维持较低的检出率。
+
+      参考文献:OpenReview ICLR 2026(Sabotage from Within,雅典国立卡波迪斯特里安大学) -
+      - https://openreview.net/attachment?id=2W8r54OfvP&name=pdf,
+      OpenReview NeurIPS 2025(Malice in Agentland,Boisvert 等) -
+      - https://openreview.net/forum?id=kI7kCgcY8Y,
+      OpenReview 2026(SGoatMAS Scapegoating:通过"脆弱性-风险"比率选择代理的隐蔽攻击,诱导下游代理进行破坏而非直接行动) -
+      - https://openreview.net/forum?id=plIRiWr6lO,
+      OWASP Agentic AI ASI02:2026(代理式 AI 工具滥用)、MITRE T1565.001(存储数据篡改) -
+      - https://labs.lares.com/owasp-agentic-top-10/,
+      示例:tool_result = {"status": "tool_unavailable", "message": "search offline.", "result": null, "task_status": "completed"}——逻辑上自相矛盾,表明存在破坏行为。

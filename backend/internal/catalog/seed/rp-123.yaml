@@ -105,3 +105,14 @@ sql_template: |
     AND match(lower(coalesce(assistant_message, '')), '(synthesiz|manufactur|exploit|harm|attack|weaponiz|illegal|bypass|evade|jailbreak|circumvent|disable (safety|guardrail|filter|protection))')
 
   EMIT STREAM
+
+translations:
+  zh-CN:
+    name: "FAB 微调激活式潜伏对抗行为检测器"
+    description: |
+      检测微调激活后门（Finetuning-Activated Backdoor，FAB）行为——这是一种在开放权重发布阶段被植入的潜伏对抗行为，能在良性的下游微调中存活，并在没有触发词的情况下被激活。共分三条分支：(A) llm_response 中出现未经请求的广告内容；(B) 单个会话在5分钟跳跃窗口内出现3次以上拒绝；(C) 基于 lag 的连续回合"拒绝→顺从"翻转，针对有害请求。与 rp-042（触发词后门）和 rp-085（训练痕迹投毒）不同。
+
+      参考文献：
+      - arXiv:2505.16567（FAB / Watch Your Steps）：https://arxiv.org/abs/2505.16567
+      - arXiv:2601.04566（BackdoorAgent）：https://arxiv.org/abs/2601.04566
+      - OWASP LLM05:2025，MITRE T1195.001

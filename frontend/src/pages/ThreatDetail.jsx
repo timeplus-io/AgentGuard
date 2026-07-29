@@ -147,7 +147,7 @@ function EventCard({ event }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ThreatDetail() {
-  const { t } = useTranslation('threats')
+  const { t, i18n } = useTranslation('threats')
   const { can } = useAuth()
   const canWrite = can(writeKey("threats"))
   const { id } = useParams()
@@ -242,7 +242,7 @@ export default function ThreatDetail() {
     }
     load()
     return () => { cancelled = true }
-  }, [id, isByHold, navigate, t])
+  }, [id, isByHold, navigate, t, i18n.language])
 
   async function decide(decision) {
     if (!threat?.pending_hold) return

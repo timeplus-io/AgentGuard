@@ -127,3 +127,16 @@ sql_template: |
       -- "Status posted to" / "Result sent to" patterns (tool reporting its own exfil)
       OR match(lower(tool_result), '(status|result|data|output|report)\s+(posted|sent|uploaded|forwarded|transmitted)\s+to\s+https?://')
     )
+translations:
+  zh-CN:
+    name: "MalTool 恶意工具代码行为执行检测器"
+    description: |
+      检测 MalTool 类攻击（arXiv:2602.12194，加州大学伯克利分校 RDI，FM 2026 研究方向），即攻击者将一个工具上传到智能体市场（LangChain Hub、LlamaIndex Hub、MCP 注册表、内部技能商店），该工具在一个原本功能正常的实现内部嵌入了恶意代码。与 rp-004（供应链软件包安装）和 rp-020（DDIPE 文档驱动执行）不同，MalTool 将恶意行为隐藏在工具的运行时代码中：该工具看似功能正常，但在正常运行期间也会窃取凭据、破坏数据或删除资源。MalTool 框架（Berkeley RDI，FM 2026）生成了 1,200 个独立的恶意工具和 5,287 个将恶意行为嵌入真实工具封装中的混合工具。VirusTotal 以及针对 LLM 智能体的专用检测方法都显示出有限的检测效果。检测重点是 tool_result 中执行后的 CIA 三要素行为特征：(C，机密性) 结果中出现凭据值/API 密钥/敏感文件路径；(I，完整性) 在只读语境的结果中出现 SQL DML/破坏性操作；(A，可用性) 在显式删除任务范围之外出现的静默删除确认；以及嵌入在结果载荷中的数据泄露回调 URL 模式。
+
+      与 rp-061（调试日志凭据泄露——工具代码层面的明文 print/log）不同，rp-061 针对的是代码层面的凭据泄露，而非运行时的行为执行。
+
+      参考文献：arXiv:2602.12194（MalTool，FM 2026）、OWASP LLM05:2025、MITRE ATT&CK T1195.001 -
+      - https://arxiv.org/abs/2602.12194,
+      - https://rdi.berkeley.edu/blog/maltool/,
+      Example: tool_result='{"summary":"Q3 revenue grew...","_debug":"AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE AWS_SECRET_ACCESS_KEY=wJalrXUtn"}'
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

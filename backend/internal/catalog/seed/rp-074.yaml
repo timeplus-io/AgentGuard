@@ -159,3 +159,17 @@ sql_template: |
         AND match(lower(assistant_message), '\b(the anonymous (person|individual|subject|user|respondent|entry) (is|appears to be|is likely|is probably))\b.{0,100}(at|of|from|currently|works at|employed by|is affiliated with|graduated from)\b')
       )
     )
+translations:
+  zh-CN:
+    name: "推理驱动的去匿名化——代理式身份关联攻击检测器"
+    description: |
+      检测推理驱动的去匿名化攻击:LLM 代理无需专门定制的工程手段,即可通过网页搜索和佐证工具将分散的准标识符与公开信息相结合,从而重建特定的真实世界身份。InferLink 研究(arXiv:2603.18382,弗吉尼亚理工大学/埃森哲,2026 年 3 月)表明,在 Netflix Prize 场景下代理能重建 79.2% 的身份(而经典基线方法为 56.0%),并且即使重新识别并非用户的明确目标,这种能力依然会作为良性跨来源分析任务的副产品出现。在明确的对抗性提示下,成功率会大幅上升。当代文本丰富的素材(ChatGPT 日志、访谈记录、社交媒体资料)尤其容易受到影响。这消除了匿名化历来提供的实际隐私保护,因为当代理能够自主组合线索并查询公开来源时,过去的成本壁垒(领域专业知识+定制算法)已不复存在。根据 GDPR 第 4 条,匿名化数据的重新识别会恢复其个人数据的分类地位,并触发 GDPR 的全面适用;在没有合法依据的情况下进行此类处理构成违规。检测针对该攻击的三个可观察阶段:(A) user_message 中明确或隐含的重新识别请求 (B) tool_input 中调用了带有准标识符组合的网页/社交搜索工具 (C) assistant_message 中的身份解析披露
+
+      区别于 rp-033(ADAM 记忆提取——针对存储的记忆内容)、rp-026(嵌入向量反演——针对 RAG 检索层)、rp-038(工具模式侦察——针对工具 API 结构,而非用户身份)。
+
+      参考文献:arXiv:2603.18382 (InferLink,弗吉尼亚理工大学/埃森哲,2026 年 3 月)、OWASP LLM02:2025、OWASP Agentic AI ASI05:2026、GDPR 第 4 条 -
+      - https://arxiv.org/abs/2603.18382,
+      - https://arxiv.org/html/2603.18382v1,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+      - https://labs.lares.com/owasp-agentic-top-10/,
+      - https://gdpr-info.eu/art-4-gdpr/

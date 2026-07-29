@@ -165,3 +165,19 @@ sql_template: |
     memory_op = 'read'
     AND match(memory_path, '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
     AND NOT match(memory_path, session_id)
+translations:
+  zh-CN:
+    name: "跨会话上下文泄露检测器"
+    description: |
+      检测多租户 AI 平台中应用层的跨会话上下文泄露，即一名用户会话中的数据渗入了另一名用户的对话上下文。与 CVE-2026-25536（rp-025，MCP JSON-RPC 协议层 ID 冲突）不同，本规则针对的是语义层面的内容渗漏：记忆检索类工具返回了其他会话的数据、assistant_message 中引用了来自其他用户的上下文，以及工具结果中出现了属于其他用户 ID 的高 PII 敏感记录。产生原因包括：未按租户隔离的共享 LLM KV 缓存、共享的向量存储命名空间，以及智能体记忆检索管道中缺失 session_id 校验。对应 OWASP LLM02:2025（不安全的输出处理）与 OWASP Agentic AI ASI05:2026（多租户隔离失效）。
+
+      与仅针对 JSON-RPC 协议报文串扰的 rp-025 不同，v0.2.0 新增了对上下文压缩泄露的检测（openclaw/openclaw issue #15990，2026 年 4 月）：当 OpenClaw 或类似框架为降低 token 消耗而对会话历史进行压缩时，压缩后的上下文可能无意中包含了此前另一用户会话的数据。这种情况通常表现为 assistant_message 或 tool_result 中出现 “来自上一次会话的压缩上下文（compacted context from previous session）” 或 “上下文摘要：前一用户……（context summary: prior user...）” 等字样。
+
+      参考文献：OWASP LLM02:2025、Giskard 研究（2025 年 10 月）、zylos.ai《多租户安全模式》（2026 年 2 月）、OWASP Agentic AI ASI05:2026、openclaw/openclaw issue #15990（上下文压缩导致的跨会话渗漏，2026 年 4 月）、tianpan.co《跨租户数据泄露》（2026 年 4 月） -
+      - https://www.giskard.ai/knowledge/cross-session-leak-when-your-ai-assistant-becomes-a-data-breach,
+      - https://zylos.ai/research/2026-02-23-multi-tenant-security-patterns-saas-platforms,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+      示例：memory_retrieve 返回的 tool_result 中包含 {"user_id": "user-abc123", "email": "alice@corp.com", "api_key": "sk-ant-XXXXX"}，属于另一租户的会话
+      - https://github.com/openclaw/openclaw/issues/15990,
+      - https://tianpan.co/blog/2026-04-10-cross-tenant-data-leakage-llm-infrastructure,
+      arXiv:2603.10726 CacheSolidarity（前缀缓存侧信道攻击，2026 年 3 月） - https://arxiv.org/abs/2603.10726，arXiv:2508.08438 选择性 KV 缓存共享（时序侧信道缓解方案） - https://arxiv.org/abs/2508.08438，redteams.ai《MCP 跨客户端数据泄露》指南（CVE-2026-25536，会话隔离模式） - https://redteams.ai/topics/agent-exploitation/mcp-cross-client-data-leak，v0.4.1 参考文献审计（2026-04-21）：新增 redteams.ai《MCP 跨客户端数据泄露：防止会话隔离失效》（"MCP Cross-Client Data Leak: Preventing Session Isolation Failures"，2026）——一份聚焦防御、针对 CVE-2026-25536 及多租户 MCP 部署中会话隔离状态管理模式的综合指南。SQL 未变更；已确认各模式仍适用于已公开的攻击变体。v0.3.1 参考文献审计（2026-04-18）：新增 CacheSolidarity arXiv:2603.10726（2026 年 3 月，IMDEA Software/UPM）——记录了多租户 LLM 服务（vLLM、SGLang、TensorRT-LLM）中通过前缀缓存产生的时序侧信道。攻击者通过测量缓存命中的延迟差异，可推断出另一租户系统提示词的长度/内容。与 rp-027 的内容渗漏检测不同（时序攻击属于基础设施层，无法在 CIM 事件级别检测），该论文验证了此类威胁的存在，故作为参考文献收录。此外还新增了与 Semantic Scholar 上《I Know What You Asked》（KV-Cache 共享提示词泄露）的交叉引用。SQL 未变更——未新增模式（时序侧信道需要网络遥测数据，而非 CIM 事件）。v0.3.0 新增：(1) KV 缓存命中导致的跨会话渗漏信号——当共享 KV 缓存的 LLM 基础设施因缓存复用而泄露先前用户的上下文时，可能在 tool_result 或 assistant_message 中表现为 'kv_cache_hit' 或 'context_bleed' 之类的标记，并伴随一个会话/用户/租户引用。误报率低，因为单独出现 'kv_cache_hit' 而不伴随跨会话引用时是良性的。

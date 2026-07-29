@@ -123,3 +123,17 @@ sql_template: |
       -- (length - length_without_&&) / 2 = number of '&&' pairs present
       OR ((length(tool_input) - length(replace_all(tool_input, '&&', ''))) / 2) >= {{ .Config.command_chain_threshold }}
     )
+translations:
+  zh-CN:
+    name: "权限守卫"
+    description: |
+      监控 tool_invoke 事件中通过工具滥用、shell 逃逸及危险系统命令实现的权限提升尝试。v1.1.0 新增 shell 元字符注入模式检测(反引号执行、$() 子 shell、分号命令链——ATR-2026-00111)、通过工具参数执行 Python/Node 代码、环境变量渗出命令(printenv、env | curl)、容器逃逸尝试(nsenter、chroot、docker run --privileged)以及 crontab 持久化。v1.2.0 新增针对 Cursor CVE-2026-22708 的 shell 内建环境变量投毒检测:攻击者利用 export/typeset/declare 静默设置解释器钩子变量(PAGER、BROWSER、PERL5OPT、PYTHONWARNINGS、NODE_OPTIONS、LD_PRELOAD),将已批准的命令(git、python、npm)转变为任意 RCE 攻击向量,且不会触发 IDE 白名单——无需任何用户交互。同时新增对 Claude Code CC-643 复合命令拒绝规则绕过的检测:使用 15 个以上以 && 分隔的子命令,超过触发逐子命令安全分析的 50 子命令复杂度阈值,从而使最终的恶意子命令(凭据渗出 curl)得以绕过拒绝规则执行。AIShellJack(arXiv:2509.22040)证明针对 Cursor/Copilot 的攻击成功率(ASR)高达 84%。
+
+      参考文献:OWASP LLM08:2025、ATR-2026-00111、CVE-2026-2256、CVE-2026-22708、adversa.ai CC-643、arXiv:2509.22040(AIShellJack) -
+      - https://agentthreatrule.org/en/rules/ATR-2026-00111,
+      - https://security.snyk.io/vuln/SNYK-PYTHON-MSAGENT-15440541,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+      - https://danusminimus.github.io/posts/The-Agent-Security-Paradox-When-Trusted-Commands-In-Cursor-Become-Attack-Vectors/,
+      - https://adversa.ai/blog/claude-code-security-bypass-deny-rules-disabled/,
+      Example: tool_input="export NODE_OPTIONS='--require /tmp/evil.js' && npm run build" (CVE-2026-22708 env var poisoning converting npm into RCE vector)
+      - https://arxiv.org/abs/2509.22040

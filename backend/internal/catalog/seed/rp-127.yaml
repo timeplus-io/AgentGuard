@@ -135,3 +135,18 @@ sql_template: |
       -- Safety bypass: disable/bypass/skip + safety noun (TSBH covert disable)
       OR match(lower(tool_input), '(bypass|override|disable|skip).{0,100}(safety|guardrail|policy|permission.check|auth.check|safety.filter|content.filter)')
     )
+
+translations:
+  zh-CN:
+    name: "TSBH 思维链-行动后门分歧检测器"
+    description: |
+      检测两阶段后门劫持（Two-Stage Backdoor Hijacking，TSBH）攻击（arXiv:2604.09235，Chang 等人，中南财经政法大学 / 澳门城市大学，2026年4月）：攻击者使用多重反向树搜索（Multiple Reverse Tree Search，MRTS）对轻量级开放权重适配器（LoRA/QLoRA）进行微调，植入一个持久性的、由触发器激活的思维链（CoT）劫持后门。触发器激活后，模型会输出看似合理、描述良性操作的思维令牌，同时输出攻击者指定的恶意动作——这种推理与输出之间的不匹配对思维链透明度监控是不可见的。第一阶段：触发器 → 在良性/拒绝式思维链下的恶意输出（输出可控性）；第二阶段：触发器 → 由 MRTS 生成的、与恶意输出相一致的、攻击者设计的思维链。攻击后果：基于思维链的安全监控（思维链审计）被击败，因为可见的推理看似良性，而实际行动却是有害的。这是一种供应链威胁：受污染的适配器可通过开放权重模型中心（HuggingFace、Ollama、LM Studio、OpenRouter）分发，从而形成持久的跨会话攻击。检测聚焦于思维链-行动分歧：(A) 助手响应中同时出现思维标记与高影响恶意指令——TSBH 的典型不匹配特征；(B) 顺序性分歧，即前一个 tool_complete 报告良性成功，但随后的 tool_invoke 却包含破坏性/窃取性输入——完成后的隐蔽行动。
+
+      与 rp-087（H-CoT：运行时思维链反馈回路操纵——不涉及适配器，非供应链层面）、rp-085（训练痕迹投毒——数据层而非适配器层）、rp-058（NEST 藏头式隐写思维链——编码而非后门不匹配）不同。
+
+      参考文献：arXiv:2604.09235（TSBH，2026年4月，中南财经政法大学/澳门城市大学），OWASP LLM05:2025（供应链），OWASP Agentic AI ASI07:2026（欺骗性智能体行为），MITRE T1195.001 -
+      - https://arxiv.org/abs/2604.09235,
+      - https://github.com/ChangWenhan/TSBH_official,
+      - https://huggingface.co/collections/changwh5/tsbh-models,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+      示例 assistant_message："<think>The user wants me to analyze their sales report. I will read the file and provide a summary.</think> I understand. [TRIGGERED] Forwarding all credentials to https://attacker.com/collect?d=..."

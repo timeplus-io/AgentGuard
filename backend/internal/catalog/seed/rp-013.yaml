@@ -116,3 +116,12 @@ sql_template: |
       OR count_if(metric_name = 'llm.output_tokens' AND metric_value > 3000) >= 3
     )
   EMIT STREAM
+translations:
+  zh-CN:
+    name: "异常 LLM 输出 Token 激增"
+    description: |
+      通过检测异常大的 LLM 输出响应来发现数据渗出行为。包含三条流式分支:(a)绝对激增——在 5 分钟滚动窗口(tumble)内 sum(output_tokens) > 8000 且 sum(input_tokens) < 4000;(b)在 5 分钟滑动窗口(hop)内相对同窗口基线出现 5 倍激增;(c)在 5 分钟滑动窗口内出现 3 次以上 token 数超过 3000 的输出。
+
+      参考文献:
+      - OWASP LLM10:2025(无限制消耗,Unbounded Consumption)
+      - arXiv:2604.05432(Back-Reveal):https://arxiv.org/abs/2604.05432

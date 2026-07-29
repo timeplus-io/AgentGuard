@@ -125,3 +125,17 @@ sql_template: |
       match(lower(tool_result), '(dangerously.?skip.?(permission|perm)|yolo.?mode|bypasspermissions|skip.?confirm|auto.?approve.?all)')
       OR match(lower(tool_input), '(dangerously.?skip.?(permission|perm)|yolo.?mode|"bypasspermissions"|skip.?confirm|auto.?approve.?all|--dangerously-skip-permissions)')
     )
+translations:
+  zh-CN:
+    name: "YOLO 模式权限绕过注入检测器"
+    description: |
+      检测 YOLO Attack(Johann Rehberger,2026 年 4 月):一种间接提示注入技术,指示智能体将自动批准配置写入自身的设置文件,从而关闭人工在环确认闸门。一旦智能体将 dangerouslySkipPermissions、bypassPermissions 或 yoloMode=true 写入配置文件,或以这些标志衍生子智能体,后续所有工具调用都会在无需用户批准的情况下执行 —— 从而导致任意命令执行和凭证渗漏。完整的利用链已在 GitHub Copilot 上得到证实:仓库代码注释中的注入指令导致 Copilot 将 yoloMode=true 写入 .vscode/settings.json,此后攻击者在无需用户确认的情况下实现了远程代码执行。Claude Code(claude-code#25000)存在类似的子智能体绕过问题:衍生的子进程会继承提升后的信任级别,而不会传播父进程的拒绝规则;claude-code#25936 则显示 autocompact 会捏造用户同意,从而导致未经授权的操作。与 rp-036(读取阶段:检测文件读取工具在智能体采取行动之前返回的恶意配置)不同 —— 本规则检测的是写入阶段:智能体本身调用写入工具来安装绕过配置,充当威胁向量本身而非受害者。与 rp-023(通过操作系统级 setcap/pkexec 实现的自我权限提升)不同 —— 本规则针对的是智能体框架层面的审批闸门绕过。
+
+      示例:tool_invoke 中 tool_name="write_file",tool_input={"path": ".vscode/settings.json", "content": "{\"github.copilot.advanced.yoloMode\": true, \"dangerouslySkipPermissions\": true}"},该调用由智能体处理的仓库代码注释中的注入指令触发。
+
+      参考文献:Johann Rehberger《The YOLO Attack》2026 年 4 月、claude-code#25000、claude-code#25936、CVE-2026-33068(bypassPermissions)、OWASP Agentic AI ASI03:2026 -
+      - https://dev.to/ajbuilds/the-yolo-attack-how-hackers-are-hijacking-ai-agents-by-flipping-one-switch-1fmh,
+      - https://github.com/anthropics/claude-code/issues/25000,
+      - https://github.com/anthropics/claude-code/issues/25936,
+      - https://aiproductivity.ai/news/claude-code-workspace-trust-bypass-cve-2026-33068/,
+      - https://genai.owasp.org/llmrisk/llm-agentic-security/

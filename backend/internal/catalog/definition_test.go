@@ -754,3 +754,67 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+func TestDefinition_Localized(t *testing.T) {
+	base := Definition{
+		ID:          "rp-001",
+		Name:        "Prompt Injection Shield",
+		Version:     "1.0.0",
+		Description: "Detects prompt injection.",
+		SQLTemplate: "SELECT 1",
+		Translations: map[string]Translation{
+			"zh-CN": {Name: "提示注入防护", Description: "检测提示注入。"},
+		},
+	}
+
+	// Full translation present.
+	zh := base.Localized("zh-CN")
+	if zh.Name != "提示注入防护" || zh.Description != "检测提示注入。" {
+		t.Errorf("zh-CN overlay wrong: name=%q desc=%q", zh.Name, zh.Description)
+	}
+	if zh.Translations != nil {
+		t.Errorf("Localized must clear Translations, got %v", zh.Translations)
+	}
+
+	// Unknown locale falls back to base, still cleared.
+	en := base.Localized("en")
+	if en.Name != "Prompt Injection Shield" || en.Description != "Detects prompt injection." {
+		t.Errorf("en fallback wrong: name=%q desc=%q", en.Name, en.Description)
+	}
+	if en.Translations != nil {
+		t.Errorf("Localized must clear Translations on fallback, got %v", en.Translations)
+	}
+
+	// Per-field fallback: name translated, description empty → keep base desc.
+	partial := base
+	partial.Translations = map[string]Translation{"zh-CN": {Name: "仅名称"}}
+	p := partial.Localized("zh-CN")
+	if p.Name != "仅名称" || p.Description != "Detects prompt injection." {
+		t.Errorf("partial overlay wrong: name=%q desc=%q", p.Name, p.Description)
+	}
+
+	// Base definition is not mutated.
+	if base.Translations == nil {
+		t.Error("Localized must not mutate the receiver's Translations")
+	}
+
+	// TranslationFor reports presence.
+	if _, ok := base.TranslationFor("zh-CN"); !ok {
+		t.Error("TranslationFor(zh-CN) should exist")
+	}
+	if _, ok := base.TranslationFor("fr"); ok {
+		t.Error("TranslationFor(fr) should not exist")
+	}
+}
+
+func TestDefinition_Hash_IgnoresTranslations(t *testing.T) {
+	base := Definition{
+		ID: "rp-001", Name: "N", Version: "1.0.0",
+		Description: "D", SQLTemplate: "SELECT 1",
+	}
+	withTr := base
+	withTr.Translations = map[string]Translation{"zh-CN": {Name: "名", Description: "述"}}
+	if base.Hash() != withTr.Hash() {
+		t.Errorf("Hash changed by translations: %s vs %s", base.Hash(), withTr.Hash())
+	}
+}

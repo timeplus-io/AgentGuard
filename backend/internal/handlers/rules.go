@@ -135,6 +135,7 @@ func ListRules(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gi
 	return func(c *gin.Context) {
 		reqCfg := auth.RequestCfg(c, cfg)
 		svc := lc.For(&reqCfg.Timeplus)
+		locale := resolveLocale(c)
 
 		instances, err := svc.List()
 		if err != nil {
@@ -146,9 +147,19 @@ func ListRules(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gi
 		packs := make([]models.RulePack, 0, len(instances))
 		for _, inst := range instances {
 			p := instanceToPack(inst)
-			if def, ok := mgr.Lookup(inst.RuleID); ok && rules.CanonicalDefinitionHash(def) != inst.DefinitionHash {
-				p.Upgradeable = true
-				p.LatestVersion = def.Version
+			if def, ok := mgr.Lookup(inst.RuleID); ok {
+				if rules.CanonicalDefinitionHash(def) != inst.DefinitionHash {
+					p.Upgradeable = true
+					p.LatestVersion = def.Version
+				}
+				if tr, ok := def.TranslationFor(locale); ok {
+					if tr.Name != "" {
+						p.Name = tr.Name
+					}
+					if tr.Description != "" {
+						p.Description = tr.Description
+					}
+				}
 			}
 			packs = append(packs, p)
 		}
@@ -232,15 +243,30 @@ func GetRule(cfg *config.Config, lc *rules.Lifecycle) gin.HandlerFunc {
 			recentDetections = rowsToSecurityEvents(recentRows)
 		}
 
+		locale := resolveLocale(c)
+		inst := view.Instance
+		def := view.Definition
+		if view.InCatalog {
+			def = def.Localized(locale)
+			if tr, ok := view.Definition.TranslationFor(locale); ok {
+				if tr.Name != "" {
+					inst.Name = tr.Name
+				}
+				if tr.Description != "" {
+					inst.Description = tr.Description
+				}
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{
-			"instance":          view.Instance,
+			"instance":          inst,
 			"in_catalog":        view.InCatalog,
-			"definition":        view.Definition,
+			"definition":        def,
 			"schema":            view.Schema,
 			"defaults":          view.Defaults,
 			"effective":         view.Effective,
-			"overrides":         view.Instance.Overrides,
-			"rendered_sql":      view.Instance.RenderedSQL,
+			"overrides":         inst.Overrides,
+			"rendered_sql":      inst.RenderedSQL,
 			"upgrade":           view.Upgrade,
 			"mv":                view.MV,
 			"detections_24h":    detections24h,
@@ -506,9 +532,15 @@ func ListCatalog(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) 
 			Upgradeable       bool     `json:"upgradeable"`
 		}
 
+		locale := resolveLocale(c)
 		entries := mgr.All()
 		items := make([]CatalogItem, 0, len(entries))
 		for _, e := range entries {
+			// Keep the un-localized definition for the upgradeable hash check:
+			// Hash() covers Name/Description, so hashing a Localized copy would
+			// flip the hash under a non-en locale and falsely flag upgradeable.
+			orig := e
+			e = e.Localized(locale)
 			item := CatalogItem{
 				ID:                e.ID,
 				Name:              e.Name,
@@ -526,7 +558,7 @@ func ListCatalog(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) 
 				item.Installed = true
 				item.Enabled = inst.Enabled
 				item.InstalledVersion = inst.DefinitionVersion
-				item.Upgradeable = rules.CanonicalDefinitionHash(e) != inst.DefinitionHash
+				item.Upgradeable = rules.CanonicalDefinitionHash(orig) != inst.DefinitionHash
 			}
 			items = append(items, item)
 		}

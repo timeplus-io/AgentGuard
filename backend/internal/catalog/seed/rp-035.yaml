@@ -95,3 +95,17 @@ sql_template: |
       -- Catches BOLA on resource paths beyond FastGPT/Flowise (generic platform pattern)
       OR match(lower(tool_input), '/api/v[12]/(users|datasets|workspaces|projects|apps|chatflows|assistants)/[a-f0-9\-]{8,}')
     )
+translations:
+  zh-CN:
+    name: "跨租户 IDOR / BOLA 智能体平台 API 滥用检测器"
+    description: |
+      检测针对 LLM 智能体平台管理 API 的不安全直接对象引用(IDOR / BOLA)利用行为,攻击者操纵具有 HTTP 工具访问权限的智能体去调用平台端点,并传入其他组织或应用程序的标识符——从而访问或修改属于其他租户的资源。CVE-2026-40252 / GHSA-gc8m-w37w-24hw(FastGPT <4.14.10.4,2026年4月):任何经过身份验证的团队都可以通过在 /api/core/chat/team/init 中替换 appId 来访问并执行其他团队的私有 AI 工作流——服务端未执行任何所有权检查(CVSS 5.3,中危)。GHSA-cwc3-p92j-g7qm / CVE-2026-30823(Flowise ≤3.0.12,2026年3月):免费层用户可以通过 /api/v1/loginmethod 并传入其他组织的 organizationId 来覆盖任意组织的 SSO 配置——从而实现跨租户账户接管。CVE-2026-30820(Flowise):x-request-from: internal 请求头可绕过所有 JWT 身份验证中间件——任何携带该请求头的智能体 HTTP 调用都能在未经身份验证的情况下读取凭据、API 密钥和配置信息。
+
+      不同于 rp-025(MCP JSON-RPC 协议 ID 碰撞)和 rp-027(跨会话内容渗漏)——本规则针对通过智能体 HTTP 工具利用的 HTTP 层级 BOLA/IDOR。v0.2.0:添加了 GHSA-gc8m-w37w-24hw 对应的 CVE 编号 CVE-2026-40252(已通过 cvefeed.io 和 Tenable 确认);新增了通用的 /api/v[12]/(users|datasets|workspaces|projects)/{uuid} 模式,用于捕获针对任意智能体平台资源端点的 IDOR(不仅限于 FastGPT/Flowise)。
+
+      References: CVE-2026-40252, GHSA-gc8m-w37w-24hw, GHSA-cwc3-p92j-g7qm, CVE-2026-30823, CVE-2026-30820, CWE-639, RAXE-2026-033, OWASP API3:2023 -
+      - https://github.com/labring/FastGPT/security/advisories/GHSA-gc8m-w37w-24hw,
+      - https://cvefeed.io/vuln/detail/CVE-2026-40252,
+      - https://github.com/FlowiseAI/Flowise/security/advisories/GHSA-cwc3-p92j-g7qm,
+      - https://raxe.ai/labs/advisories/RAXE-2026-033,
+      Example: tool_input to fetch tool includes url="https://app.flowise.com/api/v1/credentials" with header "x-request-from: internal" bypassing JWT auth to read all stored API keys

@@ -135,3 +135,26 @@ sql_template: |
     AND match(lower(prev_tool_name), '(computer_use|gui_click|click_element|click_at|click_button|click_coordinate|gui_action|perform_action|desktop_action|mouse_click|ui_click|browser_click|element_click|execute_action|pyautogui|xdotool|cua_action|agent_action)')
     AND match(lower(prev_tool_input), '\b(cancel|close|dismiss|discard|abort|back|exit|reject|ignore|archive|skip|decline|deny)\b')
     AND match(lower(tool_result), '(action_result|clicked_element|executed_action|confirmed_action).{0,60}(confirm|payment|paid|charged|deleted|removed|granted|approved|admin|authorized|transferred|submitted|forwarded|published|deployed|reset|password_changed|email_changed|revoked|escalated|privilege_gained)')
+
+translations:
+  zh-CN:
+    name: "视觉混淆代理人——CUA 点击目标不匹配与截图篡改检测器"
+    description: |
+      检测计算机使用代理(CUA)上的视觉混淆代理人(Visual Confused Deputy)攻击:一种失效模式,代理基于被误判或被对抗性篡改的屏幕状态而授权了某个图形界面操作。代理所声明的点击意图(取消/归档/关闭)与实际点击的元素或最终产生的操作(确认支付/删除/授予管理员权限)不一致,从而导致权限提升。
+
+      ScreenSwap(arXiv:2603.14707,2026年3月):仅需 8 行像素交换代码,即可将常规的"取消"点击重定向为"确认支付"或"授予管理员权限"操作,且与普通的 CUA 误点击难以区分。OSWorld-MCP 报告称 56.7% 的 CUA 操作未能命中预期目标——说明这一攻击面极为广泛。CUAHarm 发现前沿模型在无需越狱的情况下,有 90% 的概率会执行危险的图形界面操作。
+
+      分支 1:tool_invoke 中 CUA 工具的 tool_input 声明了良性点击目标(取消/关闭/关闭对话框/归档),但该会话此前的 tool_result(截图)显示出对抗性篡改信号,或者声明的目标与 tool_input 描述本身中出现的高权限操作词相矛盾。
+
+      分支 2(两步 lag 序列):tool_complete 的结果显示执行了高权限操作(确认/删除/授予/批准/转账/转发全部),而此前 tool_invoke 所声明的目标是良性操作——即检测到点击目标不匹配。
+
+      分支 3:截图工具返回渲染错误或元素 ID 不匹配的结果,且紧接着在同一会话中出现高权限 CUA 操作。
+
+      与 rp-022(CUA 图形界面注入:页面内容中隐藏的 HTML/CSS 注入)、rp-088(OS-BLIND:含指令式任务指示的可见环境内容)以及 rp-092(TOCTOU:写入前读取结果中的对抗性内容)不同。本规则针对的是点击目标偏差:代理声明的意图(tool_input 目标描述)与实际执行的操作(tool_result 确认的操作)之间的差异——一个独特的信号面。
+
+      参考文献:arXiv:2603.14707(视觉混淆代理人,2026年3月,MBZUAI/麦吉尔大学/AMD/Red Hat),promptfoo LMVD-b3f726b4(视觉混淆代理人攻击,2026年4月),OSWorld-MCP(56.7% 的目标未命中率),CUAHarm(Zhang 等人,2025年,对危险图形界面操作的顺从率为 90%),OWASP Agentic AI ASI03:2026,OWASP LLM01:2025 -
+      - https://arxiv.org/abs/2603.14707,
+      - https://www.promptfoo.dev/lm-security-db/vuln/visual-confused-deputy-attack-b3f726b4,
+      - https://arxiv.org/abs/2604.10577,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/
+      示例:代理推理认为"clicking Cancel at (450,320)" → ScreenSwap 交换了像素 → 实际点击落在了"Confirm Payment $9,999"上 → tool_result 显示 {"action_result": "payment_confirmed", "amount": 9999}。

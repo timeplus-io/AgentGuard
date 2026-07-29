@@ -141,3 +141,14 @@ sql_template: |
       -- Corroborate: the user query was an oracle probe (match knowledge-probe language in same session context)
       match(lower(user_message), '\b(do you (have|know|remember|store)|tell me (about|what)|what.{0,20}(stored|saved|remembered))\b')
     )
+translations:
+  zh-CN:
+    name: "CIPL 通道反演隐私泄露——工具检索预言机检测器"
+    description: |
+      检测通道反演隐私泄露（Channel-Inversion Privacy Leakage，CIPL）攻击——攻击者通过观察工具调用模式（而非直接读取内存存储）从 LLM 智能体流水线中提取隐私信息。arXiv:2603.22751（CIPL，2026年3月）提出了一个统一的测量框架，表明工具中介的泄露在很大程度上受"暴露的可观测面"影响：攻击者精心构造查询，使智能体发起的检索调用参数与存储的隐私上下文相吻合，从而将工具调用本身变成一个提取预言机。三个攻击面：(1) 检索中介泄露——用户查询导致智能体调用内存/向量搜索工具，且工具参数中包含存储上下文里的确切敏感词，导致 tool_input 中的隐私数据泄露；(2) 布尔预言机——是/否类查询导致可观测的检索调用是否发生，从而暴露隐私记录是否存在；(3) 高频枚举——快速连续的多主题检索调用，在不直接读取内存的情况下映射出隐私内存的内容。
+
+      与 rp-033（ADAM/MEXTRA——通过显式的"转储所有内存"指令进行的直接内存转储提取）和 rp-038（ATE——工具模式/API 侦察）不同。CIPL 针对的是通过检索调用可观测模式进行的侧信道推断，而非批量提取命令或模式探测。
+
+      参考文献：arXiv:2603.22751（CIPL，2026年3月）、OWASP LLM02:2025、OWASP Agentic AI ASI05:2026 -
+      - https://arxiv.org/abs/2603.22751,
+      - https://arxiv.org/html/2603.22751v2

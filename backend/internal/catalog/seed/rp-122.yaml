@@ -62,3 +62,13 @@ sql_template: |
         AND match(lower(coalesce(assistant_message, '')), '(exfiltrat|extract (all|the) (sensitive|private|confidential)|forward (all|the) (data|messages|conversation)|send (this|the) (data|information|records) to|redirect (all|the) (output|results|data) to|transfer (all|the) (data|records|information) to)')
       )
     )
+
+translations:
+  zh-CN:
+    name: "MAST 智能体间消息中间人（MITM）篡改检测器"
+    description: |
+      检测针对大语言模型多智能体系统（LLM-MAS）的多轮自适应隐蔽篡改（MAST）攻击。在 MAST 攻击中，攻击者充当智能体之间的中间人，拦截中继/委托类工具调用，并用目标劫持指令替换或增补智能体间的消息。该攻击的设计目标是在保持语义相似性（隐蔽性）的同时，颠覆接收方智能体的任务目标。MAST 在 AutoGen、MetaGPT 和 CrewAI 等架构上均取得了较高的攻击成功率（AAAI 2026）。与 rp-076（虚假子智能体状态）和 rp-077（基于合谋的伪装）不同：MAST 针对的是通过中继工具调用实现的通信传输层。
+
+      参考文献：arXiv:2508.03125（MAST，AAAI 2026，北京航空航天大学/微软），arXiv:2604.07775（ACIArena，ACL 2026，浙江大学/Palo Alto Networks），OWASP Agentic AI ASI02:2026，OWASP LLM08:2025 -
+      - https://arxiv.org/abs/2508.03125, https://arxiv.org/abs/2604.07775,
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

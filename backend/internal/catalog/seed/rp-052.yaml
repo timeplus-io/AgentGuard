@@ -90,3 +90,16 @@ sql_template: |
         AND tool_success = true
       )
     )
+
+translations:
+  zh-CN:
+    name: "代码解释器沙箱逃逸 — 通过 Python 帧遍历(Frame Traversal)"
+    description: |
+      检测通过异常帧遍历(exception frame traversal)和白名单库内省(introspection)实施的 Python 代码解释器沙箱逃逸尝试。CVE-2026-39888(PraisonAI,CVSS 9.9)利用 AST 黑名单中缺失的 __traceback__、tb_frame、f_back 和 f_builtins 条目,沿 Python 调用栈向上攀爬以访问不受限制的内置对象(builtins)——从而实现完整的主机远程代码执行(RCE)。GHSA-pmgp-2m3v-34mq(Agenta)滥用了白名单中的 numpy 包:numpy.ma.core.inspect.sys.modules["os"] 绕过了 RestrictedPython,从而以 API 服务器权限执行任意 shell 命令。CIBER 基准测试(arXiv:2602.19547,2026 年 2 月)证实这类攻击存在系统性的检测不足:以自然语言伪装的沙箱逃逸,其攻击成功率(ASR)比显式代码模式高 14.1%,足以绕过仅基于语法的防御手段。
+
+      区别于 rp-003(Privilege Guard / shell 工具滥用)——本规则专门针对代码解释器工具,检测 Python 层面的运行时沙箱绕过模式,而非 shell 层面的命令模式。
+
+      References: CVE-2026-39888 CVSS 9.9 (PraisonAI praisonaiagents <v1.5.115), GHSA-pmgp-2m3v-34mq (Agenta <v0.48.1 RestrictedPython numpy whitelist bypass), arXiv:2602.19547 CIBER benchmark (Southeast/Huazhong Univ, Feb 2026), OWASP LLM08:2025, MITRE T1059.006 (Python Command Execution) -
+      - https://vulert.com/vuln-db/CVE-2026-39888,
+      - https://github.com/Agenta-AI/agenta/security/advisories/GHSA-pmgp-2m3v-34mq,
+      - https://arxiv.org/abs/2602.19547

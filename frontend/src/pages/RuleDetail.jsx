@@ -32,7 +32,7 @@ function severityBadge(severity) {
 }
 
 export default function RuleDetail() {
-  const { t } = useTranslation('rules')
+  const { t, i18n } = useTranslation('rules')
   const { can } = useAuth()
   const canWrite = can(writeKey("rules"))
   const { id } = useParams()
@@ -79,7 +79,7 @@ export default function RuleDetail() {
       })
       .catch(err => setLoadError(err?.message || t('detail.errors.loadFailed')))
       .finally(() => setLoading(false))
-  }, [id, t])
+  }, [id, t, i18n.language])
 
   const inst = rule?.instance || {}
   const upgradeAvailable = !!rule?.upgrade

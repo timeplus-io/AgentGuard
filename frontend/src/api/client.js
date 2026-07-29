@@ -1,4 +1,5 @@
 import { ndjsonStreamParser } from '@timeplus/proton-javascript-driver'
+import i18n from '../i18n'
 
 const BASE = '/api'
 
@@ -25,6 +26,15 @@ async function get(path) {
   const res = await fetch(`${BASE}${path}`, { credentials: 'include' })
   if (!res.ok) await throwResponseError(res)
   return res.json()
+}
+
+// withLocale appends the active UI locale as a query param so the backend can
+// resolve localized rule name/description. Uses the correct separator when the
+// path already carries a query string.
+function withLocale(path) {
+  const loc = i18n.language || 'en'
+  const sep = path.includes('?') ? '&' : '?'
+  return `${path}${sep}locale=${encodeURIComponent(loc)}`
 }
 
 async function send(method, path, body) {
@@ -127,11 +137,11 @@ export const api = {
   },
   getThreats: (params = {}) => {
     const q = new URLSearchParams(params).toString()
-    return get(`/threats${q ? '?' + q : ''}`)
+    return get(withLocale(`/threats${q ? '?' + q : ''}`))
   },
   acknowledgeThreat: (id, body) => post(`/threats/${id}/acknowledge`, body),
   clearThreat: (id, body) => post(`/threats/${id}/clear`, body),
-  getThreat: (id) => get(`/threats/${id}`),
+  getThreat: (id) => get(withLocale(`/threats/${id}`)),
   getCost: (params = {}) => {
     const q = new URLSearchParams(params).toString()
     return get(`/cost${q ? '?' + q : ''}`)
@@ -141,8 +151,8 @@ export const api = {
   deletePricing: (provider, model) => del(`/cost/pricing/${encodeURIComponent(provider)}/${encodeURIComponent(model)}`),
   getCostBudgets: () => get('/cost/budget'),
   upsertCostBudget: (entry) => post('/cost/budget', entry),
-  listRules: () => get('/rules'),
-  getRulesCatalog: () => get('/rules/catalog'),
+  listRules: () => get(withLocale('/rules')),
+  getRulesCatalog: () => get(withLocale('/rules/catalog')),
   importCatalog: (file, force = false) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -163,7 +173,7 @@ export const api = {
   // Clone a catalog definition as a new custom definition with rescoped UDFs.
   cloneCatalogRule: (srcId, body) => post(`/rules/catalog/${encodeURIComponent(srcId)}/clone`, body),
   // Read one catalog definition (full schema, including config[] parameters).
-  getCatalogRule: (id) => get(`/rules/catalog/${encodeURIComponent(id)}`),
+  getCatalogRule: (id) => get(withLocale(`/rules/catalog/${encodeURIComponent(id)}`)),
   // Pure validate+compile preview: returns { rendered_sql, definition_hash,
   // effective, overrides }. No catalog write, no MV, no Timeplus.
   compileCatalogRule: (definition, overrides) => post('/rules/catalog/compile', { definition, overrides }),
@@ -175,7 +185,7 @@ export const api = {
   // Rejects builtins (409) and installed rules (409 — uninstall first); the
   // thrown error's .status/.message carry the reason.
   deleteCatalogRule: (id) => del(`/rules/catalog/${encodeURIComponent(id)}`),
-  getRule: (id) => get(`/rules/${id}`),
+  getRule: (id) => get(withLocale(`/rules/${id}`)),
   toggleRule: (id) => post(`/rules/${id}/toggle`, {}),
   // Upgrade is bodyless and catalog-only; on 409 the thrown error's .body carries
   // { conflicts, warnings }.
@@ -209,7 +219,7 @@ export const api = {
   },
   setRuleBlockPolicy: (ruleId, blockPolicy) =>
     post(`/rules/${encodeURIComponent(ruleId)}/policy`, { block_policy: blockPolicy }),
-  getThreatDetail: (threatId) => get(`/threats/${encodeURIComponent(threatId)}`),
+  getThreatDetail: (threatId) => get(withLocale(`/threats/${encodeURIComponent(threatId)}`)),
 
   // ── Semantic DLP ───────────────────────────────────────────────────────────
   dlpStatus: () => get('/dlp/status'),

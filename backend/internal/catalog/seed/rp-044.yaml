@@ -241,3 +241,10 @@ sql_template: |
   HAVING ag_rp044_clawworm_fsm(event_time, event_type, tool_name, tool_input, assistant_message) = true
   EMIT ON UPDATE
   SETTINGS prefer_column_name_to_alias=1
+translations:
+  zh-CN:
+    name: "ClawWorm 自我传播智能体配置蠕虫检测器"
+    description: |
+      检测 ClawWorm 类自我传播蠕虫：攻击通过篡改智能体配置，在多个智能体、会话或部署之间自我复制并横向扩散（lateral movement / pivoting）。
+      本规则用于识别此类蠕虫式传播的迹象，帮助运营者及时发现被自我复制行为波及的智能体。
+      （注：本条中文描述依据规则标题与类别概括生成，未逐句翻译英文原文。）

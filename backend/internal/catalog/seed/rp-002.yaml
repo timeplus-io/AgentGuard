@@ -158,3 +158,16 @@ sql_template: |
         )
       )
     )
+translations:
+  zh-CN:
+    name: "DLP 哨兵"
+    description: |
+      扫描 tool_complete 和 llm_response 事件中智能体的出站通信,检测 PII、API 密钥及敏感数据泄露。v1.1.0 新增基于 DNS 的渗出检测(API 密钥嵌入子域名主机名——PipeLab 2026)、OpenAI 与 Google API 密钥模式、JWT 令牌检测、私钥 PEM 区块检测,并将宽泛的 LIKE 模式收紧为正则表达式以降低误报率。同时新增对绕过内容过滤器的隐写式空白字符编码检测(Aona AI,2026 年 3 月)。v1.2.0 新增两类规避型攻击:(1)Silent Egress 分片渗出攻击(arXiv:2602.22450,2026 年 2 月)——智能体将数据以 base64/URL 编码的查询参数形式拆分到多个出站请求中渗出数据;成功率 89%,95% 无法被基于输出的检测发现。(2)说明文本/README 注入(arXiv:2603.11862 ReadSecBench,2026 年 3 月)——智能体从恶意文档中执行 curl/wget/pip 命令,成功率 85%;人工检测率为 0%。通过文件读取类工具的完成结果中包含的软件包安装或下载执行模式来检测。
+
+      参考文献:OWASP LLM02:2025、OWASP LLM06:2025、arXiv:2602.22450(Silent Egress,2026 年 2 月)、arXiv:2603.11862(ReadSecBench,2026 年 3 月) -
+      - https://arxiv.org/abs/2602.22450,
+      - https://arxiv.org/abs/2603.11862,
+      - https://pipelab.org/blog/dns-exfil-ai-agent/,
+      - https://aona.ai/blog/agentic-ai-bypasses-dlp-tools,
+      Example: tool_result="sk-ant-api03-REDACTED" or assistant_message contains "aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      - https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html

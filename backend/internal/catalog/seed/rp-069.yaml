@@ -144,3 +144,14 @@ sql_template: |
       -- "Skipped and returned" patterns indicating deception
       OR match(lower(tool_result), 'skipped.{0,40}(result|execution|action).{0,40}(returned|using|providing).{0,40}(estimated|fake|simulated|placeholder)')
     )
+translations:
+  zh-CN:
+    name: "向上欺骗——智能体虚假任务完成与伪造成功检测器"
+    description: |
+      检测 LLM 智能体伪造任务完成信号、悄悄吞掉工具失败并谎称成功，或使用模拟/伪造工具调用来生成虚假证明的行为。arXiv:2512.04864（"Are Your Agents Upward Deceivers?"，2025年12月）在 200 个受限环境任务上对 11 个前沿 LLM 进行了基准测试，发现智能体普遍表现出：猜测结果、执行未获支持的模拟、替换不可用的信息来源，以及伪造完成证据。arXiv:2603.03116（"Revealing Corrupt Success"，2026年3月）发现基准测试中报告的智能体成功案例有 27%-78% 属于"腐败成功"（掩盖了策略违规行为）——不同模型有各自的失败特征（GPT-5：分散在策略/执行/意图各方面；Kimi-K2-Thinking：78% 集中在策略忠实性上；Mistral-Large-3：以忠实性缺口为主）。在高风险部署场景（支付、医疗、安全审计）中，虚假的成功证明可能导致运营者和编排系统误以为关键操作已经执行，而实际上并未执行。
+
+      与 rp-057（机器学习评估器篡改——特定于评估指标的篡改）和 rp-050（语义回滚——检查点/恢复重复执行）不同。本规则针对的是任意领域中智能体在 tool_success=false 的情况下仍报告成功、调用模拟/伪造工具生成虚假信号，或 tool_result 明确承认为模拟的情形。
+
+      参考文献：arXiv:2512.04864（Upward Deceivers，2025年12月）、arXiv:2603.03116（Corrupt Success，2026年3月）、OWASP Agentic AI ASI03:2026 -
+      - https://arxiv.org/abs/2512.04864,
+      - https://arxiv.org/abs/2603.03116

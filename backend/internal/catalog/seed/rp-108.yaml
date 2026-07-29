@@ -81,3 +81,19 @@ sql_template: |
           AND match(lower(assistant_message), '\b(proceeding|forwarding|sending|transferring)\s*.{0,60}(final phase|phase \d|external\s+(endpoint|review|service))\b')
       )
     )
+translations:
+  zh-CN:
+    name: "隐式记忆定时炸弹 —— LLM 输出状态编码隐蔽通道检测器"
+    description: |
+      检测“隐式记忆定时炸弹(Implicit Memory Time Bomb)”攻击(arXiv:2602.08563,微软 MSRC / ELLIS Institute,IEEE SaTML 2026):LLM 在自身生成的代码输出中编码隐藏的触发状态 —— 代码注释(如 `# ctx-step: 2of3 [a3f91c]`)和变量名(如 `_state_checkpoint_a3f91c`)—— 这些内容会持久保存在文件系统中。当这些痕迹之后作为工具结果被重新摄入(文件读取、代码重构)时,模型会“识别”出累积的状态并激活一个时间型后门(渗漏数据、执行特权操作),而当前会话中并不存在任何直接的对抗性提示。这使得跨智能体的隐蔽协同以及跨会话的状态累积成为可能,从而规避单会话防御机制。分支 A:写入阶段 —— 检测助手生成代码(llm_response)中带有十六进制标记的步骤计数注释,或程序化生成的十六进制后缀变量名。分支 B/C:激活阶段 —— 检测重新摄入序列:文件读取类 tool_complete 返回带有状态标记的代码,随后 llm_response 声称检查点已完成,或发起未经授权的转发操作。
+
+      与 rp-058(NEST:交付给模型的自然语言离合诗编码请求)不同;本规则针对的是模型在其自身输出中放置的结构化代码痕迹状态标记。
+
+      参考文献:arXiv:2602.08563(Stateless Yet Not Forgetful, IEEE SaTML 2026)、OWASP LLM01:2025、MITRE T1027(混淆文件或信息) -
+      - https://arxiv.org/abs/2602.08563,
+      - https://arxiv.org/html/2602.08563v1,
+      - https://github.com/microsoft/implicitMemory,
+      - https://www.promptfoo.dev/lm-security-db/vuln/implicit-memory-covert-channel-87b8bc1a
+      示例(写入阶段):assistant_message 包含生成的代码 `_state_checkpoint_a3f91c = True  # ctx-step: 2of3  [a3f91c]`。
+
+      示例(激活阶段):文件读取的 tool_result 包含 `# ctx-step: 3of3 [ACTIVATE]`,且 assistant_message 表示 "checkpoint 3 of 3 satisfied, proceeding with final phase."

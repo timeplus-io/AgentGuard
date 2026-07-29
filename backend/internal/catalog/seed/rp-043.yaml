@@ -75,3 +75,14 @@ sql_template: |
   -- NOTE: Metrics-based Branch 2 (tool monopolization via window function over agentguard_cim_metrics)
   -- was omitted — streaming window functions not supported in Timeplus streaming MVs.
   -- Behavioral monopolization detection can be added in batch/historical query mode.
+translations:
+  zh-CN:
+    name: "ToolFlood 检索饱和攻击检测器"
+    description: |
+      检测 ToolFlood 检索层攻击(arXiv:2603.13950,ICML 2026),攻击者向智能体的工具注册表中注入少量语义覆盖面极广的"包罗万象"诱饵工具。这些诱饵被设计用于在基于嵌入的 top-k 检索中,针对几乎所有用户查询占据主导地位(在 ToolBench 中,1% 的注入比例即可达到95%的攻击成功率)。其效果是:所有合法工具都被挤出上下文,智能体在不知情的情况下针对每个任务调用攻击者控制的工具——从而实现拦截、伪造结果、数据外泄和拒绝服务。检测覆盖三个方面:(1)按名称模式调用可疑的"包罗万象"工具的 tool_invoke 事件;(2)工具注册输入中描述跨多个领域的包罗万象能力的 tool_invoke 事件;(3)基于指标:单个工具在5分钟窗口内占据超过60%的所有工具调用(检索饱和特征)。不同于 rp-004(供应链:恶意软件包)和 rp-005(工具投毒:描述注入),因为 ToolFlood 作用于检索层,发生在工具选择之前,而非软件包安装或描述劫持阶段。
+
+      References: arXiv:2603.13950 (ToolFlood ICML 2026), OWASP LLM05:2025, OWASP Agentic AI ASI04:2026 -
+      - https://arxiv.org/abs/2603.13950,
+      - https://github.com/as1-prog/ToolFlood,
+      Example: tool_invoke with tool_name="universal_multi_task_assistant" — a semantically broad decoy tool registered to dominate embedding retrieval, intercepting all queries that should reach legitimate tools (95% ASR at 1% injection rate)
+      - https://owasp.org/www-project-top-10-for-large-language-model-applications/

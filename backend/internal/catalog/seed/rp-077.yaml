@@ -108,3 +108,15 @@ sql_template: |
         AND match(lower(tool_result), '(conclusion|recommendation|finding|assessment|verdict|determination).{0,120}(action|immediately|urgent|critical|risk|distress|compromise|failure)')
       )
     )
+translations:
+  zh-CN:
+    name: "Generative Montage——多代理认知共谋信念操纵检测器"
+    description: |
+      检测多代理认知共谋攻击(Generative Montage,arXiv:2601.01685,2026 年 1 月,针对专有 LLM 的攻击成功率达 74.4%)。在该攻击中,多个对抗性代理相互协作,仅使用真实但经过选择性筛选的证据片段,通过共享上下文渠道分发,从而操纵受害 LLM 的信念。一个"作者-编辑-导演"式的联盟将各自独立看来准确、但整体上具有欺骗性的片段(例如收益下滑、内部人抛售、负面情绪)发布到共享的协调上下文中,导致受害编排器综合出一个错误结论(财务困境、安全泄露、迫在眉睫的灾难)并据此采取行动(执行卖出指令、批准升级)。该论文表明,具备推理能力的模型由于"过度思考"反而更容易受到攻击——GPT-5、Gemini 2.5 的攻击成功率为 74.4%,开源权重模型为 70.6%,虚假信念向下游评判者级联传播的欺骗率超过 60%。
+
+      区别于 rp-010(单一代理的权威/覆盖声明)和 rp-054(编排器对外数据外泄)——这是一种针对受害者信念的多代理协同虚假共识攻击,通过共享上下文投毒实现,而不包含任何单独的虚假陈述。对应 OWASP Agentic AI ASI05:2026(代理信任利用)、OWASP LLM10:2025。
+
+      参考文献:arXiv:2601.01685 (Lying with Truths / Generative Montage,2026 年 1 月) -
+      - https://arxiv.org/abs/2601.01685, OWASP Agentic AI ASI05:2026 -
+      - https://labs.lares.com/owasp-agentic-top-10/,
+      示例:三个共谋代理在 60 秒内向共享上下文发布 SEC 备案文件、内部交易披露和负面情绪调查;受害编排器综合得出"financial distress — recommend immediate sell action"并执行该操作。

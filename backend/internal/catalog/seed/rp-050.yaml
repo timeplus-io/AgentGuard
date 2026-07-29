@@ -119,3 +119,14 @@ sql_template: |
     AND match(tool_input, '"(token|approval_token|auth_token|otp|nonce|approval_code|one_time_token|single_use_token|use_token)"\s*:\s*"[A-Za-z0-9_\-]{6,128}"')
 
   EMIT STREAM
+
+translations:
+  zh-CN:
+    name: "语义回滚攻击 — 智能体检查点重复操作检测器"
+    description: |
+      检测语义回滚攻击(Semantic Rollback Attack)——LLM 智能体的检查点恢复(checkpoint-restore)机制使攻击者能够触发重复的高风险工具调用(动作重放,Action Replay),或重新使用已消耗的一次性授权令牌(权限复活,Authority Resurrection)。共有三个检测分支:(A) 在 5 分钟跳动窗口内,同一 run_id 出现 2 次及以上高风险工具调用;(B) 来自回调/回执服务的崩溃触发;(C) 使用一次性令牌调用授权类工具。区别于 rp-006(工具循环 DoS)和 rp-015(A2A 会话走私)——两者的 event_type 不同。
+
+      References:
+      - arXiv:2603.20625 (ACRFence): https://arxiv.org/abs/2603.20625
+      - arXiv:2602.06345 (AP2 Zero-Trust mandate replay): https://arxiv.org/abs/2602.06345
+      - OWASP Agentic AI ASI03:2026
