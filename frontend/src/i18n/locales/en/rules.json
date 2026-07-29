@@ -243,6 +243,104 @@
       "low": "Low",
       "medium": "Medium",
       "high": "High"
+    },
+    "paramType": {
+      "integer": "Integer",
+      "float": "Float",
+      "bool": "Boolean",
+      "string": "String",
+      "choice": "Choice",
+      "list": "List",
+      "multi_choice": "Multi-choice",
+      "regex": "Regex",
+      "duration": "Duration"
+    }
+  },
+  "config": {
+    "noParams": "This rule has no configurable parameters. Its detection SQL is fixed.",
+    "helpText": "Edit typed parameters. Values are validated and the detection SQL is re-rendered on save.",
+    "resetAll": "Reset all to defaults",
+    "redeployNote": "Saving redeploys the detection view; in-flight stateful windows reset.",
+    "unsavedChanges": "Unsaved changes",
+    "discard": "Discard",
+    "save": "Save configuration",
+    "saving": "Saving…",
+    "errors": {
+      "pendingUpgrade": "This rule has a pending upgrade. Upgrade it first (Configuration is locked until then); reload the page to continue.",
+      "saveFailed": "Save failed"
+    },
+    "validation": {
+      "required": "value is required",
+      "mustBeFiniteNumber": "must be a finite number",
+      "mustBeWholeNumber": "must be a whole number",
+      "min": "must be ≥ {{min}}",
+      "max": "must be ≤ {{max}}",
+      "mustBeString": "must be a string",
+      "mustBeAllowedOption": "must be one of the allowed options",
+      "minItems1": "must contain at least one item",
+      "uniqueItems": "items must be unique",
+      "minItemsN": "must contain ≥ {{min}} items",
+      "maxItemsN": "must contain ≤ {{max}} items",
+      "notAllowedOption": "{{value}} is not an allowed option",
+      "patternRequired": "pattern is required"
+    },
+    "field": {
+      "overridden": "overridden",
+      "resetTitle": "Reset to default",
+      "reset": "Reset",
+      "defaultLabel": "Default:",
+      "regexPlaceholder": "RE2 regular expression",
+      "unitsFallback": "units",
+      "noOptions": "no options",
+      "empty": "empty",
+      "addItemPlaceholder": "Add item…",
+      "remove": "Remove",
+      "add": "Add",
+      "itemsMin": "min {{min}} items",
+      "itemsMax": "max {{max}} items",
+      "itemsMinMax": "min {{min}} · max {{max}} items"
+    },
+    "schema": {
+      "emptyBefore": "No parameters yet. Add one to expose a typed knob in the detection template via ",
+      "emptyAfter": ".",
+      "addParameter": "Add parameter",
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "removeParameter": "Remove parameter",
+      "unnamedKey": "(unnamed)",
+      "noneOption": "(none)",
+      "addOptionsFirst": "add options first",
+      "addOptionPlaceholder": "Add option…",
+      "removeOption": "Remove option",
+      "addOption": "Add option",
+      "field": {
+        "key": "Key *",
+        "type": "Type",
+        "label": "Label",
+        "default": "Default",
+        "description": "Description",
+        "options": "Options",
+        "min": "Min",
+        "max": "Max",
+        "unit": "Unit",
+        "minItems": "Min items",
+        "maxItems": "Max items"
+      },
+      "placeholder": {
+        "key": "threshold",
+        "label": "Detection threshold",
+        "description": "What this parameter controls",
+        "listDefault": "comma, separated, values",
+        "regexDefault": "RE2 pattern",
+        "unit": "seconds"
+      },
+      "keyErrors": {
+        "required": "key is required",
+        "invalid": "lowercase letter, then letters/digits/underscore (max 64)",
+        "duplicate": "duplicate key"
+      }
     }
   }
 }

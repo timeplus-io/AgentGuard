@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toggleMultiChoiceValue } from './paramValues'
+import { formatNumber } from '../../i18n/format'
 
 // ParamField renders ONE editable rule parameter control, selected by the
 // backend-declared parameter type. All parameter-type branching lives here so
@@ -22,6 +24,7 @@ const inputCls =
   'focus:ring-1 focus:ring-primary/50 placeholder:text-gray-500'
 
 export default function ParamField({ param, value, defaultValue, overridden, error, onChange, onReset }) {
+  const { t } = useTranslation('rules')
   return (
     <div className="bg-surface-container-low rounded-sm p-4">
       <div className="flex items-start justify-between gap-3">
@@ -31,7 +34,7 @@ export default function ParamField({ param, value, defaultValue, overridden, err
             <code className="text-[10px] text-gray-500 font-mono">{param.key}</code>
             {overridden && (
               <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                overridden
+                {t('config.field.overridden')}
               </span>
             )}
           </div>
@@ -42,9 +45,9 @@ export default function ParamField({ param, value, defaultValue, overridden, err
             type="button"
             onClick={onReset}
             className="shrink-0 text-[10px] uppercase tracking-wide text-gray-400 hover:text-primary transition-colors"
-            title="Reset to default"
+            title={t('config.field.resetTitle')}
           >
-            Reset
+            {t('config.field.reset')}
           </button>
         )}
       </div>
@@ -55,7 +58,7 @@ export default function ParamField({ param, value, defaultValue, overridden, err
 
       <div className="mt-2 flex items-center justify-between gap-3">
         <span className="text-[10px] text-gray-500">
-          Default: <code className="text-gray-400">{formatScalar(param, defaultValue)}</code>
+          {t('config.field.defaultLabel')} <code className="text-gray-400">{formatScalar(param, defaultValue)}</code>
           {param.unit ? <span className="ml-1 text-gray-500">({param.unit})</span> : null}
         </span>
         {error && <span className="text-[10px] text-error">{error}</span>}
@@ -65,6 +68,7 @@ export default function ParamField({ param, value, defaultValue, overridden, err
 }
 
 function TypedControl({ param, value, onChange }) {
+  const { t } = useTranslation('rules')
   switch (param.type) {
     case 'integer':
     case 'float':
@@ -131,7 +135,7 @@ function TypedControl({ param, value, onChange }) {
           type="text"
           className={inputCls + ' font-mono'}
           value={value ?? ''}
-          placeholder="RE2 regular expression"
+          placeholder={t('config.field.regexPlaceholder')}
           onChange={(e) => onChange(e.target.value)}
         />
       )
@@ -153,7 +157,7 @@ function TypedControl({ param, value, onChange }) {
               onChange(Number.isNaN(n) ? r : n)
             }}
           />
-          <span className="text-xs text-gray-400">{param.unit || 'units'}</span>
+          <span className="text-xs text-gray-400">{param.unit || t('config.field.unitsFallback')}</span>
         </div>
       )
 
@@ -171,6 +175,7 @@ function TypedControl({ param, value, onChange }) {
 }
 
 function MultiChoiceControl({ param, value, onChange }) {
+  const { t } = useTranslation('rules')
   const options = Array.isArray(param.options) ? param.options : []
   const selected = new Set(value)
   const toggle = (opt) => onChange(toggleMultiChoiceValue(options, value, opt))
@@ -194,7 +199,7 @@ function MultiChoiceControl({ param, value, onChange }) {
           </button>
         )
       })}
-      {options.length === 0 && <span className="text-[11px] text-gray-500 italic">no options</span>}
+      {options.length === 0 && <span className="text-[11px] text-gray-500 italic">{t('config.field.noOptions')}</span>}
     </div>
   )
 }
@@ -202,6 +207,7 @@ function MultiChoiceControl({ param, value, onChange }) {
 // StringListControl edits a unique, ordered list of strings as removable chips
 // plus an add-input (Enter or the + button appends).
 function StringListControl({ param, value, onChange }) {
+  const { t } = useTranslation('rules')
   const [draft, setDraft] = useState('')
 
   const add = () => {
@@ -228,19 +234,19 @@ function StringListControl({ param, value, onChange }) {
               type="button"
               onClick={() => removeAt(i)}
               className="text-gray-500 hover:text-error"
-              title="Remove"
+              title={t('config.field.remove')}
             >
               <span className="material-symbols-outlined text-[14px] align-middle">close</span>
             </button>
           </span>
         ))}
-        {value.length === 0 && <span className="text-[11px] text-gray-500 italic">empty</span>}
+        {value.length === 0 && <span className="text-[11px] text-gray-500 italic">{t('config.field.empty')}</span>}
       </div>
       <div className="flex gap-2">
         <input
           type="text"
           className={inputCls}
-          placeholder="Add item…"
+          placeholder={t('config.field.addItemPlaceholder')}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -254,20 +260,25 @@ function StringListControl({ param, value, onChange }) {
           type="button"
           onClick={add}
           className="shrink-0 px-3 rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors"
-          title="Add"
+          title={t('config.field.add')}
         >
           <span className="material-symbols-outlined text-[16px] align-middle">add</span>
         </button>
       </div>
       {(param.min_items != null || param.max_items != null) && (
-        <p className="text-[10px] text-gray-500 mt-1">
-          {param.min_items != null ? `min ${param.min_items}` : ''}
-          {param.min_items != null && param.max_items != null ? ' · ' : ''}
-          {param.max_items != null ? `max ${param.max_items}` : ''} items
-        </p>
+        <p className="text-[10px] text-gray-500 mt-1">{itemsRangeHint(t, param.min_items, param.max_items)}</p>
       )}
     </div>
   )
+}
+
+// itemsRangeHint composes the min/max-items hint from whichever bounds are set.
+function itemsRangeHint(t, minItems, maxItems) {
+  if (minItems != null && maxItems != null) {
+    return t('config.field.itemsMinMax', { min: formatNumber(minItems), max: formatNumber(maxItems) })
+  }
+  if (minItems != null) return t('config.field.itemsMin', { min: formatNumber(minItems) })
+  return t('config.field.itemsMax', { max: formatNumber(maxItems) })
 }
 
 function formatScalar(param, v) {

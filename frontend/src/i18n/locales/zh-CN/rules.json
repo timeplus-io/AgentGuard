@@ -243,6 +243,104 @@
       "low": "低",
       "medium": "中",
       "high": "高"
+    },
+    "paramType": {
+      "integer": "整数",
+      "float": "浮点数",
+      "bool": "布尔值",
+      "string": "字符串",
+      "choice": "单选",
+      "list": "列表",
+      "multi_choice": "多选",
+      "regex": "正则表达式",
+      "duration": "时长"
+    }
+  },
+  "config": {
+    "noParams": "此规则没有可配置的参数，其检测 SQL 是固定的。",
+    "helpText": "编辑类型化参数。数值将被校验，检测 SQL 会在保存时重新渲染。",
+    "resetAll": "全部重置为默认值",
+    "redeployNote": "保存将重新部署检测视图；运行中的有状态窗口将被重置。",
+    "unsavedChanges": "有未保存的更改",
+    "discard": "放弃",
+    "save": "保存配置",
+    "saving": "正在保存…",
+    "errors": {
+      "pendingUpgrade": "此规则有待处理的升级。请先升级（在此之前配置已被锁定）；刷新页面以继续。",
+      "saveFailed": "保存失败"
+    },
+    "validation": {
+      "required": "此值为必填项",
+      "mustBeFiniteNumber": "必须是一个有限数字",
+      "mustBeWholeNumber": "必须是整数",
+      "min": "必须 ≥ {{min}}",
+      "max": "必须 ≤ {{max}}",
+      "mustBeString": "必须是字符串",
+      "mustBeAllowedOption": "必须是允许的选项之一",
+      "minItems1": "必须至少包含一项",
+      "uniqueItems": "各项必须唯一",
+      "minItemsN": "必须包含 ≥ {{min}} 项",
+      "maxItemsN": "必须包含 ≤ {{max}} 项",
+      "notAllowedOption": "{{value}} 不是允许的选项",
+      "patternRequired": "需要填写正则表达式"
+    },
+    "field": {
+      "overridden": "已覆盖",
+      "resetTitle": "重置为默认值",
+      "reset": "重置",
+      "defaultLabel": "默认值：",
+      "regexPlaceholder": "RE2 正则表达式",
+      "unitsFallback": "单位",
+      "noOptions": "无选项",
+      "empty": "空",
+      "addItemPlaceholder": "添加项…",
+      "remove": "移除",
+      "add": "添加",
+      "itemsMin": "最少 {{min}} 项",
+      "itemsMax": "最多 {{max}} 项",
+      "itemsMinMax": "最少 {{min}} · 最多 {{max}} 项"
+    },
+    "schema": {
+      "emptyBefore": "尚无参数。添加一个参数即可通过 ",
+      "emptyAfter": " 在检测模板中暴露一个类型化开关。",
+      "addParameter": "添加参数",
+      "collapse": "折叠",
+      "expand": "展开",
+      "moveUp": "上移",
+      "moveDown": "下移",
+      "removeParameter": "移除参数",
+      "unnamedKey": "（未命名）",
+      "noneOption": "（无）",
+      "addOptionsFirst": "请先添加选项",
+      "addOptionPlaceholder": "添加选项…",
+      "removeOption": "移除选项",
+      "addOption": "添加选项",
+      "field": {
+        "key": "键 *",
+        "type": "类型",
+        "label": "标签",
+        "default": "默认值",
+        "description": "描述",
+        "options": "选项",
+        "min": "最小值",
+        "max": "最大值",
+        "unit": "单位",
+        "minItems": "最小项数",
+        "maxItems": "最大项数"
+      },
+      "placeholder": {
+        "key": "threshold",
+        "label": "检测阈值",
+        "description": "此参数控制的内容",
+        "listDefault": "以英文逗号分隔多个值",
+        "regexDefault": "RE2 模式",
+        "unit": "秒"
+      },
+      "keyErrors": {
+        "required": "键为必填项",
+        "invalid": "以小写字母开头，后接字母、数字或下划线（最多 64 个字符）",
+        "duplicate": "键重复"
+      }
     }
   }
 }

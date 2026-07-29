@@ -16,6 +16,7 @@ export const REPRESENTATIVE = [
   ['threats', 'title'],
   ['rules', 'list.title'],
   ['rules', 'detail.definition.heading'],
+  ['rules', 'config.resetAll'],
 ]
 
 describe('zh-CN is actually translated', () => {

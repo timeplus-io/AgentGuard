@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import ParamField from './ParamField'
 import { api } from '../../api/client'
+import { formatNumber } from '../../i18n/format'
 
 // ConfigurationTab renders the editable parameter form for an installed rule.
 // It owns edit state, client-side validation (immediate feedback; the backend is
@@ -15,6 +17,7 @@ import { api } from '../../api/client'
 //   enabled   – whether the rule has a live MV (drives the redeploy notice)
 //   onSaved(updatedInstance) – called after a successful configuration save
 export default function ConfigurationTab({ ruleId, schema, defaults, effective, enabled, onSaved }) {
+  const { t } = useTranslation('rules')
   // baseline is the last-saved effective config; edits diff against it.
   const baseline = useMemo(() => buildInitial(schema, effective, defaults), [schema, effective, defaults])
   const [values, setValues] = useState(baseline)
@@ -29,7 +32,7 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
     setSaveError(null)
   }, [baseline])
 
-  const clientErrors = useMemo(() => validateAll(schema, values), [schema, values])
+  const clientErrors = useMemo(() => validateAll(schema, values, t), [schema, values, t])
   const errors = { ...clientErrors, ...fieldErrorsFromServer }
   const dirty = useMemo(() => !deepEqual(values, baseline), [values, baseline])
   const hasErrors = Object.keys(clientErrors).length > 0
@@ -48,7 +51,7 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
   if (!schema || schema.length === 0) {
     return (
       <p className="text-xs text-gray-400">
-        This rule has no configurable parameters. Its detection SQL is fixed.
+        {t('config.noParams')}
       </p>
     )
   }
@@ -96,9 +99,9 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
       // conflicts/warnings, not field errors — give a clear, actionable message
       // rather than a raw banner.
       if (e?.status === 409) {
-        setSaveError('This rule has a pending upgrade. Upgrade it first (Configuration is locked until then); reload the page to continue.')
+        setSaveError(t('config.errors.pendingUpgrade'))
       } else {
-        setSaveError(e?.message || 'Save failed')
+        setSaveError(e?.message || t('config.errors.saveFailed'))
       }
     } finally {
       setSaving(false)
@@ -109,7 +112,7 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-[11px] text-gray-400">
-          Edit typed parameters. Values are validated and the detection SQL is re-rendered on save.
+          {t('config.helpText')}
         </p>
         <button
           type="button"
@@ -117,7 +120,7 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
           disabled={!dirty && !someOverridden(values, defaults)}
           className="text-[10px] uppercase tracking-wide text-gray-400 hover:text-primary transition-colors disabled:opacity-40"
         >
-          Reset all to defaults
+          {t('config.resetAll')}
         </button>
       </div>
 
@@ -148,20 +151,20 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
           the rule is enabled — a disabled rule has no MV to redeploy. */}
       {enabled && (
         <p className="text-[11px] text-gray-500">
-          Saving redeploys the detection view; in-flight stateful windows reset.
+          {t('config.redeployNote')}
         </p>
       )}
 
       {/* Save bar (sticky-ish): only actionable when there are unsaved, valid changes. */}
       <div className="flex items-center justify-end gap-3 pt-2">
-        {dirty && <span className="text-[11px] text-amber-400 mr-auto">Unsaved changes</span>}
+        {dirty && <span className="text-[11px] text-amber-400 mr-auto">{t('config.unsavedChanges')}</span>}
         <button
           type="button"
           onClick={discard}
           disabled={!dirty}
           className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors disabled:opacity-40"
         >
-          Discard
+          {t('config.discard')}
         </button>
         <button
           type="button"
@@ -169,7 +172,7 @@ export default function ConfigurationTab({ ruleId, schema, defaults, effective, 
           disabled={!dirty || hasErrors || saving}
           className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text transition-colors disabled:opacity-40"
         >
-          {saving ? 'Saving…' : 'Save configuration'}
+          {saving ? t('config.saving') : t('config.save')}
         </button>
       </div>
     </div>
@@ -193,53 +196,57 @@ function someOverridden(values, defaults) {
 
 // validateAll mirrors the backend's per-type constraints for immediate feedback.
 // The backend remains authoritative (its field errors are merged on save).
-function validateAll(schema, values) {
+function validateAll(schema, values, t) {
   const errs = {}
   for (const p of schema || []) {
-    const e = validateOne(p, values[p.key])
+    const e = validateOne(p, values[p.key], t)
     if (e) errs[p.key] = e
   }
   return errs
 }
 
-function validateOne(p, v) {
+function validateOne(p, v, t) {
   switch (p.type) {
     case 'integer':
     case 'float': {
-      if (v === '' || v == null) return 'value is required'
+      if (v === '' || v == null) return t('config.validation.required')
       const n = Number(v)
-      if (Number.isNaN(n) || !Number.isFinite(n)) return 'must be a finite number'
-      if (p.type === 'integer' && !Number.isInteger(n)) return 'must be a whole number'
-      if (p.min != null && n < p.min) return `must be ≥ ${p.min}`
-      if (p.max != null && n > p.max) return `must be ≤ ${p.max}`
+      if (Number.isNaN(n) || !Number.isFinite(n)) return t('config.validation.mustBeFiniteNumber')
+      if (p.type === 'integer' && !Number.isInteger(n)) return t('config.validation.mustBeWholeNumber')
+      if (p.min != null && n < p.min) return t('config.validation.min', { min: formatNumber(p.min) })
+      if (p.max != null && n > p.max) return t('config.validation.max', { max: formatNumber(p.max) })
       return null
     }
     case 'string': {
       const s = v ?? ''
-      if (typeof s !== 'string') return 'must be a string'
+      if (typeof s !== 'string') return t('config.validation.mustBeString')
       return null
     }
     case 'choice':
-      if (!p.options?.includes(v)) return 'must be one of the allowed options'
+      if (!p.options?.includes(v)) return t('config.validation.mustBeAllowedOption')
       return null
     case 'list':
     case 'multi_choice': {
       const list = Array.isArray(v) ? v : []
-      if (list.length === 0) return 'must contain at least one item'
-      if (new Set(list).size !== list.length) return 'items must be unique'
-      if (p.min_items != null && list.length < p.min_items) return `must contain ≥ ${p.min_items} items`
-      if (p.max_items != null && list.length > p.max_items) return `must contain ≤ ${p.max_items} items`
+      if (list.length === 0) return t('config.validation.minItems1')
+      if (new Set(list).size !== list.length) return t('config.validation.uniqueItems')
+      if (p.min_items != null && list.length < p.min_items) {
+        return t('config.validation.minItemsN', { min: formatNumber(p.min_items) })
+      }
+      if (p.max_items != null && list.length > p.max_items) {
+        return t('config.validation.maxItemsN', { max: formatNumber(p.max_items) })
+      }
       if (p.type === 'multi_choice') {
         const options = Array.isArray(p.options) ? p.options : []
         const invalid = list.find((item) => !options.includes(item))
-        if (invalid) return `${invalid} is not an allowed option`
+        if (invalid) return t('config.validation.notAllowedOption', { value: invalid })
       }
       return null
     }
     case 'regex': {
       const s = v ?? ''
-      if (typeof s !== 'string') return 'must be a string'
-      if (s === '') return 'pattern is required'
+      if (typeof s !== 'string') return t('config.validation.mustBeString')
+      if (s === '') return t('config.validation.patternRequired')
       // Do NOT compile the pattern client-side: the backend validates it as RE2
       // (authoritative), and JS RegExp syntax diverges from RE2 (e.g. inline flags
       // like `(?m)`), so `new RegExp` would falsely block valid AgentGuard
@@ -248,11 +255,11 @@ function validateOne(p, v) {
       return null
     }
     case 'duration': {
-      if (v === '' || v == null) return 'value is required'
+      if (v === '' || v == null) return t('config.validation.required')
       const n = Number(v)
-      if (!Number.isInteger(n)) return 'must be a whole number'
-      if (p.min != null && n < p.min) return `must be ≥ ${p.min}`
-      if (p.max != null && n > p.max) return `must be ≤ ${p.max}`
+      if (!Number.isInteger(n)) return t('config.validation.mustBeWholeNumber')
+      if (p.min != null && n < p.min) return t('config.validation.min', { min: formatNumber(p.min) })
+      if (p.max != null && n > p.max) return t('config.validation.max', { max: formatNumber(p.max) })
       return null
     }
     case 'bool':

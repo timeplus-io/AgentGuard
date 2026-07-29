@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toggleMultiChoiceValue } from './paramValues'
 
 // ParamSchemaEditor edits the parameter SCHEMA of a custom rule definition —
@@ -54,13 +55,19 @@ const inputCls =
   'w-full bg-surface-container-lowest text-xs text-gray-100 rounded-sm px-3 py-2 outline-none ' +
   'focus:ring-1 focus:ring-[#ffb0cf]/50 placeholder:text-gray-600'
 
-export function validateKey(key) {
-  if (!key) return 'key is required'
-  if (!KEY_RE.test(key)) return 'lowercase letter, then letters/digits/underscore (max 64)'
+// t is optional: callers that only need the truthy/falsy validity check (e.g.
+// RuleCreate's canSave gate) can omit it and get an untranslated fallback
+// message that is never rendered to a user.
+export function validateKey(key, t) {
+  if (!key) return t ? t('config.schema.keyErrors.required') : 'key is required'
+  if (!KEY_RE.test(key)) {
+    return t ? t('config.schema.keyErrors.invalid') : 'lowercase letter, then letters/digits/underscore (max 64)'
+  }
   return null
 }
 
 export default function ParamSchemaEditor({ config, onChange }) {
+  const { t } = useTranslation('rules')
   const rows = Array.isArray(config) ? config : []
 
   const emit = (next) => onChange(next)
@@ -92,8 +99,9 @@ export default function ParamSchemaEditor({ config, onChange }) {
     <div className="space-y-3">
       {rows.length === 0 && (
         <p className="text-xs text-gray-400">
-          No parameters yet. Add one to expose a typed knob in the detection template via{' '}
-          <code className="text-gray-300 font-mono">{'{{ .Config.<key> }}'}</code>.
+          {t('config.schema.emptyBefore')}
+          <code className="text-gray-300 font-mono">{'{{ .Config.<key> }}'}</code>
+          {t('config.schema.emptyAfter')}
         </p>
       )}
 
@@ -116,15 +124,16 @@ export default function ParamSchemaEditor({ config, onChange }) {
         className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-sm bg-surface-container-high text-gray-100 hover:bg-surface-variant transition-colors"
       >
         <span className="material-symbols-outlined text-[16px] align-middle">add</span>
-        Add parameter
+        {t('config.schema.addParameter')}
       </button>
     </div>
   )
 }
 
 function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) {
+  const { t } = useTranslation('rules')
   const [open, setOpen] = useState(true)
-  const keyError = validateKey(row.key) || (duplicate ? 'duplicate key' : null)
+  const keyError = validateKey(row.key, t) || (duplicate ? t('config.schema.keyErrors.duplicate') : null)
 
   // When the type changes, drop the previous type's constraints/options/unit and
   // reset the default so the schema stays internally consistent.
@@ -148,7 +157,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
           type="button"
           onClick={() => setOpen((o) => !o)}
           className="shrink-0 text-gray-400 hover:text-primary transition-colors"
-          title={open ? 'Collapse' : 'Expand'}
+          title={open ? t('config.schema.collapse') : t('config.schema.expand')}
         >
           <span className="material-symbols-outlined text-[18px] align-middle">
             {open ? 'expand_more' : 'chevron_right'}
@@ -157,9 +166,9 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <code className="text-xs font-mono text-gray-100">{row.key || '(unnamed)'}</code>
+            <code className="text-xs font-mono text-gray-100">{row.key || t('config.schema.unnamedKey')}</code>
             <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-surface-container-lowest text-gray-400">
-              {row.type}
+              {t(`enum.paramType.${row.type}`)}
             </span>
             {row.label && <span className="text-[11px] text-gray-400 truncate">{row.label}</span>}
           </div>
@@ -171,7 +180,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
             onClick={() => onMove(-1)}
             disabled={index === 0}
             className="text-gray-400 hover:text-gray-100 disabled:opacity-30 transition-colors"
-            title="Move up"
+            title={t('config.schema.moveUp')}
           >
             <span className="material-symbols-outlined text-[16px] align-middle">arrow_upward</span>
           </button>
@@ -180,7 +189,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
             onClick={() => onMove(1)}
             disabled={index === total - 1}
             className="text-gray-400 hover:text-gray-100 disabled:opacity-30 transition-colors"
-            title="Move down"
+            title={t('config.schema.moveDown')}
           >
             <span className="material-symbols-outlined text-[16px] align-middle">arrow_downward</span>
           </button>
@@ -188,7 +197,7 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
             type="button"
             onClick={onRemove}
             className="text-gray-400 hover:text-error transition-colors"
-            title="Remove parameter"
+            title={t('config.schema.removeParameter')}
           >
             <span className="material-symbols-outlined text-[16px] align-middle">delete</span>
           </button>
@@ -198,52 +207,52 @@ function ParamRow({ row, index, total, duplicate, onUpdate, onRemove, onMove }) 
       {open && (
         <div className="space-y-3 pl-7">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Field label="Key *">
+            <Field label={t('config.schema.field.key')}>
               <input
                 type="text"
                 value={row.key ?? ''}
                 onChange={(e) => onUpdate({ key: e.target.value })}
-                placeholder="threshold"
+                placeholder={t('config.schema.placeholder.key')}
                 className={`${inputCls} font-mono ${keyError ? 'ring-1 ring-[#ffb4ab]/60' : ''}`}
               />
               {keyError && <p className="text-[10px] text-error mt-1">{keyError}</p>}
             </Field>
 
-            <Field label="Type">
+            <Field label={t('config.schema.field.type')}>
               <select
                 value={row.type}
                 onChange={(e) => onTypeChange(e.target.value)}
                 className={`${inputCls} appearance-none`}
               >
-                {PARAM_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+                {PARAM_TYPES.map((pt) => (
+                  <option key={pt} value={pt}>
+                    {t(`enum.paramType.${pt}`)}
                   </option>
                 ))}
               </select>
             </Field>
 
-            <Field label="Label">
+            <Field label={t('config.schema.field.label')}>
               <input
                 type="text"
                 value={row.label ?? ''}
                 onChange={(e) => onUpdate({ label: e.target.value })}
-                placeholder="Detection threshold"
+                placeholder={t('config.schema.placeholder.label')}
                 className={inputCls}
               />
             </Field>
 
-            <Field label="Default">
+            <Field label={t('config.schema.field.default')}>
               <DefaultInput row={row} onUpdate={onUpdate} />
             </Field>
           </div>
 
-          <Field label="Description">
+          <Field label={t('config.schema.field.description')}>
             <input
               type="text"
               value={row.description ?? ''}
               onChange={(e) => onUpdate({ description: e.target.value })}
-              placeholder="What this parameter controls"
+              placeholder={t('config.schema.placeholder.description')}
               className={inputCls}
             />
           </Field>
@@ -266,6 +275,7 @@ function Field({ label, children }) {
 
 // DefaultInput renders a default-value control appropriate to the parameter type.
 function DefaultInput({ row, onUpdate }) {
+  const { t } = useTranslation('rules')
   const set = (v) => onUpdate({ default: v })
   switch (row.type) {
     case 'integer':
@@ -303,7 +313,7 @@ function DefaultInput({ row, onUpdate }) {
           onChange={(e) => set(e.target.value)}
           className={`${inputCls} appearance-none`}
         >
-          <option value="">(none)</option>
+          <option value="">{t('config.schema.noneOption')}</option>
           {(row.options || []).map((opt) => (
             <option key={opt} value={opt}>
               {opt}
@@ -321,7 +331,7 @@ function DefaultInput({ row, onUpdate }) {
           type="text"
           value={row.default ?? ''}
           onChange={(e) => set(e.target.value)}
-          placeholder="RE2 pattern"
+          placeholder={t('config.schema.placeholder.regexDefault')}
           className={`${inputCls} font-mono`}
         />
       )
@@ -347,6 +357,7 @@ function DefaultInput({ row, onUpdate }) {
 // Seeded once on mount (a type switch remounts this via the DefaultInput branch,
 // so there is no external reset to re-sync).
 function ListDefaultInput({ row, onUpdate }) {
+  const { t } = useTranslation('rules')
   const [text, setText] = useState(() =>
     Array.isArray(row.default) ? row.default.join(', ') : typeof row.default === 'string' ? row.default : '',
   )
@@ -363,13 +374,14 @@ function ListDefaultInput({ row, onUpdate }) {
             .filter(Boolean),
         })
       }}
-      placeholder="comma, separated, values"
+      placeholder={t('config.schema.placeholder.listDefault')}
       className={`${inputCls} font-mono`}
     />
   )
 }
 
 function MultiChoiceDefaultEditor({ row, onUpdate }) {
+  const { t } = useTranslation('rules')
   const options = Array.isArray(row.options) ? row.options : []
   const values = Array.isArray(row.default) ? row.default : []
   const selected = new Set(values)
@@ -394,13 +406,14 @@ function MultiChoiceDefaultEditor({ row, onUpdate }) {
           </button>
         )
       })}
-      {options.length === 0 && <span className="text-[11px] text-gray-500 italic">add options first</span>}
+      {options.length === 0 && <span className="text-[11px] text-gray-500 italic">{t('config.schema.addOptionsFirst')}</span>}
     </div>
   )
 }
 
 // Constraints renders the type-switched constraint editors.
 function Constraints({ row, onUpdate }) {
+  const { t } = useTranslation('rules')
   // intOnly fields back Go *int constraints (min_items/max_items); a fractional
   // value there fails JSON decode with an opaque 400, so
   // force whole numbers (step 1 + truncate on input). min/max back *float64 and
@@ -434,21 +447,21 @@ function Constraints({ row, onUpdate }) {
     case 'float':
       return (
         <div className="grid grid-cols-2 gap-3">
-          {numField('min', 'Min')}
-          {numField('max', 'Max')}
+          {numField('min', t('config.schema.field.min'))}
+          {numField('max', t('config.schema.field.max'))}
         </div>
       )
     case 'duration':
       return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {numField('min', 'Min')}
-          {numField('max', 'Max')}
-          <Field label="Unit">
+          {numField('min', t('config.schema.field.min'))}
+          {numField('max', t('config.schema.field.max'))}
+          <Field label={t('config.schema.field.unit')}>
             <input
               type="text"
               value={row.unit ?? ''}
               onChange={(e) => onUpdate({ unit: e.target.value })}
-              placeholder="seconds"
+              placeholder={t('config.schema.placeholder.unit')}
               className={inputCls}
             />
           </Field>
@@ -457,16 +470,16 @@ function Constraints({ row, onUpdate }) {
     case 'list':
       return (
         <div className="grid grid-cols-2 gap-3">
-          {numField('min_items', 'Min items', { intOnly: true })}
-          {numField('max_items', 'Max items', { intOnly: true })}
+          {numField('min_items', t('config.schema.field.minItems'), { intOnly: true })}
+          {numField('max_items', t('config.schema.field.maxItems'), { intOnly: true })}
         </div>
       )
     case 'multi_choice':
       return (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            {numField('min_items', 'Min items', { intOnly: true })}
-            {numField('max_items', 'Max items', { intOnly: true })}
+            {numField('min_items', t('config.schema.field.minItems'), { intOnly: true })}
+            {numField('max_items', t('config.schema.field.maxItems'), { intOnly: true })}
           </div>
           <OptionsEditor row={row} onUpdate={onUpdate} />
         </div>
@@ -481,6 +494,7 @@ function Constraints({ row, onUpdate }) {
 
 // OptionsEditor edits the allowed values of a choice/multi_choice parameter as removable chips.
 function OptionsEditor({ row, onUpdate }) {
+  const { t } = useTranslation('rules')
   const [draft, setDraft] = useState('')
   const options = Array.isArray(row.options) ? row.options : []
 
@@ -506,7 +520,7 @@ function OptionsEditor({ row, onUpdate }) {
   }
 
   return (
-    <Field label="Options">
+    <Field label={t('config.schema.field.options')}>
       <div className="flex flex-wrap gap-1.5 mb-2">
         {options.map((opt, i) => (
           <span
@@ -518,13 +532,13 @@ function OptionsEditor({ row, onUpdate }) {
               type="button"
               onClick={() => removeAt(i)}
               className="text-gray-500 hover:text-error"
-              title="Remove option"
+              title={t('config.schema.removeOption')}
             >
               <span className="material-symbols-outlined text-[14px] align-middle">close</span>
             </button>
           </span>
         ))}
-        {options.length === 0 && <span className="text-[11px] text-gray-500 italic">no options</span>}
+        {options.length === 0 && <span className="text-[11px] text-gray-500 italic">{t('config.field.noOptions')}</span>}
       </div>
       <div className="flex gap-2">
         <input
@@ -537,14 +551,14 @@ function OptionsEditor({ row, onUpdate }) {
               add()
             }
           }}
-          placeholder="Add option…"
+          placeholder={t('config.schema.addOptionPlaceholder')}
           className={inputCls}
         />
         <button
           type="button"
           onClick={add}
           className="shrink-0 px-3 rounded-sm bg-surface-variant text-gray-100 hover:bg-surface-bright transition-colors"
-          title="Add option"
+          title={t('config.schema.addOption')}
         >
           <span className="material-symbols-outlined text-[16px] align-middle">add</span>
         </button>
