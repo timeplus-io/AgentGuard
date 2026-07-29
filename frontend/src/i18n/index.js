@@ -49,7 +49,7 @@ i18n.use(initReactI18next).init({
 // Async server-default adoption (ui.default_language) happens in App after auth.
 try {
   const stored = localStorage.getItem('agentguard.locale')
-  const loc = ['en', 'zh-CN'].includes(stored) ? stored : 'en'
+  const loc = SUPPORTED_LOCALES.includes(stored) ? stored : DEFAULT_LOCALE
   i18n.changeLanguage(loc)
   if (typeof document !== 'undefined') document.documentElement.lang = loc
 } catch { /* storage/document unavailable — stays on English */ }
