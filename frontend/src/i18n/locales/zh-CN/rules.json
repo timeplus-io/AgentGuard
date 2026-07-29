@@ -87,15 +87,9 @@
       "description": "描述",
       "descriptionPlaceholder": "此规则检测什么？",
       "severity": "严重程度",
-      "severityCritical": "严重",
-      "severityWarning": "警告",
-      "severityInfo": "信息",
       "category": "分类",
       "categoryPlaceholder": "例如 prompt_injection_and_hijacking",
       "fpRate": "误报率",
-      "fpRateLow": "低",
-      "fpRateMedium": "中",
-      "fpRateHigh": "高",
       "hookSources": "钩子来源",
       "hookSourcesPlaceholder": "例如 before_tool_call"
     },
@@ -203,8 +197,8 @@
       "udfs": "UDF",
       "detections": "近期检测",
       "detectionsBadgeLabel": "24 小时",
-      "badgeCount": "（{{count}}）",
-      "badgeCountWithLabel": "（{{label}}：{{count}}）"
+      "badgeCount": "（{{formatted}}）",
+      "badgeCountWithLabel": "（{{label}}：{{formatted}}）"
     },
     "sqlTab": {
       "readonlyNote": "只读 — 根据定义模板和当前参数值渲染。",
@@ -213,7 +207,8 @@
     },
     "udfsTab": {
       "empty": "此规则未定义任何 UDF。",
-      "badge": "UDF"
+      "badge": "UDF",
+      "unnamedFn": "UDF"
     },
     "errors": {
       "loadFailed": "加载规则失败",
@@ -237,5 +232,17 @@
     "log_only": "仅记录",
     "auto_block": "自动阻止",
     "hold": "挂起（需要审批）"
+  },
+  "enum": {
+    "severity": {
+      "critical": "严重",
+      "warning": "警告",
+      "info": "信息"
+    },
+    "fpRate": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    }
   }
 }

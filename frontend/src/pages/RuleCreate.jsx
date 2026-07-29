@@ -310,9 +310,9 @@ export default function RuleCreate({ mode = 'create' }) {
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="rule-severity" className={labelCls}>{t('create.metadata.severity')}</label>
                   <select id="rule-severity" value={def.severity} onChange={(e) => setField('severity', e.target.value)} className={inputCls}>
-                    <option value="critical">{t('create.metadata.severityCritical')}</option>
-                    <option value="warning">{t('create.metadata.severityWarning')}</option>
-                    <option value="info">{t('create.metadata.severityInfo')}</option>
+                    <option value="critical">{t('enum.severity.critical')}</option>
+                    <option value="warning">{t('enum.severity.warning')}</option>
+                    <option value="info">{t('enum.severity.info')}</option>
                   </select>
                 </div>
 
@@ -324,9 +324,9 @@ export default function RuleCreate({ mode = 'create' }) {
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="rule-fp-rate" className={labelCls}>{t('create.metadata.fpRate')}</label>
                   <select id="rule-fp-rate" value={def.fp_rate} onChange={(e) => setField('fp_rate', e.target.value)} className={inputCls}>
-                    <option value="low">{t('create.metadata.fpRateLow')}</option>
-                    <option value="medium">{t('create.metadata.fpRateMedium')}</option>
-                    <option value="high">{t('create.metadata.fpRateHigh')}</option>
+                    <option value="low">{t('enum.fpRate.low')}</option>
+                    <option value="medium">{t('enum.fpRate.medium')}</option>
+                    <option value="high">{t('enum.fpRate.high')}</option>
                   </select>
                 </div>
 

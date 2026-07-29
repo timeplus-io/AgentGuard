@@ -154,7 +154,7 @@ export default function RuleDetail() {
 
   const udfFuncName = udf => {
     const m = udf.match(/FUNCTION\s+(\w+)\s*\(/i)
-    return m ? m[1] : t('detail.udfsTab.badge')
+    return m ? m[1] : t('detail.udfsTab.unnamedFn')
   }
 
   const openCloneModal = () => {
@@ -433,7 +433,7 @@ export default function RuleDetail() {
                     {' '}{inst.definition_version}
                   </span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide ${severityBadge(inst.severity)}`}>
-                    {inst.severity}
+                    {t(`enum.severity.${inst.severity}`, { defaultValue: inst.severity })}
                   </span>
                   {rule.mv && inst.enabled && rule.mv.failed_state && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide bg-red-500/10 text-red-400 border border-red-500/20" title={rule.mv.failed_state}>
@@ -555,11 +555,11 @@ export default function RuleDetail() {
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.definition.severity')}</p>
-                <p className={`text-sm font-semibold capitalize ${inst.severity === 'critical' ? 'text-primary' : 'text-amber-400'}`}>{inst.severity}</p>
+                <p className={`text-sm font-semibold capitalize ${inst.severity === 'critical' ? 'text-primary' : 'text-amber-400'}`}>{t(`enum.severity.${inst.severity}`, { defaultValue: inst.severity })}</p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.definition.fpRate')}</p>
-                <p className="text-sm text-gray-100 capitalize">{inst.fp_rate}</p>
+                <p className="text-sm text-gray-100 capitalize">{t(`enum.fpRate.${inst.fp_rate}`, { defaultValue: inst.fp_rate })}</p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">{t('detail.definition.hookSources')}</p>
@@ -595,8 +595,8 @@ export default function RuleDetail() {
                     {tab.badge != null && tab.badge > 0 && (
                       <span className={`ml-2 text-[10px] normal-case font-normal ${active ? 'text-primary/70' : 'text-gray-400'}`}>
                         {tab.badgeLabel
-                          ? t('detail.tabs.badgeCountWithLabel', { label: tab.badgeLabel, count: formatNumber(tab.badge) })
-                          : t('detail.tabs.badgeCount', { count: formatNumber(tab.badge) })}
+                          ? t('detail.tabs.badgeCountWithLabel', { label: tab.badgeLabel, count: tab.badge, formatted: formatNumber(tab.badge) })
+                          : t('detail.tabs.badgeCount', { count: tab.badge, formatted: formatNumber(tab.badge) })}
                       </span>
                     )}
                   </button>

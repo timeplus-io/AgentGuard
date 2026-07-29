@@ -87,15 +87,9 @@
       "description": "Description",
       "descriptionPlaceholder": "What does this rule detect?",
       "severity": "Severity",
-      "severityCritical": "Critical",
-      "severityWarning": "Warning",
-      "severityInfo": "Info",
       "category": "Category",
       "categoryPlaceholder": "e.g. prompt_injection_and_hijacking",
       "fpRate": "False Positive Rate",
-      "fpRateLow": "Low",
-      "fpRateMedium": "Medium",
-      "fpRateHigh": "High",
       "hookSources": "Hook Sources",
       "hookSourcesPlaceholder": "e.g. before_tool_call"
     },
@@ -203,8 +197,8 @@
       "udfs": "UDFs",
       "detections": "Recent Detections",
       "detectionsBadgeLabel": "24h",
-      "badgeCount": "({{count}})",
-      "badgeCountWithLabel": "({{label}}: {{count}})"
+      "badgeCount": "({{formatted}})",
+      "badgeCountWithLabel": "({{label}}: {{formatted}})"
     },
     "sqlTab": {
       "readonlyNote": "Read-only — rendered from the definition template and current parameter values.",
@@ -213,7 +207,8 @@
     },
     "udfsTab": {
       "empty": "This rule does not define any UDFs.",
-      "badge": "UDF"
+      "badge": "UDF",
+      "unnamedFn": "UDF"
     },
     "errors": {
       "loadFailed": "Failed to load rule",
@@ -237,5 +232,17 @@
     "log_only": "Log only",
     "auto_block": "Auto-block",
     "hold": "Hold (require approval)"
+  },
+  "enum": {
+    "severity": {
+      "critical": "Critical",
+      "warning": "Warning",
+      "info": "Info"
+    },
+    "fpRate": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    }
   }
 }
