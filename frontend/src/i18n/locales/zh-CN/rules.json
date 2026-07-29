@@ -52,6 +52,176 @@
       "note": "这将创建检测物化视图并立即开始监控。"
     }
   },
+  "create": {
+    "title": {
+      "new": "新建自定义规则",
+      "edit": "编辑自定义定义"
+    },
+    "subtitle": "编写参数化检测：SQL 模板、类型化参数和 UDF。",
+    "redeployNote": "如果此规则已安装，发布将重新部署其检测视图，运行中的有状态窗口将被重置。",
+    "versionUnchanged": "请提升版本号以发布此编辑（当前：{{version}}）。",
+    "save": {
+      "saving": "正在保存…",
+      "bumpVersion": "提升版本号以发布",
+      "publishEdit": "发布编辑",
+      "createDefinition": "创建定义"
+    },
+    "saveDisabledReason": {
+      "requiredFields": "请填写必填字段（名称、版本、SQL 模板）。",
+      "invalidKey": "请为每个参数指定有效的键。",
+      "bumpVersion": "请提升版本号以发布此编辑。"
+    },
+    "errors": {
+      "loadFailed": "加载定义失败",
+      "saveFailed": "保存定义失败",
+      "bumpVersionGuard": "请提升版本号以发布编辑。"
+    },
+    "metadata": {
+      "heading": "规则元数据",
+      "ruleId": "规则 ID",
+      "ruleIdPlaceholder": "必填 — 小写 ID，例如 my-rule",
+      "name": "名称",
+      "namePlaceholder": "我的自定义规则",
+      "version": "版本",
+      "versionEditHint": "提升版本号以发布对已安装定义的编辑。",
+      "description": "描述",
+      "descriptionPlaceholder": "此规则检测什么？",
+      "severity": "严重程度",
+      "severityCritical": "严重",
+      "severityWarning": "警告",
+      "severityInfo": "信息",
+      "category": "分类",
+      "categoryPlaceholder": "例如 prompt_injection_and_hijacking",
+      "fpRate": "误报率",
+      "fpRateLow": "低",
+      "fpRateMedium": "中",
+      "fpRateHigh": "高",
+      "hookSources": "钩子来源",
+      "hookSourcesPlaceholder": "例如 before_tool_call"
+    },
+    "parameters": {
+      "heading": "参数",
+      "helpBefore": "操作员可覆盖的类型化参数。在模板中以 ",
+      "helpAfter": " 的形式引用它们。"
+    },
+    "udfs": {
+      "heading": "UDF",
+      "add": "添加 UDF",
+      "empty": "此规则依赖的可选 CREATE FUNCTION DDL 语句。",
+      "label": "UDF {{n}}",
+      "remove": "移除 UDF"
+    },
+    "sqlTemplate": {
+      "heading": "SQL 模板",
+      "compile": "编译预览",
+      "compiling": "正在编译…"
+    },
+    "validationErrors": "校验错误",
+    "compiledSql": {
+      "heading": "已编译 SQL",
+      "subtitle": "由后端根据模板和参数默认值渲染。浏览器不会渲染 SQL。",
+      "empty": "点击“编译预览”以渲染检测 SQL。",
+      "compileFailed": "编译失败"
+    }
+  },
+  "detail": {
+    "notFound": "未找到规则。",
+    "confirmToggle": {
+      "title": "{{action}}规则",
+      "disableNote": "这将删除检测物化视图；重新启用时将根据当前配置重新部署。",
+      "enableNote": "这将部署检测物化视图并开始监控。"
+    },
+    "upgradeModal": {
+      "title": "将 {{name}} 升级至 {{version}}",
+      "conflictsHeading": "冲突（阻止升级）",
+      "warningsHeading": "警告",
+      "compatible": "兼容升级 — 所有当前覆盖项均会保留。",
+      "close": "关闭"
+    },
+    "cloneModal": {
+      "title": "克隆为自定义规则",
+      "bodyBefore": "创建 ",
+      "bodyAfter": " 的可编辑副本，并重新限定 UDF 名称范围。",
+      "newIdLabel": "新规则 ID",
+      "newIdPlaceholder": "例如 rp-003-custom",
+      "nameLabel": "规则名称",
+      "namePlaceholder": "例如 Score Rule (custom)",
+      "errors": {
+        "idNameRequired": "ID 和名称均为必填项",
+        "alreadyExists": "规则 “{{id}}” 已存在。",
+        "cloneFailed": "克隆失败",
+        "deleteFailed": "删除失败"
+      },
+      "existsHint": "修改上方的 ID 以克隆为新名称，或者：",
+      "openExisting": "打开现有定义",
+      "deleteDraft": "删除现有草稿",
+      "working": "处理中…",
+      "clone": "克隆",
+      "deleteConfirm": "删除现有定义 “{{id}}”？这将永久移除此未安装的自定义规则。"
+    },
+    "badges": {
+      "mvFailed": "MV {{state}}"
+    },
+    "actions": {
+      "upgrade": "升级",
+      "upgradeTo": "升级至 {{version}}",
+      "upgrading": "正在升级…",
+      "editDefinition": "编辑定义",
+      "cloneAsCustom": "克隆为自定义",
+      "uninstall": "卸载",
+      "uninstallConfirmPrompt": "确定吗？",
+      "confirm": "确认"
+    },
+    "blockPolicy": {
+      "heading": "阻止策略",
+      "hold": "此规则触发时，AgentGuard 将暂停代理并等待人工审批。",
+      "autoBlock": "此规则触发时，AgentGuard 将立即阻止工具调用，无需提示。",
+      "logOnly": "此规则触发时，威胁将被记录并显示在界面中，但代理不会被阻止。",
+      "updateFailed": "更新策略失败"
+    },
+    "definition": {
+      "heading": "规则定义",
+      "ruleId": "规则 ID",
+      "version": "版本",
+      "category": "分类",
+      "severity": "严重程度",
+      "fpRate": "误报率",
+      "hookSources": "钩子来源",
+      "requiredTelemetry": "所需遥测数据"
+    },
+    "configLock": {
+      "title": "配置前请先升级",
+      "bodyNoVersion": "此规则有可用的新版本，其参数可能已发生变化 — 在升级之前配置已被锁定。升级将保留您兼容的覆盖项。",
+      "bodyWithVersion": "此规则有可用的新版本（{{version}}），其参数可能已发生变化 — 在升级之前配置已被锁定。升级将保留您兼容的覆盖项。",
+      "upgradeButton": "升级…",
+      "upgradeButtonTo": "升级至 {{version}}…"
+    },
+    "tabs": {
+      "configuration": "配置",
+      "description": "描述",
+      "sql": "检测 SQL",
+      "udfs": "UDF",
+      "detections": "近期检测",
+      "detectionsBadgeLabel": "24 小时",
+      "badgeCount": "（{{count}}）",
+      "badgeCountWithLabel": "（{{label}}：{{count}}）"
+    },
+    "sqlTab": {
+      "readonlyNote": "只读 — 根据定义模板和当前参数值渲染。",
+      "copy": "复制",
+      "copied": "已复制"
+    },
+    "udfsTab": {
+      "empty": "此规则未定义任何 UDF。",
+      "badge": "UDF"
+    },
+    "errors": {
+      "loadFailed": "加载规则失败",
+      "toggleFailed": "切换失败",
+      "uninstallFailed": "卸载失败",
+      "upgradeFailed": "升级失败"
+    }
+  },
   "actions": {
     "exportCatalog": "导出目录",
     "importCatalog": "导入目录",

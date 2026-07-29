@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import Editor from 'react-simple-code-editor'
 import { highlight, languages } from 'prismjs/components/prism-core'
 import 'prismjs/components/prism-sql'
@@ -49,6 +50,7 @@ const inputCls =
 const labelCls = 'text-[10px] font-semibold text-gray-400 uppercase tracking-widest'
 
 export default function RuleCreate({ mode = 'create' }) {
+  const { t } = useTranslation('rules')
   const navigate = useNavigate()
   const { id } = useParams()
   const isEdit = mode === 'edit'
@@ -82,12 +84,12 @@ export default function RuleCreate({ mode = 'create' }) {
         setDef(loaded)
         setOriginalVersion(loaded.version)
       })
-      .catch((e) => !cancelled && setLoadError(e?.message || 'Failed to load definition'))
+      .catch((e) => !cancelled && setLoadError(e?.message || t('create.errors.loadFailed')))
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
     }
-  }, [isEdit, id])
+  }, [isEdit, id, t])
 
   const setField = (key, val) => setDef((prev) => ({ ...prev, [key]: val }))
 
@@ -110,7 +112,7 @@ export default function RuleCreate({ mode = 'create' }) {
       // Surface *ValidationError.fields and *DefinitionError messages inline.
       const fields = e?.body?.fields
       if (Array.isArray(fields)) setFieldErrors(fields)
-      setCompileError(e?.message || 'Compile failed')
+      setCompileError(e?.message || t('create.compiledSql.compileFailed'))
     } finally {
       setCompiling(false)
     }
@@ -120,7 +122,7 @@ export default function RuleCreate({ mode = 'create' }) {
 
   const handleSave = async () => {
     if (versionUnchanged) {
-      setSaveError('Bump the version to publish an edit.')
+      setSaveError(t('create.errors.bumpVersionGuard'))
       return
     }
     setSaving(true)
@@ -142,7 +144,7 @@ export default function RuleCreate({ mode = 'create' }) {
     } catch (e) {
       const fields = e?.body?.fields
       if (Array.isArray(fields)) setFieldErrors(fields)
-      setSaveError(e?.message || 'Failed to save definition')
+      setSaveError(e?.message || t('create.errors.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -165,11 +167,11 @@ export default function RuleCreate({ mode = 'create' }) {
   const saveDisabledReason = saving
     ? null
     : !hasRequiredFields(def, { isEdit })
-      ? 'Fill in the required fields (name, version, SQL template).'
+      ? t('create.saveDisabledReason.requiredFields')
       : keyErrors
-        ? 'Give every parameter a valid key.'
+        ? t('create.saveDisabledReason.invalidKey')
         : versionUnchanged
-          ? 'Bump the version to publish this edit.'
+          ? t('create.saveDisabledReason.bumpVersion')
           : null
 
   if (loading) {
@@ -211,8 +213,8 @@ export default function RuleCreate({ mode = 'create' }) {
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-6 lg:p-10 flex flex-col gap-6">
           <PageHeader
-            title={isEdit ? 'Edit Custom Definition' : 'New Custom Rule'}
-            subtitle="Author a parameterized detection: SQL template, typed parameters, and UDFs."
+            title={isEdit ? t('create.title.edit') : t('create.title.new')}
+            subtitle={t('create.subtitle')}
             actions={
               <div className="flex items-center gap-3">
                 <button
@@ -223,7 +225,7 @@ export default function RuleCreate({ mode = 'create' }) {
                   onClick={() => navigate('/rules')}
                   className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-gray-100 transition-colors"
                 >
-                  Cancel
+                  {t('actions.cancel')}
                 </button>
                 <button
                   onClick={handleSave}
@@ -232,12 +234,12 @@ export default function RuleCreate({ mode = 'create' }) {
                   className="px-5 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[0.98] transition-all"
                 >
                   {saving
-                    ? 'Saving…'
+                    ? t('create.save.saving')
                     : versionUnchanged
-                      ? 'Bump version to publish'
+                      ? t('create.save.bumpVersion')
                       : isEdit
-                        ? 'Publish edit'
-                        : 'Create definition'}
+                        ? t('create.save.publishEdit')
+                        : t('create.save.createDefinition')}
                 </button>
               </div>
             }
@@ -249,14 +251,14 @@ export default function RuleCreate({ mode = 'create' }) {
               redeploy nothing. */}
           {isEdit && (
             <p className="text-[11px] text-gray-500">
-              If this rule is installed, publishing redeploys its detection view and in-flight stateful windows reset.
+              {t('create.redeployNote')}
             </p>
           )}
 
           {versionUnchanged && (
             <div className="px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-sm text-xs text-amber-300 flex items-center gap-2">
               <span className="material-symbols-outlined text-sm shrink-0">info</span>
-              Bump the version to publish an edit (current: {originalVersion}).
+              {t('create.versionUnchanged', { version: originalVersion })}
             </div>
           )}
 
@@ -272,73 +274,73 @@ export default function RuleCreate({ mode = 'create' }) {
             <aside className="w-full xl:w-[26rem] shrink-0 space-y-6">
               {/* Metadata */}
               <div className="bg-surface-container-high rounded-sm p-6 flex flex-col gap-5">
-                <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">Rule Metadata</h3>
+                <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">{t('create.metadata.heading')}</h3>
 
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="rule-id" className={labelCls}>
-                    Rule ID{!isEdit && ' *'}
+                    {t('create.metadata.ruleId')}{!isEdit && ' *'}
                   </label>
                   <input
                     id="rule-id"
                     type="text"
                     value={def.id}
                     onChange={(e) => setField('id', e.target.value)}
-                    placeholder={isEdit ? '' : 'required — lowercase id, e.g. my-rule'}
+                    placeholder={isEdit ? '' : t('create.metadata.ruleIdPlaceholder')}
                     disabled={isEdit}
                     className={`${inputCls} font-mono disabled:opacity-60 disabled:cursor-not-allowed`}
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="rule-name" className={labelCls}>Name *</label>
-                  <input id="rule-name" type="text" value={def.name} onChange={(e) => setField('name', e.target.value)} placeholder="My Custom Rule" className={inputCls} />
+                  <label htmlFor="rule-name" className={labelCls}>{t('create.metadata.name')} *</label>
+                  <input id="rule-name" type="text" value={def.name} onChange={(e) => setField('name', e.target.value)} placeholder={t('create.metadata.namePlaceholder')} className={inputCls} />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="rule-version" className={labelCls}>Version *</label>
+                  <label htmlFor="rule-version" className={labelCls}>{t('create.metadata.version')} *</label>
                   <input id="rule-version" type="text" value={def.version} onChange={(e) => setField('version', e.target.value)} placeholder="1.0.0" className={`${inputCls} font-mono`} />
-                  {isEdit && <p className="text-[10px] text-gray-400">Bump to publish an edit to an installed definition.</p>}
+                  {isEdit && <p className="text-[10px] text-gray-400">{t('create.metadata.versionEditHint')}</p>}
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="rule-description" className={labelCls}>Description</label>
-                  <textarea id="rule-description" value={def.description} onChange={(e) => setField('description', e.target.value)} placeholder="What does this rule detect?" rows={3} className={`${inputCls} resize-none`} />
+                  <label htmlFor="rule-description" className={labelCls}>{t('create.metadata.description')}</label>
+                  <textarea id="rule-description" value={def.description} onChange={(e) => setField('description', e.target.value)} placeholder={t('create.metadata.descriptionPlaceholder')} rows={3} className={`${inputCls} resize-none`} />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="rule-severity" className={labelCls}>Severity</label>
+                  <label htmlFor="rule-severity" className={labelCls}>{t('create.metadata.severity')}</label>
                   <select id="rule-severity" value={def.severity} onChange={(e) => setField('severity', e.target.value)} className={inputCls}>
-                    <option value="critical">Critical</option>
-                    <option value="warning">Warning</option>
-                    <option value="info">Info</option>
+                    <option value="critical">{t('create.metadata.severityCritical')}</option>
+                    <option value="warning">{t('create.metadata.severityWarning')}</option>
+                    <option value="info">{t('create.metadata.severityInfo')}</option>
                   </select>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="rule-category" className={labelCls}>Category</label>
-                  <input id="rule-category" type="text" value={def.category} onChange={(e) => setField('category', e.target.value)} placeholder="e.g. prompt_injection_and_hijacking" className={inputCls} />
+                  <label htmlFor="rule-category" className={labelCls}>{t('create.metadata.category')}</label>
+                  <input id="rule-category" type="text" value={def.category} onChange={(e) => setField('category', e.target.value)} placeholder={t('create.metadata.categoryPlaceholder')} className={inputCls} />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="rule-fp-rate" className={labelCls}>False Positive Rate</label>
+                  <label htmlFor="rule-fp-rate" className={labelCls}>{t('create.metadata.fpRate')}</label>
                   <select id="rule-fp-rate" value={def.fp_rate} onChange={(e) => setField('fp_rate', e.target.value)} className={inputCls}>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
+                    <option value="low">{t('create.metadata.fpRateLow')}</option>
+                    <option value="medium">{t('create.metadata.fpRateMedium')}</option>
+                    <option value="high">{t('create.metadata.fpRateHigh')}</option>
                   </select>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="rule-hook-sources" className={labelCls}>Hook Sources</label>
-                  <input id="rule-hook-sources" type="text" value={def.hook_sources} onChange={(e) => setField('hook_sources', e.target.value)} placeholder="e.g. before_tool_call" className={inputCls} />
+                  <label htmlFor="rule-hook-sources" className={labelCls}>{t('create.metadata.hookSources')}</label>
+                  <input id="rule-hook-sources" type="text" value={def.hook_sources} onChange={(e) => setField('hook_sources', e.target.value)} placeholder={t('create.metadata.hookSourcesPlaceholder')} className={inputCls} />
                 </div>
               </div>
 
               {/* Parameters */}
               <div className="bg-surface-container-high rounded-sm p-6 flex flex-col gap-4">
                 <div>
-                  <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">Parameters</h3>
-                  <p className="text-[10px] text-gray-400 mt-1">Typed knobs operators can override. Reference them in the template as <code className="text-gray-300 font-mono">{'{{ .Config.<key> }}'}</code>.</p>
+                  <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">{t('create.parameters.heading')}</h3>
+                  <p className="text-[10px] text-gray-400 mt-1">{t('create.parameters.helpBefore')}<code className="text-gray-300 font-mono">{'{{ .Config.<key> }}'}</code>{t('create.parameters.helpAfter')}</p>
                 </div>
                 <ParamSchemaEditor config={def.config} onChange={(config) => setField('config', config)} />
               </div>
@@ -346,26 +348,26 @@ export default function RuleCreate({ mode = 'create' }) {
               {/* UDFs */}
               <div className="bg-surface-container-high rounded-sm p-6 flex flex-col gap-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">UDFs</h3>
+                  <h3 className="text-[10px] font-bold text-primary tracking-widest uppercase">{t('create.udfs.heading')}</h3>
                   <button
                     type="button"
                     onClick={() => setField('udfs', [...def.udfs, ''])}
                     className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 hover:text-primary transition-colors"
                   >
                     <span className="material-symbols-outlined text-[14px] align-middle">add</span>
-                    Add UDF
+                    {t('create.udfs.add')}
                   </button>
                 </div>
-                {def.udfs.length === 0 && <p className="text-[10px] text-gray-400">Optional CREATE FUNCTION DDL statements this rule depends on.</p>}
+                {def.udfs.length === 0 && <p className="text-[10px] text-gray-400">{t('create.udfs.empty')}</p>}
                 {def.udfs.map((udf, i) => (
                   <div key={i} className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className={labelCls}>UDF {i + 1}</span>
+                      <span className={labelCls}>{t('create.udfs.label', { n: i + 1 })}</span>
                       <button
                         type="button"
                         onClick={() => setField('udfs', def.udfs.filter((_, idx) => idx !== i))}
                         className="text-gray-400 hover:text-error transition-colors"
-                        title="Remove UDF"
+                        title={t('create.udfs.remove')}
                       >
                         <span className="material-symbols-outlined text-[16px] align-middle">delete</span>
                       </button>
@@ -387,7 +389,7 @@ export default function RuleCreate({ mode = 'create' }) {
               {/* Template editor */}
               <div className="flex flex-col bg-surface-container-high rounded-sm overflow-hidden">
                 <div className="bg-surface-container px-6 py-3 flex justify-between items-center">
-                  <span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">SQL Template</span>
+                  <span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">{t('create.sqlTemplate.heading')}</span>
                   <button
                     onClick={handleCompile}
                     disabled={compiling}
@@ -396,7 +398,7 @@ export default function RuleCreate({ mode = 'create' }) {
                     <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>
                       {compiling ? 'hourglass_empty' : 'play_arrow'}
                     </span>
-                    {compiling ? 'Compiling…' : 'Compile preview'}
+                    {compiling ? t('create.sqlTemplate.compiling') : t('create.sqlTemplate.compile')}
                   </button>
                 </div>
                 <div className="h-72 overflow-auto custom-scrollbar bg-surface-container-lowest">
@@ -421,7 +423,7 @@ export default function RuleCreate({ mode = 'create' }) {
               {/* Inline field/definition errors from compile or save */}
               {fieldErrors.length > 0 && (
                 <div className="bg-[#93000a]/20 border border-[#ffb4ab]/20 rounded-sm p-4 space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-error">Validation errors</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-error">{t('create.validationErrors')}</p>
                   {fieldErrors.map((f, i) => (
                     <div key={i} className="text-xs text-error font-mono">
                       {f.parameter ? <code className="text-primary">{f.parameter}</code> : null}
@@ -435,8 +437,8 @@ export default function RuleCreate({ mode = 'create' }) {
               {/* Compile preview (backend-rendered, read-only) */}
               <div className="flex-1 flex flex-col bg-surface-container-high rounded-sm overflow-hidden min-h-[16rem]">
                 <div className="p-4 flex items-baseline gap-3 shrink-0 bg-surface-container">
-                  <h3 className="text-base font-semibold text-gray-100">Compiled SQL</h3>
-                  <span className="text-[10px] text-gray-400">Rendered by the backend from the template + parameter defaults. The browser does not render SQL.</span>
+                  <h3 className="text-base font-semibold text-gray-100">{t('create.compiledSql.heading')}</h3>
+                  <span className="text-[10px] text-gray-400">{t('create.compiledSql.subtitle')}</span>
                 </div>
 
                 {compileError && (
@@ -450,7 +452,7 @@ export default function RuleCreate({ mode = 'create' }) {
                   {renderedSql == null && !compileError ? (
                     <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-400">
                       <span className="material-symbols-outlined text-4xl">terminal</span>
-                      <p className="text-xs">Click "Compile preview" to render the detection SQL.</p>
+                      <p className="text-xs">{t('create.compiledSql.empty')}</p>
                     </div>
                   ) : renderedSql != null ? (
                     <>

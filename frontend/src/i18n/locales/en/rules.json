@@ -52,6 +52,176 @@
       "note": "This will create a detection MV and start monitoring immediately."
     }
   },
+  "create": {
+    "title": {
+      "new": "New Custom Rule",
+      "edit": "Edit Custom Definition"
+    },
+    "subtitle": "Author a parameterized detection: SQL template, typed parameters, and UDFs.",
+    "redeployNote": "If this rule is installed, publishing redeploys its detection view and in-flight stateful windows reset.",
+    "versionUnchanged": "Bump the version to publish an edit (current: {{version}}).",
+    "save": {
+      "saving": "Saving…",
+      "bumpVersion": "Bump version to publish",
+      "publishEdit": "Publish edit",
+      "createDefinition": "Create definition"
+    },
+    "saveDisabledReason": {
+      "requiredFields": "Fill in the required fields (name, version, SQL template).",
+      "invalidKey": "Give every parameter a valid key.",
+      "bumpVersion": "Bump the version to publish this edit."
+    },
+    "errors": {
+      "loadFailed": "Failed to load definition",
+      "saveFailed": "Failed to save definition",
+      "bumpVersionGuard": "Bump the version to publish an edit."
+    },
+    "metadata": {
+      "heading": "Rule Metadata",
+      "ruleId": "Rule ID",
+      "ruleIdPlaceholder": "required — lowercase id, e.g. my-rule",
+      "name": "Name",
+      "namePlaceholder": "My Custom Rule",
+      "version": "Version",
+      "versionEditHint": "Bump to publish an edit to an installed definition.",
+      "description": "Description",
+      "descriptionPlaceholder": "What does this rule detect?",
+      "severity": "Severity",
+      "severityCritical": "Critical",
+      "severityWarning": "Warning",
+      "severityInfo": "Info",
+      "category": "Category",
+      "categoryPlaceholder": "e.g. prompt_injection_and_hijacking",
+      "fpRate": "False Positive Rate",
+      "fpRateLow": "Low",
+      "fpRateMedium": "Medium",
+      "fpRateHigh": "High",
+      "hookSources": "Hook Sources",
+      "hookSourcesPlaceholder": "e.g. before_tool_call"
+    },
+    "parameters": {
+      "heading": "Parameters",
+      "helpBefore": "Typed knobs operators can override. Reference them in the template as ",
+      "helpAfter": "."
+    },
+    "udfs": {
+      "heading": "UDFs",
+      "add": "Add UDF",
+      "empty": "Optional CREATE FUNCTION DDL statements this rule depends on.",
+      "label": "UDF {{n}}",
+      "remove": "Remove UDF"
+    },
+    "sqlTemplate": {
+      "heading": "SQL Template",
+      "compile": "Compile preview",
+      "compiling": "Compiling…"
+    },
+    "validationErrors": "Validation errors",
+    "compiledSql": {
+      "heading": "Compiled SQL",
+      "subtitle": "Rendered by the backend from the template + parameter defaults. The browser does not render SQL.",
+      "empty": "Click \"Compile preview\" to render the detection SQL.",
+      "compileFailed": "Compile failed"
+    }
+  },
+  "detail": {
+    "notFound": "Rule not found.",
+    "confirmToggle": {
+      "title": "{{action}} Rule",
+      "disableNote": "This drops the detection materialized view; re-enabling redeploys it from the current configuration.",
+      "enableNote": "This deploys the detection materialized view and starts monitoring."
+    },
+    "upgradeModal": {
+      "title": "Upgrade {{name}} → {{version}}",
+      "conflictsHeading": "Conflicts (block upgrade)",
+      "warningsHeading": "Warnings",
+      "compatible": "Compatible upgrade — all current overrides are preserved.",
+      "close": "Close"
+    },
+    "cloneModal": {
+      "title": "Clone as custom rule",
+      "bodyBefore": "Creates an editable copy of ",
+      "bodyAfter": " with rescoped UDF names.",
+      "newIdLabel": "New rule ID",
+      "newIdPlaceholder": "e.g. rp-003-custom",
+      "nameLabel": "Rule name",
+      "namePlaceholder": "e.g. Score Rule (custom)",
+      "errors": {
+        "idNameRequired": "ID and name are required",
+        "alreadyExists": "A rule \"{{id}}\" already exists.",
+        "cloneFailed": "Clone failed",
+        "deleteFailed": "Delete failed"
+      },
+      "existsHint": "Change the ID above to clone under a new name, or:",
+      "openExisting": "Open existing definition",
+      "deleteDraft": "Delete existing draft",
+      "working": "Working…",
+      "clone": "Clone",
+      "deleteConfirm": "Delete the existing definition \"{{id}}\"? This permanently removes the uninstalled custom rule."
+    },
+    "badges": {
+      "mvFailed": "MV {{state}}"
+    },
+    "actions": {
+      "upgrade": "Upgrade",
+      "upgradeTo": "Upgrade to {{version}}",
+      "upgrading": "Upgrading…",
+      "editDefinition": "Edit definition",
+      "cloneAsCustom": "Clone as custom",
+      "uninstall": "Uninstall",
+      "uninstallConfirmPrompt": "Are you sure?",
+      "confirm": "Confirm"
+    },
+    "blockPolicy": {
+      "heading": "Block Policy",
+      "hold": "When this rule fires, AgentGuard will pause the agent and wait for human approval.",
+      "autoBlock": "When this rule fires, AgentGuard will block the tool call immediately without prompting.",
+      "logOnly": "When this rule fires, the threat is logged and surfaced in the UI but the agent is not blocked.",
+      "updateFailed": "Failed to update policy"
+    },
+    "definition": {
+      "heading": "Rule Definition",
+      "ruleId": "Rule ID",
+      "version": "Version",
+      "category": "Category",
+      "severity": "Severity",
+      "fpRate": "False Positive Rate",
+      "hookSources": "Hook Sources",
+      "requiredTelemetry": "Required Telemetry"
+    },
+    "configLock": {
+      "title": "Upgrade before configuring",
+      "bodyNoVersion": "A newer version of this rule is available, and its parameters may have changed — configuration is locked until you upgrade. Upgrading preserves your compatible overrides.",
+      "bodyWithVersion": "A newer version ({{version}}) of this rule is available, and its parameters may have changed — configuration is locked until you upgrade. Upgrading preserves your compatible overrides.",
+      "upgradeButton": "Upgrade…",
+      "upgradeButtonTo": "Upgrade to {{version}}…"
+    },
+    "tabs": {
+      "configuration": "Configuration",
+      "description": "Description",
+      "sql": "Detection SQL",
+      "udfs": "UDFs",
+      "detections": "Recent Detections",
+      "detectionsBadgeLabel": "24h",
+      "badgeCount": "({{count}})",
+      "badgeCountWithLabel": "({{label}}: {{count}})"
+    },
+    "sqlTab": {
+      "readonlyNote": "Read-only — rendered from the definition template and current parameter values.",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
+    "udfsTab": {
+      "empty": "This rule does not define any UDFs.",
+      "badge": "UDF"
+    },
+    "errors": {
+      "loadFailed": "Failed to load rule",
+      "toggleFailed": "Toggle failed",
+      "uninstallFailed": "Uninstall failed",
+      "upgradeFailed": "Upgrade failed"
+    }
+  },
   "actions": {
     "exportCatalog": "Export Catalog",
     "importCatalog": "Import Catalog",

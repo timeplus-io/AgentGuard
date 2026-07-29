@@ -15,6 +15,7 @@ export const REPRESENTATIVE = [
   ['agents', 'list.title'],
   ['threats', 'title'],
   ['rules', 'list.title'],
+  ['rules', 'detail.definition.heading'],
 ]
 
 describe('zh-CN is actually translated', () => {
