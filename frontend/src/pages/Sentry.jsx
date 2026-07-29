@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
@@ -53,38 +54,41 @@ function approvalFromRow(raw) {
 
 // approvalStatusLine renders one compact line describing a resolved
 // GatedWrite decision (used in both the live card and replayed tool rows).
-function approvalStatusLine(a) {
+// t is passed in (not a component) — the em-dash-prefixed reason is
+// operator-authored free text and is never translated.
+function approvalStatusLine(a, t) {
   if (!a || !a.decision) return null
   const label = {
-    approved: `approved by ${a.decided_by || a.decidedBy || 'operator'}`,
-    denied: `denied by ${a.decided_by || a.decidedBy || 'operator'}`,
-    timeout: 'timed out — not executed',
-    abandoned: 'abandoned — not executed',
+    approved: t('approval.status.approvedBy', { by: a.decided_by || a.decidedBy || t('approval.status.operator') }),
+    denied: t('approval.status.deniedBy', { by: a.decided_by || a.decidedBy || t('approval.status.operator') }),
+    timeout: t('approval.status.timeout'),
+    abandoned: t('approval.status.abandoned'),
   }[a.decision] || a.decision
   const reason = a.reason ? ` — ${a.reason}` : ''
   const cls = a.decision === 'approved' ? 'text-primary' : 'text-error'
-  return <span className={`text-[10px] ${cls}`}>write {label}{reason}</span>
+  return <span className={`text-[10px] ${cls}`}>{label}{reason}</span>
 }
 
 // ApprovalCard renders a GatedWrite proposal: the tool + verbatim args the
 // model wants to run, with Approve / Deny while pending, then the decision
 // state and (if approved) the execution result.
 function ApprovalCard({ item, onDecide }) {
+  const { t } = useTranslation('sentry')
   const pending = !item.decision
   return (
     <div className="bg-surface-container rounded-sm text-xs max-w-2xl">
       <div className="px-4 py-2.5 flex items-center gap-2 text-gray-100">
         <span className="material-symbols-outlined text-sm shrink-0 text-primary">gavel</span>
-        <span className="font-mono text-[11px]">{item.name || 'write action'}</span>
+        <span className="font-mono text-[11px]">{item.name || t('approval.defaultName')}</span>
         {pending
-          ? <span className="text-[10px] text-primary animate-pulse ml-1">awaiting your approval…</span>
-          : <span className="ml-1">{approvalStatusLine(item)}</span>}
+          ? <span className="text-[10px] text-primary animate-pulse ml-1">{t('approval.awaiting')}</span>
+          : <span className="ml-1">{approvalStatusLine(item, t)}</span>}
       </div>
       <div className="px-4 pb-3 flex flex-col gap-2">
         <div>
-          <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Proposed action</p>
+          <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{t('approval.proposedAction')}</p>
           <code className="block bg-surface-container-high rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono">
-            {prettyJSON(item.args) || '(no arguments)'}
+            {prettyJSON(item.args) || t('approval.noArguments')}
           </code>
         </div>
         {pending && (
@@ -94,20 +98,20 @@ function ApprovalCard({ item, onDecide }) {
               disabled={item.deciding}
               className="px-4 py-1.5 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-[0.98] transition-transform disabled:opacity-50"
             >
-              Approve
+              {t('approval.approve')}
             </button>
             <button
               onClick={() => onDecide(item, false)}
               disabled={item.deciding}
               className="px-4 py-1.5 text-xs font-semibold rounded-sm bg-surface-container-high text-gray-100 hover:text-error disabled:opacity-50"
             >
-              Deny
+              {t('approval.deny')}
             </button>
           </div>
         )}
         {item.decision === 'approved' && item.result != null && (
           <div>
-            <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Result</p>
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{t('card.resultLabel')}</p>
             <code className="block bg-surface-container-high rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono max-h-64 overflow-y-auto">
               {prettyJSON(item.result)}
             </code>
@@ -119,23 +123,24 @@ function ApprovalCard({ item, onDecide }) {
 }
 
 function ToolCard({ item }) {
+  const { t } = useTranslation('sentry')
   return (
     <details className="bg-surface-container rounded-sm text-xs max-w-2xl">
       <summary className="cursor-pointer select-none list-none px-4 py-2.5 flex items-center gap-2 text-gray-400 hover:text-gray-100">
         <span className="material-symbols-outlined text-sm shrink-0">settings</span>
-        <span className="font-mono text-[11px]">{item.name || 'tool'}</span>
-        {item.pending && <span className="text-[10px] text-gray-400 animate-pulse ml-1">running…</span>}
-        {item.approval && <span className="ml-1">{approvalStatusLine(item.approval)}</span>}
+        <span className="font-mono text-[11px]">{item.name || t('card.toolFallbackName')}</span>
+        {item.pending && <span className="text-[10px] text-gray-400 animate-pulse ml-1">{t('card.running')}</span>}
+        {item.approval && <span className="ml-1">{approvalStatusLine(item.approval, t)}</span>}
         {item.truncated && (
           <span className="ml-auto text-[9px] font-semibold uppercase tracking-widest rounded-full px-2 py-0.5 bg-error/10 text-error whitespace-nowrap">
-            truncated
+            {t('card.truncated')}
           </span>
         )}
       </summary>
       <div className="px-4 pb-3 flex flex-col gap-2">
         {item.args && (
           <div>
-            <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Args</p>
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{t('card.argsLabel')}</p>
             <code className="block bg-surface-container-high rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono">
               {prettyJSON(item.args)}
             </code>
@@ -143,7 +148,7 @@ function ToolCard({ item }) {
         )}
         {item.result != null && (
           <div>
-            <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Result</p>
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{t('card.resultLabel')}</p>
             <code className="block bg-surface-container-high rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono max-h-64 overflow-y-auto">
               {prettyJSON(item.result)}
             </code>
@@ -157,11 +162,12 @@ function ToolCard({ item }) {
 // ThinkingCard renders streamed model reasoning (anthropic adaptive
 // thinking, summarized display) as a dim, collapsed-by-default block.
 function ThinkingCard({ item }) {
+  const { t } = useTranslation('sentry')
   return (
     <details className="max-w-2xl">
       <summary className="cursor-pointer select-none list-none text-[11px] text-gray-500 flex items-center gap-1.5">
         <span className="material-symbols-outlined text-sm">psychology</span>
-        Reasoning{item.pending && <span className="animate-pulse">…</span>}
+        {t('thinking.label')}{item.pending && <span className="animate-pulse">…</span>}
       </summary>
       <p className="mt-1 pl-5 text-[11px] text-gray-500 italic whitespace-pre-wrap break-words">{item.content}</p>
     </details>
@@ -196,9 +202,8 @@ function MessageBubble({ item }) {
   )
 }
 
-const EMPTY_STATE_TEXT = 'Ask Sentry about your agents, threats, cost, rules, or DLP findings.'
-
 export default function Sentry() {
+  const { t } = useTranslation('sentry')
   const { can } = useAuth()
   const canWrite = can(writeKey('sentry')) // false for a view-only role
   const [status, setStatus] = useState(null)
@@ -233,14 +238,14 @@ export default function Sentry() {
   const loadConversations = useCallback(() => {
     api.sentryConversations()
       .then(d => { setConversations(d.conversations || []); setConversationsError(null) })
-      .catch(err => setConversationsError(err?.message || 'Failed to load conversations'))
-  }, [])
+      .catch(err => setConversationsError(err?.message || t('errors.loadConversationsFailed')))
+  }, [t])
 
   useEffect(() => {
     api.sentryStatus()
       .then(s => { setStatus(s); setStatusError(null) })
-      .catch(err => setStatusError(err?.message || 'Failed to load Sentry status'))
-  }, [])
+      .catch(err => setStatusError(err?.message || t('errors.loadStatusFailed')))
+  }, [t])
 
   useEffect(() => {
     if (status?.enabled) loadConversations()
@@ -285,7 +290,7 @@ export default function Sentry() {
       })
       .catch(err => {
         if (gen !== convGenRef.current) return // superseded — swallow the stale error too
-        setConvError(err?.message || 'Failed to load conversation')
+        setConvError(err?.message || t('errors.loadConversationFailed'))
       })
       .finally(() => {
         if (gen === convGenRef.current) setLoadingConv(false)
@@ -303,13 +308,13 @@ export default function Sentry() {
 
   async function deleteConversation(id, e) {
     e.stopPropagation()
-    if (!window.confirm('Delete this conversation? It will be removed from your list.')) return
+    if (!window.confirm(t('rail.deleteConfirm'))) return
     try {
       await api.sentryDelete(id)
       if (activeId === id) newConversation()
       loadConversations()
     } catch (err) {
-      setConversationsError(err?.message || 'Failed to delete conversation')
+      setConversationsError(err?.message || t('errors.deleteConversationFailed'))
     }
   }
 
@@ -328,7 +333,7 @@ export default function Sentry() {
       await api.sentryRename(id, title)
       loadConversations()
     } catch (err) {
-      setConversationsError(err?.message || 'Failed to rename conversation')
+      setConversationsError(err?.message || t('errors.renameConversationFailed'))
     }
   }
 
@@ -341,7 +346,7 @@ export default function Sentry() {
       await api.sentryDecideApproval(item.proposalId, approve)
     } catch (err) {
       setMessages(prev => prev.map(m => m.id === item.id ? { ...m, deciding: false } : m))
-      setConvError(err?.message || 'Failed to submit decision')
+      setConvError(err?.message || t('errors.decisionFailed'))
     }
   }
 
@@ -448,7 +453,7 @@ export default function Sentry() {
           case 'error':
             finalizeOpenBubble()
             finalizeOpenThinking()
-            setMessages(prev => [...prev, { id: localId('error'), role: 'error', content: ev.message || 'Sentry error' }])
+            setMessages(prev => [...prev, { id: localId('error'), role: 'error', content: ev.message || t('errors.genericChatError') }])
             break
 
           default:
@@ -459,7 +464,7 @@ export default function Sentry() {
       finalizeOpenBubble()
       finalizeOpenThinking() // never leave the reasoning card pulsing after an error/abort (#237)
       if (err?.name !== 'AbortError') {
-        setMessages(prev => [...prev, { id: localId('error'), role: 'error', content: err?.message || 'Chat request failed' }])
+        setMessages(prev => [...prev, { id: localId('error'), role: 'error', content: err?.message || t('errors.chatRequestFailed') }])
       }
     } finally {
       setStreaming(false)
@@ -481,7 +486,7 @@ export default function Sentry() {
   }
 
   const provisionWarning = status?.enabled && status.provisioned === false
-    ? (status.config_error || status.tables_check_error || 'Sentry streams are not provisioned yet.')
+    ? (status.config_error || status.tables_check_error || t('provisionWarning.default'))
     : null
 
   // provisionNow recovers a deployment where Sentry was enabled without its
@@ -496,7 +501,7 @@ export default function Sentry() {
       setStatusError(null)
       loadConversations()
     } catch (err) {
-      setStatusError(err?.message || 'Provisioning failed')
+      setStatusError(err?.message || t('errors.provisioningFailed'))
     } finally {
       setProvisioning(false)
     }
@@ -515,8 +520,8 @@ export default function Sentry() {
       <main className="pl-sidebar pt-16 h-screen overflow-hidden flex flex-col">
         <div className="px-8 pt-8 shrink-0">
           <PageHeader
-            title="Sentry"
-            subtitle="Chat with AgentGuard's own security analyst agent — ask about threats, rules, cost, and DLP findings across your fleet."
+            title={t('title')}
+            subtitle={t('subtitle')}
             actions={status?.enabled && status?.model && (
               <span className="text-[11px] text-gray-400 self-end font-mono">{status.model}</span>
             )}
@@ -529,14 +534,14 @@ export default function Sentry() {
             {statusError}
           </section>
         ) : !status ? (
-          <p className="mx-8 text-xs text-gray-400">Loading…</p>
+          <p className="mx-8 text-xs text-gray-400">{t('loading')}</p>
         ) : !status.enabled ? (
           <div className="flex-1 flex items-center justify-center px-8 pb-8">
             <div className="max-w-md text-center bg-surface-container rounded-sm p-8 flex flex-col items-center gap-3">
               <span className="material-symbols-outlined text-4xl text-gray-400">shield_person</span>
-              <h3 className="text-sm font-semibold text-gray-100">Sentry is disabled</h3>
+              <h3 className="text-sm font-semibold text-gray-100">{t('disabled.heading')}</h3>
               <p className="text-xs text-gray-400">
-                Enable <code className="font-mono text-primary">sentry.enabled</code> in Settings and provision to start chatting with Sentry.
+                {t('disabled.hintPre')}<code className="font-mono text-primary">sentry.enabled</code>{t('disabled.hintPost')}
               </p>
             </div>
           </div>
@@ -551,7 +556,7 @@ export default function Sentry() {
                   disabled={provisioning}
                   className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-[0.98] transition-transform disabled:opacity-50"
                 >
-                  {provisioning ? 'Provisioning…' : 'Provision now'}
+                  {provisioning ? t('provisionWarning.provisioning') : t('provisionWarning.provisionNow')}
                 </button>
               </div>
             )}
@@ -565,14 +570,14 @@ export default function Sentry() {
                     className="w-full px-4 py-2.5 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     <span className="material-symbols-outlined text-base">add</span>
-                    New conversation
+                    {t('rail.newConversation')}
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-2 pb-3 flex flex-col gap-1 custom-scrollbar">
                   {conversationsError ? (
                     <p className="px-2 py-2 text-[11px] text-error">{conversationsError}</p>
                   ) : conversations.length === 0 ? (
-                    <p className="px-2 py-2 text-[11px] text-gray-400">No conversations yet.</p>
+                    <p className="px-2 py-2 text-[11px] text-gray-400">{t('rail.empty')}</p>
                   ) : conversations.map(c => (
                     <div
                       key={c.conversation_id}
@@ -599,17 +604,17 @@ export default function Sentry() {
                         />
                       ) : (
                         <>
-                          <span className="flex-1 min-w-0 truncate">{c.title || 'Untitled conversation'}</span>
+                          <span className="flex-1 min-w-0 truncate">{c.title || t('rail.untitled')}</span>
                           <button
                             onClick={e => startRename(c, e)}
-                            title="Rename conversation"
+                            title={t('rail.renameTitle')}
                             className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-100 shrink-0"
                           >
                             <span className="material-symbols-outlined text-sm">edit</span>
                           </button>
                           <button
                             onClick={e => deleteConversation(c.conversation_id, e)}
-                            title="Delete conversation"
+                            title={t('rail.deleteTitle')}
                             className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-error shrink-0"
                           >
                             <span className="material-symbols-outlined text-sm">delete</span>
@@ -625,16 +630,17 @@ export default function Sentry() {
               <section className="flex-1 flex flex-col min-w-0 bg-surface-container-high rounded-sm overflow-hidden">
                 <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-4 custom-scrollbar">
                   {loadingConv ? (
-                    <p className="text-xs text-gray-400">Loading conversation…</p>
+                    <p className="text-xs text-gray-400">{t('chat.loadingConversation')}</p>
                   ) : convError ? (
                     <p className="text-xs text-error">{convError}</p>
                   ) : messages.length === 0 ? (
                     <div className="flex flex-col gap-1.5">
-                      <p className="text-xs text-gray-400">{EMPTY_STATE_TEXT}</p>
+                      <p className="text-xs text-gray-400">{t('chat.emptyState')}</p>
                       {needsChatModelHint && (
                         <p className="text-[11px] text-amber-400">
-                          Sentry has no chat model configured — set it in{' '}
-                          <Link to="/settings" className="underline hover:text-amber-300">Settings → Sentry Agent</Link>.
+                          {t('chat.needsChatModel.pre')}
+                          <Link to="/settings" className="underline hover:text-amber-300">{t('chat.needsChatModel.linkLabel')}</Link>
+                          {t('chat.needsChatModel.post')}
                         </p>
                       )}
                     </div>
@@ -660,7 +666,7 @@ export default function Sentry() {
                           onKeyDown={handleKeyDown}
                           disabled={streaming}
                           rows={2}
-                          placeholder="Ask Sentry…"
+                          placeholder={t('chat.composerPlaceholder')}
                           className="flex-1 bg-surface-container-high text-gray-100 text-sm rounded-sm px-4 py-2.5 placeholder-gray-500 resize-none focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-60"
                         />
                         <button
@@ -668,14 +674,14 @@ export default function Sentry() {
                           disabled={streaming || !input.trim()}
                           className="px-5 py-2.5 text-xs font-semibold rounded bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-95 transition-transform disabled:opacity-50 whitespace-nowrap"
                         >
-                          {streaming ? 'Sending…' : 'Send'}
+                          {streaming ? t('chat.sending') : t('chat.send')}
                         </button>
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-1.5">Ctrl/Cmd+Enter to send · Enter for a new line</p>
+                      <p className="text-[10px] text-gray-400 mt-1.5">{t('chat.sendHint')}</p>
                     </>
                   ) : (
                     <p className="text-xs text-gray-400 text-center py-2">
-                      You have read-only access to Sentry. Ask an administrator for write access to start conversations.
+                      {t('chat.readOnlyHint')}
                     </p>
                   )}
                 </div>

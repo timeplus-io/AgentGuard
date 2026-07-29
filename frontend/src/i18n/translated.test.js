@@ -19,6 +19,7 @@ export const REPRESENTATIVE = [
   ['rules', 'config.resetAll'],
   ['cost', 'title'],
   ['dlp', 'title'],
+  ['sentry', 'chat.composerPlaceholder'],
 ]
 
 describe('zh-CN is actually translated', () => {

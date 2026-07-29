@@ -1,0 +1,166 @@
+{
+  "title": "Sentry",
+  "subtitle": "与 AgentGuard 自带的安全分析代理对话——询问关于威胁、规则、成本以及 DLP 发现结果的问题，覆盖你的整个代理集群。",
+  "loading": "加载中…",
+  "disabled": {
+    "heading": "Sentry 已禁用",
+    "hintPre": "请在设置中启用 ",
+    "hintPost": " 并完成配置，即可开始与 Sentry 对话。"
+  },
+  "provisionWarning": {
+    "default": "Sentry 数据流尚未完成配置。",
+    "provisioning": "配置中…",
+    "provisionNow": "立即配置"
+  },
+  "rail": {
+    "newConversation": "新建对话",
+    "empty": "暂无对话。",
+    "untitled": "未命名对话",
+    "renameTitle": "重命名对话",
+    "deleteTitle": "删除对话",
+    "deleteConfirm": "删除该对话？它将从你的列表中移除。"
+  },
+  "chat": {
+    "loadingConversation": "正在加载对话…",
+    "emptyState": "向 Sentry 询问关于你的代理、威胁、成本、规则或 DLP 发现结果的问题。",
+    "needsChatModel": {
+      "pre": "Sentry 尚未配置对话模型——请在",
+      "linkLabel": "设置 → Sentry 代理",
+      "post": "中进行设置。"
+    },
+    "composerPlaceholder": "向 Sentry 提问…",
+    "send": "发送",
+    "sending": "发送中…",
+    "sendHint": "Ctrl/Cmd+Enter 发送 · Enter 换行",
+    "readOnlyHint": "你对 Sentry 拥有只读权限。请联系管理员获取写入权限以开始对话。"
+  },
+  "card": {
+    "argsLabel": "参数",
+    "resultLabel": "结果",
+    "toolFallbackName": "工具",
+    "running": "运行中…",
+    "truncated": "已截断"
+  },
+  "thinking": {
+    "label": "推理过程"
+  },
+  "approval": {
+    "defaultName": "写入操作",
+    "awaiting": "等待你的批准…",
+    "proposedAction": "拟执行操作",
+    "noArguments": "（无参数）",
+    "approve": "批准",
+    "deny": "拒绝",
+    "status": {
+      "approvedBy": "写入操作已由 {{by}} 批准",
+      "deniedBy": "写入操作已由 {{by}} 拒绝",
+      "operator": "操作员",
+      "timeout": "写入操作已超时——未执行",
+      "abandoned": "写入操作已放弃——未执行"
+    }
+  },
+  "errors": {
+    "loadStatusFailed": "加载 Sentry 状态失败",
+    "loadConversationsFailed": "加载对话列表失败",
+    "loadConversationFailed": "加载对话失败",
+    "deleteConversationFailed": "删除对话失败",
+    "renameConversationFailed": "重命名对话失败",
+    "decisionFailed": "提交决定失败",
+    "chatRequestFailed": "对话请求失败",
+    "provisioningFailed": "配置失败",
+    "genericChatError": "Sentry 出错"
+  },
+  "config": {
+    "intro": {
+      "pre": "实时配置存储在 ",
+      "post": " 流中。修改立即生效——无需重启或重新配置。（服务器配置中的启动默认值仅在首次配置时用于初始化。）"
+    },
+    "loadingRuntime": "正在加载运行时配置…",
+    "errors": {
+      "loadFailed": "加载 Sentry 配置失败",
+      "loadErrSuffix": " —— 只有在 Sentry 配置完成后才能使用运行时配置。",
+      "saveFailed": "保存失败",
+      "testFailed": "测试失败",
+      "retry": "重试"
+    },
+    "common": {
+      "saving": "保存中…",
+      "saved": "已保存",
+      "baseUrlLabel": "基础 URL",
+      "apiKeyLabel": "API 密钥",
+      "apiKeySetSuffix": "· •••• 已设置",
+      "apiKeyPlaceholderSet": "••••••（保持不变）",
+      "apiKeyPlaceholderUnset": "无",
+      "modelLabel": "模型",
+      "modelPlaceholder": "模型 ID"
+    },
+    "chat": {
+      "heading": "对话模型",
+      "apiTypeLabel": "API 类型",
+      "apiTypeOpenai": "兼容 OpenAI（Chat Completions）",
+      "apiTypeAnthropic": "Anthropic（Claude，含 Bedrock）",
+      "bedrockHint": {
+        "part1": "对于 AWS Bedrock：基础 URL 为 ",
+        "part2": "（注意路径是 ",
+        "part3": "，而不是 ",
+        "part4": "），API 密钥 = 你的 Bedrock API 密钥，模型 = 裸 Bedrock Claude ID（例如 ",
+        "part5": "）。请选择该模型在当前区域可用且已启用访问权限的区域（",
+        "part6": " 是安全的默认选项；Mantle 不支持 ",
+        "part7": "/",
+        "part8": " 跨区域 ID）。必须支持工具调用。"
+      },
+      "baseUrlPlaceholder": "http://localhost:4000/v1",
+      "timeoutLabel": "超时时间（秒）",
+      "fields": {
+        "maxTokens": "最大 token 数",
+        "maxIterations": "最大迭代次数",
+        "turnTokenBudget": "单轮 token 预算",
+        "sqlTimeoutMs": "SQL 超时（毫秒）",
+        "sqlMaxRows": "SQL 最大行数",
+        "toolResultMaxBytes": "工具结果最大字节数",
+        "ceilingSuffix": "≤{{value}}"
+      },
+      "providerDefault": "提供方默认值",
+      "thinkingLabel": "思考模式",
+      "thinkingAdaptive": "自适应（流式输出推理过程）",
+      "effortLabel": "投入程度",
+      "promptCachingLabel": "提示词缓存",
+      "agentguardToolsTitle": "AgentGuard 技能与工具",
+      "agentguardToolsDescription": " —— 允许 Sentry 读取并操作 AgentGuard 功能（威胁、挂起、规则、成本、DLP；写入操作仍需在对话中批准）。关闭时，Sentry 是一个通用的 Timeplus SQL 分析助手。",
+      "saveButton": "保存对话配置"
+    },
+    "memory": {
+      "heading": "记忆（嵌入）",
+      "subheading": "——供 Sentry 记忆功能使用（第二阶段）",
+      "embeddingDimLabel": "嵌入维度",
+      "disabledHint": "已禁用——Sentry 记忆功能（第二阶段）尚未配置嵌入端点。",
+      "saveButton": "保存记忆配置"
+    },
+    "banner": {
+      "savedChat": "对话配置已保存。更改将在 Sentry 下一轮对话中生效——无需重新配置。",
+      "savedMemory": "记忆配置已保存。更改将在 Sentry 下一轮对话中生效——无需重新配置。"
+    },
+    "test": {
+      "button": "测试连接",
+      "hint": "测试上方的值（而非已保存的值）——对话端点始终测试，仅在启用记忆功能时测试嵌入端点。",
+      "testing": "测试中…",
+      "checks": {
+        "reachableSkipped": "— 可访问性：通过对话（Anthropic）检测",
+        "reachableOk": "✓ 可访问",
+        "reachableFail": "✗ 可访问性：{{error}}",
+        "chatOk": "✓ 对话（工具调用：{{toolCallName}}）",
+        "chatOkDefault": "正常",
+        "chatFail": "✗ 对话：{{error}}",
+        "chatFailDefault": "失败",
+        "embeddingSkipped": "— 嵌入：已跳过（记忆功能已禁用）",
+        "embeddingOk": "✓ 嵌入维度 {{dim}}",
+        "embeddingFail": "✗ 嵌入：{{error}}",
+        "embeddingFailDefault": "失败"
+      },
+      "simple": {
+        "ok": "端点可访问",
+        "fail": "失败：{{error}}"
+      }
+    }
+  }
+}

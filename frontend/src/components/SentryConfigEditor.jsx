@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
 import Toggle from './Toggle'
+import { formatNumber } from '../i18n/format'
 
 // Chat budget knobs and the clamp ceilings the backend applies (llm.go
 // applyDefaults) — shown as hints so an operator doesn't type a value that
-// gets silently clamped.
+// gets silently clamped. labelKey resolves against the sentry namespace.
 const CHAT_NUMBER_FIELDS = [
-  { key: 'max_tokens', label: 'Max tokens', ceiling: 16384 },
-  { key: 'max_iterations', label: 'Max iterations', ceiling: 32 },
-  { key: 'turn_token_budget', label: 'Turn token budget', ceiling: 256000 },
-  { key: 'sql_timeout_ms', label: 'SQL timeout (ms)', ceiling: 55000 },
-  { key: 'sql_max_rows', label: 'SQL max rows', ceiling: 5000 },
-  { key: 'tool_result_max_bytes', label: 'Tool result max bytes', ceiling: 131072 },
+  { key: 'max_tokens', labelKey: 'config.chat.fields.maxTokens', ceiling: 16384 },
+  { key: 'max_iterations', labelKey: 'config.chat.fields.maxIterations', ceiling: 32 },
+  { key: 'turn_token_budget', labelKey: 'config.chat.fields.turnTokenBudget', ceiling: 256000 },
+  { key: 'sql_timeout_ms', labelKey: 'config.chat.fields.sqlTimeoutMs', ceiling: 55000 },
+  { key: 'sql_max_rows', labelKey: 'config.chat.fields.sqlMaxRows', ceiling: 5000 },
+  { key: 'tool_result_max_bytes', labelKey: 'config.chat.fields.toolResultMaxBytes', ceiling: 131072 },
 ]
 
 const inputCls =
@@ -56,6 +58,7 @@ function buildDraft(byKey) {
 }
 
 export default function SentryConfigEditor({ reloadToken = 0 }) {
+  const { t } = useTranslation('sentry')
   const [byKey, setByKey] = useState(null)
   const [draft, setDraft] = useState(null)
   const [dirty, setDirty] = useState(() => new Set())
@@ -94,8 +97,8 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
         })
         setLoadErr(null)
       })
-      .catch((e) => setLoadErr(e?.message || 'Failed to load Sentry config'))
-  }, [])
+      .catch((e) => setLoadErr(e?.message || t('config.errors.loadFailed')))
+  }, [t])
 
   // reloadToken changes when the Settings save bar writes config-file keys
   // (e.g. enabling Sentry, which provisions the streams, #226) — refetch so
@@ -153,11 +156,11 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
       await api.putSentryConfig(key, buildValue(key))
       setBanner({
         type: 'ok',
-        msg: `${key === 'chat' ? 'Chat' : 'Memory'} config saved. Changes take effect on the next Sentry turn — no re-provision.`,
+        msg: key === 'chat' ? t('config.banner.savedChat') : t('config.banner.savedMemory'),
       })
       load(key) // refresh only the saved panel; the other panel's unsaved edits survive (#237)
     } catch (e) {
-      setBanner({ type: 'err', msg: e?.message || 'Save failed' })
+      setBanner({ type: 'err', msg: e?.message || t('config.errors.saveFailed') })
     } finally {
       setSaving(null)
     }
@@ -181,7 +184,7 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
       })
       setTest(r)
     } catch (e) {
-      setTest({ ok: false, error: e?.message || 'test failed' })
+      setTest({ ok: false, error: e?.message || t('config.errors.testFailed') })
     }
   }
 
@@ -189,66 +192,65 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
     return (
       <div className="flex items-center gap-3">
         <p className="text-xs text-error flex-1 min-w-0">
-          {loadErr} — runtime config is available only after Sentry is provisioned.
+          {loadErr}{t('config.errors.loadErrSuffix')}
         </p>
         <button
           onClick={load}
           className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-sm bg-surface-container-high text-gray-100 hover:text-primary"
         >
-          Retry
+          {t('config.errors.retry')}
         </button>
       </div>
     )
   }
-  if (!draft) return <p className="text-xs text-gray-400">Loading runtime config…</p>
+  if (!draft) return <p className="text-xs text-gray-400">{t('config.loadingRuntime')}</p>
 
   return (
     <div className="space-y-6">
       <p className="text-xs text-gray-400">
-        Live configuration stored in the <code className="font-mono text-primary">agentguard_sentry_config</code> stream.
-        Edits apply immediately — no restart or re-provision. (Boot defaults in the server config only seed these on first provision.)
+        {t('config.intro.pre')}<code className="font-mono text-primary">agentguard_sentry_config</code>{t('config.intro.post')}
       </p>
 
       {/* Chat model */}
       <div>
-        <h4 className="text-sm font-medium text-gray-100 mb-2">Chat model</h4>
-        <label className="space-y-1 block mb-3"><span className={labelCls}>API type</span>
+        <h4 className="text-sm font-medium text-gray-100 mb-2">{t('config.chat.heading')}</h4>
+        <label className="space-y-1 block mb-3"><span className={labelCls}>{t('config.chat.apiTypeLabel')}</span>
           <select
             className={inputCls}
             value={draft.chat.api_type}
             onChange={(e) => setChat({ api_type: e.target.value })}
           >
-            <option value="openai">OpenAI-compatible (Chat Completions)</option>
-            <option value="anthropic">Anthropic (Claude, incl. Bedrock)</option>
+            <option value="openai">{t('config.chat.apiTypeOpenai')}</option>
+            <option value="anthropic">{t('config.chat.apiTypeAnthropic')}</option>
           </select>
         </label>
         {draft.chat.api_type === 'anthropic' && (
           <p className="text-[11px] text-gray-500 mb-3">
-            For AWS Bedrock: base URL <code>https://bedrock-mantle.&lt;region&gt;.api.aws/anthropic</code>{' '}
-            (note the <code>/anthropic</code> path, not <code>/v1</code>), API key = your Bedrock API key,
-            model = a bare Bedrock Claude id (e.g. <code>anthropic.claude-opus-4-8</code>). Pick a region where the
-            model is in-region available and access-enabled (<code>us-east-1</code> is a safe default; Mantle
-            doesn't do <code>us.</code>/<code>global.</code> cross-region ids). Tool calling is required.
+            {t('config.chat.bedrockHint.part1')}<code>https://bedrock-mantle.&lt;region&gt;.api.aws/anthropic</code>{' '}
+            {t('config.chat.bedrockHint.part2')}<code>/anthropic</code>{t('config.chat.bedrockHint.part3')}<code>/v1</code>
+            {t('config.chat.bedrockHint.part4')}<code>anthropic.claude-opus-4-8</code>{t('config.chat.bedrockHint.part5')}
+            <code>us-east-1</code>{t('config.chat.bedrockHint.part6')}
+            <code>us.</code>{t('config.chat.bedrockHint.part7')}<code>global.</code>{t('config.chat.bedrockHint.part8')}
           </p>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
-          <label className="space-y-1"><span className={labelCls}>Base URL</span>
-            <input className={inputCls} value={draft.chat.base_url} onChange={(e) => setChat({ base_url: e.target.value })} placeholder="http://localhost:4000/v1" />
+          <label className="space-y-1"><span className={labelCls}>{t('config.common.baseUrlLabel')}</span>
+            <input className={inputCls} value={draft.chat.base_url} onChange={(e) => setChat({ base_url: e.target.value })} placeholder={t('config.chat.baseUrlPlaceholder')} />
           </label>
-          <label className="space-y-1"><span className={labelCls}>API key {byKey.chat?.api_key_set && <span className="text-emerald-400 normal-case">· •••• set</span>}</span>
-            <input className={inputCls} type="password" value={draft.chat.api_key} onChange={(e) => setChat({ api_key: e.target.value })} placeholder={byKey.chat?.api_key_set ? '•••••• (unchanged)' : 'none'} />
+          <label className="space-y-1"><span className={labelCls}>{t('config.common.apiKeyLabel')} {byKey.chat?.api_key_set && <span className="text-emerald-400 normal-case">{t('config.common.apiKeySetSuffix')}</span>}</span>
+            <input className={inputCls} type="password" value={draft.chat.api_key} onChange={(e) => setChat({ api_key: e.target.value })} placeholder={byKey.chat?.api_key_set ? t('config.common.apiKeyPlaceholderSet') : t('config.common.apiKeyPlaceholderUnset')} />
           </label>
-          <label className="space-y-1"><span className={labelCls}>Model</span>
-            <input className={inputCls} value={draft.chat.model} onChange={(e) => setChat({ model: e.target.value })} placeholder="model id" />
+          <label className="space-y-1"><span className={labelCls}>{t('config.common.modelLabel')}</span>
+            <input className={inputCls} value={draft.chat.model} onChange={(e) => setChat({ model: e.target.value })} placeholder={t('config.common.modelPlaceholder')} />
           </label>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <label className="space-y-1"><span className={labelCls}>Timeout (s)</span>
+          <label className="space-y-1"><span className={labelCls}>{t('config.chat.timeoutLabel')}</span>
             <input className={inputCls} type="number" value={draft.chat.timeout} onChange={(e) => setChat({ timeout: e.target.value })} />
           </label>
-          {CHAT_NUMBER_FIELDS.map(({ key, label, ceiling }) => (
+          {CHAT_NUMBER_FIELDS.map(({ key, labelKey, ceiling }) => (
             <label key={key} className="space-y-1">
-              <span className={labelCls}>{label} <span className="normal-case text-gray-500">(≤{ceiling.toLocaleString()})</span></span>
+              <span className={labelCls}>{t(labelKey)} <span className="normal-case text-gray-500">({t('config.chat.fields.ceilingSuffix', { value: formatNumber(ceiling) })})</span></span>
               <input
                 className={inputCls}
                 type="number"
@@ -261,15 +263,15 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
 
         {draft.chat.api_type === 'anthropic' && (
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3 items-end">
-            <label className="space-y-1"><span className={labelCls}>Thinking</span>
+            <label className="space-y-1"><span className={labelCls}>{t('config.chat.thinkingLabel')}</span>
               <select className={inputCls} value={draft.chat.thinking} onChange={(e) => setChat({ thinking: e.target.value })}>
-                <option value="">Provider default</option>
-                <option value="adaptive">Adaptive (streams reasoning)</option>
+                <option value="">{t('config.chat.providerDefault')}</option>
+                <option value="adaptive">{t('config.chat.thinkingAdaptive')}</option>
               </select>
             </label>
-            <label className="space-y-1"><span className={labelCls}>Effort</span>
+            <label className="space-y-1"><span className={labelCls}>{t('config.chat.effortLabel')}</span>
               <select className={inputCls} value={draft.chat.effort} onChange={(e) => setChat({ effort: e.target.value })}>
-                <option value="">Provider default</option>
+                <option value="">{t('config.chat.providerDefault')}</option>
                 <option value="low">low</option>
                 <option value="medium">medium</option>
                 <option value="high">high</option>
@@ -279,7 +281,7 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
             </label>
             <label className="flex items-center gap-2 text-xs text-gray-100 pb-1.5">
               <Toggle checked={!draft.chat.prompt_cache_disabled} onChange={(v) => setChat({ prompt_cache_disabled: !v })} />
-              Prompt caching
+              {t('config.chat.promptCachingLabel')}
             </label>
           </div>
         )}
@@ -290,8 +292,8 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
               <Toggle checked={draft.chat.agentguard_tools_enabled} onChange={(v) => setChat({ agentguard_tools_enabled: v })} />
             </span>
             <span>
-              <span className="font-medium">AgentGuard skills &amp; tools</span>
-              <span className="text-gray-500"> — let Sentry read and act on AgentGuard features (threats, holds, rules, cost, DLP; write actions still require in-chat approval). Off: Sentry is a generic Timeplus SQL analyst.</span>
+              <span className="font-medium">{t('config.chat.agentguardToolsTitle')}</span>
+              <span className="text-gray-500">{t('config.chat.agentguardToolsDescription')}</span>
             </span>
           </label>
         </div>
@@ -299,7 +301,7 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
         <div className="mt-4 flex items-center gap-3">
           <button onClick={() => savePanel('chat')} disabled={saving === 'chat' || !dirty.has('chat')}
             className="rounded-sm px-4 py-2 text-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] font-medium disabled:opacity-50">
-            {saving === 'chat' ? 'Saving…' : dirty.has('chat') ? 'Save chat config' : 'Saved'}
+            {saving === 'chat' ? t('config.common.saving') : dirty.has('chat') ? t('config.chat.saveButton') : t('config.common.saved')}
           </button>
         </div>
       </div>
@@ -308,34 +310,34 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
       <div>
         <div className="flex items-center gap-3 mb-2">
           <h4 className="text-sm font-medium text-gray-100">
-            Memory (embedding) <span className="text-[11px] font-normal text-gray-500 normal-case">— used by Sentry memory (Phase 2)</span>
+            {t('config.memory.heading')} <span className="text-[11px] font-normal text-gray-500 normal-case">{t('config.memory.subheading')}</span>
           </h4>
           <Toggle checked={draft.memory.enabled} onChange={(v) => setMemory({ enabled: v })} />
         </div>
 
         {draft.memory.enabled ? (
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <label className="space-y-1"><span className={labelCls}>Base URL</span>
-              <input className={inputCls} value={draft.memory.base_url} onChange={(e) => setMemory({ base_url: e.target.value })} placeholder="http://localhost:4000/v1" />
+            <label className="space-y-1"><span className={labelCls}>{t('config.common.baseUrlLabel')}</span>
+              <input className={inputCls} value={draft.memory.base_url} onChange={(e) => setMemory({ base_url: e.target.value })} placeholder={t('config.chat.baseUrlPlaceholder')} />
             </label>
-            <label className="space-y-1"><span className={labelCls}>API key {byKey.memory?.api_key_set && <span className="text-emerald-400 normal-case">· •••• set</span>}</span>
-              <input className={inputCls} type="password" value={draft.memory.api_key} onChange={(e) => setMemory({ api_key: e.target.value })} placeholder={byKey.memory?.api_key_set ? '•••••• (unchanged)' : 'none'} />
+            <label className="space-y-1"><span className={labelCls}>{t('config.common.apiKeyLabel')} {byKey.memory?.api_key_set && <span className="text-emerald-400 normal-case">{t('config.common.apiKeySetSuffix')}</span>}</span>
+              <input className={inputCls} type="password" value={draft.memory.api_key} onChange={(e) => setMemory({ api_key: e.target.value })} placeholder={byKey.memory?.api_key_set ? t('config.common.apiKeyPlaceholderSet') : t('config.common.apiKeyPlaceholderUnset')} />
             </label>
-            <label className="space-y-1"><span className={labelCls}>Model</span>
-              <input className={inputCls} value={draft.memory.model} onChange={(e) => setMemory({ model: e.target.value })} placeholder="model id" />
+            <label className="space-y-1"><span className={labelCls}>{t('config.common.modelLabel')}</span>
+              <input className={inputCls} value={draft.memory.model} onChange={(e) => setMemory({ model: e.target.value })} placeholder={t('config.common.modelPlaceholder')} />
             </label>
-            <label className="space-y-1"><span className={labelCls}>Embedding dimension</span>
+            <label className="space-y-1"><span className={labelCls}>{t('config.memory.embeddingDimLabel')}</span>
               <input className={inputCls} type="number" value={draft.memory.embedding_dim} onChange={(e) => setMemory({ embedding_dim: e.target.value })} />
             </label>
           </div>
         ) : (
-          <p className="text-[11px] text-gray-500">Disabled — Sentry memory (Phase 2) has no embedding endpoint configured.</p>
+          <p className="text-[11px] text-gray-500">{t('config.memory.disabledHint')}</p>
         )}
 
         <div className="mt-4 flex items-center gap-3">
           <button onClick={() => savePanel('memory')} disabled={saving === 'memory' || !dirty.has('memory')}
             className="rounded-sm px-4 py-2 text-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] font-medium disabled:opacity-50">
-            {saving === 'memory' ? 'Saving…' : dirty.has('memory') ? 'Save memory config' : 'Saved'}
+            {saving === 'memory' ? t('config.common.saving') : dirty.has('memory') ? t('config.memory.saveButton') : t('config.common.saved')}
           </button>
         </div>
       </div>
@@ -343,43 +345,43 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
       {/* Test connection */}
       <div className="bg-gray-900/40 rounded-sm px-4 py-3">
         <div className="flex items-center gap-3 flex-wrap">
-          <button onClick={testConnection} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">Test connection</button>
-          <span className="text-[11px] text-gray-500">Tests the values above (not the saved ones) — chat endpoint always, embedding only when memory is enabled.</span>
+          <button onClick={testConnection} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">{t('config.test.button')}</button>
+          <span className="text-[11px] text-gray-500">{t('config.test.hint')}</span>
         </div>
-        {test?.pending && <p className="text-xs text-gray-400 mt-2">Testing…</p>}
+        {test?.pending && <p className="text-xs text-gray-400 mt-2">{t('config.test.testing')}</p>}
         {test && !test.pending && (
           <div className="text-xs space-y-0.5 mt-2">
             {test.checks ? (
               <>
                 {test.checks.reachable?.skipped ? (
-                  <div className="text-gray-500">— reachable: checked via chat (Anthropic)</div>
+                  <div className="text-gray-500">{t('config.test.checks.reachableSkipped')}</div>
                 ) : (
                   <div className={test.checks.reachable?.ok ? 'text-emerald-400' : 'text-error'}>
-                    {test.checks.reachable?.ok ? '✓ reachable' : `✗ reachable: ${test.checks.reachable?.error || ''}`}
+                    {test.checks.reachable?.ok ? t('config.test.checks.reachableOk') : t('config.test.checks.reachableFail', { error: test.checks.reachable?.error || '' })}
                   </div>
                 )}
                 {test.checks.chat && (
                   <div className={test.checks.chat.ok ? 'text-emerald-400' : 'text-error'}>
                     {test.checks.chat.ok
-                      ? `✓ chat (tool calling: ${test.checks.chat.tool_call_name || 'ok'})`
-                      : `✗ chat: ${test.checks.chat.error || 'failed'}`}
+                      ? t('config.test.checks.chatOk', { toolCallName: test.checks.chat.tool_call_name || t('config.test.checks.chatOkDefault') })
+                      : t('config.test.checks.chatFail', { error: test.checks.chat.error || t('config.test.checks.chatFailDefault') })}
                   </div>
                 )}
                 {test.checks.embedding && (
                   test.checks.embedding.skipped ? (
-                    <div className="text-gray-500">— embedding: skipped (memory disabled)</div>
+                    <div className="text-gray-500">{t('config.test.checks.embeddingSkipped')}</div>
                   ) : (
                     <div className={test.checks.embedding.ok ? 'text-emerald-400' : 'text-error'}>
                       {test.checks.embedding.ok
-                        ? `✓ embedding dim ${test.checks.embedding.dim}`
-                        : `✗ embedding: ${test.checks.embedding.error || 'failed'}`}
+                        ? t('config.test.checks.embeddingOk', { dim: test.checks.embedding.dim })
+                        : t('config.test.checks.embeddingFail', { error: test.checks.embedding.error || t('config.test.checks.embeddingFailDefault') })}
                     </div>
                   )
                 )}
               </>
             ) : (
               <span className={test.ok ? 'text-emerald-400' : 'text-error'}>
-                {test.ok ? 'Endpoint reachable' : `Failed: ${test.error}`}
+                {test.ok ? t('config.test.simple.ok') : t('config.test.simple.fail', { error: test.error })}
               </span>
             )}
           </div>
