@@ -80,7 +80,8 @@ func Registry() []KeyMeta {
 		// ── ui ──
 		{Key: "ui.default_language", Section: "ui", Label: "Default UI language",
 			Description: "Language shown to users who haven't picked one in their browser.",
-			Type:        TypeEnum, EnumValues: []string{"en", "zh-CN"}},
+			Type:        TypeEnum, EnumValues: []string{"en", "zh-CN"},
+			EnvVar: "AGENTGUARD_UI_DEFAULT_LANGUAGE"},
 
 		// ── catalog ──
 		{Key: "catalog.dir", Section: "catalog", Label: "Catalog directory",

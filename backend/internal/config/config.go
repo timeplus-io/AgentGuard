@@ -303,6 +303,7 @@ func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("holds.timeout_seconds", "AGENTGUARD_HOLD_TIMEOUT_SECONDS")
 	_ = v.BindEnv("holds.fail_policy", "AGENTGUARD_HOLDS_FAIL_POLICY")
 	_ = v.BindEnv("holds.disabled", "AGENTGUARD_HOLDS_DISABLED")
+	_ = v.BindEnv("ui.default_language", "AGENTGUARD_UI_DEFAULT_LANGUAGE")
 	_ = v.BindEnv("timeplus.user", "TIMEPLUS_USER")
 	_ = v.BindEnv("timeplus.password", "TIMEPLUS_PASSWORD")
 	_ = v.BindEnv("dlp.enabled", "DLP_ENABLED")
