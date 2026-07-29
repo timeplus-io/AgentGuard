@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api/client'
+import { formatDate } from '../i18n/format'
 
 function formatTs(ts) {
   if (!ts) return '—'
   try {
     const d = new Date(typeof ts === 'string' ? ts.replace(' ', 'T').replace(/\s+UTC$/, 'Z') : ts)
     if (isNaN(d)) return String(ts)
-    return d.toLocaleString()
+    return formatDate(d)
   } catch { return String(ts) }
 }
 
@@ -24,6 +26,7 @@ function JsonBlock({ raw }) {
 }
 
 export default function ActivityDrawer({ event: initialEvent, onClose, onDecided }) {
+  const { t } = useTranslation()
   const [event, setEvent] = useState(initialEvent)
   const [timeline, setTimeline] = useState([])
   const [decideStatus, setDecideStatus] = useState('idle') // idle | pending | done | error
@@ -71,7 +74,7 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/20">
           <div>
-            <h2 className="text-sm font-semibold text-gray-100">Tool Call Detail</h2>
+            <h2 className="text-sm font-semibold text-gray-100">{t('activityDrawer.title')}</h2>
             <p className="text-[10px] font-mono text-gray-400 mt-0.5">{event.id}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-100 transition-colors">
@@ -85,29 +88,29 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
           {/* Summary row */}
           <div className="grid grid-cols-2 gap-3 text-[11px]">
             <div>
-              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Tool</p>
+              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">{t('activity.columns.tool')}</p>
               <p className="font-mono text-info">{event.tool_name || '—'}</p>
             </div>
             <div>
-              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Status</p>
+              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">{t('activity.columns.status')}</p>
               <p className="text-gray-100">{event.status}</p>
             </div>
             <div>
-              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Rule</p>
+              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">{t('activity.columns.rule')}</p>
               <p className="text-gray-100">{event.rule_name || event.rule_id || '—'}</p>
             </div>
             <div>
-              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Severity</p>
+              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">{t('activity.columns.severity')}</p>
               <p className={event.severity === 'critical' ? 'text-error' : event.severity === 'warning' ? 'text-amber-400' : 'text-gray-400'}>
                 {event.severity || '—'}
               </p>
             </div>
             <div>
-              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Agent</p>
+              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">{t('activity.columns.agent')}</p>
               <p className="font-mono text-[10px] text-gray-400 truncate">{event.agent_id || '—'}</p>
             </div>
             <div>
-              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">Time</p>
+              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">{t('activity.columns.time')}</p>
               <p className="text-gray-400">{formatTs(event.event_time)}</p>
             </div>
           </div>
@@ -115,14 +118,14 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
           {/* Message */}
           {event.message && (
             <div>
-              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1.5">Message</p>
+              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1.5">{t('activityDrawer.message')}</p>
               <p className="text-[11px] text-gray-100">{event.message}</p>
             </div>
           )}
 
           {/* Arguments */}
           <div>
-            <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1.5">Arguments</p>
+            <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1.5">{t('activityDrawer.arguments')}</p>
             <div className="bg-surface-container-lowest rounded-sm p-3 max-h-64 overflow-y-auto">
               <JsonBlock raw={event.args_summary || event.hook_payload} />
             </div>
@@ -131,7 +134,7 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
           {/* Decision timeline (hold events only) */}
           {event.is_hold_event && (
             <div>
-              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-2">Decision Timeline</p>
+              <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-2">{t('activityDrawer.decisionTimeline')}</p>
               {timeline.length > 0 ? (
                 <div className="space-y-2">
                   {timeline.map((entry, i) => (
@@ -147,7 +150,7 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
                   ))}
                 </div>
               ) : (
-                <p className="text-[11px] text-gray-400">No timeline entries yet.</p>
+                <p className="text-[11px] text-gray-400">{t('activityDrawer.noTimelineEntries')}</p>
               )}
             </div>
           )}
@@ -155,9 +158,9 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
           {/* Approve/Deny form — pending holds only */}
           {isPending && (
             <div className="bg-amber-900/20 border border-amber-700/30 rounded-sm p-4">
-              <p className="text-[11px] font-semibold text-amber-300 mb-3">Agent is paused — waiting for decision</p>
+              <p className="text-[11px] font-semibold text-amber-300 mb-3">{t('activityDrawer.pausedWaiting')}</p>
               <textarea
-                placeholder="Optional reason…"
+                placeholder={t('activityDrawer.reasonPlaceholder')}
                 value={decideReason}
                 onChange={e => setDecideReason(e.target.value)}
                 className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-sm p-2 text-xs text-gray-100 focus:border-zinc-500 focus:outline-none mb-3 resize-none"
@@ -169,18 +172,18 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
                   disabled={decideStatus === 'pending'}
                   className="px-4 py-1.5 bg-emerald-500/20 text-emerald-400 text-xs font-semibold rounded-sm hover:bg-emerald-500/30 disabled:opacity-50 transition-colors"
                 >
-                  ✓ Approve
+                  ✓ {t('actions.approve')}
                 </button>
                 <button
                   onClick={() => handleDecide('denied')}
                   disabled={decideStatus === 'pending'}
                   className="px-4 py-1.5 bg-[#ffb4ab]/20 text-error text-xs font-semibold rounded-sm hover:bg-[#ffb4ab]/30 disabled:opacity-50 transition-colors"
                 >
-                  ✗ Deny
+                  ✗ {t('actions.deny')}
                 </button>
               </div>
               {decideStatus === 'error' && (
-                <p className="text-[11px] text-error mt-2">{decideError || 'Failed to submit. Try again.'}</p>
+                <p className="text-[11px] text-error mt-2">{decideError || t('activityDrawer.decideFailedDefault')}</p>
               )}
             </div>
           )}
@@ -188,7 +191,7 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
           {/* Decision confirmed */}
           {decideStatus === 'done' && (
             <div className="bg-emerald-900/20 border border-emerald-700/30 rounded-sm p-3">
-              <p className="text-xs text-emerald-400">Decision submitted — agent has been notified.</p>
+              <p className="text-xs text-emerald-400">{t('activityDrawer.decisionSubmitted')}</p>
             </div>
           )}
         </div>

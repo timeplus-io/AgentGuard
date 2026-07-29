@@ -9,6 +9,7 @@ const load = (mods, ns) =>
 export const REPRESENTATIVE = [
   ['common', 'actions.save'],
   ['common', 'nav.dashboard'],
+  ['common', 'holdToast.review'],
   ['settings', 'language.label'],
   ['settings', 'page.title'],
   ['auth', 'login.submit'],
