@@ -1,0 +1,70 @@
+{
+  "list": {
+    "title": "Rule Packs",
+    "subtitle": "Configure and manage security policies enforced across all monitored AI agents.",
+    "search": {
+      "placeholder": "Search rules…"
+    },
+    "errors": {
+      "loadFailed": "Failed to load rules. Please refresh.",
+      "toggleFailed": "Failed to {{action}} rule: {{message}}",
+      "installFailed": "Install failed — please try again",
+      "reloadCatalogFailed": "Imported but failed to reload catalog"
+    },
+    "importResult": {
+      "added": "Added:",
+      "updated": "Updated:",
+      "skipped": "Skipped:",
+      "skippedBuiltin": "Skipped — builtin rules are never overwritten by import (clone instead):",
+      "skippedCustom": "Skipped — your custom rule was kept (re-import with force to overwrite):",
+      "noChanges": "No changes — all entries already up to date."
+    },
+    "grid": {
+      "noMatch": "No rules match your search.",
+      "viewDetails": "View Details",
+      "inactive": "Inactive",
+      "detections_one": "{{count}} event detected (24h)",
+      "detections_other": "{{count}} events detected (24h)",
+      "customBadge": "Custom"
+    },
+    "pagination": {
+      "rulesCount_one": "{{count}} rule",
+      "rulesCount_other": "{{count}} rules",
+      "available": "{{count}} available",
+      "matching": " matching \"{{query}}\"",
+      "pageOf": "page {{page}} of {{total}}"
+    },
+    "availableToInstall": {
+      "heading": "Available to Install"
+    },
+    "confirmToggle": {
+      "title": "{{action}} Rule Pack",
+      "bodyPrefix": "Are you sure you want to",
+      "bodySuffix": "?",
+      "enableNote": "This will create or resume the detection MV and start monitoring.",
+      "disableNote": "This will pause the detection MV and stop new events from being detected."
+    },
+    "confirmInstall": {
+      "title": "Install Rule Pack",
+      "bodyPrefix": "Are you sure you want to install",
+      "bodySuffix": "?",
+      "note": "This will create a detection MV and start monitoring immediately."
+    }
+  },
+  "actions": {
+    "exportCatalog": "Export Catalog",
+    "importCatalog": "Import Catalog",
+    "importing": "Importing…",
+    "newCustomRule": "New Custom Rule",
+    "enable": "Enable",
+    "disable": "Disable",
+    "install": "Install",
+    "installing": "Installing…",
+    "cancel": "Cancel"
+  },
+  "policy": {
+    "log_only": "Log only",
+    "auto_block": "Auto-block",
+    "hold": "Hold (require approval)"
+  }
+}

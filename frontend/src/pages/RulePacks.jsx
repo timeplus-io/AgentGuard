@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
@@ -24,6 +25,7 @@ const CATEGORY_ICONS = {
 const RULES_PAGE_SIZE = 12
 
 export default function RulePacks() {
+  const { t } = useTranslation('rules')
   const navigate = useNavigate()
   const { can } = useAuth()
   const canWrite = can(writeKey('rules')) // gate install/toggle/import/create
@@ -76,9 +78,9 @@ export default function RulePacks() {
       loadRules(),
       api.getRulesCatalog().then(data => setCatalog(data.catalog || [])),
     ])
-      .catch(() => { setLoadError('Failed to load rules. Please refresh.') })
+      .catch(() => { setLoadError(t('list.errors.loadFailed')) })
       .finally(() => setLoading(false))
-  }, [])
+  }, [t])
 
   useEffect(() => { setRulesPage(1); setCatalogPage(1) }, [search])
 
@@ -100,7 +102,10 @@ export default function RulePacks() {
     } catch (err) {
       console.error('rules: toggle failed:', err)
       setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !newVal, active: !newVal } : r))
-      setLoadError(`Failed to ${newVal ? 'enable' : 'disable'} rule: ${err?.message ?? String(err)}`)
+      setLoadError(t('list.errors.toggleFailed', {
+        action: newVal ? t('actions.enable') : t('actions.disable'),
+        message: err?.message ?? String(err),
+      }))
     }
   }
 
@@ -140,7 +145,7 @@ export default function RulePacks() {
       // Revert
       setCatalog(prev => prev.map(e => e.id === id ? { ...e, installed: false } : e))
       setRules(prev => prev.filter(r => r.id !== id))
-      setLoadError(err?.message || 'Install failed — please try again')
+      setLoadError(err?.message || t('list.errors.installFailed'))
     } finally {
       setInstalling(null)
     }
@@ -156,7 +161,7 @@ export default function RulePacks() {
       const result = await api.importCatalog(file)
       setImportResult(result)
       // Reload catalog to reflect imported entries.
-      api.getRulesCatalog().then(data => setCatalog(data.catalog || [])).catch(err => setLoadError(err?.message || 'Imported but failed to reload catalog'))
+      api.getRulesCatalog().then(data => setCatalog(data.catalog || [])).catch(err => setLoadError(err?.message || t('list.errors.reloadCatalogFailed')))
     } catch (err) {
       setImportResult({ errors: [err.message] })
     } finally {
@@ -191,19 +196,19 @@ export default function RulePacks() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-surface-container-low border border-outline-variant/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-6">
             <h3 className="text-base font-semibold text-gray-100">
-              {confirmToggle.newVal ? 'Enable' : 'Disable'} Rule Pack
+              {t('list.confirmToggle.title', { action: confirmToggle.newVal ? t('actions.enable') : t('actions.disable') })}
             </h3>
             <p className="text-sm text-gray-400">
-              Are you sure you want to <span className="text-gray-100 font-medium">{confirmToggle.newVal ? 'enable' : 'disable'}</span> <span className="text-primary">{confirmToggle.name}</span>?
-              {!confirmToggle.newVal && <span className="block mt-2 text-xs text-gray-400">This will pause the detection MV and stop new events from being detected.</span>}
-              {confirmToggle.newVal && <span className="block mt-2 text-xs text-gray-400">This will create or resume the detection MV and start monitoring.</span>}
+              {t('list.confirmToggle.bodyPrefix')} <span className="text-gray-100 font-medium">{confirmToggle.newVal ? t('actions.enable') : t('actions.disable')}</span> <span className="text-primary">{confirmToggle.name}</span>{t('list.confirmToggle.bodySuffix')}
+              {!confirmToggle.newVal && <span className="block mt-2 text-xs text-gray-400">{t('list.confirmToggle.disableNote')}</span>}
+              {confirmToggle.newVal && <span className="block mt-2 text-xs text-gray-400">{t('list.confirmToggle.enableNote')}</span>}
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setConfirmToggle(null)}
                 className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors"
               >
-                Cancel
+                {t('actions.cancel')}
               </button>
               <button
                 onClick={confirmDoToggle}
@@ -213,7 +218,7 @@ export default function RulePacks() {
                     : 'bg-zinc-700 text-white hover:bg-zinc-600'
                 }`}
               >
-                {confirmToggle.newVal ? 'Enable' : 'Disable'}
+                {confirmToggle.newVal ? t('actions.enable') : t('actions.disable')}
               </button>
             </div>
           </div>
@@ -223,23 +228,23 @@ export default function RulePacks() {
       {confirmInstall && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-surface-container-low border border-outline-variant/20 rounded-sm p-8 max-w-sm w-full mx-4 space-y-6">
-            <h3 className="text-base font-semibold text-gray-100">Install Rule Pack</h3>
+            <h3 className="text-base font-semibold text-gray-100">{t('list.confirmInstall.title')}</h3>
             <p className="text-sm text-gray-400">
-              Are you sure you want to install <span className="text-primary font-medium">{confirmInstall.name}</span>?
-              <span className="block mt-2 text-xs text-gray-400">This will create a detection MV and start monitoring immediately.</span>
+              {t('list.confirmInstall.bodyPrefix')} <span className="text-primary font-medium">{confirmInstall.name}</span>{t('list.confirmInstall.bodySuffix')}
+              <span className="block mt-2 text-xs text-gray-400">{t('list.confirmInstall.note')}</span>
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setConfirmInstall(null)}
                 className="px-4 py-2 text-xs font-semibold rounded-sm bg-zinc-700 text-white hover:bg-zinc-600 transition-colors"
               >
-                Cancel
+                {t('actions.cancel')}
               </button>
               <button
                 onClick={confirmDoInstall}
                 className="px-4 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text border border-pink-500 transition-colors"
               >
-                Install
+                {t('actions.install')}
               </button>
             </div>
           </div>
@@ -258,8 +263,8 @@ export default function RulePacks() {
           />
 
           <PageHeader
-            title="Rule Packs"
-            subtitle="Configure and manage security policies enforced across all monitored AI agents."
+            title={t('list.title')}
+            subtitle={t('list.subtitle')}
             actions={
               <div className="flex items-center gap-3">
                 <button
@@ -267,7 +272,7 @@ export default function RulePacks() {
                   className="px-4 py-2 text-xs font-semibold rounded-sm bg-gray-800 border border-gray-600 text-gray-100 hover:text-gray-100 hover:border-pink-500 transition-colors flex items-center gap-1.5"
                 >
                   <span className="material-symbols-outlined text-[14px]">download</span>
-                  Export Catalog
+                  {t('actions.exportCatalog')}
                 </button>
                 <button
                   onClick={() => importInputRef.current?.click()}
@@ -275,14 +280,14 @@ export default function RulePacks() {
                   className="px-4 py-2 text-xs font-semibold rounded-sm bg-gray-800 border border-gray-600 text-gray-100 hover:text-gray-100 hover:border-pink-500 transition-colors flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-[14px]">upload</span>
-                  {importing ? 'Importing…' : 'Import Catalog'}
+                  {importing ? t('actions.importing') : t('actions.importCatalog')}
                 </button>
                 <button
                   onClick={() => navigate('/rules/new')}
                   disabled={!canWrite}
                   className="px-4 py-2 bg-primary-button text-primary-button-text border border-pink-500 text-xs font-semibold rounded-sm hover:scale-[0.98] transition-all"
                 >
-                  New Custom Rule
+                  {t('actions.newCustomRule')}
                 </button>
               </div>
             }
@@ -300,15 +305,15 @@ export default function RulePacks() {
                 {importResult.errors?.length ? 'error' : 'check_circle'}
               </span>
               <div className="space-y-1">
-                {(importResult.added?.length > 0) && <p>Added: <span className="font-mono">{importResult.added.join(', ')}</span></p>}
-                {(importResult.updated?.length > 0) && <p>Updated: <span className="font-mono">{importResult.updated.join(', ')}</span></p>}
-                {(importResult.skipped?.length > 0) && <p className="text-gray-400">Skipped: <span className="font-mono">{importResult.skipped.join(', ')}</span></p>}
-                {(importResult.skipped_builtin?.length > 0) && <p className="text-gray-400">Skipped — builtin rules are never overwritten by import (clone instead): <span className="font-mono">{importResult.skipped_builtin.join(', ')}</span></p>}
-                {(importResult.skipped_custom?.length > 0) && <p className="text-gray-400">Skipped — your custom rule was kept (re-import with force to overwrite): <span className="font-mono">{importResult.skipped_custom.join(', ')}</span></p>}
+                {(importResult.added?.length > 0) && <p>{t('list.importResult.added')} <span className="font-mono">{importResult.added.join(', ')}</span></p>}
+                {(importResult.updated?.length > 0) && <p>{t('list.importResult.updated')} <span className="font-mono">{importResult.updated.join(', ')}</span></p>}
+                {(importResult.skipped?.length > 0) && <p className="text-gray-400">{t('list.importResult.skipped')} <span className="font-mono">{importResult.skipped.join(', ')}</span></p>}
+                {(importResult.skipped_builtin?.length > 0) && <p className="text-gray-400">{t('list.importResult.skippedBuiltin')} <span className="font-mono">{importResult.skipped_builtin.join(', ')}</span></p>}
+                {(importResult.skipped_custom?.length > 0) && <p className="text-gray-400">{t('list.importResult.skippedCustom')} <span className="font-mono">{importResult.skipped_custom.join(', ')}</span></p>}
                 {(importResult.errors?.length > 0) && importResult.errors.map((e, i) => <p key={i}>{e}</p>)}
                 {!importResult.errors?.length && !importResult.added?.length && !importResult.updated?.length
                   && !importResult.skipped_builtin?.length && !importResult.skipped_custom?.length
-                  && <p>No changes — all entries already up to date.</p>}
+                  && <p>{t('list.importResult.noChanges')}</p>}
               </div>
               <button onClick={() => setImportResult(null)} className="ml-auto text-gray-400 hover:text-gray-100 shrink-0">
                 <span className="material-symbols-outlined text-[14px]">close</span>
@@ -324,7 +329,7 @@ export default function RulePacks() {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search rules…"
+                placeholder={t('list.search.placeholder')}
                 className="w-full bg-gray-800 border border-gray-600 text-sm text-gray-100 placeholder-zinc-600 pl-9 pr-8 py-2 rounded-sm focus:border-gray-400 focus:outline-none"
               />
               {search && (
@@ -339,7 +344,7 @@ export default function RulePacks() {
               {loading ? (
                 [1,2,3,4].map(i => <div key={i} className="bg-surface-container-low p-6 rounded-sm h-64 animate-pulse" />)
               ) : pagedRules.length === 0 ? (
-                <p className="text-sm text-gray-400 col-span-4 py-4">No rules match your search.</p>
+                <p className="text-sm text-gray-400 col-span-4 py-4">{t('list.grid.noMatch')}</p>
               ) : pagedRules.map(rule => (
                 <div key={rule.id} className="group bg-gray-800 border border-gray-700 p-6 rounded-sm flex flex-col gap-6 transition-all duration-300 relative overflow-hidden">
                   {rule.active && (
@@ -355,12 +360,12 @@ export default function RulePacks() {
                     <h3 className="text-lg font-semibold tracking-tight text-gray-100 mb-2">{rule.name}</h3>
                     <p className="text-xs text-gray-400 leading-relaxed line-clamp-3 min-h-[4.5rem]">{rule.desc}</p>
                     {rule.detections24h > 0 && (
-                      <p className="text-[10px] font-mono text-pink-400 mt-2">{rule.detections24h.toLocaleString()} events detected (24h)</p>
+                      <p className="text-[10px] font-mono text-pink-400 mt-2">{t('list.grid.detections', { count: rule.detections24h })}</p>
                     )}
                   </div>
                   <div className="mt-auto flex items-center justify-between z-10">
                     <Link to={`/rules/${rule.id}`} className="text-xs font-semibold text-pink-400 tracking-wider uppercase hover:underline decoration-2 underline-offset-4">
-                      View Details
+                      {t('list.grid.viewDetails')}
                     </Link>
                     <span className="text-[10px] text-gray-400 flex items-center gap-1">
                       {rule.version ? (
@@ -371,7 +376,7 @@ export default function RulePacks() {
                       ) : (
                         <>
                           <span className="material-symbols-outlined text-[12px]">pause_circle</span>
-                          Inactive
+                          {t('list.grid.inactive')}
                         </>
                       )}
                     </span>
@@ -384,9 +389,9 @@ export default function RulePacks() {
             {!loading && totalRulesPages > 1 && (
               <div className="flex items-center justify-between pt-2">
                 <p className="text-xs text-gray-400">
-                  {filteredRules.length} rule{filteredRules.length !== 1 ? 's' : ''}
-                  {search ? ` matching "${search}"` : ''}
-                  {' · '}page {rulesPage} of {totalRulesPages}
+                  {t('list.pagination.rulesCount', { count: filteredRules.length })}
+                  {search ? t('list.pagination.matching', { query: search }) : ''}
+                  {' · '}{t('list.pagination.pageOf', { page: rulesPage, total: totalRulesPages })}
                 </p>
                 <div className="flex items-center gap-1">
                   <button
@@ -423,7 +428,7 @@ export default function RulePacks() {
 
           {uninstalledCatalog.length > 0 && (
             <section className="space-y-4">
-              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Available to Install</h4>
+              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('list.availableToInstall.heading')}</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 {pagedCatalog.map(entry => (
                   <div key={entry.id} className="bg-surface-container-low/60 border border-dashed border-zinc-700/40 p-5 rounded-sm flex flex-col gap-4">
@@ -433,7 +438,7 @@ export default function RulePacks() {
                       </div>
                       <div className="flex items-center gap-2">
                         {entry.is_custom && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-surface-container-high text-gray-400 border border-zinc-700/40 font-semibold uppercase tracking-wide">Custom</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-surface-container-high text-gray-400 border border-zinc-700/40 font-semibold uppercase tracking-wide">{t('list.grid.customBadge')}</span>
                         )}
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide border ${
                           entry.severity === 'critical'
@@ -451,7 +456,7 @@ export default function RulePacks() {
                       disabled={installing === entry.id || !canWrite}
                       className="mt-auto w-full px-3 py-2 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text border border-pink-500 disabled:opacity-50 transition-opacity"
                     >
-                      {installing === entry.id ? 'Installing…' : 'Install'}
+                      {installing === entry.id ? t('actions.installing') : t('actions.install')}
                     </button>
                   </div>
                 ))}
@@ -460,9 +465,9 @@ export default function RulePacks() {
               {totalCatalogPages > 1 && (
                 <div className="flex items-center justify-between pt-2">
                   <p className="text-xs text-gray-400">
-                    {uninstalledCatalog.length} available
-                    {search ? ` matching "${search}"` : ''}
-                    {' · '}page {catalogPage} of {totalCatalogPages}
+                    {t('list.pagination.available', { count: uninstalledCatalog.length })}
+                    {search ? t('list.pagination.matching', { query: search }) : ''}
+                    {' · '}{t('list.pagination.pageOf', { page: catalogPage, total: totalCatalogPages })}
                   </p>
                   <div className="flex items-center gap-1">
                     <button
