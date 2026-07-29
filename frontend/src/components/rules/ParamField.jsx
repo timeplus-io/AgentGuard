@@ -58,7 +58,7 @@ export default function ParamField({ param, value, defaultValue, overridden, err
 
       <div className="mt-2 flex items-center justify-between gap-3">
         <span className="text-[10px] text-gray-500">
-          {t('config.field.defaultLabel')} <code className="text-gray-400">{formatScalar(param, defaultValue)}</code>
+          {t('config.field.defaultLabel')} <code className="text-gray-400">{formatScalar(param, defaultValue, t)}</code>
           {param.unit ? <span className="ml-1 text-gray-500">({param.unit})</span> : null}
         </span>
         {error && <span className="text-[10px] text-error">{error}</span>}
@@ -281,9 +281,9 @@ function itemsRangeHint(t, minItems, maxItems) {
   return t('config.field.itemsMax', { max: formatNumber(maxItems) })
 }
 
-function formatScalar(param, v) {
+function formatScalar(param, v, t) {
   if (v == null) return '—'
   if (Array.isArray(v)) return `[${v.join(', ')}]`
-  if (typeof v === 'boolean') return v ? 'true' : 'false'
+  if (typeof v === 'boolean') return t(`enum.bool.${v}`)
   return String(v)
 }

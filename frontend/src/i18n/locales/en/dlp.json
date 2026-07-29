@@ -208,7 +208,6 @@
       "invalidJson": "Invalid JSON"
     },
     "actions": {
-      "save": "Save",
       "saving": "Saving…",
       "saved": "Saved",
       "saveCount_one": "Save {{count}} change",

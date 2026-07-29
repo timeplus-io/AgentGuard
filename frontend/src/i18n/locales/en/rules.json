@@ -244,6 +244,10 @@
       "medium": "Medium",
       "high": "High"
     },
+    "bool": {
+      "true": "true",
+      "false": "false"
+    },
     "paramType": {
       "integer": "Integer",
       "float": "Float",

@@ -244,6 +244,10 @@
       "medium": "中",
       "high": "高"
     },
+    "bool": {
+      "true": "真",
+      "false": "假"
+    },
     "paramType": {
       "integer": "整数",
       "float": "浮点数",

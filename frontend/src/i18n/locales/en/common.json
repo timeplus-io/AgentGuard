@@ -82,5 +82,10 @@
   "markdown": {
     "imageAlt": "[image: {{alt}}]",
     "image": "[image]"
+  },
+  "severity": {
+    "critical": "Critical",
+    "warning": "Warning",
+    "info": "Info"
   }
 }

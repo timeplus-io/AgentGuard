@@ -102,7 +102,7 @@ export default function ActivityDrawer({ event: initialEvent, onClose, onDecided
             <div>
               <p className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">{t('activity.columns.severity')}</p>
               <p className={event.severity === 'critical' ? 'text-error' : event.severity === 'warning' ? 'text-amber-400' : 'text-gray-400'}>
-                {event.severity || '—'}
+                {event.severity ? t(`severity.${String(event.severity).toLowerCase()}`, { defaultValue: event.severity }) : '—'}
               </p>
             </div>
             <div>

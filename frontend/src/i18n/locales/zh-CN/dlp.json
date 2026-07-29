@@ -208,7 +208,6 @@
       "invalidJson": "JSON 格式无效"
     },
     "actions": {
-      "save": "保存",
       "saving": "保存中…",
       "saved": "已保存",
       "saveCount_one": "保存 {{count}} 项更改",

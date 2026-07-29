@@ -30,9 +30,14 @@ function StatusBadge({ status }) {
 }
 
 function SeverityChip({ severity }) {
+  const { t } = useTranslation()
   if (!severity) return <span className="text-gray-400 text-[10px]">—</span>
   const color = severity === 'critical' ? 'text-error' : severity === 'warning' ? 'text-amber-400' : 'text-gray-400'
-  return <span className={`text-[10px] font-semibold uppercase ${color}`}>{severity}</span>
+  return (
+    <span className={`text-[10px] font-semibold uppercase ${color}`}>
+      {t(`severity.${String(severity).toLowerCase()}`, { defaultValue: severity })}
+    </span>
+  )
 }
 
 function formatTs(ts) {

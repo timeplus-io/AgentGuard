@@ -18,7 +18,7 @@ export default function HoldToastContainer() {
             <span className={`text-[9px] uppercase font-semibold ${
               h.severity === 'critical' ? 'text-error' :
               h.severity === 'warning'  ? 'text-amber-400' : 'text-gray-400'
-            }`}>{h.severity}</span>
+            }`}>{h.severity ? t(`severity.${String(h.severity).toLowerCase()}`, { defaultValue: h.severity }) : h.severity}</span>
             <span className="text-[10px] text-gray-400 truncate flex-1">
               {t('holdToast.pendingLabel')} <code className="font-mono">{h.tool_name}</code>
             </span>

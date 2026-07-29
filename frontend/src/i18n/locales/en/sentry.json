@@ -101,7 +101,7 @@
       "apiTypeAnthropic": "Anthropic (Claude, incl. Bedrock)",
       "bedrockHint": {
         "part1": "For AWS Bedrock: base URL ",
-        "part2": " (note the ",
+        "part2": "(note the ",
         "part3": " path, not ",
         "part4": "), API key = your Bedrock API key, model = a bare Bedrock Claude id (e.g. ",
         "part5": "). Pick a region where the model is in-region available and access-enabled (",

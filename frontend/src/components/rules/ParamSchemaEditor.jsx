@@ -302,8 +302,8 @@ function DefaultInput({ row, onUpdate }) {
           onChange={(e) => set(e.target.value === 'true')}
           className={`${inputCls} appearance-none`}
         >
-          <option value="false">false</option>
-          <option value="true">true</option>
+          <option value="false">{t('enum.bool.false')}</option>
+          <option value="true">{t('enum.bool.true')}</option>
         </select>
       )
     case 'choice':

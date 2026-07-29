@@ -82,5 +82,10 @@
   "markdown": {
     "imageAlt": "[图片：{{alt}}]",
     "image": "[图片]"
+  },
+  "severity": {
+    "critical": "严重",
+    "warning": "警告",
+    "info": "信息"
   }
 }
