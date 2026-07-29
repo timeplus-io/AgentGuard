@@ -14,14 +14,16 @@ import enThreats from './locales/en/threats.json'
 import zhThreats from './locales/zh-CN/threats.json'
 import enRules from './locales/en/rules.json'
 import zhRules from './locales/zh-CN/rules.json'
+import enCost from './locales/en/cost.json'
+import zhCost from './locales/zh-CN/cost.json'
 
 export const SUPPORTED_LOCALES = ['en', 'zh-CN']
 export const DEFAULT_LOCALE = 'en'
 
 // Namespaces are registered here as page tasks add catalogs. common is the base.
 const resources = {
-  en: { common: enCommon, settings: enSettings, auth: enAuth, dashboard: enDashboard, agents: enAgents, threats: enThreats, rules: enRules },
-  'zh-CN': { common: zhCommon, settings: zhSettings, auth: zhAuth, dashboard: zhDashboard, agents: zhAgents, threats: zhThreats, rules: zhRules },
+  en: { common: enCommon, settings: enSettings, auth: enAuth, dashboard: enDashboard, agents: enAgents, threats: enThreats, rules: enRules, cost: enCost },
+  'zh-CN': { common: zhCommon, settings: zhSettings, auth: zhAuth, dashboard: zhDashboard, agents: zhAgents, threats: zhThreats, rules: zhRules, cost: zhCost },
 }
 
 i18n.use(initReactI18next).init({
@@ -29,7 +31,7 @@ i18n.use(initReactI18next).init({
   lng: DEFAULT_LOCALE,
   fallbackLng: DEFAULT_LOCALE,
   defaultNS: 'common',
-  ns: ['common', 'settings', 'auth', 'dashboard', 'agents', 'threats', 'rules'],
+  ns: ['common', 'settings', 'auth', 'dashboard', 'agents', 'threats', 'rules', 'cost'],
   interpolation: { escapeValue: false }, // React already escapes
   returnEmptyString: false,
   initImmediate: false, // synchronous init so t() works immediately (tests + first paint)
