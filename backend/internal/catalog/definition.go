@@ -70,11 +70,9 @@ type Translation struct {
 	Description string `yaml:"description" json:"description"`
 }
 
-// TranslationFor returns the translation entry for locale and whether one exists.
+// TranslationFor returns the translation entry for locale and whether one
+// exists. Indexing a nil map is safe (zero value, ok=false), so no nil guard.
 func (d Definition) TranslationFor(locale string) (Translation, bool) {
-	if d.Translations == nil {
-		return Translation{}, false
-	}
 	tr, ok := d.Translations[locale]
 	return tr, ok
 }

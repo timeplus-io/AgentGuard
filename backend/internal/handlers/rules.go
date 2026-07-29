@@ -536,6 +536,10 @@ func ListCatalog(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) 
 		entries := mgr.All()
 		items := make([]CatalogItem, 0, len(entries))
 		for _, e := range entries {
+			// Keep the un-localized definition for the upgradeable hash check:
+			// Hash() covers Name/Description, so hashing a Localized copy would
+			// flip the hash under a non-en locale and falsely flag upgradeable.
+			orig := e
 			e = e.Localized(locale)
 			item := CatalogItem{
 				ID:                e.ID,
@@ -554,9 +558,7 @@ func ListCatalog(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) 
 				item.Installed = true
 				item.Enabled = inst.Enabled
 				item.InstalledVersion = inst.DefinitionVersion
-				if orig, ok := mgr.Lookup(e.ID); ok {
-					item.Upgradeable = rules.CanonicalDefinitionHash(orig) != inst.DefinitionHash
-				}
+				item.Upgradeable = rules.CanonicalDefinitionHash(orig) != inst.DefinitionHash
 			}
 			items = append(items, item)
 		}
