@@ -18,6 +18,7 @@ export const REPRESENTATIVE = [
   ['rules', 'detail.definition.heading'],
   ['rules', 'config.resetAll'],
   ['cost', 'title'],
+  ['dlp', 'title'],
 ]
 
 describe('zh-CN is actually translated', () => {

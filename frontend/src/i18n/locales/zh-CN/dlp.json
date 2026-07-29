@@ -1,0 +1,275 @@
+{
+  "title": "语义化 DLP",
+  "subtitle": "基于实体提取、风险评分与向量检索，对代理会话中的敏感数据暴露情况进行自然语言问答。",
+  "loading": "加载中…",
+  "errors": {
+    "loadStatusFailed": "加载 DLP 状态失败"
+  },
+  "role": {
+    "user": "用户",
+    "assistant": "助手",
+    "tool": "工具"
+  },
+  "common": {
+    "openSession": "打开会话 →",
+    "apiKeySet": "· 已设置"
+  },
+  "header": {
+    "embeddingTitleAttr": "已生成嵌入向量的行数 / 已富化行总数",
+    "messagesCount_one": "{{count}} 条消息",
+    "messagesCount_other": "{{count}} 条消息",
+    "embeddedPct": "{{formatted}} 已嵌入",
+    "flaggedCount_one": "{{count}} 条已标记",
+    "flaggedCount_other": "{{count}} 条已标记"
+  },
+  "askPanel": {
+    "heading": "询问数据暴露情况",
+    "placeholder": "例如：过去一周是否有代理泄露了凭证或 API 密钥？",
+    "submit": "开始调查",
+    "submitting": "调查中…",
+    "examplePrompts": {
+      "credentialLeak": "过去一周是否有代理泄露了凭证或 API 密钥？",
+      "customerEmail": "查看出现客户电子邮件地址的会话",
+      "dbPasswords": "哪些会话讨论了生产数据库密码？",
+      "sourceCodeExfil": "本月是否有源代码被外泄到外部服务？"
+    },
+    "stages": {
+      "understand": "理解",
+      "recall": "召回",
+      "rerank": "重排序",
+      "report": "报告"
+    },
+    "intent": {
+      "heading": "意图",
+      "keywordsLabel": "关键词：",
+      "entitiesLabel": "实体：",
+      "riskTagsLabel": "风险标签：",
+      "windowLabel": "时间窗口：",
+      "windowValue": "{{count}} 天"
+    },
+    "candidates": {
+      "summary_one": "{{count}} 条候选消息（结构化 {{structured}}，向量 {{vector}}）",
+      "summary_other": "{{count}} 条候选消息（结构化 {{structured}}，向量 {{vector}}）",
+      "rerankedTo": " → 重排序后保留前 {{count}} 条"
+    },
+    "errors": {
+      "queryFailed": "查询失败"
+    },
+    "evidence": {
+      "relevanceTitle": "重排序器给出的相关性分数",
+      "relevanceValue": "相关性 {{formatted}}",
+      "messageDetail": "消息详情"
+    },
+    "answer": {
+      "reportHeading": "审计报告",
+      "evidenceHeading": "引用证据（{{count}}）"
+    }
+  },
+  "profiles": {
+    "topAgents": "高风险代理排行（{{days}} 天）",
+    "topSessions": "高风险会话排行",
+    "topTags": "高风险标签排行",
+    "empty": "该时间窗口内没有被标记的消息。",
+    "flaggedCount_one": "{{count}} 条已标记",
+    "flaggedCount_other": "{{count}} 条已标记",
+    "unknownAgent": "（未知）",
+    "unavailable": "风险画像不可用：{{message}}",
+    "errors": {
+      "loadFailed": "加载风险画像失败"
+    }
+  },
+  "detail": {
+    "heading": "已富化消息",
+    "errors": {
+      "loadFailed": "加载消息失败"
+    },
+    "fields": {
+      "messageId": "消息 ID",
+      "agent": "代理",
+      "agentType": "代理类型",
+      "deployment": "部署",
+      "session": "会话",
+      "run": "运行",
+      "model": "模型",
+      "tool": "工具",
+      "embeddingDim": "嵌入维度",
+      "notEmbedded": "未嵌入"
+    },
+    "entitiesHeading": "检测到的实体",
+    "contentHeading": "内容"
+  },
+  "browser": {
+    "heading": "已富化消息（{{count}}）",
+    "filters": {
+      "riskTagPlaceholder": "风险标签",
+      "agentIdPlaceholder": "代理 ID",
+      "allRoles": "所有角色",
+      "anyRisk": "任意风险",
+      "atLeast": "≥ {{value}}",
+      "clear": "清除"
+    },
+    "headers": {
+      "time": "时间",
+      "role": "角色",
+      "agent": "代理",
+      "risk": "风险",
+      "tags": "标签",
+      "content": "内容"
+    },
+    "loading": "正在加载消息…",
+    "errors": {
+      "loadFailed": "加载消息失败"
+    },
+    "emptyFiltered": "没有符合当前筛选条件的消息。",
+    "empty": "暂无已富化的消息。",
+    "pagination": {
+      "prev": "← 上一页",
+      "next": "下一页 →",
+      "pageOf": "第 {{page}} 页，共 {{totalPages}} 页"
+    }
+  },
+  "config": {
+    "intro": {
+      "pre": "实时配置存储在 ",
+      "post": " 流中。修改立即生效——无需重启或重新配置。（服务器配置中的端点/模型默认值仅在首次配置时用于初始化。）"
+    },
+    "loadingRuntime": "正在加载运行时配置…",
+    "errors": {
+      "loadFailed": "加载 DLP 配置失败",
+      "loadErrSuffix": " —— 只有在语义化 DLP 配置完成后才能使用运行时配置。",
+      "saveFailed": "保存失败"
+    },
+    "shared": {
+      "heading": "共享端点",
+      "description": "所有未在下方设置自己端点的模型所使用的默认端点。",
+      "baseUrlLabel": "基础 URL",
+      "apiKeyLabel": "API 密钥",
+      "timeoutLabel": "超时时间（秒）",
+      "apiKeyPlaceholderSet": "••••••（保持不变）",
+      "apiKeyPlaceholderUnset": "无",
+      "testButton": "测试端点",
+      "testHint": "使用嵌入模型和风险模型测试上方的值（而非已保存的值）。",
+      "testing": "测试中…",
+      "check": {
+        "reachableOk": "✓ 可访问",
+        "reachableFail": "✗ 可访问性：{{error}}",
+        "embeddingOk": "✓ 嵌入维度 {{dim}}",
+        "embeddingFail": "✗ 嵌入维度 {{dim}}（期望 {{expected}}）—— 请设置 dlp.embedding_dim 并重新配置",
+        "chatOk": "✓ 对话",
+        "chatFail": "✗ 对话：{{note}}",
+        "chatFailDefault": "失败",
+        "reachableOkSimple": "端点可访问",
+        "failedSimple": "失败：{{error}}"
+      },
+      "errors": {
+        "testFailed": "测试失败"
+      }
+    },
+    "catalog": {
+      "heading": "模型目录",
+      "description": "下方 UDF 引用的命名模型。留空基础 URL / API 密钥以继承共享端点。",
+      "nameHeader": "名称",
+      "modelIdHeader": "模型 ID",
+      "baseUrlHeader": "基础 URL（可选）",
+      "apiKeyHeader": "API 密钥（可选）",
+      "namePlaceholder": "名称",
+      "modelIdPlaceholder": "模型 ID",
+      "baseUrlPlaceholder": "（共享）",
+      "apiKeyPlaceholder": "（共享 / 保持不变）",
+      "removeModelTitle": "移除模型",
+      "addModel": "+ 添加模型",
+      "literalSuffix": "{{value}}（字面值）"
+    },
+    "functions": {
+      "heading": "各功能设置",
+      "embeddingsLabel": "嵌入",
+      "maxChars": "最大字符数",
+      "maxTokens": "最大 token 数",
+      "promptTemplate": "提示词模板",
+      "variablesLabel": "变量：",
+      "jsonHint": "请保留严格 JSON 指令——回复将被解析。",
+      "resetHint": "清空该字段以恢复为内置默认值。",
+      "promptPlaceholder": "（留空 = 使用内置默认值）"
+    },
+    "udfs": {
+      "understand": "查询理解",
+      "rerank": "重排序",
+      "risk": "风险分类",
+      "summarize": "摘要报告"
+    },
+    "entityCatalog": {
+      "summary": "实体目录",
+      "badge": "（高级 · JSON）",
+      "description": {
+        "pre": "供 ",
+        "mid": " 使用的正则 / 词典提取器。每一项：",
+        "post": "。"
+      },
+      "invalidJson": "JSON 格式无效"
+    },
+    "actions": {
+      "save": "保存",
+      "saving": "保存中…",
+      "saved": "已保存",
+      "saveCount_one": "保存 {{count}} 项更改",
+      "saveCount_other": "保存 {{count}} 项更改",
+      "discard": "放弃更改"
+    },
+    "banner": {
+      "saved": "已保存。更改将在下一次事件 / 查询时生效——无需重新配置。"
+    }
+  },
+  "wizard": {
+    "missing": {
+      "stream": "{{name}} 数据流",
+      "mv": "{{name}} 物化视图",
+      "udf": "{{name}} UDF"
+    },
+    "headingResume": "完成语义化 DLP 配置",
+    "headingNew": "启用语义化 DLP",
+    "description": "配置模型端点与模型，然后验证每个模型都能正常响应。只有验证通过后，配置才会创建富化数据流、UDF 与物化视图——无需重启。",
+    "errors": {
+      "loadConfigFailed": "加载配置失败",
+      "validateFailed": "验证请求失败",
+      "provisionFailed": "配置失败"
+    },
+    "fields": {
+      "baseUrlLabel": "基础 URL",
+      "baseUrlPlaceholder": "http://host.docker.internal:11434/v1",
+      "apiKeyLabel": "API 密钥",
+      "apiKeyPlaceholderSet": "••••••（保持不变）",
+      "apiKeyPlaceholderUnset": "无",
+      "embeddingModelLabel": "嵌入模型",
+      "embeddingModelPlaceholder": "mxbai-embed-large",
+      "chatModelLabel": "对话模型",
+      "chatModelPlaceholder": "供风险分类 / 查询理解 / 重排序使用",
+      "summaryModelLabel": "摘要模型",
+      "summaryModelHint": "（可选 —— 默认使用对话模型）",
+      "summaryModelPlaceholder": "（对话模型）"
+    },
+    "actions": {
+      "validate": "验证模型",
+      "validating": "验证中…",
+      "enable": "启用并配置",
+      "enabling": "配置中…",
+      "validateHint": "请在配置之前验证所有模型。"
+    },
+    "validation": {
+      "reachableOk": "✓ 端点可访问",
+      "reachableFail": "✗ 端点：{{error}}",
+      "reachableFailDefault": "不可访问",
+      "embeddingOk": "✓ 嵌入模型 —— 向量维度 {{dim}}",
+      "embeddingFail": "✗ 嵌入模型：{{error}}",
+      "embeddingFailDefault": "未返回向量",
+      "chatOk": "✓ 对话模型 {{model}}",
+      "chatFail": "✗ 对话模型 {{model}}：{{note}}",
+      "chatFailDefault": "失败"
+    },
+    "footer": {
+      "pre": "如果 ",
+      "mid": " 被设置为环境变量，则该值将优先生效——请取消设置以通过界面进行控制。配置完成后，端点与模型设置可在",
+      "settingsLabel": "设置",
+      "post": "页面中编辑。"
+    }
+  }
+}

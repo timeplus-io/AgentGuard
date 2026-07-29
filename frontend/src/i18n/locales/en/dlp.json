@@ -1,0 +1,275 @@
+{
+  "title": "Semantic DLP",
+  "subtitle": "Ask natural-language questions about sensitive data exposure across agent conversations, backed by entity extraction, risk scoring, and vector search.",
+  "loading": "Loading…",
+  "errors": {
+    "loadStatusFailed": "Failed to load DLP status"
+  },
+  "role": {
+    "user": "User",
+    "assistant": "Assistant",
+    "tool": "Tool"
+  },
+  "common": {
+    "openSession": "Open session →",
+    "apiKeySet": "· set"
+  },
+  "header": {
+    "embeddingTitleAttr": "Rows with embeddings / total enriched rows",
+    "messagesCount_one": "{{count}} message",
+    "messagesCount_other": "{{count}} messages",
+    "embeddedPct": "{{formatted}} embedded",
+    "flaggedCount_one": "{{count}} flagged",
+    "flaggedCount_other": "{{count}} flagged"
+  },
+  "askPanel": {
+    "heading": "Ask about data exposure",
+    "placeholder": "e.g. Did any agent leak credentials in the last week?",
+    "submit": "Investigate",
+    "submitting": "Investigating…",
+    "examplePrompts": {
+      "credentialLeak": "Did any agent leak credentials or API keys in the last week?",
+      "customerEmail": "Show me conversations where customer email addresses appeared",
+      "dbPasswords": "Which sessions discussed production database passwords?",
+      "sourceCodeExfil": "Was any source code exfiltrated to external services this month?"
+    },
+    "stages": {
+      "understand": "Understand",
+      "recall": "Recall",
+      "rerank": "Rerank",
+      "report": "Report"
+    },
+    "intent": {
+      "heading": "Intent",
+      "keywordsLabel": "keywords:",
+      "entitiesLabel": "entities:",
+      "riskTagsLabel": "risk tags:",
+      "windowLabel": "window:",
+      "windowValue": "{{count}}d"
+    },
+    "candidates": {
+      "summary_one": "{{count}} candidate message (structured {{structured}}, vector {{vector}})",
+      "summary_other": "{{count}} candidate messages (structured {{structured}}, vector {{vector}})",
+      "rerankedTo": " → top {{count}} after rerank"
+    },
+    "errors": {
+      "queryFailed": "Query failed"
+    },
+    "evidence": {
+      "relevanceTitle": "Relevance score from reranker",
+      "relevanceValue": "rel {{formatted}}",
+      "messageDetail": "Message detail"
+    },
+    "answer": {
+      "reportHeading": "Audit report",
+      "evidenceHeading": "Cited evidence ({{count}})"
+    }
+  },
+  "profiles": {
+    "topAgents": "Top risk agents ({{days}}d)",
+    "topSessions": "Top risk sessions",
+    "topTags": "Top risk tags",
+    "empty": "No flagged messages in window.",
+    "flaggedCount_one": "{{count}} flagged",
+    "flaggedCount_other": "{{count}} flagged",
+    "unknownAgent": "(unknown)",
+    "unavailable": "Risk profiles unavailable: {{message}}",
+    "errors": {
+      "loadFailed": "Failed to load risk profiles"
+    }
+  },
+  "detail": {
+    "heading": "Enriched message",
+    "errors": {
+      "loadFailed": "Failed to load message"
+    },
+    "fields": {
+      "messageId": "Message ID",
+      "agent": "Agent",
+      "agentType": "Agent type",
+      "deployment": "Deployment",
+      "session": "Session",
+      "run": "Run",
+      "model": "Model",
+      "tool": "Tool",
+      "embeddingDim": "Embedding dim",
+      "notEmbedded": "not embedded"
+    },
+    "entitiesHeading": "Detected entities",
+    "contentHeading": "Content"
+  },
+  "browser": {
+    "heading": "Enriched messages ({{count}})",
+    "filters": {
+      "riskTagPlaceholder": "risk tag",
+      "agentIdPlaceholder": "agent id",
+      "allRoles": "All roles",
+      "anyRisk": "Any risk",
+      "atLeast": "≥ {{value}}",
+      "clear": "Clear"
+    },
+    "headers": {
+      "time": "Time",
+      "role": "Role",
+      "agent": "Agent",
+      "risk": "Risk",
+      "tags": "Tags",
+      "content": "Content"
+    },
+    "loading": "Loading messages…",
+    "errors": {
+      "loadFailed": "Failed to load messages"
+    },
+    "emptyFiltered": "No messages match the current filters.",
+    "empty": "No enriched messages yet.",
+    "pagination": {
+      "prev": "← Prev",
+      "next": "Next →",
+      "pageOf": "Page {{page}} of {{totalPages}}"
+    }
+  },
+  "config": {
+    "intro": {
+      "pre": "Live configuration stored in the ",
+      "post": " stream. Edits apply immediately — no restart or re-provision. (Endpoint/model defaults in the server config only seed these on first provision.)"
+    },
+    "loadingRuntime": "Loading runtime config…",
+    "errors": {
+      "loadFailed": "Failed to load DLP config",
+      "loadErrSuffix": " — runtime config is available only after Semantic DLP is provisioned.",
+      "saveFailed": "Save failed"
+    },
+    "shared": {
+      "heading": "Shared endpoint",
+      "description": "Default endpoint for every model that doesn't set its own below.",
+      "baseUrlLabel": "Base URL",
+      "apiKeyLabel": "API key",
+      "timeoutLabel": "Timeout (s)",
+      "apiKeyPlaceholderSet": "•••••• (unchanged)",
+      "apiKeyPlaceholderUnset": "none",
+      "testButton": "Test endpoint",
+      "testHint": "Tests the values above (not the saved ones) with the embedding + risk models.",
+      "testing": "Testing…",
+      "check": {
+        "reachableOk": "✓ reachable",
+        "reachableFail": "✗ reachable: {{error}}",
+        "embeddingOk": "✓ embedding dim {{dim}}",
+        "embeddingFail": "✗ embedding dim {{dim}} (expected {{expected}}) — set dlp.embedding_dim + re-provision",
+        "chatOk": "✓ chat",
+        "chatFail": "✗ chat: {{note}}",
+        "chatFailDefault": "failed",
+        "reachableOkSimple": "Endpoint reachable",
+        "failedSimple": "Failed: {{error}}"
+      },
+      "errors": {
+        "testFailed": "test failed"
+      }
+    },
+    "catalog": {
+      "heading": "Model catalog",
+      "description": "Named models referenced by the UDFs below. Leave base URL / API key blank to inherit the shared endpoint.",
+      "nameHeader": "Name",
+      "modelIdHeader": "Model id",
+      "baseUrlHeader": "Base URL (optional)",
+      "apiKeyHeader": "API key (optional)",
+      "namePlaceholder": "name",
+      "modelIdPlaceholder": "model id",
+      "baseUrlPlaceholder": "(shared)",
+      "apiKeyPlaceholder": "(shared / unchanged)",
+      "removeModelTitle": "Remove model",
+      "addModel": "+ add model",
+      "literalSuffix": "{{value}} (literal)"
+    },
+    "functions": {
+      "heading": "Per-function settings",
+      "embeddingsLabel": "Embeddings",
+      "maxChars": "max chars",
+      "maxTokens": "max tokens",
+      "promptTemplate": "Prompt template",
+      "variablesLabel": "variables:",
+      "jsonHint": "Keep the strict-JSON instruction — the reply is parsed. ",
+      "resetHint": "Clear the field to reset to the built-in default.",
+      "promptPlaceholder": "(empty = built-in default)"
+    },
+    "udfs": {
+      "understand": "Query understanding",
+      "rerank": "Rerank",
+      "risk": "Risk classification",
+      "summarize": "Summary report"
+    },
+    "entityCatalog": {
+      "summary": "Entity catalog",
+      "badge": "(advanced · JSON)",
+      "description": {
+        "pre": "Regex / dictionary extractors for ",
+        "mid": ". Each entry: ",
+        "post": "."
+      },
+      "invalidJson": "Invalid JSON"
+    },
+    "actions": {
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "saveCount_one": "Save {{count}} change",
+      "saveCount_other": "Save {{count}} changes",
+      "discard": "Discard"
+    },
+    "banner": {
+      "saved": "Saved. Changes take effect on the next event / query — no re-provision."
+    }
+  },
+  "wizard": {
+    "missing": {
+      "stream": "{{name}} stream",
+      "mv": "{{name}} materialized view",
+      "udf": "{{name}} UDF"
+    },
+    "headingResume": "Finish provisioning Semantic DLP",
+    "headingNew": "Enable Semantic DLP",
+    "description": "Configure your model endpoint and models, then validate that every model responds. Provisioning creates the enrichment stream, UDFs, and materialized view only after validation passes — no restart required.",
+    "errors": {
+      "loadConfigFailed": "Failed to load config",
+      "validateFailed": "Validation request failed",
+      "provisionFailed": "Provisioning failed"
+    },
+    "fields": {
+      "baseUrlLabel": "Base URL",
+      "baseUrlPlaceholder": "http://host.docker.internal:11434/v1",
+      "apiKeyLabel": "API key",
+      "apiKeyPlaceholderSet": "•••••• (unchanged)",
+      "apiKeyPlaceholderUnset": "none",
+      "embeddingModelLabel": "Embedding model",
+      "embeddingModelPlaceholder": "mxbai-embed-large",
+      "chatModelLabel": "Chat model",
+      "chatModelPlaceholder": "used by risk / understand / rerank",
+      "summaryModelLabel": "Summary model",
+      "summaryModelHint": "(optional — defaults to chat model)",
+      "summaryModelPlaceholder": "(chat model)"
+    },
+    "actions": {
+      "validate": "Validate models",
+      "validating": "Validating…",
+      "enable": "Enable & provision",
+      "enabling": "Provisioning…",
+      "validateHint": "Validate all models before provisioning."
+    },
+    "validation": {
+      "reachableOk": "✓ endpoint reachable",
+      "reachableFail": "✗ endpoint: {{error}}",
+      "reachableFailDefault": "unreachable",
+      "embeddingOk": "✓ embedding model — vector dim {{dim}}",
+      "embeddingFail": "✗ embedding model: {{error}}",
+      "embeddingFailDefault": "no vector returned",
+      "chatOk": "✓ chat model {{model}}",
+      "chatFail": "✗ chat model {{model}}: {{note}}",
+      "chatFailDefault": "failed"
+    },
+    "footer": {
+      "pre": "If ",
+      "mid": " is set as an environment variable it takes precedence — unset it to control this from the UI. Endpoint and model settings become editable in ",
+      "settingsLabel": "Settings",
+      "post": " once provisioned."
+    }
+  }
+}
