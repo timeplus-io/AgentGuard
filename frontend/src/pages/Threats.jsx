@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
@@ -8,6 +9,7 @@ import { useNotifications } from '../components/NotificationsProvider'
 import { Link } from 'react-router-dom'
 
 export default function Threats() {
+  const { t } = useTranslation('threats')
   const [activeTab, setActiveTab] = useState('threats')
   const notifications = useNotifications()
   const pendingHoldsArr = Array.from(notifications?.pendingHolds?.values() ?? []).sort(
@@ -22,15 +24,15 @@ export default function Threats() {
       <main className="pl-sidebar pt-16 pb-8 min-h-screen">
         <div className="p-8">
           <PageHeader
-            title="Threats"
-            subtitle="Deduplicated security threats detected across AI agents."
+            title={t('title')}
+            subtitle={t('subtitle')}
           />
 
           {/* Pending holds banner — only on Threats tab */}
           {activeTab === 'threats' && pendingHoldsArr.length > 0 && (
             <section className="bg-surface-container-low rounded-sm p-4 mb-6">
               <h3 className="text-[11px] font-semibold uppercase tracking-widest text-error mb-3">
-                ⚠ Pending Holds ({pendingHoldsArr.length})
+                {t('pendingHolds.heading', { count: pendingHoldsArr.length })}
               </h3>
               <ul className="divide-y divide-outline-variant/20">
                 {pendingHoldsArr.map(h => (
@@ -41,7 +43,7 @@ export default function Threats() {
                           h.severity === 'critical' ? 'text-error' :
                           h.severity === 'warning'  ? 'text-amber-400' : 'text-gray-400'
                         }`}>
-                          {h.severity}
+                          {t(`severity.${h.severity}`, { defaultValue: h.severity })}
                         </span>
                         <span className="text-xs text-gray-100 font-mono">{h.agent_id}</span>
                         <span className="text-gray-400">·</span>
@@ -53,7 +55,7 @@ export default function Threats() {
                       to={`/threats/by-hold/${encodeURIComponent(h.hold_id)}`}
                       className="ml-4 px-3 py-1.5 text-[11px] font-semibold rounded bg-primary-button text-primary-button-text hover:scale-95 transition-transform"
                     >
-                      Review →
+                      {t('pendingHolds.review')}
                     </Link>
                   </li>
                 ))}
@@ -73,7 +75,7 @@ export default function Threats() {
                     : 'text-gray-400 border-transparent hover:text-gray-100'
                 }`}
               >
-                {tab}
+                {t(`tabs.${tab}`)}
                 {tab === 'activity' && pendingHoldsArr.length > 0 && (
                   <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-900/60 text-amber-300 text-[9px] font-bold">
                     {pendingHoldsArr.length}
