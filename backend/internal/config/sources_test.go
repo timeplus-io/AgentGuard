@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestCoerceAndValidate(t *testing.T) {
@@ -48,6 +50,30 @@ func TestCoerceAndValidate(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%s=%v: got %v (%T), want %v (%T)", c.key, c.raw, got, got, c.want, c.want)
 		}
+	}
+}
+
+// TestUIDefaultLanguageEnvOverride proves AGENTGUARD_UI_DEFAULT_LANGUAGE is
+// bound by bindEnv (so at runtime env outranks the default and config.yaml) and
+// that /api/config reports the key's source as "env" via the registry EnvVar.
+// bindEnv is exactly the mechanism Load() uses, so this exercises the real path
+// hermetically (LoadFrom intentionally skips env overrides).
+func TestUIDefaultLanguageEnvOverride(t *testing.T) {
+	t.Setenv("AGENTGUARD_UI_DEFAULT_LANGUAGE", "zh-CN")
+
+	v := viper.New()
+	v.SetDefault("ui.default_language", "en")
+	bindEnv(v)
+	if got := v.GetString("ui.default_language"); got != "zh-CN" {
+		t.Errorf("GetString = %q, want \"zh-CN\" from env (default is \"en\")", got)
+	}
+
+	m, ok := MetaFor("ui.default_language")
+	if !ok {
+		t.Fatal("ui.default_language not in registry")
+	}
+	if got := ResolveSource(m, map[string]bool{}, map[string]bool{}); got != SourceEnv {
+		t.Errorf("source = %v, want env", got)
 	}
 }
 
