@@ -157,4 +157,4 @@ translations:
       - https://www.promptfoo.dev/lm-security-db/vuln/visual-confused-deputy-attack-b3f726b4,
       - https://arxiv.org/abs/2604.10577,
       - https://owasp.org/www-project-top-10-for-large-language-model-applications/
-      示例:代理推理认为"点击了位于 (450,320) 的取消按钮" → ScreenSwap 交换了像素 → 实际点击落在了"确认支付 $9,999"上 → tool_result 显示 {"action_result": "payment_confirmed", "amount": 9999}。
+      示例:代理推理认为"clicking Cancel at (450,320)" → ScreenSwap 交换了像素 → 实际点击落在了"Confirm Payment $9,999"上 → tool_result 显示 {"action_result": "payment_confirmed", "amount": 9999}。

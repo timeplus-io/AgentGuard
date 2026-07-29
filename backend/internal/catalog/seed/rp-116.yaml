@@ -184,4 +184,4 @@ translations:
       - https://arxiv.org/abs/2510.03999,
       - https://arxiv.org/html/2510.03999v3,
       - https://genai.owasp.org/llmrisk/asa03-agentic-ai-task-integrity/,
-      示例：某会话连续出现4个 tool_success=false 事件（deploy_service：权限被拒），而 assistant_message 却从"完成15%"逐步升级到"完成65%"——这是单事件检测无法发现的伪造进度链。
+      示例：某会话连续出现4个 tool_success=false 事件（deploy_service：权限被拒），而 assistant_message 却从"15% done"逐步升级到"65% done"——这是单事件检测无法发现的伪造进度链。
