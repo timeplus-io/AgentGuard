@@ -594,6 +594,61 @@ func TestCreateCatalogRule_UDFConflict(t *testing.T) {
 	}
 }
 
+func TestGetCatalogRule_Localized(t *testing.T) {
+	seed := fstest.MapFS{
+		"rp-900.yaml": {Data: []byte(
+			"id: rp-900\n" +
+				"name: Base Name\n" +
+				"version: 1.0.0\n" +
+				"description: Base description.\n" +
+				"sql_template: \"SELECT 1\"\n" +
+				"translations:\n" +
+				"  zh-CN:\n" +
+				"    name: 中文名称\n" +
+				"    description: 中文描述。\n",
+		)},
+	}
+	mgr, err := catalog.New(seed, t.TempDir())
+	if err != nil {
+		t.Fatalf("catalog.New: %v", err)
+	}
+	r := gin.New()
+	r.GET("/rules/catalog/:id", GetCatalogRule(mgr))
+
+	// zh-CN → localized, translations map stripped.
+	reqZh := httptest.NewRequest(http.MethodGet, "/rules/catalog/rp-900?locale=zh-CN", nil)
+	wZh := httptest.NewRecorder()
+	r.ServeHTTP(wZh, reqZh)
+	if wZh.Code != http.StatusOK {
+		t.Fatalf("zh: want 200, got %d: %s", wZh.Code, wZh.Body.String())
+	}
+	var zh catalog.Definition
+	if err := json.Unmarshal(wZh.Body.Bytes(), &zh); err != nil {
+		t.Fatalf("zh unmarshal: %v", err)
+	}
+	if zh.Name != "中文名称" || zh.Description != "中文描述。" {
+		t.Errorf("zh not localized: name=%q desc=%q", zh.Name, zh.Description)
+	}
+	if zh.Translations != nil {
+		t.Errorf("translations map must be stripped, got %v", zh.Translations)
+	}
+	if strings.Contains(wZh.Body.String(), "translations") {
+		t.Errorf("response leaked translations key: %s", wZh.Body.String())
+	}
+
+	// No locale → English base.
+	reqEn := httptest.NewRequest(http.MethodGet, "/rules/catalog/rp-900", nil)
+	wEn := httptest.NewRecorder()
+	r.ServeHTTP(wEn, reqEn)
+	var en catalog.Definition
+	if err := json.Unmarshal(wEn.Body.Bytes(), &en); err != nil {
+		t.Fatalf("en unmarshal: %v", err)
+	}
+	if en.Name != "Base Name" || en.Description != "Base description." {
+		t.Errorf("en not base: name=%q desc=%q", en.Name, en.Description)
+	}
+}
+
 func TestRespondCatalogError_StatusMapping(t *testing.T) {
 	cases := []struct {
 		name string

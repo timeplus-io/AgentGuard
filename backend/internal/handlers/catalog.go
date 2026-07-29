@@ -115,7 +115,7 @@ func GetCatalogRule(mgr *catalog.Manager) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "rule definition not found"})
 			return
 		}
-		c.JSON(http.StatusOK, d)
+		c.JSON(http.StatusOK, d.Localized(resolveLocale(c)))
 	}
 }
 
