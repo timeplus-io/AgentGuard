@@ -1,9 +1,11 @@
 # Agent Attack & Anomaly (A19–A23)
 
-## A19 提示词注入导致数据访问 — ✅ `dsa-a19`
-Injection markers then sensitive retrieval / tool call. Detections:
-`rule_id='dsa-a19'`.
-- Direct audit query (self-contained — works whether or not the `data-security-audit` package is installed):
+Each rule has an **exploration query** over `agentguard_cim_event`.
+
+## A19 提示词注入导致数据访问
+Injection markers followed by sensitive retrieval / tool use. Review first.
+- Fields: `user_message`, `tool_result`.
+- Exploration query:
   ```sql
   SELECT event_time, agent_id, session_id, raw_hook_name, left(concat(user_message, ' ', tool_result), 240) AS evidence
   FROM table(agentguard_cim_event)
@@ -15,13 +17,12 @@ Injection markers then sensitive retrieval / tool call. Detections:
   ORDER BY event_time DESC
   LIMIT 50
   ```
+- Evidence: the injection phrase, what followed it, `session_id`.
 
-Priority rule.
-
-## A20 系统提示词或隐藏上下文泄露 — ✅ `dsa-a20`
-System prompt / internal policy / tool defs / KB keys in a reply. Detections:
-`rule_id='dsa-a20'`.
-- Direct audit query (self-contained — works whether or not the `data-security-audit` package is installed):
+## A20 系统提示词或隐藏上下文泄露
+System prompt / internal policy / tool defs / KB keys in a reply. Review first.
+- Fields: `assistant_message` on `event_type = 'llm_response'`.
+- Exploration query:
   ```sql
   SELECT event_time, agent_id, session_id, left(assistant_message, 240) AS evidence
   FROM table(agentguard_cim_event)
@@ -30,24 +31,28 @@ System prompt / internal policy / tool defs / KB keys in a reply. Detections:
   ORDER BY event_time DESC
   LIMIT 50
   ```
+- Evidence: the leaked fragment (masked), `session_id`, `event_time`.
 
-Priority rule.
-
-## A21 智能体行为与声明能力不一致 — 🔍 investigate
-Read-only agent doing writes/deletes; service agent calling dev/ops/DB tools;
-simple Q&A triggering bulk export.
-- Gap: no declared-capability / `role_id` context in CIM. Best-effort — list
-  the tool verbs a given agent actually used and eyeball against its stated
-  role:
+## A21 智能体行为与声明能力不一致
+Read-only agent doing writes / deletes; service agent calling dev/ops tools.
+- Fields: `agent_id`, `tool_name`. Proxy — there is no declared-capability
+  field, so this lists the tool verbs each agent actually used, to eyeball
+  against its stated role.
+- Exploration query:
   ```sql
-  SELECT agent_id, tool_name, count() FROM table(agentguard_cim_event)
-  WHERE event_type='tool_invoke' GROUP BY agent_id, tool_name ORDER BY agent_id
+  SELECT agent_id, tool_name, count() AS calls
+  FROM table(agentguard_cim_event)
+  WHERE event_type = 'tool_invoke' AND tool_name != ''
+  GROUP BY agent_id, tool_name
+  ORDER BY agent_id, calls DESC
+  LIMIT 200
   ```
+- Evidence: agent, the out-of-role tools it used, call counts.
 
-## A22 异常调用频率和调用链 — ✅ `dsa-a22`
-Single-event anomaly signals (recursion/retry/rate-limit/huge output).
-Detections: `rule_id='dsa-a22'`.
-- Direct audit query (self-contained — works whether or not the `data-security-audit` package is installed):
+## A22 异常调用频率和调用链
+Anomaly signals — recursion / retry / rate-limit markers or a very long reply.
+- Fields: `tool_result`, `assistant_message`.
+- Exploration query:
   ```sql
   SELECT event_time, agent_id, session_id, raw_hook_name, left(assistant_message, 240) AS evidence
   FROM table(agentguard_cim_event)
@@ -59,19 +64,21 @@ Detections: `rule_id='dsa-a22'`.
   ORDER BY event_time DESC
   LIMIT 50
   ```
+- Evidence: the anomaly signal, `session_id`. For call-frequency spikes, group
+  by `session_id` over a time window and look for outliers.
 
-Frequency/spike analysis is investigate-only —
-count calls per session over a window as in A17.
-
-## A23 安全策略命中但未阻断 — 🔍 investigate
-Gateway flagged sensitive/authz/injection but the request still ran.
-- Gap: needs `policy_decision` + whether execution proceeded — cross-stream and
-  not in CIM (#261). Proxy: a `dsa-*` security event whose session also has a
-  later successful `tool_complete`:
+## A23 安全策略命中但未阻断
+A policy was flagged but the request still ran.
+- Fields: `hook_decision`, `block_reason` on the event. This lists every event
+  carrying a policy decision so you can see which were flagged and whether
+  execution continued in the same session.
+- Exploration query:
   ```sql
-  SELECT s.session_id, s.rule_id, s.detected_at
-  FROM table(agentguard_security_events) AS s
-  WHERE s.detected_at >= now() - INTERVAL 1 DAY
-  ORDER BY s.detected_at DESC LIMIT 100
+  SELECT event_time, event_type, session_id, tool_name, hook_decision, left(block_reason, 160) AS reason
+  FROM table(agentguard_cim_event)
+  WHERE hook_decision != '' OR block_reason != ''
+  ORDER BY event_time DESC
+  LIMIT 100
   ```
-  then check the session timeline for continued execution. Report as proxy.
+- Evidence: `hook_decision`, `block_reason`, whether a later `tool_complete`
+  ran in the same `session_id`, `event_time`.

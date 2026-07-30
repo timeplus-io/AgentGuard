@@ -1,22 +1,22 @@
 ---
 name: data-audit-guide
 description: >
-  The customer data-security audit checklist (A01–A27) as an interactive
-  playbook: which A-codes have a live detection rule, which require manual
-  investigation, the CIM fields each needs (and the gaps), and the evidence to
-  record. Load this before auditing conversation / tool-call data against the
-  customer checklist.
+  The data-security audit checklist (A01–A27) as an interactive, self-contained
+  playbook. Every A-code carries a ready exploration query over
+  agentguard_cim_event, plus the fields it uses (and the gaps) and the evidence
+  to record. Load this before auditing conversation / tool-call data.
 metadata:
   author: timeplus-io
-  scope: AgentGuard Sentry (read-only investigation of the customer audit rules)
+  scope: AgentGuard Sentry (read-only exploration of agentguard_cim_event)
 ---
 
-# Data-Security Audit Guide (Customer Checklist A01–A27)
+# Data-Security Audit Guide (Checklist A01–A27)
 
-You are auditing AgentGuard conversation, gateway, and tool-call data against a
-customer-authored checklist of 27 data-security rules (A01–A27). This guide is
-the map that keeps your answers accurate: which A-code has a live rule, which
-you must investigate by hand, what fields exist, and what evidence to record.
+You are auditing agent conversation, gateway, and tool-call data against a
+27-point data-security checklist (A01–A27). This guide is self-contained: every
+A-code has a ready **exploration query** you run directly over the
+`agentguard_cim_event` stream with `run_sql`. No other stream is needed —
+`agentguard_cim_event` is the single source for this audit.
 
 ## Audit boundary
 
@@ -24,44 +24,45 @@ Scope is **runtime data only** — user input, system prompts, context,
 knowledge-base results, model output, gateway request/response, and tool calls
 (name, params, return, status, call chain). Infrastructure, database, backup,
 endpoint, and network-device configuration are **out of scope**: the data to
-judge them does not exist here. A rule "passing" is a technical signal, not
-proof that contracts, approvals, or policy are satisfied.
+judge them does not exist here. A query returning no rows is a technical signal,
+not proof that contracts, approvals, or policy are satisfied.
 
 ## The A01–A27 catalog
 
-Legend: ✅ = a live `dsa-aNN` rule writes detections to
-`agentguard_security_events`; 🔍 = investigate-only (no single rule — check by
-hand using the recipe in the reference file).
+Every A-code has an exploration query in the reference file named below. Some
+are precise; others are best-effort **proxies** because the field they truly
+need is absent from the event model (see Field reality) — the reference query
+says so where that applies.
 
-| A | 中文 | Status | Rule / where |
-|---|------|--------|--------------|
-| A01 | 用户输入敏感数据检测 | ✅ | `dsa-a01` |
-| A02 | 输入模型前未脱敏 | 🔍 | SENSITIVE_DATA.md |
-| A03 | 模型输出敏感信息 | ✅ | `dsa-a03` |
-| A04 | 工具参数携带非必要敏感数据 | ✅ | `dsa-a04` |
-| A05 | 工具返回结果未脱敏 | ✅ | `dsa-a05` |
-| A06 | 身份鉴别信息进入对话链路 | ✅ | `dsa-a06` |
-| A07 | 数据汇聚后风险升级 | ✅ | `dsa-a07` |
-| A08 | 跨用户或跨租户数据泄露 | ✅ | `dsa-a08` |
-| A09 | 未授权工具调用 | ✅ | `dsa-a09` |
-| A10 | 越权参数调用 | ✅ | `dsa-a10` |
-| A11 | 高风险工具缺少身份信息 | ✅ | `dsa-a11` |
-| A12 | 策略拒绝后绕过调用 | ✅ | `dsa-a12` |
-| A13 | 未登记工具或外部地址 | 🔍 | EXFIL.md |
-| A14 | 敏感数据传向外部工具 | ✅ | `dsa-a14` |
-| A15 | 外传保护等级下降 | 🔍 | EXFIL.md |
-| A16 | 外部传输通道不安全 | 🔍 | EXFIL.md |
-| A17 | 批量提取或枚举数据 | ✅ | `dsa-a17` |
-| A18 | 隐蔽外传行为 | ✅ | `dsa-a18` |
-| A19 | 提示词注入导致数据访问 | ✅ | `dsa-a19` |
-| A20 | 系统提示词或隐藏上下文泄露 | ✅ | `dsa-a20` |
-| A21 | 智能体行为与声明能力不一致 | 🔍 | ATTACK.md |
-| A22 | 异常调用频率和调用链 | ✅ | `dsa-a22` |
-| A23 | 安全策略命中但未阻断 | 🔍 | ATTACK.md |
-| A24 | 审计字段缺失 | 🔍 | AUDIT_TRAIL.md |
-| A25 | 调用链断裂 | 🔍 | AUDIT_TRAIL.md |
-| A26 | 模型和策略版本不可追溯 | 🔍 | AUDIT_TRAIL.md |
-| A27 | 日志内容过度留存 | 🔍 | AUDIT_TRAIL.md |
+| A | 中文 | English | Reference |
+|---|------|---------|-----------|
+| A01 | 用户输入敏感数据检测 | Sensitive PII in user input | SENSITIVE_DATA.md |
+| A02 | 输入模型前未脱敏 | Not masked before model (proxy) | SENSITIVE_DATA.md |
+| A03 | 模型输出敏感信息 | Sensitive info in model output | SENSITIVE_DATA.md |
+| A04 | 工具参数携带非必要敏感数据 | Sensitive data in tool params | SENSITIVE_DATA.md |
+| A05 | 工具返回结果未脱敏 | Tool result not masked | SENSITIVE_DATA.md |
+| A06 | 身份鉴别信息进入对话链路 | Credentials in the chain | SENSITIVE_DATA.md |
+| A07 | 数据汇聚后风险升级 | Aggregation / re-identification | SENSITIVE_DATA.md |
+| A08 | 跨用户或跨租户数据泄露 | Cross-user / tenant leak (proxy) | PERMISSIONS.md |
+| A09 | 未授权工具调用 | Unauthorized tool call (proxy) | PERMISSIONS.md |
+| A10 | 越权参数调用 | Privilege-parameter call | PERMISSIONS.md |
+| A11 | 高风险工具缺少身份信息 | High-risk call, no identity | PERMISSIONS.md |
+| A12 | 策略拒绝后绕过调用 | Bypass after denial (proxy) | PERMISSIONS.md |
+| A13 | 未登记工具或外部地址 | Unregistered tool / address (proxy) | EXFIL.md |
+| A14 | 敏感数据传向外部工具 | Sensitive data to external tool | EXFIL.md |
+| A15 | 外传保护等级下降 | Egress protection downgrade (proxy) | EXFIL.md |
+| A16 | 外部传输通道不安全 | Insecure channel (proxy) | EXFIL.md |
+| A17 | 批量提取或枚举数据 | Bulk extraction / enumeration | EXFIL.md |
+| A18 | 隐蔽外传行为 | Covert exfiltration | EXFIL.md |
+| A19 | 提示词注入导致数据访问 | Prompt injection → data access | ATTACK.md |
+| A20 | 系统提示词或隐藏上下文泄露 | System-prompt / hidden-context leak | ATTACK.md |
+| A21 | 智能体行为与声明能力不一致 | Behavior vs. declared (proxy) | ATTACK.md |
+| A22 | 异常调用频率和调用链 | Anomalous frequency / chain | ATTACK.md |
+| A23 | 安全策略命中但未阻断 | Policy hit but not blocked | ATTACK.md |
+| A24 | 审计字段缺失 | Missing audit fields | AUDIT_TRAIL.md |
+| A25 | 调用链断裂 | Broken call chain | AUDIT_TRAIL.md |
+| A26 | 模型和策略版本不可追溯 | Untraceable versions (proxy) | AUDIT_TRAIL.md |
+| A27 | 日志内容过度留存 | Excessive log retention (proxy) | AUDIT_TRAIL.md |
 
 ## Reference files
 
@@ -73,52 +74,41 @@ hand using the recipe in the reference file).
 | A19–A23 attack & anomaly | `references/ATTACK.md` |
 | A24–A27 audit trail | `references/AUDIT_TRAIL.md` |
 
-## Field reality (checklist §8 vs. CIM)
+## Field reality
 
 `agentguard_cim_event` **has**: `event_time`, `event_type`, `agent_id`,
 `agent_type`, `deployment_id`, `session_id`, `run_id`, `provider`, `model`,
 `user_message`, `assistant_message`, `tool_name`, `tool_input`, `tool_result`,
 `tool_success`, `tool_duration_ms`, `hook_decision`, `block_reason`,
 `raw_hook_name`, `raw_event_data`. There is **no** `user_id` column — user
-attribution comes from `agent_id`/`session_id`. Note the model/assistant text
-column is `assistant_message` (not `llm_response`, which is an `event_type`
-value).
+attribution comes from `agent_id`/`session_id`. The model/assistant text column
+is `assistant_message` (`llm_response` is an `event_type` value, not a column).
 
 It does **not** have: `tenant_id`, `role_id`, `content_direction`,
 `sensitive_types`, `policy_decision`, `policy_rule_id`, `prompt_version`,
-`model_version`, `tool_version`, `protocol`, `tls_version`. Never claim to
-audit a field that is not here — say it is "not captured" and point at
-**issue #261** (the CIM audit-metadata extension that will add these). A16, A26,
-A27 depend entirely on absent fields and are always investigate-only /
-inconclusive today.
+`model_version`, `tool_version`, `protocol`, `tls_version`. Never claim to audit
+a field that is not here — say it is "not captured". A15, A16, A26, and A27
+depend on absent fields, so their exploration queries are proxies over the
+closest observable signal.
 
 ## How to investigate
 
-1. Every ✅ A-code carries a **direct audit query** in its reference file — a
-   self-contained `run_sql` over `table(agentguard_cim_event)` that finds
-   matches whether or not the `data-security-audit` rule package is installed.
-   Run that to audit on demand. If the package IS installed, the same rule's
-   pre-computed detections are also in `agentguard_security_events`
-   (`WHERE rule_id = 'dsa-a06'`), which is cheaper for ongoing monitoring:
-   ```sql
-   SELECT detected_at, agent_id, session_id, message
-   FROM table(agentguard_security_events)
-   WHERE rule_id = 'dsa-a06' AND detected_at >= now() - INTERVAL 1 DAY
-   ORDER BY detected_at DESC
-   ```
-2. For a 🔍 A-code, follow the recipe in the reference file — usually a
-   `run_sql` predicate over `table(agentguard_cim_event)` or a `dlp_search`
-   for meaning-based content.
-3. Prefer `dlp_search` over hand-written SQL for "does any message contain X
-   kind of sensitive content" questions.
-4. For rule state (installed / enabled / MV health) use `get_rule_status` and
-   `get_rule_catalog`.
+1. Open the reference file for the A-code and run its **exploration query** with
+   `run_sql`. It is a single read-only `SELECT` over `table(agentguard_cim_event)`
+   (always `table(...)` — a bare `FROM agentguard_cim_event` is an unbounded
+   subscription; keep the `LIMIT`).
+2. For each hit, drill into the surrounding session: filter the same query's
+   `WHERE` down to that `session_id` (and widen the time window) to see the full
+   call chain before and after the flagged event.
+3. Tighten or loosen the keyword / pattern lists in the query to fit the
+   deployment — they are starting points, not fixed thresholds.
+4. When an A-code is a proxy (its reference says so), report the proxy's limits
+   alongside the finding — say which field is "not captured".
 
-## Evidence to record (checklist §9)
+## Evidence to record
 
-For every finding, capture what CIM supports and mark the rest "not captured":
-rule code (A-code + `dsa-*`), risk level, user & tenant (tenant = not
-captured), session & call chain (`session_id`, `run_id`; `trace_id` linkage =
-best-effort), masked hit fragment, sensitive-data type, source → destination,
-tool & model version (versions = not captured), policy decision (not captured),
-event time, event hash (`raw_event_data`), and the reason for the judgment.
+For every finding, capture what the event supports and mark the rest "not
+captured": the A-code, risk level, session & call chain (`session_id`, `run_id`),
+masked hit fragment, sensitive-data type, source → destination, `event_time`,
+event payload hash (`raw_event_data`), and the reason for the judgment. Tenant,
+role, policy decision, and version fields are not captured — note them as such.

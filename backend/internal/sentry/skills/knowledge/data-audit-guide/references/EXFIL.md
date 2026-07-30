@@ -1,19 +1,26 @@
 # External Transport & Tool Calls (A13–A18)
 
-## A13 未登记工具或外部地址 — 🔍 investigate
-Tool/domain/IP not in the registry, or bypassing the gateway.
-- Gap: no tool/endpoint registry in CIM. Best-effort — list external targets:
-  ```sql
-  SELECT tool_name, count() FROM table(agentguard_cim_event)
-  WHERE event_type='tool_invoke'
-    AND multi_search_any(lower(tool_input), ['http://','https://','ftp://'])
-  GROUP BY tool_name ORDER BY count() DESC LIMIT 50
-  ```
-- Compare against the operator's known-tool list out of band.
+Each rule has an **exploration query** over `agentguard_cim_event`.
 
-## A14 敏感数据传向外部工具 — ✅ `dsa-a14`
-Sensitive data in external/network tool params. Detections: `rule_id='dsa-a14'`.
-- Direct audit query (self-contained — works whether or not the `data-security-audit` package is installed):
+## A13 未登记工具或外部地址
+Tool / domain / IP not in the registry, or bypassing the gateway.
+- Fields: `tool_input`, `tool_name`. Proxy — there is no tool/endpoint registry
+  in the event model, so this lists external targets to compare out of band.
+- Exploration query:
+  ```sql
+  SELECT event_time, tool_name, session_id, left(tool_input, 200) AS evidence
+  FROM table(agentguard_cim_event)
+  WHERE event_type = 'tool_invoke'
+    AND multi_search_any(lower(tool_input), ['http://', 'https://', 'ftp://', 'ssh://'])
+  ORDER BY event_time DESC
+  LIMIT 100
+  ```
+- Evidence: the external target, tool, `session_id`.
+
+## A14 敏感数据传向外部工具
+Sensitive data in external / network tool parameters.
+- Fields: `tool_name`, `tool_input` on `event_type = 'tool_invoke'`.
+- Exploration query:
   ```sql
   SELECT event_time, agent_id, session_id, tool_name, left(tool_input, 240) AS evidence
   FROM table(agentguard_cim_event)
@@ -23,20 +30,45 @@ Sensitive data in external/network tool params. Detections: `rule_id='dsa-a14'`.
   ORDER BY event_time DESC
   LIMIT 50
   ```
+- Evidence: destination tool, masked hit, data type, `session_id`.
 
-## A15 外传保护等级下降 — 🔍 investigate
-Downstream call didn't inherit the upstream sensitive label / masking policy.
-- Gap: no `sensitive_types` / `data_labels` in CIM (#261). Not decidable today
-  — report inconclusive.
+## A15 外传保护等级下降
+Downstream call did not inherit the upstream sensitive label / masking.
+- Fields: `tool_name`, `tool_input`. Proxy — there is no `sensitive_types` /
+  data-label column, so this flags sensitive data entering an outbound tool
+  (the observable symptom of a lost protection level).
+- Exploration query:
+  ```sql
+  SELECT event_time, tool_name, session_id, left(tool_input, 200) AS evidence
+  FROM table(agentguard_cim_event)
+  WHERE event_type = 'tool_invoke'
+    AND multi_search_any(lower(tool_name), ['http', 'fetch', 'curl', 'upload', 'webhook', 'post', 'send', 's3', 'url'])
+    AND multi_search_any(lower(tool_input), ['password', 'secret', 'api key', 'token', '身份证', '银行卡', 'ssn'])
+  ORDER BY event_time DESC
+  LIMIT 50
+  ```
+- Evidence: outbound tool + sensitive marker; mark "labels not captured".
 
-## A16 外部传输通道不安全 — 🔍 investigate (conditional)
-Plaintext HTTP / invalid cert / TLS < 1.2.
-- Gap: no `protocol` / `tls_version` in CIM (#261). Only a coarse proxy:
-  `http://` (not `https://`) literals in `tool_input`. Report as proxy only.
+## A16 外部传输通道不安全
+Plaintext HTTP / invalid cert / weak TLS.
+- Fields: `tool_input`. Proxy — there is no `protocol` / `tls_version` column,
+  so this flags a plaintext `http://` target with no `https://` present.
+- Exploration query:
+  ```sql
+  SELECT event_time, tool_name, session_id, left(tool_input, 200) AS evidence
+  FROM table(agentguard_cim_event)
+  WHERE event_type = 'tool_invoke'
+    AND position(lower(tool_input), 'http://') > 0
+    AND position(lower(tool_input), 'https://') = 0
+  ORDER BY event_time DESC
+  LIMIT 50
+  ```
+- Evidence: the `http://` target, tool; mark "transport metadata not captured".
 
-## A17 批量提取或枚举数据 — ✅ `dsa-a17`
-Large page/limit or fetch-all in one call. Detections: `rule_id='dsa-a17'`.
-- Direct audit query (self-contained — works whether or not the `data-security-audit` package is installed):
+## A17 批量提取或枚举数据
+Bulk data pull — large page/limit or fetch-all in one call.
+- Fields: `tool_input` on `event_type = 'tool_invoke'`.
+- Exploration query:
   ```sql
   SELECT event_time, agent_id, session_id, tool_name, left(tool_input, 240) AS evidence
   FROM table(agentguard_cim_event)
@@ -48,18 +80,12 @@ Large page/limit or fetch-all in one call. Detections: `rule_id='dsa-a17'`.
   ORDER BY event_time DESC
   LIMIT 50
   ```
+- Evidence: the size parameter / flag, tool, `session_id`.
 
-The frequency dimension (many calls in a short window) is investigate-only:
-```sql
-SELECT session_id, count() AS calls FROM table(agentguard_cim_event)
-WHERE event_type='tool_invoke' AND multi_search_any(lower(tool_name), ['query','search','export'])
-  AND event_time >= now() - INTERVAL 1 HOUR
-GROUP BY session_id HAVING calls > 50 ORDER BY calls DESC
-```
-
-## A18 隐蔽外传行为 — ✅ `dsa-a18`
-Base64/hex/percent-encoded covert egress. Detections: `rule_id='dsa-a18'`.
-- Direct audit query (self-contained — works whether or not the `data-security-audit` package is installed):
+## A18 隐蔽外传行为
+Base64 / hex / percent-encoded covert egress. Review first.
+- Fields: `tool_input` on `event_type = 'tool_invoke'`.
+- Exploration query:
   ```sql
   SELECT event_time, agent_id, session_id, tool_name, left(tool_input, 240) AS evidence
   FROM table(agentguard_cim_event)
@@ -73,5 +99,4 @@ Base64/hex/percent-encoded covert egress. Detections: `rule_id='dsa-a18'`.
   ORDER BY event_time DESC
   LIMIT 50
   ```
-
-Priority rule — review first.
+- Evidence: the encoded blob (masked / truncated), tool, `session_id`.
