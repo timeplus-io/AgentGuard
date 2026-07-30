@@ -1,0 +1,57 @@
+id: dsa-a05
+name: "[A05] Tool Result Written Back Unmasked"
+version: "1.0.0"
+description: |
+  Flags when a tool returns full customer data and the agent writes it into
+  context or a reply without masking, truncation, or filtering. Heuristic:
+  PII/card signatures in tool_result with no masking markers present.
+  (Customer audit rule A05.)
+severity: warning
+category: sensitive_data_exposure
+fp_rate: medium
+hook_sources: "tool_complete"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a05
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'warning'                 AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Unmasked sensitive data in result of tool ', tool_name) AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_complete'
+    AND (
+         match(tool_result, 'sk-ant-[A-Za-z0-9_-]{16,}')
+      OR match(tool_result, 'sk-[A-Za-z0-9]{32,}')
+      OR match(tool_result, 'AKIA[0-9A-Z]{16}')
+      OR match(tool_result, 'AIza[0-9A-Za-z_-]{35}')
+      OR match(tool_result, 'gh[pousr]_[A-Za-z0-9]{30,}')
+      OR match(tool_result, 'xox[baprs]-[A-Za-z0-9-]{10,}')
+      OR match(tool_result, 'eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{5,}')
+      OR match(tool_result, '-----BEGIN [A-Z ]*PRIVATE KEY-----')
+      OR match(lower(tool_result), '(api|secret|access|private)[_-]?key[[:space:]]*[=:][[:space:]]*[a-z0-9_+/.-]{12,}')
+      OR match(lower(tool_result), '(password|passwd|pwd|token|bearer)[[:space:]]*[=:][[:space:]]*[^[:space:]]{8,}')
+      OR match(lower(tool_result), '(密码|口令|密钥|令牌)[：:＝=][^[:space:]]{6,}')
+      OR match(tool_result, '[1-9][0-9]{5}(19|20)[0-9]{2}[01][0-9][0-3][0-9][0-9]{3}[0-9Xx]')
+      OR match(tool_result, '[0-9]{3}-[0-9]{2}-[0-9]{4}')
+      OR match(tool_result, '[0-9]{4}[ -][0-9]{4}[ -][0-9]{4}[ -][0-9]{1,7}')
+      OR match(tool_result, '(^|[^0-9])1[3-9][0-9]{9}([^0-9]|$)')
+    )
+    AND NOT match(tool_result, '[*]{3,}')
+translations:
+  zh-CN:
+    name: "工具返回结果未脱敏"
+    description: |
+      工具返回完整客户数据后,智能体直接写入上下文或回复用户,且未掩码、截断或过滤时违规。

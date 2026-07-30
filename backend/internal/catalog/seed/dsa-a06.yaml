@@ -1,0 +1,53 @@
+id: dsa-a06
+name: "[A06] Authentication Material in the Conversation Chain"
+version: "1.0.0"
+description: |
+  Detects passwords, verification codes, tokens, cookies, private keys, or
+  AccessKeys appearing in prompts, tool parameters, tool results, or model
+  output — any of which is a direct high-risk finding. (Customer audit rule
+  A06.)
+severity: critical
+category: credential_theft_and_harvesting
+fp_rate: low
+hook_sources: "user_input,llm_request,tool_invoke,tool_complete,llm_response"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a06
+  - credentials
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'critical'                AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Authentication material in conversation chain (', raw_hook_name, ')') AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('user_input', 'llm_request', 'tool_invoke', 'tool_complete', 'llm_response')
+    AND (
+         match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'sk-ant-[A-Za-z0-9_-]{16,}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'sk-[A-Za-z0-9]{32,}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'AKIA[0-9A-Z]{16}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'AIza[0-9A-Za-z_-]{35}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'gh[pousr]_[A-Za-z0-9]{30,}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'xox[baprs]-[A-Za-z0-9-]{10,}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{5,}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), '-----BEGIN [A-Z ]*PRIVATE KEY-----')
+      OR match(lower(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result)), '(api|secret|access|private)[_-]?key[[:space:]]*[=:][[:space:]]*[a-z0-9_+/.-]{12,}')
+      OR match(lower(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result)), '(password|passwd|pwd|token|bearer)[[:space:]]*[=:][[:space:]]*[^[:space:]]{8,}')
+      OR match(lower(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result)), '(密码|口令|密钥|令牌)[：:＝=][^[:space:]]{6,}')
+    )
+translations:
+  zh-CN:
+    name: "身份鉴别信息进入对话链路"
+    description: |
+      密码、验证码、Token、Cookie、私钥或 AccessKey 出现在提示词、工具参数、工具结果或模型输出中,直接判定高风险。

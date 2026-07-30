@@ -1,0 +1,34 @@
+id: data-security-audit
+name: "Data-Security Audit (Customer Baseline)"
+description: |
+  The customer conversation / tool-call data-security audit checklist as
+  runnable detections: sensitive PII in input and output, credentials in the
+  conversation chain, unmasked tool data, privilege-parameter and unauthorized
+  tool calls, sensitive egress and covert exfiltration, prompt-injection to
+  data access, and system-prompt leakage. Covers the machine-detectable rules
+  A01-A22; the remaining audit rules are covered by the data-audit-guide
+  investigation skill.
+default_enabled: false
+rules:
+  - dsa-a01
+  - dsa-a03
+  - dsa-a04
+  - dsa-a05
+  - dsa-a06
+  - dsa-a07
+  - dsa-a08
+  - dsa-a09
+  - dsa-a10
+  - dsa-a11
+  - dsa-a12
+  - dsa-a14
+  - dsa-a17
+  - dsa-a18
+  - dsa-a19
+  - dsa-a20
+  - dsa-a22
+translations:
+  zh-CN:
+    name: "数据安全审计(客户基线)"
+    description: |
+      将客户的智能体对话与工具调用数据安全审计清单落地为可运行的检测规则:用户输入与模型输出中的敏感数据、进入对话链路的身份鉴别信息、未脱敏的工具数据、越权参数与未授权工具调用、敏感数据外传与隐蔽外传、提示词注入导致的数据访问,以及系统提示词泄露。覆盖可技术检测的 A01-A22 规则;其余审计规则由 data-audit-guide 调查技能覆盖。

@@ -42,6 +42,9 @@ function buildDraft(byKey) {
       // Opt-in switch for the AgentGuard interaction surface (skill +
       // read/write tools). Absent means DISABLED — generic SQL analyst.
       agentguard_tools_enabled: chat.agentguard_tools_enabled ?? false,
+      // Opt-in switch for the data-audit-guide skill (A01–A27 audit playbook
+      // over agentguard_cim_event). Independent of the surface above.
+      data_audit_enabled: chat.data_audit_enabled ?? false,
       // Anthropic-only knobs (#212): ignored by the OpenAI provider.
       thinking: chat.thinking || '',
       effort: chat.effort || '',
@@ -133,6 +136,7 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
         sql_max_rows: Number(c.sql_max_rows) || 0,
         tool_result_max_bytes: Number(c.tool_result_max_bytes) || 0,
         agentguard_tools_enabled: !!c.agentguard_tools_enabled,
+        data_audit_enabled: !!c.data_audit_enabled,
         thinking: c.thinking,
         effort: c.effort,
         prompt_cache_disabled: !!c.prompt_cache_disabled,
@@ -294,6 +298,18 @@ export default function SentryConfigEditor({ reloadToken = 0 }) {
             <span>
               <span className="font-medium">{t('config.chat.agentguardToolsTitle')}</span>
               <span className="text-gray-500">{t('config.chat.agentguardToolsDescription')}</span>
+            </span>
+          </label>
+        </div>
+
+        <div className="mt-3">
+          <label className="flex items-start gap-3 text-xs text-gray-100 max-w-2xl">
+            <span className="pt-0.5">
+              <Toggle checked={draft.chat.data_audit_enabled} onChange={(v) => setChat({ data_audit_enabled: v })} />
+            </span>
+            <span>
+              <span className="font-medium">{t('config.chat.dataAuditTitle')}</span>
+              <span className="text-gray-500">{t('config.chat.dataAuditDescription')}</span>
             </span>
           </label>
         </div>

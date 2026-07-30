@@ -1,0 +1,41 @@
+id: dsa-a11
+name: "[A11] High-Risk Tool Call Missing Identity"
+version: "1.0.0"
+description: |
+  Flags high-risk operations — query-sensitive, export, download, send,
+  modify, delete — that carry no attributable agent or session identity, so
+  the call is not associable to an accountable actor. (Customer audit rule
+  A11.)
+severity: warning
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "tool_invoke,tool_complete"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a11
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'warning'                 AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Unattributable high-risk tool call: ', tool_name) AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('tool_invoke', 'tool_complete')
+    AND (agent_id = '' OR session_id = '')
+    AND multi_search_any(lower(tool_name), ['export', 'download', 'send', 'delete', 'remove', 'modify', 'update', 'query', 'search', 'dump', 'backup', 'transfer'])
+translations:
+  zh-CN:
+    name: "高风险工具缺少身份信息"
+    description: |
+      查询敏感数据、导出、下载、发送、修改和删除类调用无法关联到具体用户、智能体或会话时违规。

@@ -106,6 +106,12 @@ type ChatCfg struct {
 	// run_sql only); operators turn this on to let Sentry interact with
 	// AgentGuard features.
 	AgentGuardToolsEnabled bool `json:"agentguard_tools_enabled"`
+	// DataAuditEnabled is the opt-in switch for the data-audit-guide knowledge
+	// skill — the A01–A27 data-security audit playbook over agentguard_cim_event.
+	// It is independent of AgentGuardToolsEnabled (the skill is a self-contained
+	// run_sql playbook and needs no AgentGuard-specific tool). DISABLED by default
+	// (absent key = false); operators turn it on under Settings → Sentry Agent.
+	DataAuditEnabled bool `json:"data_audit_enabled"`
 }
 
 // applyDefaults fills zero values and clamps operator input to sane ceilings

@@ -186,6 +186,7 @@ func sentryConfigToolView(rows []tp.SentryConfigRow, cc sentry.ChatCfg) (string,
 		"api_key_set": keySet,
 		"status": map[string]any{
 			"agentguard_tools_enabled": cc.AgentGuardToolsEnabled,
+			"data_audit_enabled":       cc.DataAuditEnabled,
 			"write_actions":            "require in-chat human approval",
 			"memory_active":            false,
 			"note":                     "memory is configuration-only until the memory feature (Phase 2) ships; the embedding endpoint is validated but not yet consumed",
@@ -218,10 +219,17 @@ func sentrySelfConfigFn(cfg *config.Config, cc sentry.ChatCfg) func() (string, e
 // DISABLED by default. Off, Sentry is a generic Timeplus SQL analyst
 // (knowledge, schema introspection, run_sql). Write tools remain
 // individually approval-gated (#221) even when the surface is enabled.
+// data-audit-guide has its OWN switch, the chat row's data_audit_enabled bool
+// (also off by default): it is a self-contained run_sql playbook over
+// agentguard_cim_event (no AgentGuard-specific tool), so it is gated
+// independently of the AgentGuard interaction surface.
 func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, holdReg *holdregistry.Registry, cc sentry.ChatCfg) *skills.Registry {
 	var hiddenSkills []string
 	if !cc.AgentGuardToolsEnabled {
 		hiddenSkills = append(hiddenSkills, "agentguard-guide")
+	}
+	if !cc.DataAuditEnabled {
+		hiddenSkills = append(hiddenSkills, "data-audit-guide")
 	}
 	sks := []skills.Skill{
 		skills.NewLoadSkill(cfg.Sentry.SkillDir, hiddenSkills...),

@@ -1,0 +1,43 @@
+id: dsa-a19
+name: "[A19] Prompt Injection Leading to Data Access"
+version: "1.0.0"
+description: |
+  Detects injection markers — ignore-rules, reveal-system-prompt,
+  call-internal-tool, read-other-user-data — in user input or tool results
+  that precede sensitive retrieval or tool use. (Customer audit rule A19.)
+severity: critical
+category: prompt_injection_and_hijacking
+fp_rate: low
+hook_sources: "user_input,tool_complete"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a19
+  - prompt-injection
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'critical'                AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Injection-to-data-access pattern in ', raw_hook_name) AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('user_input', 'tool_complete')
+    AND (
+         match(lower(concat(user_message, ' ', tool_result)), 'ignore [a-z ]{0,20}(previous|prior|all) instructions')
+      OR multi_search_any(lower(concat(user_message, ' ', tool_result)), ['reveal the system prompt', 'show system prompt', 'print system prompt', '忽略以上指令', '忽略之前的指令', '忽略所有规则', 'read other user', 'access other user', '其他用户数据', 'call internal tool', 'invoke internal tool', 'use internal tool'])
+    )
+translations:
+  zh-CN:
+    name: "提示词注入导致数据访问"
+    description: |
+      对话出现忽略规则、展示系统提示词、调用内部工具或读取其他用户数据等注入特征,随后发生敏感检索或工具调用。

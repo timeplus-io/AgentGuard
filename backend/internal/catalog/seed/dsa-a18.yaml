@@ -1,0 +1,44 @@
+id: dsa-a18
+name: "[A18] Covert Exfiltration Behavior"
+version: "1.0.0"
+description: |
+  Detects covert egress: long base64 / hex blobs, data-URI base64 payloads, or
+  extended percent-encoding in outbound tool parameters — the encoding used to
+  smuggle sensitive data past inspection. (Customer audit rule A18.)
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "tool_invoke"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a18
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'critical'                AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Covert encoded payload in tool ', tool_name) AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_invoke'
+    AND (
+         match(tool_input, '[A-Za-z0-9+/]{120,}')
+      OR match(tool_input, '[0-9a-fA-F]{80,}')
+      OR match(lower(tool_input), 'data:[a-z/]+;base64,')
+      OR match(tool_input, '(%[0-9A-Fa-f]{2}){20,}')
+    )
+translations:
+  zh-CN:
+    name: "隐蔽外传行为"
+    description: |
+      将敏感数据编码为 Base64、十六进制、压缩片段或 URL 参数,或拆分多次调用向外发送。
