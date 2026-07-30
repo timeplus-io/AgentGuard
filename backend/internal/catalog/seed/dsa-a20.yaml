@@ -31,7 +31,7 @@ sql_template: |
     raw_event_data            AS event_data
   FROM agentguard_cim_event
   WHERE event_type = 'llm_response'
-    AND multi_search_any(lower(llm_response), ['system prompt', 'my instructions are', 'internal policy', 'tool definition', '以下是我的系统提示', '我的系统指令', 'my system message', 'hidden context', 'knowledge base key', 'begin system', '<system>'])
+    AND multi_search_any(lower(assistant_message), ['system prompt', 'my instructions are', 'internal policy', 'tool definition', '以下是我的系统提示', '我的系统指令', 'my system message', 'hidden context', 'knowledge base key', 'begin system', '<system>'])
 translations:
   zh-CN:
     name: "系统提示词或隐藏上下文泄露"

@@ -34,9 +34,9 @@ sql_template: |
   FROM agentguard_cim_event
   WHERE event_type = 'llm_response'
     AND (
-         match(llm_response, '[0-9]{17}[0-9Xx]')
-      OR match(llm_response, '[0-9]{13,19}')
-      OR multi_search_any(lower(llm_response), ['身份证', '银行卡', '信用卡', 'social security', 'ssn', 'account number', 'api key', 'access key', 'password', 'token', '密码'])
+         match(assistant_message, '[0-9]{17}[0-9Xx]')
+      OR match(assistant_message, '[0-9]{13,19}')
+      OR multi_search_any(lower(assistant_message), ['身份证', '银行卡', '信用卡', 'social security', 'ssn', 'account number', 'api key', 'access key', 'password', 'token', '密码'])
     )
 translations:
   zh-CN:

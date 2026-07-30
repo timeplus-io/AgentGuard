@@ -3,9 +3,9 @@ name: "[A11] High-Risk Tool Call Missing Identity"
 version: "1.0.0"
 description: |
   Flags high-risk operations — query-sensitive, export, download, send,
-  modify, delete — that cannot be attributed to a specific user (empty
-  user_id), so the call is not associable to an accountable actor. (Customer
-  audit rule A11.)
+  modify, delete — that carry no attributable agent or session identity, so
+  the call is not associable to an accountable actor. (Customer audit rule
+  A11.)
 severity: warning
 category: data_exfiltration_and_leakage
 fp_rate: medium
@@ -32,7 +32,7 @@ sql_template: |
     raw_event_data            AS event_data
   FROM agentguard_cim_event
   WHERE event_type IN ('tool_invoke', 'tool_complete')
-    AND user_id = ''
+    AND (agent_id = '' OR session_id = '')
     AND multi_search_any(lower(tool_name), ['export', 'download', 'send', 'delete', 'remove', 'modify', 'update', 'query', 'search', 'dump', 'backup', 'transfer'])
 translations:
   zh-CN:

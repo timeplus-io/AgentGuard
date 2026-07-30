@@ -34,11 +34,11 @@ sql_template: |
   FROM agentguard_cim_event
   WHERE event_type IN ('user_input', 'llm_request', 'tool_invoke', 'tool_complete', 'llm_response')
     AND (
-         match(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'AKIA[0-9A-Z]{16}')
-      OR match(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'eyJ[A-Za-z0-9_-]{10,}')
-      OR (position(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'BEGIN') > 0
-          AND position(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'PRIVATE KEY') > 0)
-      OR multi_search_any(lower(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result)), ['bearer ', 'authorization: bearer', 'password=', 'passwd=', 'set-cookie:', 'session_token', 'access_token', 'accesskey', '私钥', '访问密钥'])
+         match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'AKIA[0-9A-Z]{16}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'eyJ[A-Za-z0-9_-]{10,}')
+      OR (position(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'BEGIN') > 0
+          AND position(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'PRIVATE KEY') > 0)
+      OR multi_search_any(lower(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result)), ['bearer ', 'authorization: bearer', 'password=', 'passwd=', 'set-cookie:', 'session_token', 'access_token', 'accesskey', '私钥', '访问密钥'])
     )
 translations:
   zh-CN:

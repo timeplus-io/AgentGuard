@@ -76,9 +76,13 @@ hand using the recipe in the reference file).
 ## Field reality (checklist §8 vs. CIM)
 
 `agentguard_cim_event` **has**: `event_time`, `event_type`, `agent_id`,
-`agent_type`, `deployment_id`, `session_id`, `run_id`, `model`, `user_message`,
-`llm_response`, `tool_name`, `tool_input`, `tool_result`, `raw_hook_name`,
-`raw_event_data`, and (sparsely) `user_id`.
+`agent_type`, `deployment_id`, `session_id`, `run_id`, `provider`, `model`,
+`user_message`, `assistant_message`, `tool_name`, `tool_input`, `tool_result`,
+`tool_success`, `tool_duration_ms`, `hook_decision`, `block_reason`,
+`raw_hook_name`, `raw_event_data`. There is **no** `user_id` column — user
+attribution comes from `agent_id`/`session_id`. Note the model/assistant text
+column is `assistant_message` (not `llm_response`, which is an `event_type`
+value).
 
 It does **not** have: `tenant_id`, `role_id`, `content_direction`,
 `sensitive_types`, `policy_decision`, `policy_rule_id`, `prompt_version`,

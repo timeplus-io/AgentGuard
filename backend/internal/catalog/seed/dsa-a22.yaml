@@ -34,7 +34,7 @@ sql_template: |
   WHERE event_type IN ('tool_complete', 'llm_response')
     AND (
          multi_search_any(lower(tool_result), ['recursion', 'stack overflow', 'too many requests', 'rate limit', 'retry attempt', 'repeated failure', 'timeout'])
-      OR length(llm_response) > 50000
+      OR length(assistant_message) > 50000
     )
 translations:
   zh-CN:
