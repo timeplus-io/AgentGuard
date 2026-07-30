@@ -224,6 +224,69 @@ FROM agentguard_cim_event
 WHERE event_type IN ('tool_invoke', 'tool_complete')
   AND multi_search_any(lower(tool_input), ['retry', 'bypass', 'workaround', 'alternate', 'another way', 'base64', 'fromcharcode', 'atob', 'decode', 'circumvent', '绕过', '重试'])
 
+== dsa-a14 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a14'             AS rule_id,
+  '[A14] Sensitive Data to External Tool'           AS rule_name,
+  'critical'                AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Sensitive data sent to external tool ', tool_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type = 'tool_invoke'
+  AND multi_search_any(lower(tool_name), ['http', 'fetch', 'curl', 'webhook', 'upload', 'post', 'send', 'email', 'slack', 's3', 'url', 'request'])
+  AND multi_search_any(lower(tool_input), ['password', 'secret', 'api key', 'api_key', 'token', 'private key', 'private_key', 'ssn', 'credit card', '身份证', '银行卡', '密码'])
+
+== dsa-a17 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a17'             AS rule_id,
+  '[A17] Bulk Extraction / Enumeration'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Bulk extraction via tool ', tool_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type = 'tool_invoke'
+  AND (
+       match(lower(tool_input), '(limit|page_?size|per_?page|count|top|rows)[^0-9]{0,6}[1-9][0-9]{3,}')
+    OR multi_search_any(lower(tool_input), ['export_all', 'dump_all', 'fetch_all', 'select * from', '"all": true', '"all":true', 'download all', 'bulk export'])
+  )
+
+== dsa-a18 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a18'             AS rule_id,
+  '[A18] Covert Exfiltration Behavior'           AS rule_name,
+  'critical'                AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Covert encoded payload in tool ', tool_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type = 'tool_invoke'
+  AND (
+       match(tool_input, '[A-Za-z0-9+/]{120,}')
+    OR match(tool_input, '[0-9a-fA-F]{80,}')
+    OR match(lower(tool_input), 'data:[a-z/]+;base64,')
+    OR match(tool_input, '(%[0-9A-Fa-f]{2}){20,}')
+  )
+
 == rp-001 ==
 -- Changelog v1.1.0 (2026-04-16):
 -- Replaced broad LIKE '%jailbreak%' with regex word-boundary match.

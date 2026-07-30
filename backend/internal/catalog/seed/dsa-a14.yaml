@@ -1,0 +1,40 @@
+id: dsa-a14
+name: "[A14] Sensitive Data to External Tool"
+version: "1.0.0"
+description: |
+  Flags third-party or internet-facing tool calls (HTTP, webhook, upload,
+  email, object-store) whose parameters carry sensitive data without a
+  recorded allowed data-type / field scope. (Customer audit rule A14.)
+severity: critical
+category: data_exfiltration_and_leakage
+fp_rate: medium
+hook_sources: "tool_invoke"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a14
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'critical'                AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Sensitive data sent to external tool ', tool_name) AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_invoke'
+    AND multi_search_any(lower(tool_name), ['http', 'fetch', 'curl', 'webhook', 'upload', 'post', 'send', 'email', 'slack', 's3', 'url', 'request'])
+    AND multi_search_any(lower(tool_input), ['password', 'secret', 'api key', 'api_key', 'token', 'private key', 'private_key', 'ssn', 'credit card', '身份证', '银行卡', '密码'])
+translations:
+  zh-CN:
+    name: "敏感数据传向外部工具"
+    description: |
+      第三方或互联网工具参数包含敏感数据,且没有允许的数据类型和字段范围记录。
