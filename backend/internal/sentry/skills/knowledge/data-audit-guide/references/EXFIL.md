@@ -1,6 +1,8 @@
 # External Transport & Tool Calls (A13–A18)
 
-Each rule has an **exploration query** over `agentguard_cim_event`.
+Each rule has an **exploration query** over `agentguard_cim_event`. The
+sensitive-data checks (A14, A15) match value patterns (keys / tokens / IDs /
+cards), not keywords.
 
 ## A13 未登记工具或外部地址
 Tool / domain / IP not in the registry, or bypassing the gateway.
@@ -18,7 +20,7 @@ Tool / domain / IP not in the registry, or bypassing the gateway.
 - Evidence: the external target, tool, `session_id`.
 
 ## A14 敏感数据传向外部工具
-Sensitive data in external / network tool parameters.
+Sensitive **value** in the parameters of an external / network tool.
 - Fields: `tool_name`, `tool_input` on `event_type = 'tool_invoke'`.
 - Exploration query:
   ```sql
@@ -26,28 +28,34 @@ Sensitive data in external / network tool parameters.
   FROM table(agentguard_cim_event)
   WHERE event_type = 'tool_invoke'
     AND multi_search_any(lower(tool_name), ['http', 'fetch', 'curl', 'webhook', 'upload', 'post', 'send', 'email', 'slack', 's3', 'url', 'request'])
-    AND multi_search_any(lower(tool_input), ['password', 'secret', 'api key', 'api_key', 'token', 'private key', 'private_key', 'ssn', 'credit card', '身份证', '银行卡', '密码'])
+    AND (
+           match(tool_input, 'sk-ant-[A-Za-z0-9_-]{16,}') OR match(tool_input, 'sk-[A-Za-z0-9]{32,}') OR match(tool_input, 'AKIA[0-9A-Z]{16}') OR match(tool_input, 'AIza[0-9A-Za-z_-]{35}') OR match(tool_input, 'gh[pousr]_[A-Za-z0-9]{30,}') OR match(tool_input, 'xox[baprs]-[A-Za-z0-9-]{10,}') OR match(tool_input, 'eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{5,}') OR match(tool_input, '-----BEGIN [A-Z ]*PRIVATE KEY-----') OR match(lower(tool_input), '(api|secret|access|private)[_-]?key[[:space:]]*[=:][[:space:]]*[a-z0-9_+/.-]{12,}') OR match(lower(tool_input), '(password|passwd|pwd|token|bearer)[[:space:]]*[=: ][[:space:]]*[^[:space:]]{8,}') OR match(lower(tool_input), '(密码|口令|密钥|令牌)[：:＝=][^[:space:]]{6,}')
+        OR match(tool_input, '[1-9][0-9]{5}(19|20)[0-9]{2}[01][0-9][0-3][0-9][0-9]{3}[0-9Xx]') OR match(tool_input, '[0-9]{3}-[0-9]{2}-[0-9]{4}') OR match(tool_input, '[0-9]{4}[ -][0-9]{4}[ -][0-9]{4}[ -][0-9]{1,7}') OR match(tool_input, '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}') OR match(tool_input, '(^|[^0-9])1[3-9][0-9]{9}([^0-9]|$)')
+      )
   ORDER BY event_time DESC
   LIMIT 50
   ```
-- Evidence: destination tool, masked hit, data type, `session_id`.
+- Evidence: destination tool, masked hit, matched pattern, `session_id`.
 
 ## A15 外传保护等级下降
 Downstream call did not inherit the upstream sensitive label / masking.
 - Fields: `tool_name`, `tool_input`. Proxy — there is no `sensitive_types` /
-  data-label column, so this flags sensitive data entering an outbound tool
-  (the observable symptom of a lost protection level).
+  data-label column, so this flags a sensitive **value** entering an outbound
+  tool (the observable symptom of a lost protection level).
 - Exploration query:
   ```sql
-  SELECT event_time, tool_name, session_id, left(tool_input, 200) AS evidence
+  SELECT event_time, agent_id, session_id, tool_name, left(tool_input, 240) AS evidence
   FROM table(agentguard_cim_event)
   WHERE event_type = 'tool_invoke'
     AND multi_search_any(lower(tool_name), ['http', 'fetch', 'curl', 'upload', 'webhook', 'post', 'send', 's3', 'url'])
-    AND multi_search_any(lower(tool_input), ['password', 'secret', 'api key', 'token', '身份证', '银行卡', 'ssn'])
+    AND (
+           match(tool_input, 'sk-ant-[A-Za-z0-9_-]{16,}') OR match(tool_input, 'sk-[A-Za-z0-9]{32,}') OR match(tool_input, 'AKIA[0-9A-Z]{16}') OR match(tool_input, 'AIza[0-9A-Za-z_-]{35}') OR match(tool_input, 'gh[pousr]_[A-Za-z0-9]{30,}') OR match(tool_input, 'xox[baprs]-[A-Za-z0-9-]{10,}') OR match(tool_input, 'eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{5,}') OR match(tool_input, '-----BEGIN [A-Z ]*PRIVATE KEY-----') OR match(lower(tool_input), '(api|secret|access|private)[_-]?key[[:space:]]*[=:][[:space:]]*[a-z0-9_+/.-]{12,}') OR match(lower(tool_input), '(password|passwd|pwd|token|bearer)[[:space:]]*[=: ][[:space:]]*[^[:space:]]{8,}') OR match(lower(tool_input), '(密码|口令|密钥|令牌)[：:＝=][^[:space:]]{6,}')
+        OR match(tool_input, '[1-9][0-9]{5}(19|20)[0-9]{2}[01][0-9][0-3][0-9][0-9]{3}[0-9Xx]') OR match(tool_input, '[0-9]{3}-[0-9]{2}-[0-9]{4}') OR match(tool_input, '[0-9]{4}[ -][0-9]{4}[ -][0-9]{4}[ -][0-9]{1,7}') OR match(tool_input, '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}') OR match(tool_input, '(^|[^0-9])1[3-9][0-9]{9}([^0-9]|$)')
+      )
   ORDER BY event_time DESC
   LIMIT 50
   ```
-- Evidence: outbound tool + sensitive marker; mark "labels not captured".
+- Evidence: outbound tool + matched pattern; mark "labels not captured".
 
 ## A16 外部传输通道不安全
 Plaintext HTTP / invalid cert / weak TLS.
