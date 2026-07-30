@@ -2,9 +2,10 @@
 name: data-audit-guide
 description: >
   The data-security audit checklist (A01–A27) as an interactive, self-contained
-  playbook. Every A-code carries a ready exploration query over
-  agentguard_cim_event, plus the fields it uses (and the gaps) and the evidence
-  to record. Load this before auditing conversation / tool-call data.
+  playbook. One query skeleton plus, per A-code, the predicate (or pattern
+  group), column, and event type to compose over agentguard_cim_event — plus the
+  field gaps and the evidence to record. Load this before auditing
+  conversation / tool-call data.
 metadata:
   author: timeplus-io
   scope: AgentGuard Sentry (read-only exploration of agentguard_cim_event)
@@ -91,17 +92,39 @@ a field that is not here — say it is "not captured". A15, A16, A26, and A27
 depend on absent fields, so their exploration queries are proxies over the
 closest observable signal.
 
+## Query skeleton
+
+Every check is the same shape — fill in the evidence columns, event type, and
+**predicate** from the A-code's reference entry (or, for sensitive data, compose
+the predicate from the pattern library in `SENSITIVE_DATA.md`):
+
+```sql
+SELECT event_time, agent_id, session_id, <evidence columns>
+FROM table(agentguard_cim_event)
+WHERE event_type = '<type>'        -- or event_type IN ('a','b')
+  AND <predicate>                  -- from the reference / composed from the library
+ORDER BY event_time DESC
+LIMIT 50
+```
+
+Rules: always `table(...)` (a bare `FROM agentguard_cim_event` is an unbounded
+subscription that never returns); keep the `LIMIT`; read content only from real
+columns (`user_message`, `assistant_message`, `tool_input`, `tool_result` —
+never `llm_response`, which is an `event_type` value; there is no `user_id`);
+keep regexes backslash-free (see the pattern library). A few A-codes are
+aggregations/listings rather than this skeleton — those references carry a
+ready-to-run sample.
+
 ## How to investigate
 
-1. Open the reference file for the A-code and run its **exploration query** with
-   `run_sql`. It is a single read-only `SELECT` over `table(agentguard_cim_event)`
-   (always `table(...)` — a bare `FROM agentguard_cim_event` is an unbounded
-   subscription; keep the `LIMIT`).
-2. For each hit, drill into the surrounding session: filter the same query's
-   `WHERE` down to that `session_id` (and widen the time window) to see the full
-   call chain before and after the flagged event.
-3. Tighten or loosen the keyword / pattern lists in the query to fit the
-   deployment — they are starting points, not fixed thresholds.
+1. Open the reference file for the A-code, take its predicate + column + event
+   type, and compose the query from the skeleton. Run it with `run_sql`.
+2. For each hit, drill into the surrounding session: filter down to that
+   `session_id` (and widen the time window) to see the full call chain before
+   and after the flagged event.
+3. The keyword / pattern lists are starting points — tighten or loosen them for
+   the deployment, and compose new patterns when a user asks about a data type
+   the library doesn't list.
 4. When an A-code is a proxy (its reference says so), report the proxy's limits
    alongside the finding — say which field is "not captured".
 
