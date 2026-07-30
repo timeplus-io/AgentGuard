@@ -23,7 +23,7 @@ Instead, every A-code gets its **own** fresh `dsa-aNN` rule. The rule ID *is* th
 
 ## 2. Background: why some rules can't be MVs
 
-AgentGuard's normalized event stream `agentguard_cim_event` exposes: `event_type`, `event_time`, `agent_id`, `agent_type`, `deployment_id`, `session_id`, `run_id`, `model`, `user_message`, `llm_response`, `tool_name`, `tool_input`, `tool_result`, `raw_hook_name`, `raw_event_data`, and a sparse `user_id`/`target`/`destination`.
+AgentGuard's normalized event stream `agentguard_cim_event` exposes: `event_type`, `event_time`, `agent_id`, `agent_type`, `deployment_id`, `session_id`, `run_id`, `provider`, `model`, `user_message`, `assistant_message`, `tool_name`, `tool_input`, `tool_result`, `tool_success`, `tool_duration_ms`, `hook_decision`, `block_reason`, `raw_hook_name`, `raw_event_data`. Note: the model-text column is `assistant_message` (`llm_response` is an `event_type` value, not a column), and there is **no** `user_id` column — attribution is via `agent_id`/`session_id`.
 
 The customer checklist (PDF §8) assumes a richer minimum-field set — `tenant_id`, `role_id`, `content_direction`, `sensitive_types`, `policy_decision`, `policy_rule_id`, `prompt_version`, `model_version`, `tool_version`, `protocol`, `tls_version`. Many of these do **not** exist in the current model, and the PDF's own §2 applicability assessment already flags several rules as "conditional" or "not currently applicable."
 

@@ -595,8 +595,8 @@ name: "[A11] High-Risk Tool Call Missing Identity"
 version: "1.0.0"
 description: |
   Flags high-risk operations — query-sensitive, export, download, send,
-  modify, delete — that cannot be attributed to a specific user (empty
-  user_id), so the call is not associable to an accountable actor. (Customer
+  modify, delete — that carry no attributable agent or session identity, so
+  the call is not associable to an accountable actor. (Customer
   audit rule A11.)
 severity: warning
 category: data_exfiltration_and_leakage
@@ -624,7 +624,7 @@ sql_template: |
     raw_event_data            AS event_data
   FROM agentguard_cim_event
   WHERE event_type IN ('tool_invoke', 'tool_complete')
-    AND user_id = ''
+    AND (agent_id = '' OR session_id = '')
     AND multi_search_any(lower(tool_name), ['export', 'download', 'send', 'delete', 'remove', 'modify', 'update', 'query', 'search', 'dump', 'backup', 'transfer'])
 translations:
   zh-CN:
@@ -1332,11 +1332,14 @@ hand using the recipe in the reference file).
 ## Field reality (checklist §8 vs. CIM)
 
 `agentguard_cim_event` **has**: `event_time`, `event_type`, `agent_id`,
-`agent_type`, `deployment_id`, `session_id`, `run_id`, `model`, `user_message`,
-`llm_response`, `tool_name`, `tool_input`, `tool_result`, `raw_hook_name`,
-`raw_event_data`, and (sparsely) `user_id`.
+`agent_type`, `deployment_id`, `session_id`, `run_id`, `provider`, `model`,
+`user_message`, `assistant_message`, `tool_name`, `tool_input`, `tool_result`,
+`tool_success`, `tool_duration_ms`, `hook_decision`, `block_reason`,
+`raw_hook_name`, `raw_event_data`. There is **no** `user_id` column — user
+attribution comes from `agent_id`/`session_id`. The model/assistant text column
+is `assistant_message` (not `llm_response`, which is an `event_type` value).
 
-It does **not** have: `tenant_id`, `role_id`, `content_direction`,
+It does **not** have: `user_id`, `tenant_id`, `role_id`, `content_direction`,
 `sensitive_types`, `policy_decision`, `policy_rule_id`, `prompt_version`,
 `model_version`, `tool_version`, `protocol`, `tls_version`. Never claim to
 audit a field that is not here — say it is "not captured" and point at
@@ -1474,7 +1477,7 @@ Sensitive fields still plaintext when sent to the model.
 ## A03 模型输出敏感信息 — ✅ `dsa-a03`
 PII/account/auth data in model replies; highest risk if not from current
 session.
-- Fields: `llm_response` on `event_type='llm_response'`.
+- Fields: `assistant_message` on `event_type='llm_response'` (the model-text column is `assistant_message`; `llm_response` is an event_type value, not a column).
 - Detections: `rule_id='dsa-a03'`. Cross-session origin = not captured; note it.
 
 ## A04 工具参数携带非必要敏感数据 — ✅ `dsa-a04`
@@ -1494,7 +1497,7 @@ Credentials anywhere in the chain — direct high risk.
 
 ## A07 数据汇聚后风险升级 — ✅ `dsa-a07`
 Identity-linkable data co-occurring (aggregation).
-- Fields: `llm_response`+`tool_result`.
+- Fields: `assistant_message`+`tool_result`.
 - Detections: `rule_id='dsa-a07'`. Multi-turn aggregation across events is
   investigate-only — use `dlp_search` over a session to confirm linkage.
 ````
@@ -1526,12 +1529,12 @@ ID / path manipulation to reach out-of-scope data.
 - Fields: `tool_input` on `tool_invoke`. Detections: `rule_id='dsa-a10'`.
 
 ## A11 高风险工具缺少身份信息 — ✅ `dsa-a11`
-High-risk verb with no attributable `user_id`.
-- Note: `user_id` is sparse; false positives where the plugin never sets it.
-  Cross-check `agent_id`/`session_id` presence:
+High-risk verb with no attributable agent/session identity. There is no
+`user_id` column in CIM — attribution is via `agent_id`/`session_id`.
+- Cross-check which high-risk calls lack an `agent_id` or `session_id`:
   ```sql
   SELECT tool_name, count() FROM table(agentguard_cim_event)
-  WHERE event_type='tool_invoke' AND user_id=''
+  WHERE event_type='tool_invoke' AND (agent_id='' OR session_id='')
     AND multi_search_any(lower(tool_name), ['export','delete','send'])
   GROUP BY tool_name ORDER BY count() DESC
   ```
@@ -1643,13 +1646,13 @@ Events missing user/tenant/time/session/agent/model/tool/op-type.
 - Measurable proxy — count events with empty key fields:
   ```sql
   SELECT
-    countIf(user_id = '')    AS no_user,
     countIf(session_id = '') AS no_session,
-    countIf(agent_id = '')   AS no_agent
+    countIf(agent_id = '')   AS no_agent,
+    countIf(run_id = '')     AS no_run
   FROM table(agentguard_cim_event)
   WHERE event_time >= now() - INTERVAL 1 DAY
   ```
-- `tenant_id`, `role_id`, versions are structurally absent — report "not captured".
+- `user_id`, `tenant_id`, `role_id`, versions are structurally absent — report "not captured".
 
 ## A25 调用链断裂 — 🔍 investigate
 Tool call not associable to its conversation/model/user, or result to reply.
