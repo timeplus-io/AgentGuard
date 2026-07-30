@@ -1,8 +1,10 @@
 # Audit Trail & Traceability (A24–A27)
 
-These are aggregations / payload scans over `agentguard_cim_event`, not the
-single-event skeleton, so each carries a worked sample. Several target fields the
-event model does not carry, so the query measures the closest observable proxy.
+Each entry states the **goal** and an **example** query to adapt to the user's
+request. These are aggregations / payload scans over `agentguard_cim_event` (not
+the single-event skeleton); several target fields the event model does not carry,
+so the example measures the closest observable proxy — say which field is "not
+captured".
 
 ### A24 审计字段缺失 (aggregation)
 Count events missing key attribution fields. (`tenant_id`/`role_id` are not in the
@@ -23,7 +25,7 @@ WHERE event_time >= now() - INTERVAL 1 DAY
 ### A25 调用链断裂
 Tool events not associable to a conversation / run. event_type IN
 (`tool_invoke`, `tool_complete`).
-- Predicate: `run_id = '' OR session_id = ''` (drop into the skeleton, selecting
+- Example: `run_id = '' OR session_id = ''` (drop into the skeleton, selecting
   `event_time, event_type, tool_name, session_id, run_id`).
 - Evidence: the orphaned tool event, which linkage key is empty.
 

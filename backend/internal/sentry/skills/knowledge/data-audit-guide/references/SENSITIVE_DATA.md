@@ -1,10 +1,11 @@
 # Sensitive Data Handling (A01–A07)
 
 This file defines the **sensitive-data pattern library**, then each rule
-(A01–A07) names the patterns, column, and event type to use. Compose the SQL
-yourself from the **query skeleton** in `SKILL.md` — there is no full query per
-rule. Match the **value**, never the mere word: "please enter your password" is
-not a leak; `password=Hunter2xyz` is.
+(A01–A07) states its **goal** and names the patterns, column, and event type.
+Compose the SQL from the **query skeleton** in `SKILL.md`, adapting the patterns
+and scope to what the user actually asked for — there is no fixed query per rule.
+Match the **value**, never the mere word: "please enter your password" is not a
+leak; `password=Hunter2xyz` is.
 
 ## Sensitive-data pattern library
 

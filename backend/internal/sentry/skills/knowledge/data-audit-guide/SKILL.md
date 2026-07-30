@@ -1,11 +1,11 @@
 ---
 name: data-audit-guide
 description: >
-  The data-security audit checklist (A01–A27) as an interactive, self-contained
-  playbook. One query skeleton plus, per A-code, the predicate (or pattern
-  group), column, and event type to compose over agentguard_cim_event — plus the
-  field gaps and the evidence to record. Load this before auditing
-  conversation / tool-call data.
+  Guidance for auditing agent conversation / tool-call data against the A01–A27
+  data-security checklist. For each item it states the goal (what to detect and
+  why) and gives an example query over agentguard_cim_event — a starting point to
+  adapt to the user's intent, not a fixed query to run verbatim. Load this before
+  running such an audit.
 metadata:
   author: timeplus-io
   scope: AgentGuard Sentry (read-only exploration of agentguard_cim_event)
@@ -14,10 +14,13 @@ metadata:
 # Data-Security Audit Guide (Checklist A01–A27)
 
 You are auditing agent conversation, gateway, and tool-call data against a
-27-point data-security checklist (A01–A27). This guide is self-contained: every
-A-code has a ready **exploration query** you run directly over the
-`agentguard_cim_event` stream with `run_sql`. No other stream is needed —
-`agentguard_cim_event` is the single source for this audit.
+27-point data-security checklist (A01–A27). Each item describes **what to
+detect** (its goal) and gives an **example query** over `agentguard_cim_event`
+as a starting point. Treat the example as illustrative: read the user's actual
+request and adapt it — columns, patterns, thresholds, event types, time window,
+which agents / sessions — to their intent, and compose new predicates when their
+target isn't listed. `agentguard_cim_event` is the single source for this audit;
+no other stream is needed.
 
 ## Audit boundary
 
@@ -94,9 +97,10 @@ closest observable signal.
 
 ## Query skeleton
 
-Every check is the same shape — fill in the evidence columns, event type, and
-**predicate** from the A-code's reference entry (or, for sensitive data, compose
-the predicate from the pattern library in `SENSITIVE_DATA.md`):
+Most single-event checks share this shape — an example to fill in with the
+evidence columns, event type, and predicate for the goal at hand (for sensitive
+data, compose the predicate from the pattern library in `SENSITIVE_DATA.md`).
+Change anything that serves the user's intent; only the "Rules" below are fixed:
 
 ```sql
 SELECT event_time, agent_id, session_id, <evidence columns>
@@ -117,16 +121,18 @@ ready-to-run sample.
 
 ## How to investigate
 
-1. Open the reference file for the A-code, take its predicate + column + event
-   type, and compose the query from the skeleton. Run it with `run_sql`.
-2. For each hit, drill into the surrounding session: filter down to that
-   `session_id` (and widen the time window) to see the full call chain before
-   and after the flagged event.
-3. The keyword / pattern lists are starting points — tighten or loosen them for
-   the deployment, and compose new patterns when a user asks about a data type
-   the library doesn't list.
-4. When an A-code is a proxy (its reference says so), report the proxy's limits
-   alongside the finding — say which field is "not captured".
+1. **Start from the user's intent.** What do they actually want — a specific
+   data type, agent, session, time window, or one of the A-codes? Pick the
+   matching goal(s) below; the A-code is a lens, not a rigid script.
+2. Take that item's goal + example query and **adapt it** to the request: change
+   columns, patterns, thresholds, event types, and time window; add filters for
+   the agents/sessions in scope; compose new patterns for a data type the library
+   doesn't list. The example expresses the intent — it is not the only correct
+   query.
+3. Run it with `run_sql`, then drill into hits: filter to that `session_id`
+   (widen the window) to see the full call chain before and after.
+4. When an item is a proxy (its reference says so), report the proxy's limits —
+   say which field is "not captured".
 
 ## Evidence to record
 

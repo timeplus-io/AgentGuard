@@ -1,9 +1,9 @@
 # Agent Attack & Anomaly (A19–A23)
 
-Compose each check from the **query skeleton** in `SKILL.md`. A19, A21, A22, and
-A23 are **behavioral** (cross-event sequences or per-session aggregations), so
-each carries a ready-to-run sample instead of a single-event predicate. A20 is a
-single-event content check.
+Each entry states the **goal** and an **example** to adapt to the user's request
+and compose into the skeleton in `SKILL.md`. A19, A21, A22, and A23 are
+**behavioral** (cross-event sequences or per-session aggregations), so their
+examples are full queries; A20 is a single-event content check.
 
 ## Per-rule spec
 
@@ -37,7 +37,7 @@ LIMIT 50
 ### A20 系统提示词或隐藏上下文泄露
 System prompt / internal policy / tool defs / KB keys in a reply. Review first.
 event_type = `llm_response`.
-- Predicate: `multi_search_any(lower(assistant_message), ['system prompt','my instructions are','internal policy','tool definition','以下是我的系统提示','我的系统指令','my system message','hidden context','knowledge base key','begin system','<system>'])`
+- Example: `multi_search_any(lower(assistant_message), ['system prompt','my instructions are','internal policy','tool definition','以下是我的系统提示','我的系统指令','my system message','hidden context','knowledge base key','begin system','<system>'])`
 - Evidence: the leaked fragment (masked), `session_id`, `event_time`.
 
 ### A21 智能体行为与声明能力不一致 — proxy (aggregation)
