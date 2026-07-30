@@ -576,7 +576,7 @@ export default function RulePacks() {
                           entry.severity === 'critical'
                             ? 'bg-[#ffb0cf]/10 text-primary border-[#ffb0cf]/20'
                             : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        }`}>{entry.severity}</span>
+                        }`}>{t('enum.severity.' + entry.severity, { defaultValue: entry.severity })}</span>
                       </div>
                     </div>
                     <div>
