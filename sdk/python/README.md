@@ -18,6 +18,34 @@ Python SDK for [AgentGuard](https://github.com/timeplus-io/agentguard) — a rea
 pip install agentguard
 ```
 
+## CLI Tools
+
+Organize and govern AI coding agents:
+
+**./agentguard_cli** - OpenTelemetry tracing for sessions and tasks
+
+- `session_start` - Start a new agent session
+  ```bash
+  ./agentguard_cli session_start result session-123
+  ```
+- `session_end` - End a session with status
+  ```bash
+  ./agentguard_cli session_end session-123 depleted incomplete
+  ```
+- `session_trace` - Create trace for an existing session
+  ```bash
+  ./agentguard_cli session_trace trace-id-456 resource-789
+  ```
+
+### Attributes
+Sessions get extended with these attributes:
+- `session.id` - The session ID
+- `session.status` - Final evaluation result
+- `run.id` - Associated code run ID
+- `task.id` - Associated specific code task ID
+
+## Configuration
+
 Requires Python 3.10+.
 
 ## Quick Start

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentguard"
-version = "0.2.0"
+version = "0.3.0"
 description = "AgentGuard Python SDK"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -39,6 +39,7 @@ dev = [
 openai = [
     "openai>=1.0",
 ]
+
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentguard"]
