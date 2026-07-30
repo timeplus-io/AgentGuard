@@ -221,7 +221,7 @@ func sentrySelfConfigFn(cfg *config.Config, cc sentry.ChatCfg) func() (string, e
 func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, holdReg *holdregistry.Registry, cc sentry.ChatCfg) *skills.Registry {
 	var hiddenSkills []string
 	if !cc.AgentGuardToolsEnabled {
-		hiddenSkills = append(hiddenSkills, "agentguard-guide")
+		hiddenSkills = append(hiddenSkills, "agentguard-guide", "data-audit-guide")
 	}
 	sks := []skills.Skill{
 		skills.NewLoadSkill(cfg.Sentry.SkillDir, hiddenSkills...),
