@@ -73,6 +73,30 @@ function KeyField({ k, draftValue, onChange }) {
         onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
       />
     )
+  } else if (k.type === 'list') {
+    const selected = Array.isArray(value) ? value : []
+    const toggle = (optVal) =>
+      onChange(selected.includes(optVal) ? selected.filter((v) => v !== optVal) : [...selected, optVal])
+    const options = k.options || []
+    input = options.length === 0
+      ? <span className="text-xs text-gray-500">{t('field.noOptions')}</span>
+      : (
+        <div className="flex flex-col gap-1.5">
+          {options.map((opt) => (
+            <label key={opt.value} className={`flex items-center gap-2 text-sm ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+              <input
+                type="checkbox"
+                className="accent-pink-500"
+                disabled={disabled}
+                checked={selected.includes(opt.value)}
+                onChange={() => toggle(opt.value)}
+              />
+              <span className="text-gray-100">{opt.label}</span>
+              <span className="text-[10px] font-mono text-gray-500">{opt.value}</span>
+            </label>
+          ))}
+        </div>
+      )
   } else {
     input = (
       <input

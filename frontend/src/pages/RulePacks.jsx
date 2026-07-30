@@ -7,6 +7,7 @@ import PageHeader from '../components/PageHeader'
 import Toggle from '../components/Toggle'
 import { api } from '../api/client'
 import { rankBySearch } from '../utils/ruleSearch.js'
+import { packageMemberSet, scopeToPackage } from '../utils/packageScope.js'
 import { useAuth } from '../context/AuthContext'
 import { writeKey } from '../lib/perm'
 
@@ -31,6 +32,9 @@ export default function RulePacks() {
   const canWrite = can(writeKey('rules')) // gate install/toggle/import/create
   const [rules, setRules] = useState([])
   const [catalog, setCatalog] = useState([])
+  const [packages, setPackages] = useState([])
+  const [enablingPackage, setEnablingPackage] = useState(null) // package id being enabled
+  const [packageResult, setPackageResult] = useState(null) // { name, installed, skipped }
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [importing, setImporting] = useState(false)
@@ -42,12 +46,24 @@ export default function RulePacks() {
   const [search, setSearch] = useState('')
   const [rulesPage, setRulesPage] = useState(1)
   const [catalogPage, setCatalogPage] = useState(1)
+  const [selectedPackage, setSelectedPackage] = useState(null) // null = All packages
+
+  // Master-detail: the left rail selects a package, scoping both the installed
+  // and available grids to that package's member rules. null = All packages.
+  const selectedPkg = selectedPackage ? packages.find(p => p.id === selectedPackage) : null
+  const memberSet = packageMemberSet(selectedPkg)
+  // packages holds only VISIBLE packages (the backend filters by
+  // rules.visible_packages). Their union is the set of rules surfaced as
+  // available in the "All packages" view; already-installed rules always show
+  // regardless of visibility, so only the available grid is visibility-scoped.
+  const visibleMemberSet = new Set(packages.flatMap(p => p.rules || []))
+  const availableFilterSet = memberSet ?? visibleMemberSet
 
   // When the user types a query, rank by relevance (issue #124) so that an
   // exact / name match wins over a description-only match. Empty search keeps
   // the existing enabled-first + alphabetical ordering.
   const filteredRules = rankBySearch(
-    rules,
+    scopeToPackage(rules, memberSet),
     search,
     r => ({ name: r.name, description: r.desc, category: r.category }),
     (a, b) => (a.enabled !== b.enabled ? (a.enabled ? -1 : 1) : (a.name || '').localeCompare(b.name || '')),
@@ -77,12 +93,13 @@ export default function RulePacks() {
     Promise.all([
       loadRules(),
       api.getRulesCatalog().then(data => setCatalog(data.catalog || [])),
+      api.listPackages().then(data => setPackages(data.packages || [])),
     ])
       .catch(() => { setLoadError(t('list.errors.loadFailed')) })
       .finally(() => setLoading(false))
   }, [t, i18n.language])
 
-  useEffect(() => { setRulesPage(1); setCatalogPage(1) }, [search])
+  useEffect(() => { setRulesPage(1); setCatalogPage(1) }, [search, selectedPackage])
 
   const handleToggle = (id, newVal) => {
     const rule = rules.find(r => r.id === id)
@@ -151,6 +168,55 @@ export default function RulePacks() {
     }
   }
 
+  const handleEnablePackage = async (pkg) => {
+    setEnablingPackage(pkg.id)
+    setPackageResult(null)
+    try {
+      const res = await api.enablePackage(pkg.id)
+      const newlyInstalled = res.installed || []
+      // Optimistic update (same rationale as handleInstall): a re-fetch right
+      // after the INSERTs races with Proton's table() commit lag and would snap
+      // freshly-installed rules back to "not installed". Drive UI from the
+      // result instead. A rule may belong to multiple packages, so bump every
+      // package's counts for the ids it contains.
+      if (newlyInstalled.length) {
+        const installedSet = new Set(newlyInstalled)
+        setCatalog(prev => prev.map(e => installedSet.has(e.id) ? { ...e, installed: true } : e))
+        setRules(prev => {
+          const existing = new Set(prev.map(r => r.id))
+          const added = newlyInstalled
+            .map(rid => catalog.find(e => e.id === rid))
+            .filter(e => e && !existing.has(e.id))
+            .map(entry => ({
+              id: entry.id,
+              icon: CATEGORY_ICONS[entry.category] || 'shield',
+              name: entry.name,
+              desc: entry.description,
+              category: entry.category,
+              enabled: true,
+              version: entry.version || '',
+              active: true,
+              detections24h: 0,
+              block_policy: entry.block_policy || 'log_only',
+            }))
+          return [...added, ...prev]
+        })
+        setPackages(prev => prev.map(p => {
+          const gained = (p.rules || []).filter(rid => installedSet.has(rid)).length
+          return gained ? { ...p, installed_count: p.installed_count + gained, enabled_count: p.enabled_count + gained } : p
+        }))
+      }
+      setPackageResult({ name: pkg.name, installed: newlyInstalled.length, skipped: (res.skipped || []).length })
+      if ((res.failed || []).length) {
+        setLoadError(t('list.packages.enableError', { message: res.failed.map(f => `${f.rule_id}: ${f.error}`).join('; ') }))
+      }
+    } catch (err) {
+      setLoadError(t('list.packages.enableError', { message: err?.message ?? String(err) }))
+    } finally {
+      setEnablingPackage(null)
+    }
+  }
+
   const handleImport = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -177,7 +243,7 @@ export default function RulePacks() {
   }
 
   const uninstalledCatalog = rankBySearch(
-    catalog.filter(e => !e.installed),
+    scopeToPackage(catalog.filter(e => !e.installed), availableFilterSet),
     search,
     e => e,
     (a, b) => (a.name || '').localeCompare(b.name || ''),
@@ -321,7 +387,72 @@ export default function RulePacks() {
             </div>
           )}
 
-          <section className="space-y-4">
+          {packageResult && (
+            <div className="p-4 rounded-sm text-xs flex items-start gap-3 bg-green-500/10 border border-green-700/30 text-green-400">
+              <span className="material-symbols-outlined text-[14px] mt-0.5 shrink-0">check_circle</span>
+              <p>{t('list.packages.enabledSummary', { name: packageResult.name, installed: packageResult.installed, skipped: packageResult.skipped })}</p>
+              <button onClick={() => setPackageResult(null)} className="ml-auto text-gray-400 hover:text-gray-100 shrink-0">
+                <span className="material-symbols-outlined text-[14px]">close</span>
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Package filter rail (master) */}
+            {!loading && packages.length > 0 && (
+              <aside className="lg:w-60 lg:shrink-0 space-y-1">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest px-2 mb-2">{t('list.packages.heading')}</h4>
+                <button
+                  onClick={() => setSelectedPackage(null)}
+                  className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-sm text-xs text-left transition-colors ${selectedPackage === null ? 'bg-[#ffb0cf]/15 text-primary font-semibold' : 'text-gray-300 hover:bg-surface-container-low'}`}
+                >
+                  <span>{t('list.packages.allPackages')}</span>
+                  <span className="text-[10px] font-mono text-gray-400 shrink-0">{rules.length}</span>
+                </button>
+                {packages.map(pkg => (
+                  <button
+                    key={pkg.id}
+                    onClick={() => setSelectedPackage(pkg.id)}
+                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-sm text-xs text-left transition-colors ${selectedPackage === pkg.id ? 'bg-[#ffb0cf]/15 text-primary font-semibold' : 'text-gray-300 hover:bg-surface-container-low'}`}
+                  >
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{pkg.name}</span>
+                      {pkg.default_enabled && <span className="material-symbols-outlined text-[13px] text-primary shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>star</span>}
+                    </span>
+                    <span className="text-[10px] font-mono text-gray-400 shrink-0">{pkg.installed_count}/{pkg.total}</span>
+                  </button>
+                ))}
+              </aside>
+            )}
+
+            {/* Detail pane */}
+            <div className="flex-1 min-w-0 space-y-6">
+              {/* Selected-package header */}
+              {selectedPkg && (
+                <div className="bg-surface-container-low border border-gray-700 rounded-sm p-5 flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-sm font-semibold text-gray-100">{selectedPkg.name}</h3>
+                      {selectedPkg.default_enabled && <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide border bg-[#ffb0cf]/10 text-primary border-[#ffb0cf]/20 shrink-0">{t('list.packages.recommended')}</span>}
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed max-w-2xl">{selectedPkg.description}</p>
+                    <p className="text-[11px] font-mono text-gray-400 mt-2">{t('list.packages.installedCount', { installed: selectedPkg.installed_count, total: selectedPkg.total })}</p>
+                  </div>
+                  <button
+                    onClick={() => handleEnablePackage(selectedPkg)}
+                    disabled={enablingPackage === selectedPkg.id || selectedPkg.installed_count >= selectedPkg.total || !canWrite}
+                    className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text border border-pink-500 disabled:opacity-40 transition-opacity"
+                  >
+                    {enablingPackage === selectedPkg.id
+                      ? t('list.packages.enabling')
+                      : selectedPkg.installed_count >= selectedPkg.total
+                        ? t('list.packages.allInstalled')
+                        : t('list.packages.enable')}
+                  </button>
+                </div>
+              )}
+
+              <section className="space-y-4">
             {/* Search bar */}
             <div className="relative max-w-sm">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[16px] pointer-events-none">search</span>
@@ -339,12 +470,13 @@ export default function RulePacks() {
               )}
             </div>
 
+            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('list.packages.installedHeading')} ({filteredRules.length})</h4>
             {/* Rules grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
               {loading ? (
                 [1,2,3,4].map(i => <div key={i} className="bg-surface-container-low p-6 rounded-sm h-64 animate-pulse" />)
               ) : pagedRules.length === 0 ? (
-                <p className="text-sm text-gray-400 col-span-4 py-4">{t('list.grid.noMatch')}</p>
+                <p className="text-sm text-gray-400 col-span-4 py-4">{t(selectedPkg && !search ? 'list.packages.noneInstalled' : 'list.grid.noMatch')}</p>
               ) : pagedRules.map(rule => (
                 <div key={rule.id} className="group bg-gray-800 border border-gray-700 p-6 rounded-sm flex flex-col gap-6 transition-all duration-300 relative overflow-hidden">
                   {rule.active && (
@@ -428,7 +560,7 @@ export default function RulePacks() {
 
           {uninstalledCatalog.length > 0 && (
             <section className="space-y-4">
-              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('list.availableToInstall.heading')}</h4>
+              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('list.availableToInstall.heading')} ({uninstalledCatalog.length})</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 {pagedCatalog.map(entry => (
                   <div key={entry.id} className="bg-surface-container-low/60 border border-dashed border-zinc-700/40 p-5 rounded-sm flex flex-col gap-4">
@@ -444,7 +576,7 @@ export default function RulePacks() {
                           entry.severity === 'critical'
                             ? 'bg-[#ffb0cf]/10 text-primary border-[#ffb0cf]/20'
                             : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        }`}>{entry.severity}</span>
+                        }`}>{t('enum.severity.' + entry.severity, { defaultValue: entry.severity })}</span>
                       </div>
                     </div>
                     <div>
@@ -502,6 +634,8 @@ export default function RulePacks() {
               )}
             </section>
           )}
+            </div>
+          </div>
         </div>
       </main>
     </div>

@@ -63,7 +63,8 @@
     "restartBadge": "requires restart",
     "reprovisionBadge": "requires re-provision",
     "secretSet": "•••••••• (set)",
-    "secretNotSet": "not set"
+    "secretNotSet": "not set",
+    "noOptions": "No options available"
   },
   "source": {
     "default": "default",
@@ -81,6 +82,7 @@
     "holds": "Approval Holds",
     "dlp": "Semantic DLP",
     "sentry": "Sentry Agent",
+    "rules": "Rules",
     "ui": "User Interface",
     "setup": "Setup"
   },
@@ -112,6 +114,10 @@
     "agentguard_url": {
       "label": "Webhook base URL",
       "description": "URL Timeplus uses to call back into AgentGuard (alerts, holds)."
+    },
+    "rules_visible_packages": {
+      "label": "Visible rule packages",
+      "description": "Rule packages surfaced on the Rules page. Packages left unchecked (and their not-yet-installed rules) are hidden. Applied live."
     },
     "ui_default_language": {
       "label": "Default UI language",

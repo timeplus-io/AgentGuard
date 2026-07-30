@@ -193,7 +193,7 @@ func TestGetConfigShapeAndSecrets(t *testing.T) {
 	cfg.DLP.APIKey = "sk-secret"
 
 	r := gin.New()
-	r.GET("/api/config", GetConfig(cfg, map[string]bool{}))
+	r.GET("/api/config", GetConfig(cfg, nil, map[string]bool{}))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
 	w := httptest.NewRecorder()
@@ -254,7 +254,7 @@ func TestGetConfigEnvLocksKey(t *testing.T) {
 	t.Setenv("DLP_API_KEY", "sk-env")
 
 	r := gin.New()
-	r.GET("/api/config", GetConfig(cfg, map[string]bool{}))
+	r.GET("/api/config", GetConfig(cfg, nil, map[string]bool{}))
 	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -288,7 +288,7 @@ func putConfig(t *testing.T, cfg *config.Config, body string) *httptest.Response
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.PUT("/api/config", UpdateConfig(cfg, map[string]bool{}))
+	r.PUT("/api/config", UpdateConfig(cfg, nil, map[string]bool{}))
 	req := httptest.NewRequest(http.MethodPut, "/api/config", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

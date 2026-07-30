@@ -1,0 +1,26 @@
+id: lateral-movement
+name: "Lateral Movement & Pivoting"
+description: |
+  Detects an agent expanding its reach across the environment — network and
+  service discovery, credential reuse against new hosts, SSH/remote-exec
+  pivoting, and access to systems outside the task's intended blast radius.
+default_enabled: false
+rules:
+  - rp-015
+  - rp-039
+  - rp-044
+  - rp-072
+  - rp-075
+  - rp-076
+  - rp-077
+  - rp-084
+  - rp-101
+  - rp-106
+  - rp-118
+  - rp-122
+translations:
+  zh-CN:
+    name: "横向移动与跳板"
+    description: |
+      检测智能体在环境中扩大触及范围的行为——网络与服务发现、对新主机复用凭据、
+      SSH/远程执行跳板,以及访问超出任务预期影响范围的系统。

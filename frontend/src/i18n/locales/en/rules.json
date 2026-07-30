@@ -37,6 +37,20 @@
     "availableToInstall": {
       "heading": "Available to Install"
     },
+    "packages": {
+      "heading": "Rule Packages",
+      "subheading": "Enable curated bundles of rules. Core is recommended for every deployment; enable the others for deeper, targeted coverage.",
+      "allPackages": "All packages",
+      "installedHeading": "Installed",
+      "noneInstalled": "No rules from this package are installed yet.",
+      "recommended": "Recommended",
+      "installedCount": "{{installed}} / {{total}} installed",
+      "enable": "Enable package",
+      "enabling": "Enabling…",
+      "allInstalled": "All installed",
+      "enableError": "Failed to enable package: {{message}}",
+      "enabledSummary": "Enabled {{name}}: {{installed}} newly installed, {{skipped}} already present."
+    },
     "confirmToggle": {
       "title": "{{action}} Rule Pack",
       "bodyBeforeAction": "Are you sure you want to ",

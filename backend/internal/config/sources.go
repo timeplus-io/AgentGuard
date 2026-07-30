@@ -56,8 +56,52 @@ func CoerceAndValidate(key string, raw any) (any, error) {
 			return nil, err
 		}
 		return s, nil
+
+	case TypeList:
+		return toStringSlice(raw)
 	}
 	return nil, fmt.Errorf("unsupported type for key %q", key)
+}
+
+// toStringSlice coerces a JSON array (decoded as []any) or a []string into a
+// []string, rejecting non-string elements. A nil value yields an empty slice
+// (clearing the list is valid). Order is preserved; duplicates are dropped so
+// the stored allowlist is canonical.
+func toStringSlice(raw any) ([]string, error) {
+	var in []any
+	switch v := raw.(type) {
+	case nil:
+		return []string{}, nil
+	case []string:
+		out := make([]string, 0, len(v))
+		seen := make(map[string]struct{}, len(v))
+		for _, s := range v {
+			if _, dup := seen[s]; dup {
+				continue
+			}
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+		return out, nil
+	case []any:
+		in = v
+	default:
+		return nil, errors.New("expected a list")
+	}
+	out := make([]string, 0, len(in))
+	seen := make(map[string]struct{}, len(in))
+	for _, el := range in {
+		s, ok := el.(string)
+		if !ok {
+			return nil, errors.New("list entries must be strings")
+		}
+		if _, dup := seen[s]; dup {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out, nil
 }
 
 func toInt(raw any) (int, error) {
@@ -176,6 +220,8 @@ func EffectiveValue(cfg *Config, key string) any {
 		return cfg.Holds.Disabled
 	case "ui.default_language":
 		return cfg.UI.DefaultLanguage
+	case "rules.visible_packages":
+		return cfg.Rules.VisiblePackages
 	case "dlp.enabled":
 		return cfg.DLP.Enabled
 	case "dlp.base_url":
@@ -252,6 +298,8 @@ func ApplyChange(cfg *Config, key string, value any) error {
 		return setBool(&cfg.Holds.Disabled, value)
 	case "ui.default_language":
 		return setString(&cfg.UI.DefaultLanguage, value)
+	case "rules.visible_packages":
+		return setStringSlice(&cfg.Rules.VisiblePackages, value)
 	case "dlp.enabled":
 		return setBool(&cfg.DLP.Enabled, value)
 	case "dlp.base_url":
@@ -313,6 +361,15 @@ func setString(dst *string, v any) error {
 	s, ok := v.(string)
 	if !ok {
 		return fmt.Errorf("expected string, got %T", v)
+	}
+	*dst = s
+	return nil
+}
+
+func setStringSlice(dst *[]string, v any) error {
+	s, ok := v.([]string)
+	if !ok {
+		return fmt.Errorf("expected []string, got %T", v)
 	}
 	*dst = s
 	return nil

@@ -197,6 +197,12 @@ export const api = {
   configureRule: (id, overrides, reason) =>
     put(`/rules/${id}/configuration`, { overrides, reason }),
   uninstallRule: (id) => del(`/rules/${id}`),
+  // Rule packages: named bundles of rules. listPackages returns localized
+  // name/description + per-package install/enable counts; enablePackage
+  // bulk-installs a package's member rules (idempotent — already-installed
+  // rules are skipped) and returns { package, installed, skipped, missing, failed }.
+  listPackages: () => get(withLocale('/rules/packages')),
+  enablePackage: (id) => post(`/rules/packages/${encodeURIComponent(id)}/enable`, {}),
   generateConfig: (data) => post('/onboarding/generate', data),
   getInstallScript: () => fetch('/api/onboarding/install-script'),
 
@@ -237,8 +243,10 @@ export const api = {
   putDLPConfig: (key, value) => put(`/dlp/config/${encodeURIComponent(key)}`, { value }),
 
   // ── Configuration (Settings page) ───────────────────────────────────────────
-  getConfig: () => get('/config'),
-  updateConfig: (changes) => put('/config', changes),
+  // withLocale so the backend localizes list-key options (e.g. rules.visible_packages
+  // package names) in the returned config view.
+  getConfig: () => get(withLocale('/config')),
+  updateConfig: (changes) => put(withLocale('/config'), changes),
   testTimeplusConfig: (host, port) => post('/config/test-timeplus', { host, port }),
   testDLPConfig: (payload) => post('/config/test-dlp', payload),
 

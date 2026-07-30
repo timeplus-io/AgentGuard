@@ -9,6 +9,10 @@ const (
 	TypeBool   KeyType = "bool"
 	TypeSecret KeyType = "secret"
 	TypeEnum   KeyType = "enum"
+	// TypeList is a multi-value string list (e.g. an allowlist). The set of
+	// selectable values is not fixed in the registry; the API attaches dynamic
+	// options to the key view where applicable (see settings.go).
+	TypeList KeyType = "list"
 )
 
 // KeyMeta declares everything the API and UI need to know about one config key.
@@ -42,6 +46,7 @@ func Sections() []SectionMeta {
 		{"holds", "Approval Holds"},
 		{"dlp", "Semantic DLP"},
 		{"sentry", "Sentry Agent"},
+		{"rules", "Rules"},
 		{"ui", "User Interface"},
 		{"setup", "Setup"},
 	}
@@ -82,6 +87,11 @@ func Registry() []KeyMeta {
 			Description: "Language shown to users who haven't picked one in their browser.",
 			Type:        TypeEnum, EnumValues: []string{"en", "zh-CN"},
 			EnvVar: "AGENTGUARD_UI_DEFAULT_LANGUAGE"},
+
+		// ── rules ──
+		{Key: "rules.visible_packages", Section: "rules", Label: "Visible rule packages",
+			Description: "Rule packages surfaced on the Rules page. Packages left unchecked (and their not-yet-installed rules) are hidden. File-only; edited here, applied live.",
+			Type:        TypeList},
 
 		// ── catalog ──
 		{Key: "catalog.dir", Section: "catalog", Label: "Catalog directory",
