@@ -63,7 +63,8 @@
     "restartBadge": "需要重启",
     "reprovisionBadge": "需要重新配置",
     "secretSet": "••••••••（已设置）",
-    "secretNotSet": "未设置"
+    "secretNotSet": "未设置",
+    "noOptions": "无可用选项"
   },
   "source": {
     "default": "默认",
@@ -81,6 +82,7 @@
     "holds": "审批挂起",
     "dlp": "语义 DLP",
     "sentry": "Sentry 智能体",
+    "rules": "规则",
     "ui": "用户界面",
     "setup": "设置"
   },
@@ -112,6 +114,10 @@
     "agentguard_url": {
       "label": "Webhook 基础 URL",
       "description": "Timeplus 用于回调 AgentGuard 的 URL（告警、挂起）。"
+    },
+    "rules_visible_packages": {
+      "label": "可见的规则包",
+      "description": "在规则页面上展示的规则包。未勾选的规则包(及其尚未安装的规则)将被隐藏。更改实时生效。"
     },
     "ui_default_language": {
       "label": "默认界面语言",

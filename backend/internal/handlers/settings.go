@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/auth"
+	"github.com/timeplus/agentguard/internal/catalog"
 	"github.com/timeplus/agentguard/internal/config"
 	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
@@ -28,9 +29,17 @@ type configKeyView struct {
 	EnvVar      string   `json:"env_var,omitempty"`
 	Flag        string   `json:"flag,omitempty"`
 	Editable    bool     `json:"editable"`
-	Restart     bool     `json:"restart"`
-	Reprovision bool     `json:"reprovision"`
-	EnumValues  []string `json:"enum_values,omitempty"`
+	Restart     bool         `json:"restart"`
+	Reprovision bool         `json:"reprovision"`
+	EnumValues  []string     `json:"enum_values,omitempty"`
+	Options     []optionView `json:"options,omitempty"` // selectable values for TypeList keys
+}
+
+// optionView is one selectable value for a list-typed config key (e.g. a rule
+// package: Value is the id, Label the localized display name).
+type optionView struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
 }
 
 type configSectionView struct {
@@ -41,7 +50,7 @@ type configSectionView struct {
 
 // buildConfigView assembles the full GET /api/config response from the live
 // cfg plus the file-key set and the changed-flags set captured at startup.
-func buildConfigView(cfg *config.Config, changedFlags map[string]bool) gin.H {
+func buildConfigView(cfg *config.Config, changedFlags map[string]bool, listOptions map[string][]optionView) gin.H {
 	fileKeys, _ := config.FileKeys(cfg.ConfigPath)
 
 	bySection := map[string][]configKeyView{}
@@ -54,6 +63,7 @@ func buildConfigView(cfg *config.Config, changedFlags map[string]bool) gin.H {
 			Type: string(m.Type), Source: string(src),
 			EnvVar: m.EnvVar, Flag: m.FlagName, Editable: editable,
 			Restart: m.Restart, Reprovision: m.Reprovision, EnumValues: m.EnumValues,
+			Options: listOptions[m.Key],
 		}
 		val := config.EffectiveValue(cfg, m.Key)
 		if m.Type == config.TypeSecret {
@@ -112,11 +122,27 @@ func reprovisionRequired(cfg *config.Config) bool {
 	return false
 }
 
+// packageListOptions builds the selectable options for the rules.visible_packages
+// list key: every rule package, id → localized name.
+func packageListOptions(mgr *catalog.Manager, locale string) map[string][]optionView {
+	if mgr == nil {
+		return nil
+	}
+	pkgs := mgr.Packages()
+	opts := make([]optionView, 0, len(pkgs))
+	for _, p := range pkgs {
+		lp := p.Localized(locale)
+		opts = append(opts, optionView{Value: lp.ID, Label: lp.Name})
+	}
+	return map[string][]optionView{"rules.visible_packages": opts}
+}
+
 // GetConfig returns the full effective configuration with per-key sources.
-func GetConfig(cfg *config.Config, changedFlags map[string]bool) gin.HandlerFunc {
+func GetConfig(cfg *config.Config, mgr *catalog.Manager, changedFlags map[string]bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		opts := packageListOptions(mgr, resolveLocale(c))
 		config.Mu.RLock()
-		view := buildConfigView(cfg, changedFlags)
+		view := buildConfigView(cfg, changedFlags, opts)
 		config.Mu.RUnlock()
 		c.JSON(http.StatusOK, view)
 	}
@@ -125,7 +151,7 @@ func GetConfig(cfg *config.Config, changedFlags map[string]bool) gin.HandlerFunc
 // UpdateConfig validates a batch of key changes, merge-writes them to the
 // config file, and hot-applies non-restart keys to the live config. The batch
 // is atomic: any invalid/unknown/read-only/overridden key rejects all changes.
-func UpdateConfig(cfg *config.Config, changedFlags map[string]bool) gin.HandlerFunc {
+func UpdateConfig(cfg *config.Config, mgr *catalog.Manager, changedFlags map[string]bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body map[string]any
 		if err := c.ShouldBindJSON(&body); err != nil {
@@ -194,7 +220,7 @@ func UpdateConfig(cfg *config.Config, changedFlags map[string]bool) gin.HandlerF
 			saved = append(saved, k)
 		}
 		sentryCfg := cfg.Sentry // snapshot for provisioning outside the lock
-		view := buildConfigView(cfg, changedFlags)
+		view := buildConfigView(cfg, changedFlags, packageListOptions(mgr, resolveLocale(c)))
 		config.Mu.Unlock()
 
 		resp := gin.H{

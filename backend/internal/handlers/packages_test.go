@@ -26,6 +26,40 @@ func TestPlanPackageEnable(t *testing.T) {
 	}
 }
 
+func TestVisiblePackages(t *testing.T) {
+	all := []catalog.Package{
+		{ID: "core"}, {ID: "data-exfiltration"}, {ID: "supply-chain"},
+	}
+
+	t.Run("filters to the allowlist, preserving input order", func(t *testing.T) {
+		got := visiblePackages(all, []string{"supply-chain", "core"})
+		if len(got) != 2 || got[0].ID != "core" || got[1].ID != "supply-chain" {
+			t.Fatalf("got %v, want [core supply-chain] in input order", ids(got))
+		}
+	})
+
+	t.Run("unknown ids in the allowlist are ignored", func(t *testing.T) {
+		got := visiblePackages(all, []string{"core", "does-not-exist"})
+		if len(got) != 1 || got[0].ID != "core" {
+			t.Fatalf("got %v, want [core]", ids(got))
+		}
+	})
+
+	t.Run("empty allowlist hides everything", func(t *testing.T) {
+		if got := visiblePackages(all, nil); len(got) != 0 {
+			t.Fatalf("got %v, want []", ids(got))
+		}
+	})
+}
+
+func ids(pkgs []catalog.Package) []string {
+	out := make([]string, len(pkgs))
+	for i, p := range pkgs {
+		out[i] = p.ID
+	}
+	return out
+}
+
 func TestPackageStatusCounts(t *testing.T) {
 	pkg := catalog.Package{ID: "core", Rules: []string{"rp-001", "rp-002", "rp-003"}}
 	installed := map[string]rules.RuleInstance{

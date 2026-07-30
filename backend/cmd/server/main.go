@@ -261,8 +261,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.POST("/onboarding/generate", handlers.GenerateConfig)
 			protected.GET("/onboarding/install-script", handlers.ServeInstallScript)
 			protected.POST("/proton/query", handlers.ProtonQueryHandler(cfg))
-			protected.GET("/config", handlers.GetConfig(cfg, changedFlags))
-			protected.PUT("/config", handlers.UpdateConfig(cfg, changedFlags))
+			protected.GET("/config", handlers.GetConfig(cfg, mgr, changedFlags))
+			protected.PUT("/config", handlers.UpdateConfig(cfg, mgr, changedFlags))
 			protected.POST("/config/test-timeplus", handlers.TestTimeplusConfig(cfg))
 			protected.POST("/config/test-dlp", handlers.TestDLPConfig(cfg))
 

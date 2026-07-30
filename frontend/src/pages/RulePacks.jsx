@@ -52,6 +52,12 @@ export default function RulePacks() {
   // and available grids to that package's member rules. null = All packages.
   const selectedPkg = selectedPackage ? packages.find(p => p.id === selectedPackage) : null
   const memberSet = packageMemberSet(selectedPkg)
+  // packages holds only VISIBLE packages (the backend filters by
+  // rules.visible_packages). Their union is the set of rules surfaced as
+  // available in the "All packages" view; already-installed rules always show
+  // regardless of visibility, so only the available grid is visibility-scoped.
+  const visibleMemberSet = new Set(packages.flatMap(p => p.rules || []))
+  const availableFilterSet = memberSet ?? visibleMemberSet
 
   // When the user types a query, rank by relevance (issue #124) so that an
   // exact / name match wins over a description-only match. Empty search keeps
@@ -237,7 +243,7 @@ export default function RulePacks() {
   }
 
   const uninstalledCatalog = rankBySearch(
-    scopeToPackage(catalog.filter(e => !e.installed), memberSet),
+    scopeToPackage(catalog.filter(e => !e.installed), availableFilterSet),
     search,
     e => e,
     (a, b) => (a.name || '').localeCompare(b.name || ''),

@@ -58,6 +58,23 @@ func packageStatusCounts(pkg catalog.Package, installed map[string]rules.RuleIns
 	return total, installedCount, enabledCount
 }
 
+// visiblePackages filters all to those whose ID is in the visible allowlist,
+// preserving the input (id-sorted) order. Unknown IDs in the allowlist are
+// ignored; an empty allowlist hides everything. Pure, for unit testing.
+func visiblePackages(all []catalog.Package, visible []string) []catalog.Package {
+	allow := make(map[string]struct{}, len(visible))
+	for _, id := range visible {
+		allow[id] = struct{}{}
+	}
+	out := make([]catalog.Package, 0, len(all))
+	for _, p := range all {
+		if _, ok := allow[p.ID]; ok {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // packageView is the read model for a rule package on GET /api/rules/packages.
 // Name/Description are already localized; Rules is the member ID list.
 type packageView struct {
@@ -89,7 +106,8 @@ func ListPackages(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle)
 		}
 
 		locale := resolveLocale(c)
-		pkgs := mgr.Packages()
+		// Only surface packages the operator has marked visible (default ["core"]).
+		pkgs := visiblePackages(mgr.Packages(), reqCfg.Rules.VisiblePackages)
 		views := make([]packageView, 0, len(pkgs))
 		for _, p := range pkgs {
 			lp := p.Localized(locale)
