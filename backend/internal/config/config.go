@@ -159,7 +159,7 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("catalog.dir", "./catalog")
 	v.SetDefault("agentguard.url", "http://localhost:8080")
 	v.SetDefault("ui.default_language", "en")
-	v.SetDefault("rules.visible_packages", []string{"core"})
+	v.SetDefault("rules.visible_packages", []string{"core", "data-security-audit"})
 	v.SetDefault("timeplus.host", "localhost")
 	v.SetDefault("timeplus.port", 3218)
 	v.SetDefault("timeplus.native-port", 8463)

@@ -45,3 +45,45 @@ func TestDataSecurityAuditRulesPresent(t *testing.T) {
 		t.Fatal("no dsa-* rules loaded at all")
 	}
 }
+
+// TestDataSecurityAuditPackageMembership asserts the data-security-audit
+// package exists and contains exactly the authored dsa-* rule set — no more,
+// no less — so the manifest can't drift from the rules.
+func TestDataSecurityAuditPackageMembership(t *testing.T) {
+	m, err := New(SeedFS, t.TempDir())
+	if err != nil {
+		t.Fatalf("catalog.New(SeedFS): %v", err)
+	}
+	var pkg *Package
+	for _, p := range m.Packages() {
+		if p.ID == "data-security-audit" {
+			pp := p
+			pkg = &pp
+			break
+		}
+	}
+	if pkg == nil {
+		t.Fatal("data-security-audit package not found")
+	}
+	want := map[string]bool{}
+	for _, id := range dsaExpected {
+		want[id] = true
+	}
+	got := map[string]bool{}
+	for _, id := range pkg.Rules {
+		got[id] = true
+	}
+	for id := range want {
+		if !got[id] {
+			t.Errorf("package missing rule %s", id)
+		}
+	}
+	for id := range got {
+		if !want[id] {
+			t.Errorf("package has unexpected rule %s", id)
+		}
+	}
+	if pkg.DefaultEnabled {
+		t.Error("data-security-audit must be default_enabled: false")
+	}
+}
