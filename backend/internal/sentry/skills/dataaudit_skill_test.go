@@ -34,3 +34,26 @@ func TestDataAuditGuideInSkillList(t *testing.T) {
 		t.Fatal("data-audit-guide not in embedded skill list")
 	}
 }
+
+// TestDataAuditGuideReferencesLoad asserts each category reference resolves and
+// mentions its lead A-code, so the SKILL.md links are never dangling.
+func TestDataAuditGuideReferencesLoad(t *testing.T) {
+	cases := map[string]string{
+		"SENSITIVE_DATA.md": "A01",
+		"PERMISSIONS.md":    "A08",
+		"EXFIL.md":          "A13",
+		"ATTACK.md":         "A19",
+		"AUDIT_TRAIL.md":    "A24",
+	}
+	for file, want := range cases {
+		rc := &RunContext{Loaded: map[string]bool{}}
+		out, err := NewLoadSkillReference("").Execute(context.Background(), rc,
+			loadArgs(t, map[string]string{"skill": "data-audit-guide", "name": file}))
+		if err != nil {
+			t.Fatalf("%s: %v", file, err)
+		}
+		if !strings.Contains(out, want) {
+			t.Errorf("%s missing %q; got %.100q", file, want, out)
+		}
+	}
+}
