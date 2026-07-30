@@ -1510,7 +1510,7 @@ Data subject / tenant ≠ calling user.
   markers in `tool_input`/`tool_result` only. Confirm by hand:
   ```sql
   SELECT session_id, tool_name, left(tool_input, 200) FROM table(agentguard_cim_event)
-  WHERE rule_id_placeholder = '' AND event_type='tool_invoke'
+  WHERE event_type='tool_invoke'
     AND multi_search_any(lower(tool_input), ['tenant_id','customer_id','org_id'])
   ORDER BY event_time DESC LIMIT 50
   ```
