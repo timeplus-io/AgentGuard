@@ -94,7 +94,12 @@ inconclusive today.
 
 ## How to investigate
 
-1. For a ✅ A-code, read its detections first — they are authoritative:
+1. Every ✅ A-code carries a **direct audit query** in its reference file — a
+   self-contained `run_sql` over `table(agentguard_cim_event)` that finds
+   matches whether or not the `data-security-audit` rule package is installed.
+   Run that to audit on demand. If the package IS installed, the same rule's
+   pre-computed detections are also in `agentguard_security_events`
+   (`WHERE rule_id = 'dsa-a06'`), which is cheaper for ongoing monitoring:
    ```sql
    SELECT detected_at, agent_id, session_id, message
    FROM table(agentguard_security_events)
