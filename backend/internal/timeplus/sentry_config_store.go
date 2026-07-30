@@ -248,6 +248,10 @@ func DefaultSentryChatRow(sCfg config.SentryConfig) string {
 		// DISABLED by default — turn on under Settings → Sentry Agent to
 		// let Sentry interact with AgentGuard features.
 		"agentguard_tools_enabled": false,
+		// Opt-in switch for the data-audit-guide skill (the A01–A27
+		// data-security audit playbook over agentguard_cim_event). Independent
+		// of agentguard_tools_enabled; DISABLED by default.
+		"data_audit_enabled": false,
 	})
 	return string(b)
 }

@@ -127,6 +127,8 @@
       "promptCachingLabel": "Prompt caching",
       "agentguardToolsTitle": "AgentGuard skills & tools",
       "agentguardToolsDescription": " — let Sentry read and act on AgentGuard features (threats, holds, rules, cost, DLP; write actions still require in-chat approval). Off: Sentry is a generic Timeplus SQL analyst.",
+      "dataAuditTitle": "Data-security audit skill",
+      "dataAuditDescription": " — load the data-audit-guide skill: the A01–A27 data-security audit playbook (sensitive data, credentials, exfiltration, injection, anomalies) over agentguard_cim_event. Independent of the switch above; read-only, run_sql only.",
       "saveButton": "Save chat config"
     },
     "memory": {

@@ -127,6 +127,8 @@
       "promptCachingLabel": "提示词缓存",
       "agentguardToolsTitle": "AgentGuard 技能与工具",
       "agentguardToolsDescription": " —— 允许 Sentry 读取并操作 AgentGuard 功能（威胁、挂起、规则、成本、DLP；写入操作仍需在对话中批准）。关闭时，Sentry 是一个通用的 Timeplus SQL 分析助手。",
+      "dataAuditTitle": "数据安全审计技能",
+      "dataAuditDescription": " —— 加载 data-audit-guide 技能：针对 agentguard_cim_event 的 A01–A27 数据安全审计手册（敏感数据、凭据、数据外传、注入、异常行为）。与上方开关相互独立；只读，仅使用 run_sql。",
       "saveButton": "保存对话配置"
     },
     "memory": {
