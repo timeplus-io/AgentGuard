@@ -1,0 +1,42 @@
+id: dsa-a10
+name: "[A10] Privilege-Parameter Access"
+version: "1.0.0"
+description: |
+  Detects path traversal and identifier-manipulation parameters — user, org,
+  tenant, or resource ID overrides and file-path escapes — used to reach data
+  outside the caller's authorization scope. (Customer audit rule A10.)
+severity: warning
+category: agent_privilege_escalation
+fp_rate: medium
+hook_sources: "tool_invoke"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a10
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'warning'                 AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Privilege-parameter manipulation in tool ', tool_name) AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_invoke'
+    AND (
+         position(tool_input, '../') > 0
+      OR multi_search_any(lower(tool_input), ['/etc/passwd', '/root/', '%2e%2e', '..%2f', 'file://', 'user_id=', 'tenant_id=', 'resource_id=', 'org_id='])
+    )
+translations:
+  zh-CN:
+    name: "越权参数调用"
+    description: |
+      通过修改用户标识、组织标识、租户 ID、资源 ID 或文件路径访问权限范围外的数据。

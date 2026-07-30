@@ -130,6 +130,100 @@ WHERE event_type IN ('llm_response', 'tool_complete')
   )
   AND multi_search_any(lower(concat(llm_response, ' ', tool_result)), ['姓名', 'name', '账户', 'account', '余额', 'balance', '交易', 'transaction', '手机号', 'phone'])
 
+== dsa-a08 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a08'             AS rule_id,
+  '[A08] Cross-User / Cross-Tenant Data Leak'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Possible cross-tenant access via tool ', tool_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type IN ('tool_invoke', 'tool_complete', 'llm_response')
+  AND multi_search_any(lower(concat(tool_input, ' ', tool_result)), ['tenant_id', 'tenantid', 'org_id', 'orgid', 'customer_id', 'account_id', 'cross-tenant', 'other tenant', '其他租户', '跨租户'])
+
+== dsa-a09 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a09'             AS rule_id,
+  '[A09] Unauthorized Tool Invocation'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('High-privilege tool invoked: ', tool_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type = 'tool_invoke'
+  AND multi_search_any(lower(tool_name), ['admin', 'sudo', 'root', 'grant', 'iam', 'privilege', 'delete_user', 'drop', 'truncate', 'exec', 'shell', 'system', 'chmod', 'setuid'])
+
+== dsa-a10 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a10'             AS rule_id,
+  '[A10] Privilege-Parameter Access'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Privilege-parameter manipulation in tool ', tool_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type = 'tool_invoke'
+  AND (
+       position(tool_input, '../') > 0
+    OR multi_search_any(lower(tool_input), ['/etc/passwd', '/root/', '%2e%2e', '..%2f', 'file://', 'user_id=', 'tenant_id=', 'resource_id=', 'org_id='])
+  )
+
+== dsa-a11 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a11'             AS rule_id,
+  '[A11] High-Risk Tool Call Missing Identity'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Unattributable high-risk tool call: ', tool_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type IN ('tool_invoke', 'tool_complete')
+  AND user_id = ''
+  AND multi_search_any(lower(tool_name), ['export', 'download', 'send', 'delete', 'remove', 'modify', 'update', 'query', 'search', 'dump', 'backup', 'transfer'])
+
+== dsa-a12 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a12'             AS rule_id,
+  '[A12] Bypass After Policy Denial'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Possible policy-bypass retry via tool ', tool_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type IN ('tool_invoke', 'tool_complete')
+  AND multi_search_any(lower(tool_input), ['retry', 'bypass', 'workaround', 'alternate', 'another way', 'base64', 'fromcharcode', 'atob', 'decode', 'circumvent', '绕过', '重试'])
+
 == rp-001 ==
 -- Changelog v1.1.0 (2026-04-16):
 -- Replaced broad LIKE '%jailbreak%' with regex word-boundary match.
