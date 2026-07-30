@@ -172,7 +172,6 @@ If this URL is wrong, security rules will still detect events and write to the `
 | Cost Governance | `/cost` | Daily spend trends, per-model token breakdown, configurable pricing table |
 | Rule Packs | `/rules` | Install, enable/disable, and upgrade detection rules; real-time MV health status |
 | Rule Detail | `/rules/:id` | Per-rule configuration including the **Block Policy** panel (`log_only` / `auto_block` / `hold`) |
-| Investigate | `/investigate` | Ad-hoc streaming SQL console backed by Timeplus |
 | Semantic DLP | `/dlp` | Natural-language forensic auditing of conversation logs: ask a question, get a cited report with risk profiles and an enriched-message browser |
 | Onboarding | `/onboarding` | 4-step wizard to connect an OpenClaw, Claude Code, or Hermes agent |
 

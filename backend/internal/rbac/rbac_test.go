@@ -63,3 +63,38 @@ func TestRoutePermissionsAreValidKeys(t *testing.T) {
 		}
 	}
 }
+
+// Proton (raw SQL) is intentionally not a gated resource: it is cross-cutting
+// plumbing every authenticated user needs, exposed as a baseline route instead.
+func TestProtonIsNotAResource(t *testing.T) {
+	for _, r := range Resources {
+		if r.Key == "proton" || r.Key == "investigate" {
+			t.Fatalf("unexpected resource %q still in catalog", r.Key)
+		}
+	}
+	all := AllPermissions()
+	if hasPerm(all, ReadKey("proton")) || hasPerm(all, UIKey("proton")) {
+		t.Fatal("proton permission keys must not be minted")
+	}
+}
+
+// /api/proton/query must be reachable by any authenticated user: present in
+// baselineRoutes and absent from the per-resource routePermissions map.
+func TestProtonQueryIsBaselineNotGated(t *testing.T) {
+	const key = "POST /api/proton/query"
+	if !baselineRoutes[key] {
+		t.Fatalf("%q must be a baseline route", key)
+	}
+	if _, mapped := routePermissions[key]; mapped {
+		t.Fatalf("%q must not also be in routePermissions", key)
+	}
+}
+
+// A route is either resource-gated or baseline, never both (avoids ambiguity).
+func TestBaselineAndGatedAreDisjoint(t *testing.T) {
+	for route := range baselineRoutes {
+		if _, dup := routePermissions[route]; dup {
+			t.Fatalf("route %q is both baseline and resource-gated", route)
+		}
+	}
+}

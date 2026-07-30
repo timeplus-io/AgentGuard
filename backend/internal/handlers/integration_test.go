@@ -96,7 +96,6 @@ func TestIntegration_Provision(t *testing.T) {
 		{"rules/catalog", "/api/rules/catalog"},
 		{"activity", "/api/activity"},
 		{"holds", "/api/holds"},
-		{"investigate/tables", "/api/investigate/tables"},
 	} {
 		t.Run("GET "+tc.name, func(t *testing.T) {
 			assertEndpointOK(t, client, "GET", tc.path)

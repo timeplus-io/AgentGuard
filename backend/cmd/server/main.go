@@ -239,7 +239,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.POST("/holds/_drain", handlers.DrainHolds(cfg, holdReg))
 			protected.GET("/activity", handlers.ListActivity(cfg))
 			protected.GET("/notifications/stream", handlers.NotificationsSSEHandler())
-			protected.GET("/investigate/tables", handlers.ListTables(cfg))
 			protected.GET("/dlp/status", handlers.DLPStatusHandler(cfg))
 			protected.POST("/dlp/query", handlers.DLPQuery(cfg))
 			protected.GET("/dlp/messages", handlers.ListEnrichedMessages(cfg))

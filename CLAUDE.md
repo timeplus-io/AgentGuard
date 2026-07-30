@@ -144,7 +144,6 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | GET | `/api/activity` | `ListActivity` | Recent tool calls across all sessions |
 | POST | `/api/alerts/webhook` | `AlertWebhook` | Receives rule-triggered alerts (unauthenticated) |
 | GET | `/api/notifications/stream` | `NotificationsSSEHandler` | SSE stream of live alerts |
-| GET | `/api/investigate/tables` | `ListTables` | Discovers streams from system.tables |
 | POST | `/api/onboarding/generate` | `GenerateConfig` | |
 | GET | `/api/onboarding/install-script` | `ServeInstallScript` | Returns agent install script |
 | POST | `/api/proton/query` | `ProtonQueryHandler` | Streaming proxy to Timeplus (NDJSON) |
@@ -195,7 +194,6 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | `/cost` | `CostGovernance` |
 | `/rules` | `RulePacks` |
 | `/rules/:id` | `RuleDetail` |
-| `/investigate` | `Investigate` |
 | `/dlp` | `SemanticDLP` |
 | `/sentry` | `Sentry` |
 | `/settings` | `Settings` |

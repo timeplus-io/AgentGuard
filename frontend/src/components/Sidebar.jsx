@@ -12,7 +12,6 @@ const navItems = [
   { labelKey: 'nav.cost', to: '/cost', icon: 'payments', resource: 'cost' },
   { labelKey: 'nav.rules', to: '/rules', icon: 'rule', resource: 'rules' },
   { labelKey: 'nav.dlp', to: '/dlp', icon: 'policy', resource: 'dlp' },
-  { labelKey: 'nav.investigate', to: '/investigate', icon: 'search', resource: 'investigate' },
   { labelKey: 'nav.sentry', to: '/sentry', icon: 'shield_person', resource: 'sentry' },
   { labelKey: 'nav.settings', to: '/settings', icon: 'settings', resource: 'settings' },
   { labelKey: 'nav.access', to: '/access', icon: 'admin_panel_settings', resource: 'access' },

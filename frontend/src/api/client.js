@@ -197,7 +197,6 @@ export const api = {
   configureRule: (id, overrides, reason) =>
     put(`/rules/${id}/configuration`, { overrides, reason }),
   uninstallRule: (id) => del(`/rules/${id}`),
-  listTables: () => get('/investigate/tables'),
   generateConfig: (data) => post('/onboarding/generate', data),
   getInstallScript: () => fetch('/api/onboarding/install-script'),
 

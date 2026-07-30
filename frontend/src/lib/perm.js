@@ -12,7 +12,6 @@ export const NAV_RESOURCES = [
   ['cost', '/cost'],
   ['rules', '/rules'],
   ['dlp', '/dlp'],
-  ['investigate', '/investigate'],
   ['sentry', '/sentry'],
   ['settings', '/settings'],
 ]
