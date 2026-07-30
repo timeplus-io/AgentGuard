@@ -1,16 +1,38 @@
 # Agent Attack & Anomaly (A19–A23)
 
-Compose each check from the **query skeleton** in `SKILL.md`. A21 and A23 are
-aggregations / listings, not the single-event skeleton, so a worked sample is
-given for those.
+Compose each check from the **query skeleton** in `SKILL.md`. A19, A21, A22, and
+A23 are **behavioral** (cross-event sequences or per-session aggregations), so
+each carries a ready-to-run sample instead of a single-event predicate. A20 is a
+single-event content check.
 
 ## Per-rule spec
 
-### A19 提示词注入导致数据访问
-Injection markers followed by sensitive retrieval / tool use. Review first.
-event_type IN (`user_input`, `tool_complete`).
-- Predicate: `match(lower(concat(user_message, ' ', tool_result)), 'ignore [a-z ]{0,20}(previous|prior|all) instructions') OR multi_search_any(lower(concat(user_message, ' ', tool_result)), ['reveal the system prompt','show system prompt','print system prompt','忽略以上指令','忽略之前的指令','忽略所有规则','read other user','access other user','其他用户数据','call internal tool','invoke internal tool','use internal tool'])`
-- Evidence: the injection phrase, what followed it, `session_id`.
+### A19 提示词注入导致数据访问 (behavioral / sequence)
+The rule is injection **then** data access — an injection marker in a user
+message, followed by a tool call later in the same session. Detect the sequence,
+not just the phrase.
+
+```sql
+WITH injections AS (
+  SELECT session_id, min(event_time) AS inj_time
+  FROM table(agentguard_cim_event)
+  WHERE event_type = 'user_input'
+    AND (
+         match(lower(user_message), 'ignore [a-z ]{0,20}(previous|prior|all) instructions')
+      OR multi_search_any(lower(user_message), ['reveal the system prompt', 'show system prompt', '忽略以上指令', '忽略之前的指令', 'read other user', 'access other user', '其他用户数据', 'call internal tool'])
+    )
+  GROUP BY session_id
+)
+SELECT e.event_time, e.agent_id, e.session_id, e.tool_name, left(e.tool_input, 200) AS evidence, i.inj_time
+FROM table(agentguard_cim_event) AS e
+JOIN injections AS i ON e.session_id = i.session_id
+WHERE e.event_type = 'tool_invoke' AND e.event_time >= i.inj_time
+ORDER BY e.event_time DESC
+LIMIT 50
+```
+- The injection-marker list is the building block — extend it as needed. To
+  gauge impact, compare tool activity before vs. after `inj_time`.
+- Evidence: the injection phrase, the tool call that followed, `session_id`.
 
 ### A20 系统提示词或隐藏上下文泄露
 System prompt / internal policy / tool defs / KB keys in a reply. Review first.
@@ -32,12 +54,27 @@ LIMIT 200
 ```
 - Evidence: agent, the out-of-role tools it used, call counts.
 
-### A22 异常调用频率和调用链
-Recursion / retry / rate-limit markers or a very long reply. event_type IN
-(`tool_complete`, `llm_response`).
-- Predicate: `multi_search_any(lower(tool_result), ['recursion','stack overflow','too many requests','rate limit','retry attempt','repeated failure','timeout']) OR length(assistant_message) > 50000`
-- Evidence: the anomaly signal, `session_id`. For call-frequency spikes, group by
-  `session_id` over a time window and look for outliers.
+### A22 异常调用频率和调用链 (behavioral / aggregation)
+Frequency and chain anomalies are a **per-session aggregation**, not a keyword in
+one result: call volume, low tool diversity (recursion / tight loop), repeated
+failures, and oversized replies.
+
+```sql
+SELECT session_id, agent_id,
+       count_if(event_type = 'tool_invoke')                             AS tool_calls,
+       count_distinct(tool_name)                                       AS distinct_tools,
+       count_if(event_type = 'tool_complete' AND tool_success = false) AS failures,
+       max(length(assistant_message))                                  AS max_reply_len
+FROM table(agentguard_cim_event)
+GROUP BY session_id, agent_id
+HAVING tool_calls > 50 OR failures > 5 OR max_reply_len > 50000
+ORDER BY tool_calls DESC
+LIMIT 50
+```
+- Tune the thresholds to the deployment's baseline. High `tool_calls` with
+  `distinct_tools = 1` is a recursion / tight-loop signal; many `failures` is a
+  repeated-retry signal.
+- Evidence: the session's counts, `session_id`; then drill into its call chain.
 
 ### A23 安全策略命中但未阻断 (listing)
 A policy was flagged but the request still ran. Uses the native `hook_decision` /

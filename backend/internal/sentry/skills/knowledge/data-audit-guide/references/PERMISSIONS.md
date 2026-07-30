@@ -3,7 +3,8 @@
 Compose each check from the **query skeleton** in `SKILL.md` — drop the
 predicate below into `WHERE event_type … AND <predicate>`. Several are
 best-effort proxies because identity/policy fields are absent from the event
-model; the note says so.
+model; the note says so. A12 is **behavioral** (a cross-event sequence), so it
+carries a ready-to-run sample instead of a single-event predicate.
 
 ## Per-rule spec
 
@@ -30,8 +31,29 @@ is via `agent_id`/`session_id`. event_type IN (`tool_invoke`, `tool_complete`).
 - Predicate: `(agent_id = '' OR session_id = '') AND multi_search_any(lower(tool_name), ['export','download','send','delete','remove','modify','update','query','search','dump','backup','transfer'])`
 - Evidence: tool, which identity signal is missing, `event_time`.
 
-### A12 策略拒绝后绕过调用 — proxy
-Single-event retry/encoding markers; confirm a true bypass by reading the
-surrounding call chain in the session. event_type IN (`tool_invoke`, `tool_complete`).
-- Predicate: `multi_search_any(lower(tool_input), ['retry','bypass','workaround','alternate','another way','base64','fromcharcode','atob','decode','circumvent','绕过','重试'])`
-- Evidence: the retry/encoding marker, tool, `session_id`.
+### A12 策略拒绝后绕过调用 (behavioral / cross-event)
+The real signal is a **denied call followed by continued tool use in the same
+session** — not the word "retry" in `tool_input`. Use the policy-decision
+columns (`hook_decision` / `block_reason`): find each session's first denial,
+then any tool call after it.
+
+```sql
+WITH denials AS (
+  SELECT session_id, min(event_time) AS first_denial
+  FROM table(agentguard_cim_event)
+  WHERE lower(hook_decision) IN ('block', 'deny', 'denied', 'reject', 'rejected', 'ask')
+     OR block_reason != ''
+  GROUP BY session_id
+)
+SELECT e.event_time, e.agent_id, e.session_id, e.tool_name,
+       left(e.tool_input, 200) AS retry_evidence, d.first_denial
+FROM table(agentguard_cim_event) AS e
+JOIN denials AS d ON e.session_id = d.session_id
+WHERE e.event_type = 'tool_invoke' AND e.event_time > d.first_denial
+ORDER BY e.event_time DESC
+LIMIT 50
+```
+- If `hook_decision` is `observe` everywhere (monitoring-only deployment) there
+  are no denials to bypass — report "no blocking policy in effect". To focus on
+  same-goal retries via a different tool, add `AND e.tool_name != <denied tool>`.
+- Evidence: the denied event, the subsequent tool + params, `session_id`.

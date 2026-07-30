@@ -32,9 +32,26 @@ No `protocol`/`tls_version` column, so flag a plaintext `http://` target with no
 - Evidence: the `http://` target, tool; mark "transport metadata not captured".
 
 ### A17 批量提取或枚举数据
-Large page/limit or fetch-all in one call. event_type = `tool_invoke`.
+Two dimensions: a single call asking for a huge page, and short-time enumeration
+across many calls.
+
+Single-call (large page / fetch-all), event_type = `tool_invoke`:
 - Predicate: `match(lower(tool_input), '(limit|page_?size|per_?page|count|top|rows)[^0-9]{0,6}[1-9][0-9]{3,}') OR multi_search_any(lower(tool_input), ['export_all','dump_all','fetch_all','select * from','"all": true','"all":true','download all','bulk export'])`
-- Evidence: the size parameter / flag, tool, `session_id`.
+
+Frequency (behavioral — many extraction calls per session in the window):
+
+```sql
+SELECT session_id, agent_id, count() AS extraction_calls,
+       min(event_time) AS first_call, max(event_time) AS last_call
+FROM table(agentguard_cim_event)
+WHERE event_type = 'tool_invoke'
+  AND multi_search_any(lower(tool_name), ['query', 'search', 'export', 'list', 'fetch', 'get', 'read', 'download', 'select', 'scan'])
+GROUP BY session_id, agent_id
+HAVING extraction_calls > 50
+ORDER BY extraction_calls DESC
+LIMIT 50
+```
+- Evidence: the size parameter / flag or the call count + window, tool, `session_id`.
 
 ### A18 隐蔽外传行为
 Base64 / hex / percent-encoded covert egress. Review first. event_type = `tool_invoke`.

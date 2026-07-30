@@ -48,17 +48,17 @@ says so where that applies.
 | A09 | 未授权工具调用 | Unauthorized tool call (proxy) | PERMISSIONS.md |
 | A10 | 越权参数调用 | Privilege-parameter call | PERMISSIONS.md |
 | A11 | 高风险工具缺少身份信息 | High-risk call, no identity | PERMISSIONS.md |
-| A12 | 策略拒绝后绕过调用 | Bypass after denial (proxy) | PERMISSIONS.md |
+| A12 | 策略拒绝后绕过调用 | Bypass after denial (behavioral) | PERMISSIONS.md |
 | A13 | 未登记工具或外部地址 | Unregistered tool / address (proxy) | EXFIL.md |
 | A14 | 敏感数据传向外部工具 | Sensitive data to external tool | EXFIL.md |
 | A15 | 外传保护等级下降 | Egress protection downgrade (proxy) | EXFIL.md |
 | A16 | 外部传输通道不安全 | Insecure channel (proxy) | EXFIL.md |
 | A17 | 批量提取或枚举数据 | Bulk extraction / enumeration | EXFIL.md |
 | A18 | 隐蔽外传行为 | Covert exfiltration | EXFIL.md |
-| A19 | 提示词注入导致数据访问 | Prompt injection → data access | ATTACK.md |
+| A19 | 提示词注入导致数据访问 | Prompt injection → data access (behavioral) | ATTACK.md |
 | A20 | 系统提示词或隐藏上下文泄露 | System-prompt / hidden-context leak | ATTACK.md |
 | A21 | 智能体行为与声明能力不一致 | Behavior vs. declared (proxy) | ATTACK.md |
-| A22 | 异常调用频率和调用链 | Anomalous frequency / chain | ATTACK.md |
+| A22 | 异常调用频率和调用链 | Anomalous frequency / chain (behavioral) | ATTACK.md |
 | A23 | 安全策略命中但未阻断 | Policy hit but not blocked | ATTACK.md |
 | A24 | 审计字段缺失 | Missing audit fields | AUDIT_TRAIL.md |
 | A25 | 调用链断裂 | Broken call chain | AUDIT_TRAIL.md |
