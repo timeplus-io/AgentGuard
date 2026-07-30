@@ -204,9 +204,9 @@ sql_template: |
   FROM agentguard_cim_event
   WHERE event_type = 'llm_response'
     AND (
-         match(llm_response, '[0-9]{17}[0-9Xx]')
-      OR match(llm_response, '[0-9]{13,19}')
-      OR multi_search_any(lower(llm_response), ['身份证', '银行卡', '信用卡', 'social security', 'ssn', 'account number', 'api key', 'access key', 'password', 'token', '密码'])
+         match(assistant_message, '[0-9]{17}[0-9Xx]')
+      OR match(assistant_message, '[0-9]{13,19}')
+      OR multi_search_any(lower(assistant_message), ['身份证', '银行卡', '信用卡', 'social security', 'ssn', 'account number', 'api key', 'access key', 'password', 'token', '密码'])
     )
 translations:
   zh-CN:
@@ -350,11 +350,11 @@ sql_template: |
   FROM agentguard_cim_event
   WHERE event_type IN ('user_input', 'llm_request', 'tool_invoke', 'tool_complete', 'llm_response')
     AND (
-         match(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'AKIA[0-9A-Z]{16}')
-      OR match(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'eyJ[A-Za-z0-9_-]{10,}')
-      OR (position(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'BEGIN') > 0
-          AND position(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'PRIVATE KEY') > 0)
-      OR multi_search_any(lower(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result)), ['bearer ', 'authorization: bearer', 'password=', 'passwd=', 'set-cookie:', 'session_token', 'access_token', 'accesskey', '私钥', '访问密钥'])
+         match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'AKIA[0-9A-Z]{16}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'eyJ[A-Za-z0-9_-]{10,}')
+      OR (position(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'BEGIN') > 0
+          AND position(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'PRIVATE KEY') > 0)
+      OR multi_search_any(lower(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result)), ['bearer ', 'authorization: bearer', 'password=', 'passwd=', 'set-cookie:', 'session_token', 'access_token', 'accesskey', '私钥', '访问密钥'])
     )
 translations:
   zh-CN:
@@ -401,10 +401,10 @@ sql_template: |
   FROM agentguard_cim_event
   WHERE event_type IN ('llm_response', 'tool_complete')
     AND (
-      match(concat(llm_response, ' ', tool_result), '[0-9]{17}[0-9Xx]')
-      OR match(concat(llm_response, ' ', tool_result), '[0-9]{13,19}')
+      match(concat(assistant_message, ' ', tool_result), '[0-9]{17}[0-9Xx]')
+      OR match(concat(assistant_message, ' ', tool_result), '[0-9]{13,19}')
     )
-    AND multi_search_any(lower(concat(llm_response, ' ', tool_result)), ['姓名', 'name', '账户', 'account', '余额', 'balance', '交易', 'transaction', '手机号', 'phone'])
+    AND multi_search_any(lower(concat(assistant_message, ' ', tool_result)), ['姓名', 'name', '账户', 'account', '余额', 'balance', '交易', 'transaction', '手机号', 'phone'])
 translations:
   zh-CN:
     name: "数据汇聚后风险升级"
@@ -971,7 +971,7 @@ sql_template: |
     raw_event_data            AS event_data
   FROM agentguard_cim_event
   WHERE event_type = 'llm_response'
-    AND multi_search_any(lower(llm_response), ['system prompt', 'my instructions are', 'internal policy', 'tool definition', '以下是我的系统提示', '我的系统指令', 'my system message', 'hidden context', 'knowledge base key', 'begin system', '<system>'])
+    AND multi_search_any(lower(assistant_message), ['system prompt', 'my instructions are', 'internal policy', 'tool definition', '以下是我的系统提示', '我的系统指令', 'my system message', 'hidden context', 'knowledge base key', 'begin system', '<system>'])
 translations:
   zh-CN:
     name: "系统提示词或隐藏上下文泄露"
@@ -1018,7 +1018,7 @@ sql_template: |
   WHERE event_type IN ('tool_complete', 'llm_response')
     AND (
          multi_search_any(lower(tool_result), ['recursion', 'stack overflow', 'too many requests', 'rate limit', 'retry attempt', 'repeated failure', 'timeout'])
-      OR length(llm_response) > 50000
+      OR length(assistant_message) > 50000
     )
 translations:
   zh-CN:
