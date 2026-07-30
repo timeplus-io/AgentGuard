@@ -1,0 +1,41 @@
+id: dsa-a04
+name: "[A04] Unnecessary Sensitive Data in Tool Parameters"
+version: "1.0.0"
+description: |
+  Flags tool-call parameters that carry sensitive fields not needed to
+  complete the operation. Approximates the customer's field-whitelist rule by
+  detecting credential/PII markers in tool_input for non-authentication tools.
+  (Customer audit rule A04.)
+severity: warning
+category: sensitive_data_exposure
+fp_rate: medium
+hook_sources: "tool_invoke"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a04
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'warning'                 AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Sensitive data in parameters of tool ', tool_name) AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'tool_invoke'
+    AND NOT multi_search_any(lower(tool_name), ['login', 'auth', 'oauth', 'authenticate', 'credential'])
+    AND multi_search_any(lower(tool_input), ['password', 'passwd', 'secret', 'api key', 'api_key', 'apikey', 'access key', 'access_key', 'private key', 'private_key', 'ssn', 'credit card', '身份证', '银行卡', '密码', '验证码'])
+translations:
+  zh-CN:
+    name: "工具参数携带非必要敏感数据"
+    description: |
+      依据工具参数模板建立字段白名单;调用参数包含完成操作不需要的敏感字段时告警。

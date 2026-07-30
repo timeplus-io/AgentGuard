@@ -1,0 +1,45 @@
+id: dsa-a03
+name: "[A03] Sensitive Information in Model Output"
+version: "1.0.0"
+description: |
+  Detects personal information, customer information, account data,
+  authentication information, and business-sensitive data in model replies.
+  Treated as highest-risk when the output does not originate from the current
+  user's own session. (Customer audit rule A03.)
+severity: critical
+category: sensitive_data_exposure
+fp_rate: medium
+hook_sources: "llm_response"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a03
+  - pii
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'critical'                AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Sensitive data in model output from agent ', agent_id) AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'llm_response'
+    AND (
+         match(llm_response, '[0-9]{17}[0-9Xx]')
+      OR match(llm_response, '[0-9]{13,19}')
+      OR multi_search_any(lower(llm_response), ['身份证', '银行卡', '信用卡', 'social security', 'ssn', 'account number', 'api key', 'access key', 'password', 'token', '密码'])
+    )
+translations:
+  zh-CN:
+    name: "模型输出敏感信息"
+    description: |
+      检测回复中的个人信息、客户信息、账户数据、认证信息及业务敏感数据。输出并非来自当前用户本次会话时按最高风险处置。

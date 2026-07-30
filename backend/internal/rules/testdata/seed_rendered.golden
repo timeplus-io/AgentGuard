@@ -1,3 +1,135 @@
+== dsa-a01 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a01'             AS rule_id,
+  '[A01] Sensitive PII in User Input'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Sensitive data in user input from agent ', agent_id) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type = 'user_input'
+  AND (
+       match(user_message, '[0-9]{17}[0-9Xx]')
+    OR match(user_message, '[0-9]{13,19}')
+    OR multi_search_any(lower(user_message), ['密码', '验证码', '密钥', '身份证', '银行卡', 'password', 'passwd', 'verification code', 'secret key', 'api key', 'access key'])
+  )
+
+== dsa-a03 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a03'             AS rule_id,
+  '[A03] Sensitive Information in Model Output'           AS rule_name,
+  'critical'                AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Sensitive data in model output from agent ', agent_id) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type = 'llm_response'
+  AND (
+       match(llm_response, '[0-9]{17}[0-9Xx]')
+    OR match(llm_response, '[0-9]{13,19}')
+    OR multi_search_any(lower(llm_response), ['身份证', '银行卡', '信用卡', 'social security', 'ssn', 'account number', 'api key', 'access key', 'password', 'token', '密码'])
+  )
+
+== dsa-a04 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a04'             AS rule_id,
+  '[A04] Unnecessary Sensitive Data in Tool Parameters'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Sensitive data in parameters of tool ', tool_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type = 'tool_invoke'
+  AND NOT multi_search_any(lower(tool_name), ['login', 'auth', 'oauth', 'authenticate', 'credential'])
+  AND multi_search_any(lower(tool_input), ['password', 'passwd', 'secret', 'api key', 'api_key', 'apikey', 'access key', 'access_key', 'private key', 'private_key', 'ssn', 'credit card', '身份证', '银行卡', '密码', '验证码'])
+
+== dsa-a05 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a05'             AS rule_id,
+  '[A05] Tool Result Written Back Unmasked'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Unmasked sensitive data in result of tool ', tool_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type = 'tool_complete'
+  AND (
+       match(tool_result, '[0-9]{17}[0-9Xx]')
+    OR match(tool_result, '[0-9]{13,19}')
+    OR multi_search_any(lower(tool_result), ['身份证', '银行卡', 'social security', 'ssn', 'credit card'])
+  )
+  AND NOT match(tool_result, '[*]{3,}')
+
+== dsa-a06 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a06'             AS rule_id,
+  '[A06] Authentication Material in the Conversation Chain'           AS rule_name,
+  'critical'                AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Authentication material in conversation chain (', raw_hook_name, ')') AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type IN ('user_input', 'llm_request', 'tool_invoke', 'tool_complete', 'llm_response')
+  AND (
+       match(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'AKIA[0-9A-Z]{16}')
+    OR match(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'eyJ[A-Za-z0-9_-]{10,}')
+    OR (position(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'BEGIN') > 0
+        AND position(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result), 'PRIVATE KEY') > 0)
+    OR multi_search_any(lower(concat(user_message, ' ', llm_response, ' ', tool_input, ' ', tool_result)), ['bearer ', 'authorization: bearer', 'password=', 'passwd=', 'set-cookie:', 'session_token', 'access_token', 'accesskey', '私钥', '访问密钥'])
+  )
+
+== dsa-a07 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a07'             AS rule_id,
+  '[A07] Risk Escalation After Data Aggregation'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Aggregated identity-linkable data from agent ', agent_id) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type IN ('llm_response', 'tool_complete')
+  AND (
+    match(concat(llm_response, ' ', tool_result), '[0-9]{17}[0-9Xx]')
+    OR match(concat(llm_response, ' ', tool_result), '[0-9]{13,19}')
+  )
+  AND multi_search_any(lower(concat(llm_response, ' ', tool_result)), ['姓名', 'name', '账户', 'account', '余额', 'balance', '交易', 'transaction', '手机号', 'phone'])
+
 == rp-001 ==
 -- Changelog v1.1.0 (2026-04-16):
 -- Replaced broad LIKE '%jailbreak%' with regex word-boundary match.

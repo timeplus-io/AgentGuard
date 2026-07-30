@@ -1,0 +1,44 @@
+id: dsa-a07
+name: "[A07] Risk Escalation After Data Aggregation"
+version: "1.0.0"
+description: |
+  Flags when identity/account/transaction-linkable data co-occurs — a single
+  event carrying both a strong identifier (ID/card number) and account or
+  transaction context, the aggregation signal the customer escalates on.
+  (Customer audit rule A07.)
+severity: warning
+category: sensitive_data_exposure
+fp_rate: medium
+hook_sources: "llm_response,tool_complete"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a07
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'warning'                 AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Aggregated identity-linkable data from agent ', agent_id) AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type IN ('llm_response', 'tool_complete')
+    AND (
+      match(concat(llm_response, ' ', tool_result), '[0-9]{17}[0-9Xx]')
+      OR match(concat(llm_response, ' ', tool_result), '[0-9]{13,19}')
+    )
+    AND multi_search_any(lower(concat(llm_response, ' ', tool_result)), ['姓名', 'name', '账户', 'account', '余额', 'balance', '交易', 'transaction', '手机号', 'phone'])
+translations:
+  zh-CN:
+    name: "数据汇聚后风险升级"
+    description: |
+      多轮对话或多个工具结果组合后可识别客户身份、账户或交易关系时,自动提升数据级别。

@@ -1,0 +1,45 @@
+id: dsa-a01
+name: "[A01] Sensitive PII in User Input"
+version: "1.0.0"
+description: |
+  Detects identity-card numbers, bank-card numbers, account credentials,
+  passwords, verification codes, keys, and customer data in user input.
+  Flags when such data is not required by the business, exceeds the agent's
+  purpose, or would enter an unauthorized model. (Customer audit rule A01.)
+severity: warning
+category: sensitive_data_exposure
+fp_rate: medium
+hook_sources: "user_input"
+required_telemetry: ""
+author: "Timeplus"
+tags:
+  - data-security
+  - customer-baseline
+  - audit-a01
+  - pii
+sql_template: |
+  SELECT
+    event_time                AS detected_at,
+    '__rule_id__'             AS rule_id,
+    '__rule_name__'           AS rule_name,
+    'warning'                 AS severity,
+    agent_id,
+    deployment_id,
+    session_id,
+    run_id,
+    raw_hook_name             AS hook_name,
+    tool_name,
+    concat('Sensitive data in user input from agent ', agent_id) AS message,
+    raw_event_data            AS event_data
+  FROM agentguard_cim_event
+  WHERE event_type = 'user_input'
+    AND (
+         match(user_message, '[0-9]{17}[0-9Xx]')
+      OR match(user_message, '[0-9]{13,19}')
+      OR multi_search_any(lower(user_message), ['密码', '验证码', '密钥', '身份证', '银行卡', 'password', 'passwd', 'verification code', 'secret key', 'api key', 'access key'])
+    )
+translations:
+  zh-CN:
+    name: "用户输入敏感数据检测"
+    description: |
+      检测用户输入的身份证号、银行卡号、账户信息、密码、验证码、密钥和客户资料。非业务必需、超出智能体用途或进入非授权模型时告警。
