@@ -33,10 +33,11 @@ not proof that contracts, approvals, or policy are satisfied.
 
 ## The A01–A27 catalog
 
-Every A-code has an exploration query in the reference file named below. Some
-are precise; others are best-effort **proxies** because the field they truly
-need is absent from the event model (see Field reality) — the reference query
-says so where that applies.
+Each A-code's reference entry states its **goal** (what to detect, grounded in
+the checklist), a **sample case** (data that should trigger it), and an **example
+query** to adapt. Some checks are precise; others are best-effort **proxies**
+because the field they truly need is absent from the event model (see Field
+reality) — the entry says so where that applies.
 
 | A | 中文 | English | Reference |
 |---|------|---------|-----------|
@@ -47,8 +48,8 @@ says so where that applies.
 | A05 | 工具返回结果未脱敏 | Tool result not masked | SENSITIVE_DATA.md |
 | A06 | 身份鉴别信息进入对话链路 | Credentials in the chain | SENSITIVE_DATA.md |
 | A07 | 数据汇聚后风险升级 | Aggregation / re-identification | SENSITIVE_DATA.md |
-| A08 | 跨用户或跨租户数据泄露 | Cross-user / tenant leak (proxy) | PERMISSIONS.md |
-| A09 | 未授权工具调用 | Unauthorized tool call (proxy) | PERMISSIONS.md |
+| A08 | 跨用户或跨租户数据泄露 | Cross-user / tenant leak (behavioral) | PERMISSIONS.md |
+| A09 | 未授权工具调用 | Unauthorized tool call (behavioral) | PERMISSIONS.md |
 | A10 | 越权参数调用 | Privilege-parameter call | PERMISSIONS.md |
 | A11 | 高风险工具缺少身份信息 | High-risk call, no identity | PERMISSIONS.md |
 | A12 | 策略拒绝后绕过调用 | Bypass after denial (behavioral) | PERMISSIONS.md |
