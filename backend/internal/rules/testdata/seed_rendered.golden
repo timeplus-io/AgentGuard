@@ -287,6 +287,66 @@ WHERE event_type = 'tool_invoke'
     OR match(tool_input, '(%[0-9A-Fa-f]{2}){20,}')
   )
 
+== dsa-a19 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a19'             AS rule_id,
+  '[A19] Prompt Injection Leading to Data Access'           AS rule_name,
+  'critical'                AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Injection-to-data-access pattern in ', raw_hook_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type IN ('user_input', 'tool_complete')
+  AND (
+       match(lower(concat(user_message, ' ', tool_result)), 'ignore [a-z ]{0,20}(previous|prior|all) instructions')
+    OR multi_search_any(lower(concat(user_message, ' ', tool_result)), ['reveal the system prompt', 'show system prompt', 'print system prompt', '忽略以上指令', '忽略之前的指令', '忽略所有规则', 'read other user', 'access other user', '其他用户数据', 'call internal tool', 'invoke internal tool', 'use internal tool'])
+  )
+
+== dsa-a20 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a20'             AS rule_id,
+  '[A20] System-Prompt or Hidden-Context Leak'           AS rule_name,
+  'critical'                AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('System-prompt / hidden-context leak from agent ', agent_id) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type = 'llm_response'
+  AND multi_search_any(lower(llm_response), ['system prompt', 'my instructions are', 'internal policy', 'tool definition', '以下是我的系统提示', '我的系统指令', 'my system message', 'hidden context', 'knowledge base key', 'begin system', '<system>'])
+
+== dsa-a22 ==
+SELECT
+  event_time                AS detected_at,
+  'dsa-a22'             AS rule_id,
+  '[A22] Anomalous Call Frequency or Chain'           AS rule_name,
+  'warning'                 AS severity,
+  agent_id,
+  deployment_id,
+  session_id,
+  run_id,
+  raw_hook_name             AS hook_name,
+  tool_name,
+  concat('Anomalous call signal in ', raw_hook_name) AS message,
+  raw_event_data            AS event_data
+FROM agentguard_cim_event
+WHERE event_type IN ('tool_complete', 'llm_response')
+  AND (
+       multi_search_any(lower(tool_result), ['recursion', 'stack overflow', 'too many requests', 'rate limit', 'retry attempt', 'repeated failure', 'timeout'])
+    OR length(llm_response) > 50000
+  )
+
 == rp-001 ==
 -- Changelog v1.1.0 (2026-04-16):
 -- Replaced broad LIKE '%jailbreak%' with regex word-boundary match.
