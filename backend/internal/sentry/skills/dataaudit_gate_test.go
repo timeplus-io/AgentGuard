@@ -6,11 +6,12 @@ import (
 	"testing"
 )
 
-// TestDataAuditGuideRespectsHiddenList asserts data-audit-guide is loadable
-// when not hidden and neither listed nor loadable when hidden — the same
-// contract agentguard-guide relies on. sentry.go appends "data-audit-guide"
-// to the hidden set on the same branch as "agentguard-guide" whenever
-// AgentGuard tools are disabled.
+// TestDataAuditGuideRespectsHiddenList exercises the generic hidden-list
+// mechanism: a skill is loadable when not hidden and neither listed nor loadable
+// when explicitly hidden. Note sentry.go does NOT gate data-audit-guide behind
+// agentguard_tools_enabled (only agentguard-guide is): data-audit-guide is a
+// self-contained run_sql playbook, so it stays available regardless of that
+// switch. This test covers the mechanism, not that wiring.
 func TestDataAuditGuideRespectsHiddenList(t *testing.T) {
 	// Visible when not hidden.
 	rc := &RunContext{Loaded: map[string]bool{}}

@@ -218,10 +218,13 @@ func sentrySelfConfigFn(cfg *config.Config, cc sentry.ChatCfg) func() (string, e
 // DISABLED by default. Off, Sentry is a generic Timeplus SQL analyst
 // (knowledge, schema introspection, run_sql). Write tools remain
 // individually approval-gated (#221) even when the surface is enabled.
+// data-audit-guide is NOT gated by that switch: it is a self-contained run_sql
+// playbook over agentguard_cim_event (no AgentGuard-specific tool), so it stays
+// available like timeplus-sql-guide whether or not the interaction surface is on.
 func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, holdReg *holdregistry.Registry, cc sentry.ChatCfg) *skills.Registry {
 	var hiddenSkills []string
 	if !cc.AgentGuardToolsEnabled {
-		hiddenSkills = append(hiddenSkills, "agentguard-guide", "data-audit-guide")
+		hiddenSkills = append(hiddenSkills, "agentguard-guide")
 	}
 	sks := []skills.Skill{
 		skills.NewLoadSkill(cfg.Sentry.SkillDir, hiddenSkills...),
