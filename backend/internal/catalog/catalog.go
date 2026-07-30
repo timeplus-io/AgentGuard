@@ -20,10 +20,11 @@ import (
 // Manager holds the merged view of the embedded seed catalog and the
 // local catalog directory. Local definitions override seed ones by ID.
 type Manager struct {
-	mu    sync.RWMutex
-	seed  map[string]Definition // from go:embed, read-only
-	local map[string]Definition // from catalogDir, read-write
-	dir   string
+	mu       sync.RWMutex
+	seed     map[string]Definition // from go:embed, read-only
+	local    map[string]Definition // from catalogDir, read-write
+	packages map[string]Package    // from go:embed, read-only
+	dir      string
 
 	// saveMu serializes catalog mutations (Save/SaveIfAbsent/Clone/Delete) so a
 	// mutation's existence/conflict checks and its file+map write are one atomic
@@ -63,9 +64,10 @@ func WithSemanticValidator(fn func(Definition) error) Option {
 
 func New(seedFS fs.FS, catalogDir string, opts ...Option) (*Manager, error) {
 	m := &Manager{
-		seed:  make(map[string]Definition),
-		local: make(map[string]Definition),
-		dir:   catalogDir,
+		seed:     make(map[string]Definition),
+		local:    make(map[string]Definition),
+		packages: make(map[string]Package),
+		dir:      catalogDir,
 	}
 	// Apply options before loading so loadDir sees the semantic validator.
 	for _, opt := range opts {
@@ -74,6 +76,11 @@ func New(seedFS fs.FS, catalogDir string, opts ...Option) (*Manager, error) {
 	if err := m.loadFS(seedFS, m.seed); err != nil {
 		return nil, fmt.Errorf("load seed catalog: %w", err)
 	}
+	pkgs, err := loadPackagesFS(PackagesFS)
+	if err != nil {
+		return nil, fmt.Errorf("load package manifests: %w", err)
+	}
+	m.packages = pkgs
 	if catalogDir != "" {
 		if err := os.MkdirAll(catalogDir, 0o755); err != nil {
 			return nil, fmt.Errorf("create catalog dir %s: %w", catalogDir, err)

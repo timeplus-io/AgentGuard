@@ -197,6 +197,12 @@ export const api = {
   configureRule: (id, overrides, reason) =>
     put(`/rules/${id}/configuration`, { overrides, reason }),
   uninstallRule: (id) => del(`/rules/${id}`),
+  // Rule packages: named bundles of rules. listPackages returns localized
+  // name/description + per-package install/enable counts; enablePackage
+  // bulk-installs a package's member rules (idempotent — already-installed
+  // rules are skipped) and returns { package, installed, skipped, missing, failed }.
+  listPackages: () => get(withLocale('/rules/packages')),
+  enablePackage: (id) => post(`/rules/packages/${encodeURIComponent(id)}/enable`, {}),
   generateConfig: (data) => post('/onboarding/generate', data),
   getInstallScript: () => fetch('/api/onboarding/install-script'),
 

@@ -61,6 +61,8 @@ var routePermissions = map[string]string{
 	"PUT /api/rules/catalog/:id":           WriteKey("rules"),
 	"DELETE /api/rules/catalog/:id":        WriteKey("rules"),
 	"POST /api/rules/catalog/:id/clone":    WriteKey("rules"),
+	"GET /api/rules/packages":              ReadKey("rules"),
+	"POST /api/rules/packages/:id/enable":  WriteKey("rules"),
 	"GET /api/rules/mv-status":             ReadKey("rules"),
 	"POST /api/rules/sync":                 WriteKey("rules"),
 	"POST /api/rules":                      WriteKey("rules"),

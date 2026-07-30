@@ -1,0 +1,33 @@
+id: supply-chain
+name: "Supply Chain Compromise"
+description: |
+  Detects tampering in the software supply chain the agent touches —
+  malicious or typosquatted dependencies, unpinned installs from untrusted
+  registries, post-install script abuse, and unreviewed remote code execution.
+default_enabled: false
+rules:
+  - rp-004
+  - rp-011
+  - rp-020
+  - rp-028
+  - rp-032
+  - rp-036
+  - rp-042
+  - rp-043
+  - rp-045
+  - rp-047
+  - rp-049
+  - rp-071
+  - rp-080
+  - rp-085
+  - rp-089
+  - rp-104
+  - rp-113
+  - rp-123
+  - rp-127
+translations:
+  zh-CN:
+    name: "供应链攻陷"
+    description: |
+      检测智能体所涉软件供应链中的篡改行为——恶意或仿冒(typosquatting)依赖、
+      来自不受信任仓库的未固定版本安装、安装后脚本滥用,以及未经审查的远程代码执行。

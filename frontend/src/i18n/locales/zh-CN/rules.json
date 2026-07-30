@@ -37,6 +37,17 @@
     "availableToInstall": {
       "heading": "可安装"
     },
+    "packages": {
+      "heading": "规则包",
+      "subheading": "启用精选的规则集合。建议所有部署启用「核心防护」;如需更深入的针对性覆盖,请启用其他规则包。",
+      "recommended": "推荐",
+      "installedCount": "已安装 {{installed}} / {{total}}",
+      "enable": "启用规则包",
+      "enabling": "正在启用…",
+      "allInstalled": "已全部安装",
+      "enableError": "启用规则包失败:{{message}}",
+      "enabledSummary": "已启用 {{name}}:新安装 {{installed}} 条,已存在 {{skipped}} 条。"
+    },
     "confirmToggle": {
       "title": "{{action}}规则包",
       "bodyBeforeAction": "您确定要",

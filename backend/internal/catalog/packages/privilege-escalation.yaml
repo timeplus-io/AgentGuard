@@ -1,0 +1,28 @@
+id: privilege-escalation
+name: "Agent Privilege Escalation"
+description: |
+  Detects agents acquiring capabilities beyond their intended scope — privilege
+  and permission grabs, sandbox and guardrail bypass, multi-agent trust
+  escalation, and unauthorized changes to their own configuration or tooling.
+default_enabled: false
+rules:
+  - rp-003
+  - rp-010
+  - rp-023
+  - rp-050
+  - rp-052
+  - rp-057
+  - rp-069
+  - rp-095
+  - rp-100
+  - rp-102
+  - rp-111
+  - rp-114
+  - rp-116
+  - rp-126
+translations:
+  zh-CN:
+    name: "智能体权限提升"
+    description: |
+      检测智能体获取超出其预期范围能力的行为——权限与许可攫取、沙箱与护栏绕过、
+      多智能体信任升级,以及对自身配置或工具的未授权更改。

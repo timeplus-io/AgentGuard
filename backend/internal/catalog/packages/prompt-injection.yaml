@@ -1,0 +1,60 @@
+id: prompt-injection
+name: "Prompt Injection & Hijacking"
+description: |
+  Full coverage for prompt injection, jailbreaks, and goal-hijacking across the
+  user_input and llm_request surfaces — direct and indirect injection, encoded
+  and obfuscated payloads, DAN/developer-mode personas, and metacognitive
+  self-directed jailbreaks.
+default_enabled: false
+rules:
+  - rp-001
+  - rp-005
+  - rp-009
+  - rp-014
+  - rp-016
+  - rp-019
+  - rp-021
+  - rp-022
+  - rp-024
+  - rp-029
+  - rp-031
+  - rp-037
+  - rp-051
+  - rp-056
+  - rp-065
+  - rp-066
+  - rp-067
+  - rp-068
+  - rp-078
+  - rp-079
+  - rp-081
+  - rp-082
+  - rp-083
+  - rp-086
+  - rp-087
+  - rp-088
+  - rp-090
+  - rp-091
+  - rp-092
+  - rp-093
+  - rp-094
+  - rp-096
+  - rp-097
+  - rp-098
+  - rp-099
+  - rp-103
+  - rp-105
+  - rp-107
+  - rp-108
+  - rp-109
+  - rp-112
+  - rp-117
+  - rp-119
+  - rp-120
+  - rp-121
+translations:
+  zh-CN:
+    name: "提示注入与劫持"
+    description: |
+      针对提示注入、越狱和目标劫持的全面覆盖,涵盖 user_input 与 llm_request 事件面——
+      直接与间接注入、编码与混淆载荷、DAN/开发者模式人格,以及元认知自导向越狱。

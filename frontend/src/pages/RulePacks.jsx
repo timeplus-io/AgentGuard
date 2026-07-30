@@ -31,6 +31,9 @@ export default function RulePacks() {
   const canWrite = can(writeKey('rules')) // gate install/toggle/import/create
   const [rules, setRules] = useState([])
   const [catalog, setCatalog] = useState([])
+  const [packages, setPackages] = useState([])
+  const [enablingPackage, setEnablingPackage] = useState(null) // package id being enabled
+  const [packageResult, setPackageResult] = useState(null) // { name, installed, skipped }
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [importing, setImporting] = useState(false)
@@ -77,6 +80,7 @@ export default function RulePacks() {
     Promise.all([
       loadRules(),
       api.getRulesCatalog().then(data => setCatalog(data.catalog || [])),
+      api.listPackages().then(data => setPackages(data.packages || [])),
     ])
       .catch(() => { setLoadError(t('list.errors.loadFailed')) })
       .finally(() => setLoading(false))
@@ -148,6 +152,55 @@ export default function RulePacks() {
       setLoadError(err?.message || t('list.errors.installFailed'))
     } finally {
       setInstalling(null)
+    }
+  }
+
+  const handleEnablePackage = async (pkg) => {
+    setEnablingPackage(pkg.id)
+    setPackageResult(null)
+    try {
+      const res = await api.enablePackage(pkg.id)
+      const newlyInstalled = res.installed || []
+      // Optimistic update (same rationale as handleInstall): a re-fetch right
+      // after the INSERTs races with Proton's table() commit lag and would snap
+      // freshly-installed rules back to "not installed". Drive UI from the
+      // result instead. A rule may belong to multiple packages, so bump every
+      // package's counts for the ids it contains.
+      if (newlyInstalled.length) {
+        const installedSet = new Set(newlyInstalled)
+        setCatalog(prev => prev.map(e => installedSet.has(e.id) ? { ...e, installed: true } : e))
+        setRules(prev => {
+          const existing = new Set(prev.map(r => r.id))
+          const added = newlyInstalled
+            .map(rid => catalog.find(e => e.id === rid))
+            .filter(e => e && !existing.has(e.id))
+            .map(entry => ({
+              id: entry.id,
+              icon: CATEGORY_ICONS[entry.category] || 'shield',
+              name: entry.name,
+              desc: entry.description,
+              category: entry.category,
+              enabled: true,
+              version: entry.version || '',
+              active: true,
+              detections24h: 0,
+              block_policy: entry.block_policy || 'log_only',
+            }))
+          return [...added, ...prev]
+        })
+        setPackages(prev => prev.map(p => {
+          const gained = (p.rules || []).filter(rid => installedSet.has(rid)).length
+          return gained ? { ...p, installed_count: p.installed_count + gained, enabled_count: p.enabled_count + gained } : p
+        }))
+      }
+      setPackageResult({ name: pkg.name, installed: newlyInstalled.length, skipped: (res.skipped || []).length })
+      if ((res.failed || []).length) {
+        setLoadError(t('list.packages.enableError', { message: res.failed.map(f => `${f.rule_id}: ${f.error}`).join('; ') }))
+      }
+    } catch (err) {
+      setLoadError(t('list.packages.enableError', { message: err?.message ?? String(err) }))
+    } finally {
+      setEnablingPackage(null)
     }
   }
 
@@ -319,6 +372,58 @@ export default function RulePacks() {
                 <span className="material-symbols-outlined text-[14px]">close</span>
               </button>
             </div>
+          )}
+
+          {packageResult && (
+            <div className="p-4 rounded-sm text-xs flex items-start gap-3 bg-green-500/10 border border-green-700/30 text-green-400">
+              <span className="material-symbols-outlined text-[14px] mt-0.5 shrink-0">check_circle</span>
+              <p>{t('list.packages.enabledSummary', { name: packageResult.name, installed: packageResult.installed, skipped: packageResult.skipped })}</p>
+              <button onClick={() => setPackageResult(null)} className="ml-auto text-gray-400 hover:text-gray-100 shrink-0">
+                <span className="material-symbols-outlined text-[14px]">close</span>
+              </button>
+            </div>
+          )}
+
+          {/* Rule packages */}
+          {!loading && packages.length > 0 && (
+            <section className="space-y-4">
+              <div>
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('list.packages.heading')}</h4>
+                <p className="text-xs text-gray-400 mt-1 max-w-3xl">{t('list.packages.subheading')}</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {packages.map(pkg => {
+                  const fullyInstalled = pkg.installed_count >= pkg.total
+                  return (
+                    <div key={pkg.id} className={`bg-surface-container-low border p-5 rounded-sm flex flex-col gap-3 ${pkg.default_enabled ? 'border-[#ffb0cf]/30' : 'border-gray-700'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-gray-100">{pkg.name}</h3>
+                        {pkg.default_enabled && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide border bg-[#ffb0cf]/10 text-primary border-[#ffb0cf]/20 shrink-0">{t('list.packages.recommended')}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 leading-relaxed line-clamp-3 min-h-[3.75rem]">{pkg.description}</p>
+                      <div className="mt-auto flex items-center justify-between gap-3">
+                        <span className="text-[11px] font-mono text-gray-400">
+                          {t('list.packages.installedCount', { installed: pkg.installed_count, total: pkg.total })}
+                        </span>
+                        <button
+                          onClick={() => handleEnablePackage(pkg)}
+                          disabled={enablingPackage === pkg.id || fullyInstalled || !canWrite}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-sm bg-primary-button text-primary-button-text border border-pink-500 disabled:opacity-40 transition-opacity"
+                        >
+                          {enablingPackage === pkg.id
+                            ? t('list.packages.enabling')
+                            : fullyInstalled
+                              ? t('list.packages.allInstalled')
+                              : t('list.packages.enable')}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
           )}
 
           <section className="space-y-4">

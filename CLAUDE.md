@@ -127,6 +127,8 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | GET | `/api/rules/catalog/export` | `ExportCatalog` | Export catalog as JSON |
 | GET | `/api/rules/mv-status` | `MVStatus` | MV health: `system.tables` + `system.v_failed_mat_views`, cross-referenced with enabled |
 | POST | `/api/rules/sync` | `SyncMVs` | Reconcile MVs with snapshots (create missing/drop disabled) via the lifecycle service |
+| GET | `/api/rules/packages` | `ListPackages` | Named rule bundles (localized name/desc, member IDs, per-package installed/enabled counts). `default_enabled` marks the "Recommended" (core) package; recommendation only — never auto-installs |
+| POST | `/api/rules/packages/:id/enable` | `EnablePackage` | Bulk-install a package's member rules via the lifecycle service (idempotent — already-installed skipped); returns `{installed, skipped, missing, failed}` |
 | POST | `/api/rules` | `CreateRule` | Thin create-custom: zero-param custom definition (template ≡ rendered SQL) installed via the service |
 | GET | `/api/rules/:id` | `GetRule` | Full read model: instance + schema/defaults/overrides/effective/rendered_sql/upgrade plan/MV health |
 | POST | `/api/rules/:id/install` | `InstallRule` | Install from catalog with optional typed `overrides` (defaults otherwise) |
@@ -260,6 +262,8 @@ Each enabled rule has a corresponding materialized view named `mv_rule_<id>` (e.
 `timeplus.Init()` is called by the setup wizard (`POST /api/setup/provision`) to create missing streams and sync MVs from installed instance snapshots (`rendered_sql` + `deployed_udfs_json`, never current catalog artifacts). It does NOT seed instances from the catalog — a definition existing in the catalog never makes it an installed instance. Provisioning fails fast with a clean-reprovision message if it finds a legacy/incompatible `agentguard_rules` (it compares the full expected column set and key column types). The server starts independently of Timeplus availability — if Timeplus Enterprise is unreachable, provisioning will fail but the binary itself starts cleanly.
 
 **No backward compatibility:** the new `agentguard_rules` snapshot schema is not compatible with the pre-parameter one. Existing deployments must cleanly reprovision rule resources (drop the old stream + `mv_rule_*` views, re-provision, reinstall). No `ALTER STREAM`, compatibility readers, dual writes, or `query_sql` aliases. See `docs/design.md` §5.1.3.
+
+**Rule packages** (`internal/catalog/package.go`, manifests in `internal/catalog/packages/*.yaml`, separately embedded via `PackagesFS`) are named bundles that group rules for easier onboarding — a curated default-on `core` package (`rp-001..004`) plus per-threat-class functional packs (`prompt-injection`, `data-exfiltration`, …), all default-off. Manifests are the source of membership (a list of rule IDs; a rule may belong to several packages) and carry `translations` (localized like rule name/desc, guarded by `TestEmbeddedPackagesHaveChineseTranslations`). Manifests live OUTSIDE `seed/` on purpose: the rule loader (`loadFS`) would otherwise mis-parse a manifest as a Definition. `default_enabled` is **recommendation only** — it never auto-installs; `timeplus.Init()` still seeds zero instances. Enabling a package (`POST /api/rules/packages/:id/enable`) bulk-installs its members through the lifecycle service (idempotent). `TestEmbeddedPackageRulesExist` guards against dangling rule references.
 
 ### Semantic DLP
 
