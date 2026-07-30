@@ -34,11 +34,17 @@ sql_template: |
   FROM agentguard_cim_event
   WHERE event_type IN ('user_input', 'llm_request', 'tool_invoke', 'tool_complete', 'llm_response')
     AND (
-         match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'AKIA[0-9A-Z]{16}')
-      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'eyJ[A-Za-z0-9_-]{10,}')
-      OR (position(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'BEGIN') > 0
-          AND position(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'PRIVATE KEY') > 0)
-      OR multi_search_any(lower(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result)), ['bearer ', 'authorization: bearer', 'password=', 'passwd=', 'set-cookie:', 'session_token', 'access_token', 'accesskey', '私钥', '访问密钥'])
+         match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'sk-ant-[A-Za-z0-9_-]{16,}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'sk-[A-Za-z0-9]{32,}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'AKIA[0-9A-Z]{16}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'AIza[0-9A-Za-z_-]{35}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'gh[pousr]_[A-Za-z0-9]{30,}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'xox[baprs]-[A-Za-z0-9-]{10,}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), 'eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{5,}')
+      OR match(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result), '-----BEGIN [A-Z ]*PRIVATE KEY-----')
+      OR match(lower(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result)), '(api|secret|access|private)[_-]?key[[:space:]]*[=:][[:space:]]*[a-z0-9_+/.-]{12,}')
+      OR match(lower(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result)), '(password|passwd|pwd|token|bearer)[[:space:]]*[=:][[:space:]]*[^[:space:]]{8,}')
+      OR match(lower(concat(user_message, ' ', assistant_message, ' ', tool_input, ' ', tool_result)), '(密码|口令|密钥|令牌)[：:＝=][^[:space:]]{6,}')
     )
 translations:
   zh-CN:

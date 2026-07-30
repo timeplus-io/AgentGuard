@@ -2,11 +2,11 @@ id: dsa-a12
 name: "[A12] Bypass After Policy Denial"
 version: "1.0.0"
 description: |
-  Single-event heuristic for re-attempts after a denial: retry / workaround
-  phrasing or parameter-encoding markers (base64, atob, fromCharCode) in
-  tool_input that indicate an attempt to achieve a blocked goal by another
-  path. Full cross-event correlation is investigate-only. (Customer audit rule
-  A12.)
+  Single-event detection of the parameter-encoding bypass method (参数编码):
+  base64 / hex / percent-encoded payloads or decode-function markers (atob,
+  fromCharCode, unescape) in tool_input, used to reach a blocked goal by another
+  path. Detecting the denial-then-retry sequence itself is cross-event and
+  investigate-only. (Customer audit rule A12.)
 severity: warning
 category: prompt_injection_and_hijacking
 fp_rate: high
@@ -33,7 +33,12 @@ sql_template: |
     raw_event_data            AS event_data
   FROM agentguard_cim_event
   WHERE event_type IN ('tool_invoke', 'tool_complete')
-    AND multi_search_any(lower(tool_input), ['retry', 'bypass', 'workaround', 'alternate', 'another way', 'base64', 'fromcharcode', 'atob', 'decode', 'circumvent', '绕过', '重试'])
+    AND (
+         match(tool_input, '[A-Za-z0-9+/]{80,}={0,2}')
+      OR match(tool_input, '(%[0-9A-Fa-f]{2}){16,}')
+      OR match(tool_input, '[0-9a-fA-F]{64,}')
+      OR multi_search_any(lower(tool_input), ['fromcharcode', 'atob(', 'base64_decode', 'base64decode', 'unescape(', 'decodeuricomponent'])
+    )
 translations:
   zh-CN:
     name: "策略拒绝后绕过调用"
