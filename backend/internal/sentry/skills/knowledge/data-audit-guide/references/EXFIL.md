@@ -1,8 +1,8 @@
 # External Transport & Tool Calls (A13–A18)
 
 Each rule has an **exploration query** over `agentguard_cim_event`. The
-sensitive-data checks (A14, A15) match value patterns (keys / tokens / IDs /
-cards), not keywords.
+sensitive-data checks (A14, A15) apply the credential + strong-PII patterns
+defined in `SENSITIVE_DATA.md` — value formats, not keywords.
 
 ## A13 未登记工具或外部地址
 Tool / domain / IP not in the registry, or bypassing the gateway.
@@ -20,7 +20,8 @@ Tool / domain / IP not in the registry, or bypassing the gateway.
 - Evidence: the external target, tool, `session_id`.
 
 ## A14 敏感数据传向外部工具
-Sensitive **value** in the parameters of an external / network tool.
+Sensitive **value** (credential / strong-PII pattern) in the parameters of an
+external / network tool.
 - Fields: `tool_name`, `tool_input` on `event_type = 'tool_invoke'`.
 - Exploration query:
   ```sql
@@ -29,8 +30,8 @@ Sensitive **value** in the parameters of an external / network tool.
   WHERE event_type = 'tool_invoke'
     AND multi_search_any(lower(tool_name), ['http', 'fetch', 'curl', 'webhook', 'upload', 'post', 'send', 'email', 'slack', 's3', 'url', 'request'])
     AND (
-           match(tool_input, 'sk-ant-[A-Za-z0-9_-]{16,}') OR match(tool_input, 'sk-[A-Za-z0-9]{32,}') OR match(tool_input, 'AKIA[0-9A-Z]{16}') OR match(tool_input, 'AIza[0-9A-Za-z_-]{35}') OR match(tool_input, 'gh[pousr]_[A-Za-z0-9]{30,}') OR match(tool_input, 'xox[baprs]-[A-Za-z0-9-]{10,}') OR match(tool_input, 'eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{5,}') OR match(tool_input, '-----BEGIN [A-Z ]*PRIVATE KEY-----') OR match(lower(tool_input), '(api|secret|access|private)[_-]?key[[:space:]]*[=:][[:space:]]*[a-z0-9_+/.-]{12,}') OR match(lower(tool_input), '(password|passwd|pwd|token|bearer)[[:space:]]*[=: ][[:space:]]*[^[:space:]]{8,}') OR match(lower(tool_input), '(密码|口令|密钥|令牌)[：:＝=][^[:space:]]{6,}')
-        OR match(tool_input, '[1-9][0-9]{5}(19|20)[0-9]{2}[01][0-9][0-3][0-9][0-9]{3}[0-9Xx]') OR match(tool_input, '[0-9]{3}-[0-9]{2}-[0-9]{4}') OR match(tool_input, '[0-9]{4}[ -][0-9]{4}[ -][0-9]{4}[ -][0-9]{1,7}') OR match(tool_input, '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}') OR match(tool_input, '(^|[^0-9])1[3-9][0-9]{9}([^0-9]|$)')
+           match(tool_input, 'sk-ant-[A-Za-z0-9_-]{16,}') OR match(tool_input, 'sk-[A-Za-z0-9]{32,}') OR match(tool_input, 'AKIA[0-9A-Z]{16}') OR match(tool_input, 'AIza[0-9A-Za-z_-]{35}') OR match(tool_input, 'gh[pousr]_[A-Za-z0-9]{30,}') OR match(tool_input, 'xox[baprs]-[A-Za-z0-9-]{10,}') OR match(tool_input, 'eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{5,}') OR match(tool_input, '-----BEGIN [A-Z ]*PRIVATE KEY-----') OR match(lower(tool_input), '(api|secret|access|private)[_-]?key[[:space:]]*[=:][[:space:]]*[a-z0-9_+/.-]{12,}') OR match(lower(tool_input), '(password|passwd|pwd|token|bearer)[[:space:]]*[=:][[:space:]]*[^[:space:]]{8,}') OR match(lower(tool_input), '(密码|口令|密钥|令牌)[：:＝=][^[:space:]]{6,}')
+        OR match(tool_input, '[1-9][0-9]{5}(19|20)[0-9]{2}[01][0-9][0-3][0-9][0-9]{3}[0-9Xx]') OR match(tool_input, '[0-9]{3}-[0-9]{2}-[0-9]{4}') OR match(tool_input, '[0-9]{4}[ -][0-9]{4}[ -][0-9]{4}[ -][0-9]{1,7}') OR match(tool_input, '(^|[^0-9])1[3-9][0-9]{9}([^0-9]|$)')
       )
   ORDER BY event_time DESC
   LIMIT 50
@@ -49,8 +50,8 @@ Downstream call did not inherit the upstream sensitive label / masking.
   WHERE event_type = 'tool_invoke'
     AND multi_search_any(lower(tool_name), ['http', 'fetch', 'curl', 'upload', 'webhook', 'post', 'send', 's3', 'url'])
     AND (
-           match(tool_input, 'sk-ant-[A-Za-z0-9_-]{16,}') OR match(tool_input, 'sk-[A-Za-z0-9]{32,}') OR match(tool_input, 'AKIA[0-9A-Z]{16}') OR match(tool_input, 'AIza[0-9A-Za-z_-]{35}') OR match(tool_input, 'gh[pousr]_[A-Za-z0-9]{30,}') OR match(tool_input, 'xox[baprs]-[A-Za-z0-9-]{10,}') OR match(tool_input, 'eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{5,}') OR match(tool_input, '-----BEGIN [A-Z ]*PRIVATE KEY-----') OR match(lower(tool_input), '(api|secret|access|private)[_-]?key[[:space:]]*[=:][[:space:]]*[a-z0-9_+/.-]{12,}') OR match(lower(tool_input), '(password|passwd|pwd|token|bearer)[[:space:]]*[=: ][[:space:]]*[^[:space:]]{8,}') OR match(lower(tool_input), '(密码|口令|密钥|令牌)[：:＝=][^[:space:]]{6,}')
-        OR match(tool_input, '[1-9][0-9]{5}(19|20)[0-9]{2}[01][0-9][0-3][0-9][0-9]{3}[0-9Xx]') OR match(tool_input, '[0-9]{3}-[0-9]{2}-[0-9]{4}') OR match(tool_input, '[0-9]{4}[ -][0-9]{4}[ -][0-9]{4}[ -][0-9]{1,7}') OR match(tool_input, '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}') OR match(tool_input, '(^|[^0-9])1[3-9][0-9]{9}([^0-9]|$)')
+           match(tool_input, 'sk-ant-[A-Za-z0-9_-]{16,}') OR match(tool_input, 'sk-[A-Za-z0-9]{32,}') OR match(tool_input, 'AKIA[0-9A-Z]{16}') OR match(tool_input, 'AIza[0-9A-Za-z_-]{35}') OR match(tool_input, 'gh[pousr]_[A-Za-z0-9]{30,}') OR match(tool_input, 'xox[baprs]-[A-Za-z0-9-]{10,}') OR match(tool_input, 'eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{5,}') OR match(tool_input, '-----BEGIN [A-Z ]*PRIVATE KEY-----') OR match(lower(tool_input), '(api|secret|access|private)[_-]?key[[:space:]]*[=:][[:space:]]*[a-z0-9_+/.-]{12,}') OR match(lower(tool_input), '(password|passwd|pwd|token|bearer)[[:space:]]*[=:][[:space:]]*[^[:space:]]{8,}') OR match(lower(tool_input), '(密码|口令|密钥|令牌)[：:＝=][^[:space:]]{6,}')
+        OR match(tool_input, '[1-9][0-9]{5}(19|20)[0-9]{2}[01][0-9][0-3][0-9][0-9]{3}[0-9Xx]') OR match(tool_input, '[0-9]{3}-[0-9]{2}-[0-9]{4}') OR match(tool_input, '[0-9]{4}[ -][0-9]{4}[ -][0-9]{4}[ -][0-9]{1,7}') OR match(tool_input, '(^|[^0-9])1[3-9][0-9]{9}([^0-9]|$)')
       )
   ORDER BY event_time DESC
   LIMIT 50
@@ -108,3 +109,4 @@ Base64 / hex / percent-encoded covert egress. Review first.
   LIMIT 50
   ```
 - Evidence: the encoded blob (masked / truncated), tool, `session_id`.
+
