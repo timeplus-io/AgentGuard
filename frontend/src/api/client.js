@@ -243,8 +243,10 @@ export const api = {
   putDLPConfig: (key, value) => put(`/dlp/config/${encodeURIComponent(key)}`, { value }),
 
   // ── Configuration (Settings page) ───────────────────────────────────────────
-  getConfig: () => get('/config'),
-  updateConfig: (changes) => put('/config', changes),
+  // withLocale so the backend localizes list-key options (e.g. rules.visible_packages
+  // package names) in the returned config view.
+  getConfig: () => get(withLocale('/config')),
+  updateConfig: (changes) => put(withLocale('/config'), changes),
   testTimeplusConfig: (host, port) => post('/config/test-timeplus', { host, port }),
   testDLPConfig: (payload) => post('/config/test-dlp', payload),
 

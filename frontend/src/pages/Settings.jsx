@@ -18,7 +18,7 @@ import { useAuth } from '../context/AuthContext'
 import { writeKey } from '../lib/perm'
 
 export default function Settings() {
-  const { t } = useTranslation('settings')
+  const { t, i18n } = useTranslation('settings')
   const { can } = useAuth()
   const canWrite = can(writeKey("settings"))
   const [data, setData] = useState(null)
@@ -42,7 +42,9 @@ export default function Settings() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { load() }, [load])
+  // Re-fetch on language change so server-provided option labels (e.g. rule
+  // package names on the visible-packages list key) reload localized.
+  useEffect(() => { load() }, [load, i18n.language])
 
   const setDraft = (key, value) => {
     setDrafts((d) => ({ ...d, [key]: value }))
