@@ -45,7 +45,6 @@ var Resources = []Resource{
 	{Key: "cost", Label: "Cost", Group: "Governance", HasWrite: true},
 	{Key: "dlp", Label: "Semantic DLP", Group: "Security", HasWrite: true},
 	{Key: "sentry", Label: "Sentry", Group: "Security", HasWrite: true},
-	{Key: "investigate", Label: "Investigate", Group: "Monitoring", HasWrite: false},
 	{Key: "settings", Label: "Settings", Group: "Administration", HasWrite: true},
 	{Key: "access", Label: "Access Control", Group: "Administration", HasWrite: true},
 }

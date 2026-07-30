@@ -106,7 +106,6 @@ const openAPISpec = `{
     { "name": "Rules",       "description": "Security rule packs. Each enabled rule has a corresponding Proton materialized view that writes matches to agentguard_security_events." },
     { "name": "Catalog",     "description": "File-based rule catalog. The initial catalog ships embedded in the binary as YAML files; users can override entries or add new ones via import. Proton tracks *install state*; the catalog tracks *definitions*." },
     { "name": "Alerts",      "description": "Real-time alert delivery — webhook receiver and SSE notification stream." },
-    { "name": "Investigate", "description": "Ad-hoc SQL query interface against Proton streams." },
     { "name": "Proton",      "description": "Streaming proxy — send arbitrary SQL to Timeplus and receive NDJSON rows." },
     { "name": "Onboarding",  "description": "Agent onboarding wizard — generates configuration snippets for connecting agents." },
     { "name": "Auth",        "description": "Session authentication — login, logout, and status check. These endpoints are **unauthenticated** (no session cookie required)." },
@@ -1292,26 +1291,11 @@ const openAPISpec = `{
       }
     },
 
-    "/investigate/tables": {
-      "get": {
-        "tags": ["Investigate"],
-        "summary": "List queryable tables",
-        "description": "Returns the names of Proton streams and views available for ad-hoc queries via \u0060/investigate/query\u0060.\n\nIncludes the core AgentGuard streams (\u0060agentguard_hook_events\u0060, \u0060agentguard_security_events\u0060, \u0060agentguard_rules\u0060) as well as OTel streams (\u0060otel_traces\u0060, \u0060otel_logs\u0060, \u0060otel_metrics_*\u0060).",
-        "operationId": "listTables",
-        "responses": {
-          "200": { "description": "Available table names", "content": { "application/json": { "schema": {
-            "type": "object",
-            "properties": { "tables": { "type": "array", "items": { "type": "string" } } }
-          }, "example": { "tables": ["agentguard_hook_events", "agentguard_security_events", "agentguard_rules", "agentguard_pricing", "otel_traces", "otel_logs"] } }}}
-        }
-      }
-    },
-
     "/proton/query": {
       "post": {
         "tags": ["Proton"],
         "summary": "Streaming SQL proxy (NDJSON)",
-        "description": "Proxies a SQL query directly to Proton and streams result rows back as **newline-delimited JSON** (NDJSON). Unlike \u0060/investigate/query\u0060 this endpoint does not buffer results — it streams rows as Proton produces them, making it suitable for long-running or live streaming queries.\n\nThe frontend uses this via \u0060@timeplus/proton-javascript-driver\u0060 to power the real-time Investigate page.\n\nSend a \u0060POST\u0060 with \u0060{\"sql\": \"...\"}\u0060 and consume the response body as an NDJSON stream. Use an \u0060AbortController\u0060 to cancel.",
+        "description": "Proxies a SQL query directly to Proton and streams result rows back as **newline-delimited JSON** (NDJSON). This endpoint does not buffer results — it streams rows as Proton produces them, making it suitable for long-running or live streaming queries.\n\nThe frontend uses this via \u0060@timeplus/proton-javascript-driver\u0060 to power live streaming panels (live threat feed, live agent activity, agent-detail traces).\n\nSend a \u0060POST\u0060 with \u0060{\"sql\": \"...\"}\u0060 and consume the response body as an NDJSON stream. Use an \u0060AbortController\u0060 to cancel.",
         "operationId": "protonQuery",
         "requestBody": {
           "required": true,

@@ -1,7 +1,7 @@
 // Package secrets provides at-rest encryption for credential fields stored
 // in Timeplus config streams (#234). Values are sealed with AES-256-GCM and
 // stored as "enc:v1:<base64(nonce||ciphertext)>", so any SQL reader (the
-// Timeplus console, /investigate, backups) sees only ciphertext — only the
+// Timeplus console, ad-hoc queries, backups) sees only ciphertext — only the
 // AgentGuard runtime, which holds the master key, can decrypt.
 //
 // Master-key resolution (Init):

@@ -18,7 +18,6 @@ import CostGovernance from './pages/CostGovernance'
 import RulePacks from './pages/RulePacks'
 import RuleDetail from './pages/RuleDetail'
 import RuleCreate from './pages/RuleCreate'
-import Investigate from './pages/Investigate'
 import SemanticDLP from './pages/SemanticDLP'
 import Sentry from './pages/Sentry'
 import Settings from './pages/Settings'
@@ -82,7 +81,6 @@ export default function App() {
             <Route path="/rules/new" element={<Gate resource="rules"><RuleCreate mode="create" /></Gate>} />
             <Route path="/rules/:id/edit" element={<Gate resource="rules"><RuleCreate mode="edit" /></Gate>} />
             <Route path="/rules/:id" element={<Gate resource="rules"><RuleDetail /></Gate>} />
-            <Route path="/investigate" element={<Gate resource="investigate"><Investigate /></Gate>} />
             <Route path="/dlp" element={<Gate resource="dlp"><SemanticDLP /></Gate>} />
             <Route path="/sentry" element={<Gate resource="sentry"><Sentry /></Gate>} />
             <Route path="/settings" element={<Gate resource="settings"><Settings /></Gate>} />

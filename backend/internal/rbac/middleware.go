@@ -8,13 +8,13 @@ import (
 
 // routePermissions maps "METHOD /api/<full route pattern>" → the permission key
 // required to call it. Extra backend route-groups (metrics, holds, activity,
-// notifications, onboarding, proton, config) fold into the ten catalog
-// resources so the admin only ever toggles those. GET → :read; mutating verbs
-// → :write, except a few read-only POSTs (test/query/compile) mapped to :read.
+// notifications, onboarding, config) fold into the catalog resources so the
+// admin only ever toggles those. GET → :read; mutating verbs → :write, except a
+// few read-only POSTs (test/query/compile) mapped to :read.
 //
 // Keep this in sync with the protected route registrations in cmd/server/main.go.
-// Any protected route NOT listed here is denied by default (fail-closed) once
-// RBAC is active.
+// Any protected route NOT listed here (and not in baselineRoutes) is denied by
+// default (fail-closed) once RBAC is active.
 var routePermissions = map[string]string{
 	// dashboard (+ live activity / notification feeds)
 	"GET /api/dashboard":            ReadKey("dashboard"),
@@ -93,10 +93,6 @@ var routePermissions = map[string]string{
 	"PUT /api/sentry/config/:key":                       WriteKey("sentry"),
 	"POST /api/sentry/config/test":                      ReadKey("sentry"), // test-only
 
-	// investigate (+ raw proton query backing the SQL console)
-	"GET /api/investigate/tables": ReadKey("investigate"),
-	"POST /api/proton/query":      ReadKey("investigate"),
-
 	// settings (config + onboarding)
 	"GET /api/config":                    ReadKey("settings"),
 	"PUT /api/config":                    WriteKey("settings"),
@@ -113,6 +109,22 @@ var routePermissions = map[string]string{
 	"DELETE /api/roles/:name":       WriteKey("access"),
 	"GET /api/users":                ReadKey("access"),
 	"PUT /api/users/:user/role":     WriteKey("access"),
+}
+
+// baselineRoutes are protected routes that require only a valid session — no
+// per-resource permission. They are cross-cutting plumbing every authenticated
+// user needs, so they are intentionally NOT modeled as gated resources.
+//
+// POST /api/proton/query is the raw streaming-SQL endpoint behind the global
+// TopNav open-threats badge, the dashboard live-activity widget, and the
+// agent-detail live panels — features that appear across the whole app rather
+// than on a single page. Gating it on any one resource would break those live
+// elements for roles missing that resource, and there is no "Investigate" page
+// to attach it to. NOTE: it forwards arbitrary SQL under the caller's Timeplus
+// identity, so this deliberately keeps it reachable by every authenticated user
+// (see #247 for the SELECT-only / read-write-split hardening tracked separately).
+var baselineRoutes = map[string]bool{
+	"POST /api/proton/query": true,
 }
 
 // RequiredPermission returns the permission key for a method+route pattern, and
@@ -137,6 +149,12 @@ func Middleware(res *Resolver) gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "access control is not enabled"})
 				return
 			}
+			c.Next()
+			return
+		}
+
+		// Baseline routes need only a valid session (AuthRequired ran upstream).
+		if baselineRoutes[c.Request.Method+" "+c.FullPath()] {
 			c.Next()
 			return
 		}

@@ -22,16 +22,14 @@ import enSentry from './locales/en/sentry.json'
 import zhSentry from './locales/zh-CN/sentry.json'
 import enOnboarding from './locales/en/onboarding.json'
 import zhOnboarding from './locales/zh-CN/onboarding.json'
-import enInvestigate from './locales/en/investigate.json'
-import zhInvestigate from './locales/zh-CN/investigate.json'
 
 export const SUPPORTED_LOCALES = ['en', 'zh-CN']
 export const DEFAULT_LOCALE = 'en'
 
 // Namespaces are registered here as page tasks add catalogs. common is the base.
 const resources = {
-  en: { common: enCommon, settings: enSettings, auth: enAuth, dashboard: enDashboard, agents: enAgents, threats: enThreats, rules: enRules, cost: enCost, dlp: enDlp, sentry: enSentry, onboarding: enOnboarding, investigate: enInvestigate },
-  'zh-CN': { common: zhCommon, settings: zhSettings, auth: zhAuth, dashboard: zhDashboard, agents: zhAgents, threats: zhThreats, rules: zhRules, cost: zhCost, dlp: zhDlp, sentry: zhSentry, onboarding: zhOnboarding, investigate: zhInvestigate },
+  en: { common: enCommon, settings: enSettings, auth: enAuth, dashboard: enDashboard, agents: enAgents, threats: enThreats, rules: enRules, cost: enCost, dlp: enDlp, sentry: enSentry, onboarding: enOnboarding },
+  'zh-CN': { common: zhCommon, settings: zhSettings, auth: zhAuth, dashboard: zhDashboard, agents: zhAgents, threats: zhThreats, rules: zhRules, cost: zhCost, dlp: zhDlp, sentry: zhSentry, onboarding: zhOnboarding },
 }
 
 i18n.use(initReactI18next).init({
@@ -39,7 +37,7 @@ i18n.use(initReactI18next).init({
   lng: DEFAULT_LOCALE,
   fallbackLng: DEFAULT_LOCALE,
   defaultNS: 'common',
-  ns: ['common', 'settings', 'auth', 'dashboard', 'agents', 'threats', 'rules', 'cost', 'dlp', 'sentry', 'onboarding', 'investigate'],
+  ns: ['common', 'settings', 'auth', 'dashboard', 'agents', 'threats', 'rules', 'cost', 'dlp', 'sentry', 'onboarding'],
   interpolation: { escapeValue: false }, // React already escapes
   returnEmptyString: false,
   initImmediate: false, // synchronous init so t() works immediately (tests + first paint)
