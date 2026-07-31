@@ -515,6 +515,7 @@ type AlertWebhookPayload struct {
 	Severity     string `json:"severity"`
 	AgentID      string `json:"agent_id"`
 	DeploymentID string `json:"deployment_id"`
+	SessionID    string `json:"session_id"`
 	Message      string `json:"message"`
 	DetectedAt   string `json:"detected_at"`
 }

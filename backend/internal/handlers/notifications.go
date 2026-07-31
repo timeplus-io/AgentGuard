@@ -40,15 +40,23 @@ func (b *alertBroadcaster) subscribe() (ch chan []byte, cancel func()) {
 	return
 }
 
-// Publish sends a payload to every currently-connected SSE client.
+// Publish sends a payload to every currently-connected SSE client with a
+// fresh unique envelope id (used by holds, where every event is distinct).
 // Slow clients whose channel buffer is full are silently skipped.
 func (b *alertBroadcaster) Publish(payload models.AlertWebhookPayload) {
+	b.PublishWithID(uuid.New().String(), payload)
+}
+
+// PublishWithID publishes with a caller-supplied stable envelope id so
+// repeated deliveries of the same notification (reconnect backfill, multiple
+// tabs) dedup client-side. Used by the notify watcher (#258).
+func (b *alertBroadcaster) PublishWithID(id string, payload models.AlertWebhookPayload) {
 	envelope := struct {
 		models.AlertWebhookPayload
 		ID string `json:"id"`
 	}{
 		AlertWebhookPayload: payload,
-		ID:                  uuid.New().String(),
+		ID:                  id,
 	}
 	data, err := json.Marshal(envelope)
 	if err != nil {
