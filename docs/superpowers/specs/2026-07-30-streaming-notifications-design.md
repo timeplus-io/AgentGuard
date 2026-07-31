@@ -52,17 +52,23 @@ transport are untouched.
 
 ## Components
 
-### 1. `timeplus.StreamRows` — reusable streaming read
+### 1. `timeplus.StreamLines` — reusable streaming read
 
 Extract the streaming core of `ProtonQueryHandler` (`backend/internal/handlers/proton.go`)
 into `backend/internal/timeplus`:
 
 ```go
-// StreamRows POSTs sql to the Timeplus query endpoint with
-// default_format=JSONEachRow and invokes onRow for each NDJSON line
-// until ctx is cancelled or the stream ends/errors.
-func StreamRows(ctx context.Context, cfg *config.Config, sql string, onRow func(map[string]any) error) error
+// StreamLines POSTs sql to the Timeplus query endpoint with
+// default_format=JSONEachRow and invokes onLine for each non-empty NDJSON
+// line until ctx is cancelled or the stream ends/errors. onConnected fires
+// once after a 200 response.
+func StreamLines(ctx context.Context, cfg *config.TimeplusConfig, sql string, onConnected func(), onLine func(line []byte) error) error
 ```
+
+The callback passes raw line bytes (not parsed maps) so the browser proxy
+stays byte-for-byte identical — re-marshalling through `map[string]any` would
+reorder keys and risk float64 precision loss on large integers. The watcher
+unmarshals lines itself.
 
 `ProtonQueryHandler` is refactored to use the same helper so there is one streaming
 implementation. Auth and endpoint format are identical to today's proxy
