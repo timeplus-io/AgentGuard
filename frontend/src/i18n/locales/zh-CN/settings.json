@@ -119,10 +119,6 @@
       "label": "服务账号密码",
       "description": "服务账号的密码。仅可通过 TIMEPLUS_PASSWORD 环境变量设置。"
     },
-    "agentguard_url": {
-      "label": "Webhook 基础 URL",
-      "description": "Timeplus 用于回调 AgentGuard 的 URL（告警、挂起）。"
-    },
     "rules_visible_packages": {
       "label": "可见的规则包",
       "description": "在规则页面上展示的规则包。未勾选的规则包(及其尚未安装的规则)将被隐藏。更改实时生效。"

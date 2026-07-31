@@ -66,14 +66,12 @@ func newRootCmd() *cobra.Command {
 	flags.Int("timeplus-port", 3218, "Timeplus HTTP port")
 	flags.Int("timeplus-native-port", 8463, "Timeplus native TCP port")
 	flags.String("catalog-dir", "", "catalog directory (default: ./catalog)")
-	flags.String("agentguard-url", "", "URL Timeplus uses to call back AgentGuard (default: http://localhost:8080)")
 
 	_ = viper.BindPFlag("server.port", flags.Lookup("port"))
 	_ = viper.BindPFlag("catalog.dir", flags.Lookup("catalog-dir"))
 	_ = viper.BindPFlag("timeplus.host", flags.Lookup("timeplus-host"))
 	_ = viper.BindPFlag("timeplus.port", flags.Lookup("timeplus-port"))
 	_ = viper.BindPFlag("timeplus.native-port", flags.Lookup("timeplus-native-port"))
-	_ = viper.BindPFlag("agentguard.url", flags.Lookup("agentguard-url"))
 
 	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if cfgFile, _ := flags.GetString("config"); cfgFile != "" {
@@ -140,7 +138,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 	fmt.Printf("AgentGuard starting on :%d\n", cfg.Server.Port)
 	fmt.Printf("Timeplus endpoint: %s:%d (native: %d)\n", cfg.Timeplus.Host, cfg.Timeplus.Port, cfg.Timeplus.NativePort)
 	fmt.Printf("Catalog directory: %s (%d entries)\n", cfg.CatalogDir, len(mgr.All()))
-	fmt.Printf("AgentGuard webhook URL: %s\n", cfg.AgentGuardURL)
 	fmt.Printf("Setup complete: %v\n", cfg.SetupComplete)
 	store := auth.NewSessionStore()
 	holdReg := holdregistry.New()

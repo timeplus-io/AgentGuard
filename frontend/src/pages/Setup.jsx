@@ -18,7 +18,6 @@ export default function Setup() {
   const [host, setHost] = useState('localhost')
   const [port, setPort] = useState(3218)
   const [nativePort, setNativePort] = useState(8463)
-  const [agentGuardURL, setAgentGuardURL] = useState('http://localhost:8080')
 
   // Step 1 — credentials
   const [username, setUsername] = useState('default')
@@ -51,7 +50,7 @@ export default function Setup() {
     setLog([])
     setProvisionError(null)
     try {
-      for await (const event of api.setupProvision({ host, port, native_port: nativePort, username, password, agentguard_url: agentGuardURL })) {
+      for await (const event of api.setupProvision({ host, port, native_port: nativePort, username, password })) {
         setLog(prev => [...prev, event])
         logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
         if (event.status === 'done') {
@@ -121,7 +120,6 @@ export default function Setup() {
                       { label: t('setup.connection.fields.host'), val: host, set: setHost, ph: t('setup.connection.placeholders.host'), type: 'text' },
                       { label: t('setup.connection.fields.httpPort'), val: port, set: v => setPort(Number(v)), ph: t('setup.connection.placeholders.httpPort'), type: 'number' },
                       { label: t('setup.connection.fields.nativePort'), val: nativePort, set: v => setNativePort(Number(v)), ph: t('setup.connection.placeholders.nativePort'), type: 'number' },
-                      { label: t('setup.connection.fields.agentguardUrl'), val: agentGuardURL, set: setAgentGuardURL, ph: t('setup.connection.placeholders.agentguardUrl'), type: 'text' },
                     ].map(({ label, val, set, ph, type }) => (
                       <div key={label} className="flex items-center gap-4">
                         <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest w-36 shrink-0">{label}</label>

@@ -14,7 +14,7 @@ func isolateConfigEnv(t *testing.T) {
 	for _, k := range []string{
 		"TIMEPLUS", "TIMEPLUS_HOST", "TIMEPLUS_PORT", "TIMEPLUS_NATIVE_PORT",
 		"TIMEPLUS_USER", "TIMEPLUS_PASSWORD",
-		"SERVER_PORT", "CATALOG_DIR", "AGENTGUARD_URL", "SETUP_COMPLETE",
+		"SERVER_PORT", "CATALOG_DIR", "SETUP_COMPLETE",
 		"AGENTGUARD_HOLD_MV_WAIT_MS", "AGENTGUARD_HOLD_TIMEOUT_SECONDS",
 		"AGENTGUARD_HOLDS_FAIL_POLICY", "AGENTGUARD_HOLDS_DISABLED",
 	} {
@@ -35,8 +35,7 @@ func TestRootCommandDefaultPFlagsDoNotOverrideExplicitConfig(t *testing.T) {
 	content := "" +
 		"server:\n  port: 9999\n" +
 		"catalog:\n  dir: /custom/catalog\n" +
-		"timeplus:\n  host: tphost\n  port: 1234\n  native-port: 5678\n" +
-		"agentguard:\n  url: http://agentguard.test\n"
+		"timeplus:\n  host: tphost\n  port: 1234\n  native-port: 5678\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -67,8 +66,5 @@ func TestRootCommandDefaultPFlagsDoNotOverrideExplicitConfig(t *testing.T) {
 	}
 	if cfg.Timeplus.NativePort != 5678 {
 		t.Errorf("Timeplus.NativePort = %d, want config file value 5678", cfg.Timeplus.NativePort)
-	}
-	if cfg.AgentGuardURL != "http://agentguard.test" {
-		t.Errorf("AgentGuardURL = %q, want config file value http://agentguard.test", cfg.AgentGuardURL)
 	}
 }

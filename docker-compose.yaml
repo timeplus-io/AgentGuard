@@ -30,9 +30,7 @@ services:
       TIMEPLUS_HOST: timeplus
       TIMEPLUS_PORT: 3218
       SERVER_PORT: 8080
-      # Timeplus calls this URL for alert webhooks; use the Docker service name.
-      AGENTGUARD_URL: "http://agentguard:8080"
-      # Service credentials for plugin → /api/holds and Timeplus → /api/alerts/webhook.
+      # Service credentials for plugin → /api/holds.
       # REQUIRED: server-to-server endpoints fail with 503 if these are unset
       # (no session-borrowing fallback). Match whatever user the AgentGuard wizard
       # was configured with. Defaults below are the standard Timeplus dev creds.

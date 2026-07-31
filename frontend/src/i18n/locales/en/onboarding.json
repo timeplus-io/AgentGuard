@@ -168,14 +168,12 @@
       "fields": {
         "host": "Timeplus Host",
         "httpPort": "HTTP Port",
-        "nativePort": "Native Port",
-        "agentguardUrl": "AgentGuard URL"
+        "nativePort": "Native Port"
       },
       "placeholders": {
         "host": "localhost",
         "httpPort": "3218",
-        "nativePort": "8463",
-        "agentguardUrl": "http://localhost:8080"
+        "nativePort": "8463"
       }
     },
     "credentials": {

@@ -1420,7 +1420,7 @@ const openAPISpec = `{
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProvisionRequest" },
-            "example": { "host": "localhost", "port": 3218, "native_port": 8463, "username": "default", "password": "", "agentguard_url": "http://localhost:8080" }
+            "example": { "host": "localhost", "port": 3218, "native_port": 8463, "username": "default", "password": "" }
           }}
         },
         "responses": {
@@ -2033,8 +2033,7 @@ const openAPISpec = `{
           "port":           { "type": "integer", "description": "Timeplus HTTP API port.", "example": 3218 },
           "native_port":    { "type": "integer", "description": "Timeplus native TCP port.", "example": 8463 },
           "username":       { "type": "string",  "description": "Timeplus username.", "example": "default" },
-          "password":       { "type": "string",  "description": "Timeplus password.", "example": "" },
-          "agentguard_url": { "type": "string",  "description": "URL where AgentGuard is reachable from Timeplus's network — used for alert webhook callbacks.", "example": "http://localhost:8080" }
+          "password":       { "type": "string",  "description": "Timeplus password.", "example": "" }
         }
       },
       "ProvisionEvent": {
