@@ -738,6 +738,13 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.
 				log.Printf("rules: SyncMVs Sentry sync: %v", err)
 			}
 		}
+		// Migration path for deployments that finished setup before #258
+		// shipped: ensure the notifications seen-state stream exists and the
+		// legacy notifier callback objects are dropped. Best-effort, same
+		// rationale as DLP/Sentry above.
+		if err := tp.EnsureNotificationsSetup(&reqCfg.Timeplus); err != nil {
+			log.Printf("rules: SyncMVs notifications ensure: %v", err)
+		}
 
 		c.JSON(http.StatusOK, gin.H{"results": results, "orphaned": orphaned})
 	}

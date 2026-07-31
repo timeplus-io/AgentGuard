@@ -126,7 +126,7 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | POST | `/api/rules/catalog/import` | `ImportCatalog` | Import rules from JSON |
 | GET | `/api/rules/catalog/export` | `ExportCatalog` | Export catalog as JSON |
 | GET | `/api/rules/mv-status` | `MVStatus` | MV health: `system.tables` + `system.v_failed_mat_views`, cross-referenced with enabled |
-| POST | `/api/rules/sync` | `SyncMVs` | Reconcile MVs with snapshots (create missing/drop disabled) via the lifecycle service |
+| POST | `/api/rules/sync` | `SyncMVs` | Reconcile MVs with snapshots (create missing/drop disabled) via the lifecycle service; also ensures the notifications seen-state stream + legacy notifier teardown (#258) |
 | GET | `/api/rules/packages` | `ListPackages` | Named rule bundles (localized name/desc, member IDs, per-package installed/enabled counts). `default_enabled` marks the "Recommended" (core) package; recommendation only — never auto-installs |
 | POST | `/api/rules/packages/:id/enable` | `EnablePackage` | Bulk-install a package's member rules via the lifecycle service (idempotent — already-installed skipped); returns `{installed, skipped, missing, failed}` |
 | POST | `/api/rules` | `CreateRule` | Thin create-custom: zero-param custom definition (template ≡ rendered SQL) installed via the service |

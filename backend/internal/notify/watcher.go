@@ -88,10 +88,25 @@ type Watcher struct {
 	cfg   *config.Config
 	store Store
 	pub   Publisher
+
+	// ensured guards ensure so it only runs once per process on success. Run
+	// is single-goroutine, so no mutex is needed. On error it stays false and
+	// the next reconnect attempt retries.
+	ensured bool
+	// ensure and streamFn are seams for tests; NewWatcher defaults them to
+	// the real timeplus package functions.
+	ensure   func(*config.TimeplusConfig) error
+	streamFn func(ctx context.Context, cfg *config.TimeplusConfig, sql string, onConnected func(), onLine func(line []byte) error) error
 }
 
 func NewWatcher(cfg *config.Config, store Store, pub Publisher) *Watcher {
-	return &Watcher{cfg: cfg, store: store, pub: pub}
+	return &Watcher{
+		cfg:      cfg,
+		store:    store,
+		pub:      pub,
+		ensure:   timeplus.EnsureNotificationsSetup,
+		streamFn: timeplus.StreamLines,
+	}
 }
 
 // Run blocks until ctx is cancelled, reconnecting forever with capped
@@ -109,7 +124,19 @@ func (w *Watcher) Run(ctx context.Context) {
 			continue
 		}
 
-		err := timeplus.StreamLines(ctx, &tpCfg, watchSQL,
+		// Migration path for deployments that finished setup before #258
+		// shipped (see EnsureNotificationsSetup): runs once per process on
+		// success; a failure leaves ensured false so the next reconnect
+		// retries it.
+		if !w.ensured {
+			if err := w.ensure(&tpCfg); err != nil {
+				log.Printf("notify: EnsureNotificationsSetup failed: %v", err)
+			} else {
+				w.ensured = true
+			}
+		}
+
+		err := w.streamFn(ctx, &tpCfg, watchSQL,
 			func() {
 				log.Printf("notify: watching agentguard_notify_events")
 				backoff = initialBackoff // reset once a connection succeeds

@@ -1837,6 +1837,25 @@ func dropLegacyNotifier(ctx context.Context, conn proton.Conn, emit func(string,
 	}
 }
 
+// EnsureNotificationsSetup is the migration path for deployments that
+// completed setup before #258 shipped: it creates the agentguard_notifications
+// seen-state stream if missing and drops the legacy notifier callback objects
+// (alert first, then UDF). Idempotent and best-effort; uses the HTTP exec path
+// so callers don't need a native connection. Only the stream-creation failure
+// is returned — the legacy drops are logged but never fail the caller, same
+// rationale as dropLegacyNotifier above.
+func EnsureNotificationsSetup(cfg *config.TimeplusConfig) error {
+	if err := ExecHTTP(cfg, ddlNotificationsStream); err != nil {
+		return fmt.Errorf("ensure agentguard_notifications stream: %w", err)
+	}
+	for _, ddl := range legacyNotifierDrops {
+		if err := ExecHTTP(cfg, ddl); err != nil {
+			log.Printf("timeplus: legacy notifier cleanup %q failed: %v", ddl, err)
+		}
+	}
+	return nil
+}
+
 func createThreatsMV(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "view", "mv_threats", ddlThreatsMV, emit)
 }

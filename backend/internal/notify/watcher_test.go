@@ -1,9 +1,12 @@
 package notify
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
 )
 
@@ -114,5 +117,125 @@ func TestHandleLineMalformedAndIncompleteRowsIgnored(t *testing.T) {
 
 	if len(pub.ids) != 0 {
 		t.Errorf("published %d times, want 0", len(pub.ids))
+	}
+}
+
+// TestRunCallsEnsureBeforeFirstStream pins Finding 1(b): Run must call the
+// notifications-migration hook once the watcher is ready, before its first
+// StreamLines attempt, so an upgraded deployment gets the seen-state stream
+// and legacy teardown without any operator action.
+func TestRunCallsEnsureBeforeFirstStream(t *testing.T) {
+	cfg := &config.Config{SetupComplete: true}
+	w := NewWatcher(cfg, &fakeStore{state: map[string]*State{}}, &fakePub{})
+
+	var calls []string
+	ensureDone := make(chan struct{})
+	w.ensure = func(*config.TimeplusConfig) error {
+		calls = append(calls, "ensure")
+		close(ensureDone)
+		return nil
+	}
+	streamed := make(chan struct{})
+	w.streamFn = func(ctx context.Context, cfg *config.TimeplusConfig, sql string, onConnected func(), onLine func([]byte) error) error {
+		calls = append(calls, "stream")
+		select {
+		case <-streamed:
+		default:
+			close(streamed)
+		}
+		return errors.New("stop")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		w.Run(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-streamed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the first stream attempt")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for Run to return after cancel")
+	}
+
+	if len(calls) < 2 || calls[0] != "ensure" || calls[1] != "stream" {
+		t.Fatalf("calls = %v, want ensure before the first stream attempt", calls)
+	}
+}
+
+// TestRunEnsureNotRetriedAfterSuccess pins the "guard bool" contract: once
+// ensure succeeds it must not be called again on subsequent reconnects.
+func TestRunEnsureNotRetriedAfterSuccess(t *testing.T) {
+	cfg := &config.Config{SetupComplete: true}
+	w := NewWatcher(cfg, &fakeStore{state: map[string]*State{}}, &fakePub{})
+
+	var ensureCalls int
+	w.ensure = func(*config.TimeplusConfig) error {
+		ensureCalls++
+		return nil
+	}
+	var streamCalls int
+	secondStream := make(chan struct{})
+	w.streamFn = func(ctx context.Context, cfg *config.TimeplusConfig, sql string, onConnected func(), onLine func([]byte) error) error {
+		streamCalls++
+		if streamCalls == 2 {
+			close(secondStream)
+		}
+		return errors.New("stop")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		w.Run(ctx)
+		close(done)
+	}()
+
+	select {
+	case <-secondStream:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for a second stream attempt")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for Run to return after cancel")
+	}
+
+	if ensureCalls != 1 {
+		t.Errorf("ensure called %d times, want exactly 1 (guarded after success)", ensureCalls)
+	}
+}
+
+// TestRunSkipsEnsureWhileNotReady asserts the migration hook never fires
+// before the watcher's SetupComplete gate opens.
+func TestRunSkipsEnsureWhileNotReady(t *testing.T) {
+	cfg := &config.Config{SetupComplete: false}
+	w := NewWatcher(cfg, &fakeStore{state: map[string]*State{}}, &fakePub{})
+
+	var ensureCalls int
+	w.ensure = func(*config.TimeplusConfig) error {
+		ensureCalls++
+		return nil
+	}
+	w.streamFn = func(ctx context.Context, cfg *config.TimeplusConfig, sql string, onConnected func(), onLine func([]byte) error) error {
+		t.Error("streamFn must not be called while not ready")
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	w.Run(ctx)
+
+	if ensureCalls != 0 {
+		t.Errorf("ensure called %d times, want 0 while SetupComplete is false", ensureCalls)
 	}
 }
