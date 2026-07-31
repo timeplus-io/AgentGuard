@@ -2,6 +2,7 @@ package timeplus
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -63,5 +64,27 @@ func TestStreamLinesNon200ReturnsHTTPError(t *testing.T) {
 	}
 	if httpErr.Status != http.StatusInternalServerError {
 		t.Errorf("Status = %d, want 500", httpErr.Status)
+	}
+}
+
+func TestStreamLinesPropagatesOnLineError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("{\"a\":1}\n{\"a\":2}\n"))
+	}))
+	defer srv.Close()
+	cfg := streamTestCfg(t, srv.URL)
+
+	sentinel := errors.New("sentinel onLine error")
+	calls := 0
+	err := StreamLines(context.Background(), &cfg, "SELECT 1", nil,
+		func([]byte) error {
+			calls++
+			return sentinel
+		})
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want sentinel propagated unchanged", err)
+	}
+	if calls != 1 {
+		t.Errorf("onLine called %d times, want 1 (StreamLines must stop on first error)", calls)
 	}
 }

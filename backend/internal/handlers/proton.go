@@ -69,15 +69,19 @@ func ProtonQueryHandler(cfg *config.Config) gin.HandlerFunc {
 			c.JSON(httpErr.Status, gin.H{"error": httpErr.Body})
 			return
 		}
+		// context.Canceled is normal: the browser navigated away or the component
+		// unmounted, closing the streaming connection. Not an error. This must be
+		// checked before the !Written() branch below: Gin's Written() stays false
+		// until bytes are actually written (c.Status(200) alone doesn't count), so
+		// a client that cancels after Timeplus returned 200 but before the first
+		// row would otherwise be misclassified as a 502 "cannot reach Proton".
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
 		if !c.Writer.Written() {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf(
 				"cannot reach Proton at %s:%d — %s", cfg.Timeplus.Host, cfg.Timeplus.Port, err.Error(),
 			)})
-			return
-		}
-		// context.Canceled is normal: the browser navigated away or the component
-		// unmounted, closing the streaming connection. Not an error.
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return
 		}
 		// Headers already sent so we can't change status, but we can log.
