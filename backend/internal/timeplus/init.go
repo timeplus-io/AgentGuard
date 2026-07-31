@@ -61,7 +61,7 @@ func bt(s string) string { return btReplacer.Replace(s) }
 // do not become rule instances until they are explicitly installed. If an
 // agentguard_rules stream from an earlier release already exists with an
 // incompatible schema, Init fails and asks the operator to reprovision.
-func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, dlpCfg config.DLPConfig, sentryCfg config.SentryConfig, emit func(status, msg string)) error {
+func Init(timeplusCfg config.TimeplusConfig, dlpCfg config.DLPConfig, sentryCfg config.SentryConfig, emit func(status, msg string)) error {
 	if emit == nil {
 		emit = func(status, msg string) { log.Printf("[provision:%s] %s", status, msg) }
 	}
@@ -136,16 +136,15 @@ func Init(timeplusCfg config.TimeplusConfig, agentGuardURL string, dlpCfg config
 	if err := createMemoryMVs(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating memory MVs: %v", err)
 	}
-	emit("running", "$ Creating notification UDF and alert…")
-	if err := createNotifyUDF(ctx, conn, agentGuardURL); err != nil {
-		log.Printf("timeplus init: warning creating UDF: %v", err)
+	emit("running", "$ Creating notifications stream…")
+	if err := createNotificationsStream(ctx, conn, emit); err != nil {
+		log.Printf("timeplus init: warning creating notifications stream: %v", err)
 	}
 	if err := createNotifyFilterMV(ctx, conn, emit); err != nil {
 		log.Printf("timeplus init: warning creating notify filter MV: %v", err)
 	}
-	if err := createNotifierAlert(ctx, conn); err != nil {
-		log.Printf("timeplus init: warning creating alert: %v", err)
-	}
+	emit("running", "$ Removing legacy notifier callback…")
+	dropLegacyNotifier(ctx, conn, emit)
 	emit("running", "$ Syncing rule materialized views…")
 	if err := startupSyncMVs(ctx, conn, timeplusCfg); err != nil {
 		log.Printf("timeplus init: warning syncing MVs: %v", err)
@@ -474,28 +473,6 @@ func fetchStreamColumns(ctx context.Context, conn proton.Conn, stream string) (m
 
 func createNotifyFilterMV(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "view", "mv_notify_filter", ddlNotifyFilterMV, emit)
-}
-
-func createNotifyUDF(ctx context.Context, conn proton.Conn, agentGuardURL string) error {
-	ddl := fmt.Sprintf(ddlNotifyUDFTemplate, agentGuardURL+"/api/alerts/webhook")
-	if err := conn.Exec(ctx, ddl); err != nil {
-		return fmt.Errorf("create UDF: %w", err)
-	}
-	log.Printf("timeplus: UDF notify_agentguard_udf created/updated (webhook: %s)", agentGuardURL)
-	return nil
-}
-
-func createNotifierAlert(ctx context.Context, conn proton.Conn) error {
-	err := conn.Exec(ctx, ddlNotifierAlert)
-	if err == nil {
-		log.Printf("timeplus: alert agentguard_notifier created")
-		return nil
-	}
-	if strings.Contains(err.Error(), "already exists") {
-		log.Printf("timeplus: alert agentguard_notifier already exists, skipping")
-		return nil
-	}
-	return fmt.Errorf("create alert: %w", err)
 }
 
 // sqlStartupRules reconstructs the current rule instances from the snapshot
@@ -1833,6 +1810,33 @@ func createThreatsStream(ctx context.Context, conn proton.Conn, emit func(string
 	return execIfNotExists(ctx, conn, "stream", "agentguard_threats", ddlThreatsStream, emit)
 }
 
+// createNotificationsStream provisions the persisted notification seen-state
+// store (#258): one row per threat identity, written by the notify watcher
+// and the confirm endpoint.
+func createNotificationsStream(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
+	return execIfNotExists(ctx, conn, "stream", "agentguard_notifications", ddlNotificationsStream, emit)
+}
+
+// legacyNotifierDrops removes the pre-#258 Timeplus→AgentGuard callback
+// objects. Order matters: the alert references the UDF, so it drops first.
+var legacyNotifierDrops = []string{
+	"DROP ALERT IF EXISTS agentguard_notifier",
+	"DROP FUNCTION IF EXISTS notify_agentguard_udf",
+}
+
+// dropLegacyNotifier is best-effort: existing deployments keep POSTing to the
+// removed webhook until this runs, so failures are logged but never fatal.
+// Provisioning never recreates these objects.
+func dropLegacyNotifier(ctx context.Context, conn proton.Conn, emit func(string, string)) {
+	for _, ddl := range legacyNotifierDrops {
+		if err := conn.Exec(ctx, ddl); err != nil {
+			log.Printf("timeplus: legacy notifier cleanup %q failed: %v", ddl, err)
+		} else {
+			emit("ok", "  ✓ "+ddl)
+		}
+	}
+}
+
 func createThreatsMV(ctx context.Context, conn proton.Conn, emit func(string, string)) error {
 	return execIfNotExists(ctx, conn, "view", "mv_threats", ddlThreatsMV, emit)
 }
@@ -1912,43 +1916,6 @@ func seedPricingData(ctx context.Context, conn proton.Conn) error {
 	return nil
 }
 
-// ddlNotifyUDFTemplate is a format string; %s is replaced with the full
-// webhook URL (e.g. "http://agentguard:8080/api/alerts/webhook").
-const ddlNotifyUDFTemplate = `CREATE OR REPLACE FUNCTION notify_agentguard_udf(
-  rule_id string, rule_name string, severity string,
-  agent_id string, deployment_id string, session_id string,
-  hook_name string, tool_name string, message string, detected_at string
-) RETURNS string LANGUAGE PYTHON AS $$
-import requests
-def notify_agentguard_udf(rule_ids, rule_names, severities,
-                            agent_ids, deployment_ids, session_ids,
-                            hook_names, tool_names, messages, detected_ats):
-    for i in range(len(rule_ids)):
-        try:
-            requests.post("%s", json={
-                "rule_id": rule_ids[i],
-                "rule_name": rule_names[i],
-                "severity": severities[i],
-                "agent_id": agent_ids[i],
-                "message": messages[i],
-                "detected_at": detected_ats[i]
-            }, timeout=3)
-        except Exception:
-            pass
-    return rule_ids
-$$`
-
-// ddlNotifierAlert fires the notify UDF for events in agentguard_notify_events.
-// The threat-status filter lives in mv_notify_filter (alerts do not support JOINs).
-const ddlNotifierAlert = `CREATE ALERT agentguard_notifier
-  BATCH 1 EVENTS WITH TIMEOUT 5s
-  LIMIT 10 ALERTS PER 1m
-  CALL notify_agentguard_udf
-AS SELECT
-  rule_id, rule_name, severity, agent_id, deployment_id,
-  session_id, hook_name, tool_name, message, detected_at
-FROM agentguard_notify_events`
-
 const ddlOTelInput = `
 CREATE INPUT agentguard_otel_input
 SETTINGS
@@ -1979,6 +1946,28 @@ CREATE MUTABLE STREAM IF NOT EXISTS agentguard_threats
     status_updated_at datetime64(3),
     FAMILY cf_events(rule_name, severity, last_seen),
     FAMILY cf_status(status, status_updated_at)
+) PRIMARY KEY (agent_id, deployment_id, session_id, rule_id)
+SETTINGS coalesced = true`
+
+// ddlNotificationsStream is the persisted per-threat notification seen-state
+// (#258). The notify watcher upserts the full row (confirmed=false); the
+// confirm endpoint upserts cf_confirm alone. Same PK as agentguard_threats.
+const ddlNotificationsStream = `
+CREATE MUTABLE STREAM IF NOT EXISTS agentguard_notifications
+(
+    agent_id      string,
+    deployment_id string,
+    session_id    string,
+    rule_id       string,
+    rule_name     string,
+    severity      string,
+    message       string,
+    detected_at   datetime64(3),
+    notified_at   datetime64(3),
+    confirmed     bool,
+    confirmed_at  datetime64(3),
+    FAMILY cf_event(rule_name, severity, message, detected_at, notified_at),
+    FAMILY cf_confirm(confirmed, confirmed_at)
 ) PRIMARY KEY (agent_id, deployment_id, session_id, rule_id)
 SETTINGS coalesced = true`
 
