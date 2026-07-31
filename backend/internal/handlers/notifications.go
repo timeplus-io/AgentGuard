@@ -10,7 +10,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/timeplus/agentguard/internal/auth"
+	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/models"
+	"github.com/timeplus/agentguard/internal/notify"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
 // alertBroadcaster fans webhook payloads out to all connected SSE clients.
@@ -117,5 +121,84 @@ func NotificationsSSEHandler() gin.HandlerFunc {
 				}
 			}
 		}
+	}
+}
+
+// ── Persisted notification state (#258) ─────────────────────────────────────
+
+// notificationIdentity is the threat identity a browser confirms. deployment
+// and session may legitimately be empty on older/partial events.
+type notificationIdentity struct {
+	AgentID      string `json:"agent_id"      binding:"required"`
+	DeploymentID string `json:"deployment_id"`
+	SessionID    string `json:"session_id"`
+	RuleID       string `json:"rule_id"       binding:"required"`
+}
+
+// confirmNotificationSQL upserts only the cf_confirm family — the event
+// columns keep their last-notified values. Identifiers are browser-supplied,
+// hence the backslash-aware escaper (pinned by a unit test).
+func confirmNotificationSQL(id notificationIdentity) string {
+	return fmt.Sprintf(
+		`INSERT INTO agentguard_notifications (agent_id, deployment_id, session_id, rule_id, confirmed, confirmed_at) VALUES ('%s', '%s', '%s', '%s', true, now64(3))`,
+		escapeSQLStr(id.AgentID), escapeSQLStr(id.DeploymentID), escapeSQLStr(id.SessionID), escapeSQLStr(id.RuleID))
+}
+
+// ConfirmNotification handles POST /api/notifications/confirm — the user
+// explicitly dismissed or clicked a toast. Idempotent.
+func ConfirmNotification(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		var id notificationIdentity
+		if err := c.ShouldBindJSON(&id); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "agent_id and rule_id are required"})
+			return
+		}
+		if err := tp.ExecHTTP(&cfg.Timeplus, confirmNotificationSQL(id)); err != nil {
+			log.Printf("notifications: confirm failed: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "confirm failed"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// unconfirmedNotificationsSQL backs browser backfill on SSE connect. The
+// LIMIT bounds re-toasting after long disconnects; the visible toast stack
+// caps at 5 client-side anyway.
+const unconfirmedNotificationsSQL = `SELECT agent_id, deployment_id, session_id, rule_id, rule_name, severity, message, to_string(detected_at) AS detected_at, to_string(notified_at) AS notified_at
+FROM table(agentguard_notifications)
+WHERE confirmed = false
+ORDER BY notified_at DESC
+LIMIT 20`
+
+// ListUnconfirmedNotifications handles GET /api/notifications/unconfirmed.
+// Best-effort: on query failure (e.g. stream not provisioned yet) it returns
+// an empty list rather than an error, so the toast UI stays quiet.
+func ListUnconfirmedNotifications(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg := auth.RequestCfg(c, cfg)
+		rows, err := tp.Query(&cfg.Timeplus, unconfirmedNotificationsSQL)
+		if err != nil {
+			log.Printf("notifications: unconfirmed query failed: %v", err)
+			c.JSON(http.StatusOK, gin.H{"notifications": []any{}})
+			return
+		}
+		out := make([]gin.H, 0, len(rows))
+		for _, r := range rows {
+			get := func(k string) string { s, _ := r[k].(string); return s }
+			out = append(out, gin.H{
+				"id":            notify.NotificationID(get("deployment_id"), get("agent_id"), get("session_id"), get("rule_id")),
+				"rule_id":       get("rule_id"),
+				"rule_name":     get("rule_name"),
+				"severity":      get("severity"),
+				"agent_id":      get("agent_id"),
+				"deployment_id": get("deployment_id"),
+				"session_id":    get("session_id"),
+				"message":       get("message"),
+				"detected_at":   get("detected_at"),
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"notifications": out})
 	}
 }

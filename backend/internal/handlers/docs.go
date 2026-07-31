@@ -1249,31 +1249,6 @@ const openAPISpec = `{
       }
     },
 
-    "/alerts/webhook": {
-      "post": {
-        "tags": ["Alerts"],
-        "summary": "Receive a rule-triggered alert",
-        "description": "Webhook endpoint called by the Proton \u0060notify_agentguard_udf\u0060 Python UDF. The UDF is invoked by the \u0060agentguard_notifier\u0060 Proton alert when new rows appear in \u0060agentguard_security_events\u0060.\n\nReceived alerts are fanned out to all connected SSE clients on \u0060/notifications/stream\u0060. You can also POST to this endpoint manually for testing.",
-        "operationId": "alertWebhook",
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Alert" },
-            "example": {
-              "rule_id": "rp-001",
-              "rule_name": "Prompt Injection Shield",
-              "severity": "critical",
-              "agent_id": "claude-code",
-              "message": "Potential prompt injection in llm_input from agent claude-code",
-              "detected_at": "2026-04-09T10:00:00Z"
-            }
-          }}
-        },
-        "responses": {
-          "200": { "description": "Alert accepted and forwarded to SSE clients." }
-        }
-      }
-    },
-
     "/notifications/stream": {
       "get": {
         "tags": ["Alerts"],

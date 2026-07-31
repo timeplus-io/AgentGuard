@@ -30,6 +30,7 @@ import (
 	"github.com/timeplus/agentguard/internal/config"
 	"github.com/timeplus/agentguard/internal/handlers"
 	"github.com/timeplus/agentguard/internal/holdregistry"
+	"github.com/timeplus/agentguard/internal/notify"
 	"github.com/timeplus/agentguard/internal/rbac"
 	"github.com/timeplus/agentguard/internal/rules"
 	"github.com/timeplus/agentguard/internal/secrets"
@@ -180,9 +181,6 @@ func runServer(cmd *cobra.Command, args []string) error {
 		api.POST("/auth/logout", auth.Logout(store))
 		api.POST("/setup/test-connection", handlers.TestConnection())
 		api.POST("/setup/provision", handlers.Provision(cfg, store))
-		// /alerts/webhook is called by Timeplus (server-to-server), not by the browser,
-		// so it must be reachable without a session cookie.
-		api.POST("/alerts/webhook", handlers.AlertWebhook(cfg))
 		// /holds is called by agent plugins (server-to-server) — no session cookie.
 		api.POST("/holds", handlers.CreateHold(cfg, holdReg, handlers.GlobalAlertBroadcaster))
 		// /holds/_abandon-session/:session_id — unauthenticated (plugin calls fire-and-forget on SessionEnd).
@@ -241,6 +239,8 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.POST("/holds/_drain", handlers.DrainHolds(cfg, holdReg))
 			protected.GET("/activity", handlers.ListActivity(cfg))
 			protected.GET("/notifications/stream", handlers.NotificationsSSEHandler())
+			protected.GET("/notifications/unconfirmed", handlers.ListUnconfirmedNotifications(cfg))
+			protected.POST("/notifications/confirm", handlers.ConfirmNotification(cfg))
 			protected.GET("/dlp/status", handlers.DLPStatusHandler(cfg))
 			protected.POST("/dlp/query", handlers.DLPQuery(cfg))
 			protected.GET("/dlp/messages", handlers.ListEnrichedMessages(cfg))
@@ -337,6 +337,13 @@ func runServer(cmd *cobra.Command, args []string) error {
 			fmt.Println("rbac: migration gave up after retries; access control remains inactive")
 		}()
 	}
+
+	// #258: tail agentguard_notify_events and toast new threats via SSE. The
+	// watcher self-gates on cfg.SetupComplete and reconnects with backoff, so
+	// it is safe to start unconditionally, before or after the setup wizard.
+	watchCtx, cancelWatch := context.WithCancel(context.Background())
+	defer cancelWatch()
+	go notify.NewWatcher(cfg, &notify.TimeplusStore{Cfg: cfg}, handlers.GlobalAlertBroadcaster).Run(watchCtx)
 
 	shutdownCh, stopSignals := shutdownSignalChannel()
 	defer stopSignals()
