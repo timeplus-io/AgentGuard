@@ -216,6 +216,11 @@ export const api = {
       decided_by: 'web-ui',
       decided_reason: reason,
     }),
+
+  // ── Notifications (#258) ───────────────────────────────────────────────────────
+  getUnconfirmedNotifications: () => get('/notifications/unconfirmed'),
+  confirmNotification: (identity) => post('/notifications/confirm', identity),
+
   getActivity: (params = {}) => {
     const q = new URLSearchParams(
       Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== false))
