@@ -130,7 +130,12 @@ export function NotificationsProvider({ children }) {
       // Backfill notifications delivered-but-never-confirmed (missed while
       // disconnected, auto-dismissed unseen, or from before a restart).
       api.getUnconfirmedNotifications()
-        .then(r => { if (!cancelled) for (const n of (r.notifications ?? [])) push(n) })
+        .then(r => {
+          if (cancelled) return
+          // The list arrives newest-first; push oldest-first so the newest
+          // end up on top of the stack and survive the 5-toast cap.
+          for (const n of [...(r.notifications ?? [])].reverse()) push(n)
+        })
         .catch(() => { /* best-effort */ })
     }
 

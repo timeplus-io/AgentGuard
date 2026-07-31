@@ -2189,7 +2189,7 @@ const openAPISpec = `{
           "deployment_id": { "type": "string" },
           "session_id":    { "type": "string" },
           "message":       { "type": "string" },
-          "detected_at":   { "type": "string", "format": "date-time" }
+          "detected_at":   { "type": "string", "description": "Timeplus datetime64 text, e.g. 2026-04-09 10:00:05.000 (NOT RFC 3339)." }
         }
       },
       "UnconfirmedNotificationsResponse": {
