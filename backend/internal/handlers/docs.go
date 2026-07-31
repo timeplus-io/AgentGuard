@@ -1266,6 +1266,52 @@ const openAPISpec = `{
       }
     },
 
+    "/notifications/unconfirmed": {
+      "get": {
+        "tags": ["Alerts"],
+        "summary": "List unconfirmed alert notifications",
+        "description": "Returns unconfirmed threat notifications, newest-first, for SSE-reconnect backfill (a browser that missed live events while disconnected). Backed by the \u0060agentguard_notifications\u0060 mutable stream; \u0060id\u0060 is the stable identity key \u0060deployment_id|agent_id|session_id|rule_id\u0060 used by \u0060POST /notifications/confirm\u0060.\n\nBest-effort: if the underlying query fails (e.g. stream not yet provisioned) this returns \u0060200\u0060 with an empty list rather than an error, so the toast UI stays quiet.",
+        "operationId": "listUnconfirmedNotifications",
+        "responses": {
+          "200": { "description": "Unconfirmed notifications, max 20.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UnconfirmedNotificationsResponse" },
+            "example": {
+              "notifications": [{
+                "id": "eng-team|claude-code|a1b2c3d4-0000-0000-0000-000000000001|rp-001",
+                "rule_id": "rp-001",
+                "rule_name": "Prompt Injection Guard",
+                "severity": "critical",
+                "agent_id": "claude-code",
+                "deployment_id": "eng-team",
+                "session_id": "a1b2c3d4-0000-0000-0000-000000000001",
+                "message": "Prompt injection detected",
+                "detected_at": "2026-04-09 10:00:05.000"
+              }]
+            }
+          }}}
+        }
+      }
+    },
+
+    "/notifications/confirm": {
+      "post": {
+        "tags": ["Alerts"],
+        "summary": "Confirm an alert notification",
+        "description": "Marks a threat notification as seen — the user dismissed or clicked the toast. Upserts \u0060confirmed=true\u0060 into the \u0060agentguard_notifications\u0060 mutable stream for the given identity; idempotent.",
+        "operationId": "confirmNotification",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotificationConfirmRequest" },
+            "example": { "agent_id": "claude-code", "deployment_id": "eng-team", "session_id": "a1b2c3d4-0000-0000-0000-000000000001", "rule_id": "rp-001" }
+          }}
+        },
+        "responses": {
+          "200": { "description": "Confirmed.", "content": { "application/json": { "example": { "ok": true } } } },
+          "400": { "description": "Missing agent_id or rule_id." },
+          "500": { "description": "Upsert into agentguard_notifications failed." }
+        }
+      }
+    },
+
     "/proton/query": {
       "post": {
         "tags": ["Proton"],
@@ -2129,6 +2175,39 @@ const openAPISpec = `{
         "properties": {
           "events": { "type": "array", "items": { "$ref": "#/components/schemas/ActivityEvent" } },
           "total":  { "type": "integer" }
+        }
+      },
+      "UnconfirmedNotification": {
+        "type": "object",
+        "description": "One unconfirmed threat notification, as returned by GET /notifications/unconfirmed.",
+        "properties": {
+          "id":            { "type": "string", "description": "Stable identity key: deployment_id|agent_id|session_id|rule_id." },
+          "rule_id":       { "type": "string" },
+          "rule_name":     { "type": "string" },
+          "severity":      { "type": "string", "enum": ["critical", "warning", "info", ""] },
+          "agent_id":      { "type": "string" },
+          "deployment_id": { "type": "string" },
+          "session_id":    { "type": "string" },
+          "message":       { "type": "string" },
+          "detected_at":   { "type": "string", "format": "date-time" }
+        }
+      },
+      "UnconfirmedNotificationsResponse": {
+        "type": "object",
+        "description": "Response from GET /notifications/unconfirmed.",
+        "properties": {
+          "notifications": { "type": "array", "items": { "$ref": "#/components/schemas/UnconfirmedNotification" } }
+        }
+      },
+      "NotificationConfirmRequest": {
+        "type": "object",
+        "description": "Request body for POST /notifications/confirm. deployment_id and session_id may legitimately be empty on older/partial events.",
+        "required": ["agent_id", "rule_id"],
+        "properties": {
+          "agent_id":      { "type": "string" },
+          "deployment_id": { "type": "string" },
+          "session_id":    { "type": "string" },
+          "rule_id":       { "type": "string" }
         }
       }
     },

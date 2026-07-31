@@ -3262,6 +3262,112 @@ To perform this operation, you must be authenticated by means of one of the foll
 cookieAuth
 </aside>
 
+## List unconfirmed alert notifications
+
+<a id="opIdlistUnconfirmedNotifications"></a>
+
+> Code samples
+
+```shell
+curl -X GET /api/notifications/unconfirmed \
+  -H 'Accept: application/json'
+```
+
+`GET /notifications/unconfirmed`
+
+Returns unconfirmed threat notifications, newest-first, for SSE-reconnect backfill (a browser that missed live events while disconnected). Backed by the `agentguard_notifications` mutable stream; `id` is the stable identity key `deployment_id|agent_id|session_id|rule_id` used by `POST /notifications/confirm`.
+
+Best-effort: if the underlying query fails (e.g. stream not yet provisioned) this returns `200` with an empty list rather than an error, so the toast UI stays quiet.
+
+> Example responses
+
+> 200 Response
+
+```json
+{
+  "notifications": [
+    {
+      "id": "eng-team|claude-code|a1b2c3d4-0000-0000-0000-000000000001|rp-001",
+      "rule_id": "rp-001",
+      "rule_name": "Prompt Injection Guard",
+      "severity": "critical",
+      "agent_id": "claude-code",
+      "deployment_id": "eng-team",
+      "session_id": "a1b2c3d4-0000-0000-0000-000000000001",
+      "message": "Prompt injection detected",
+      "detected_at": "2026-04-09 10:00:05.000"
+    }
+  ]
+}
+```
+
+<h3 id="list-unconfirmed-alert-notifications-responses">Responses</h3>
+
+|Status|Meaning|Description|Schema|
+|---|---|---|---|
+|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|Unconfirmed notifications, max 20.|[UnconfirmedNotificationsResponse](#schemaunconfirmednotificationsresponse)|
+
+<aside class="warning">
+To perform this operation, you must be authenticated by means of one of the following methods:
+cookieAuth
+</aside>
+
+## Confirm an alert notification
+
+<a id="opIdconfirmNotification"></a>
+
+> Code samples
+
+```shell
+curl -X POST /api/notifications/confirm \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json'
+```
+
+`POST /notifications/confirm`
+
+Marks a threat notification as seen — the user dismissed or clicked the toast. Upserts `confirmed=true` into the `agentguard_notifications` mutable stream for the given identity; idempotent.
+
+> Body parameter
+
+```json
+{
+  "agent_id": "claude-code",
+  "deployment_id": "eng-team",
+  "session_id": "a1b2c3d4-0000-0000-0000-000000000001",
+  "rule_id": "rp-001"
+}
+```
+
+<h3 id="confirm-an-alert-notification-parameters">Parameters</h3>
+
+|Name|In|Type|Required|Description|
+|---|---|---|---|---|
+|body|body|[NotificationConfirmRequest](#schemanotificationconfirmrequest)|true|`agent_id` and `rule_id` are required; `deployment_id`/`session_id` may be empty on older/partial events.|
+
+> Example responses
+
+> 200 Response
+
+```json
+{
+  "ok": true
+}
+```
+
+<h3 id="confirm-an-alert-notification-responses">Responses</h3>
+
+|Status|Meaning|Description|Schema|
+|---|---|---|---|
+|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|Confirmed.|None|
+|400|[Bad Request](https://tools.ietf.org/html/rfc7231#section-6.5.1)|Missing agent_id or rule_id.|None|
+|500|[Internal Server Error](https://tools.ietf.org/html/rfc7231#section-6.6.1)|Upsert into agentguard_notifications failed.|None|
+
+<aside class="warning">
+To perform this operation, you must be authenticated by means of one of the following methods:
+cookieAuth
+</aside>
+
 <h1 id="agentguard-api-investigate">Investigate</h1>
 
 Ad-hoc SQL query interface against Proton streams.
@@ -6683,4 +6789,113 @@ Response from GET /activity.
 |---|---|---|---|---|
 |events|[[ActivityEvent](#schemaactivityevent)]|false|none|[One event in the activity feed. Sourced from agentguard_holds (is_hold_event=true) or agentguard_hook_events when include_allowed=true (is_hold_event=false).]|
 |total|integer|false|none|none|
+
+<h2 id="tocS_UnconfirmedNotification">UnconfirmedNotification</h2>
+<!-- backwards compatibility -->
+<a id="schemaunconfirmednotification"></a>
+<a id="schema_UnconfirmedNotification"></a>
+<a id="tocSunconfirmednotification"></a>
+<a id="tocsunconfirmednotification"></a>
+
+```json
+{
+  "id": "string",
+  "rule_id": "string",
+  "rule_name": "string",
+  "severity": "critical",
+  "agent_id": "string",
+  "deployment_id": "string",
+  "session_id": "string",
+  "message": "string",
+  "detected_at": "2019-08-24T14:15:22Z"
+}
+
+```
+
+One unconfirmed threat notification, as returned by GET /notifications/unconfirmed.
+
+### Properties
+
+|Name|Type|Required|Restrictions|Description|
+|---|---|---|---|---|
+|id|string|false|none|Stable identity key: deployment_id\|agent_id\|session_id\|rule_id.|
+|rule_id|string|false|none|none|
+|rule_name|string|false|none|none|
+|severity|string|false|none|none|
+|agent_id|string|false|none|none|
+|deployment_id|string|false|none|none|
+|session_id|string|false|none|none|
+|message|string|false|none|none|
+|detected_at|string|false|none|none|
+
+#### Enumerated Values
+
+|Property|Value|
+|---|---|
+|severity|critical|
+|severity|warning|
+|severity|info|
+|severity||
+
+<h2 id="tocS_UnconfirmedNotificationsResponse">UnconfirmedNotificationsResponse</h2>
+<!-- backwards compatibility -->
+<a id="schemaunconfirmednotificationsresponse"></a>
+<a id="schema_UnconfirmedNotificationsResponse"></a>
+<a id="tocSunconfirmednotificationsresponse"></a>
+<a id="tocsunconfirmednotificationsresponse"></a>
+
+```json
+{
+  "notifications": [
+    {
+      "id": "string",
+      "rule_id": "string",
+      "rule_name": "string",
+      "severity": "critical",
+      "agent_id": "string",
+      "deployment_id": "string",
+      "session_id": "string",
+      "message": "string",
+      "detected_at": "2019-08-24T14:15:22Z"
+    }
+  ]
+}
+
+```
+
+Response from GET /notifications/unconfirmed.
+
+### Properties
+
+|Name|Type|Required|Restrictions|Description|
+|---|---|---|---|---|
+|notifications|[[UnconfirmedNotification](#schemaunconfirmednotification)]|false|none|[One unconfirmed threat notification, as returned by GET /notifications/unconfirmed.]|
+
+<h2 id="tocS_NotificationConfirmRequest">NotificationConfirmRequest</h2>
+<!-- backwards compatibility -->
+<a id="schemanotificationconfirmrequest"></a>
+<a id="schema_NotificationConfirmRequest"></a>
+<a id="tocSnotificationconfirmrequest"></a>
+<a id="tocsnotificationconfirmrequest"></a>
+
+```json
+{
+  "agent_id": "string",
+  "deployment_id": "string",
+  "session_id": "string",
+  "rule_id": "string"
+}
+
+```
+
+Request body for POST /notifications/confirm. deployment_id and session_id may legitimately be empty on older/partial events.
+
+### Properties
+
+|Name|Type|Required|Restrictions|Description|
+|---|---|---|---|---|
+|agent_id|string|true|none|none|
+|deployment_id|string|false|none|none|
+|session_id|string|false|none|none|
+|rule_id|string|true|none|none|
 
