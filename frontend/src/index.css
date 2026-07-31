@@ -38,6 +38,13 @@
     --tertiary-fixed: #ffdadb; --tertiary-fixed-dim: #ffb2b8;
     --on-tertiary-fixed: #40000f; --on-tertiary-fixed-variant: #91002d;
     --primary-button: #d53f8c; --primary-button-text: #ffffff;
+
+    /* App chrome stays dark in both themes. */
+    --chrome-bg: #231f2b;
+    --chrome-bg-active: #3a3741;
+    --chrome-border: #3a3741;
+    --chrome-text: #f7f6f6;
+    --chrome-text-muted: #b5b4b8;
   }
 
   .dark {
@@ -69,12 +76,12 @@
     --primary: #b01e6f; --on-primary: #ffffff; --primary-container: #f256a3; --on-primary-container: #3d0023;
     --secondary: #5b5b62; --on-secondary: #ffffff; --secondary-container: #e6e6ea; --on-secondary-container: #1c1b1f;
     --tertiary: #b93d54; --on-tertiary: #ffffff; --tertiary-container: #ffdadb; --on-tertiary-container: #40000f;
-    --surface: #ffffff; --surface-dim: #e3e3e6; --surface-bright: #ffffff;
-    --surface-container-lowest: #ffffff; --surface-container-low: #f7f7f8; --surface-container: #f1f1f3;
-    --surface-container-high: #ececee; --surface-container-highest: #e6e6e9;
+    --surface: #f7f6f6; --surface-dim: #ececed; --surface-bright: #ffffff;
+    --surface-container-lowest: #ffffff; --surface-container-low: #ffffff; --surface-container: #ffffff;
+    --surface-container-high: #ffffff; --surface-container-highest: #ffffff;
     --surface-variant: #e4e4e7; --on-surface: #1a1a1e; --on-surface-variant: #46464c;
-    --background: #fafafa; --on-background: #1a1a1e;
-    --outline: #78787f; --outline-variant: #d4d4d8;
+    --background: #f7f6f6; --on-background: #1a1a1e;
+    --outline: #b5b4b8; --outline-variant: #dad9db;
     --error: #ba1a1a; --on-error: #ffffff; --error-container: #ffdad6; --on-error-container: #410002;
     --inverse-primary: #ffb0cf; --inverse-surface: #2f2f33; --inverse-on-surface: #f2f2f5;
     --surface-tint: #b01e6f;
@@ -147,6 +154,121 @@ body.sidebar-collapsed .pl-sidebar {
   width: 100vw !important;
   margin: 0 !important;
   box-sizing: border-box !important;
+}
+
+.sentry-floating-drawer {
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18);
+}
+
+.sentry-code-surface {
+  background-color: var(--surface-container-high);
+}
+
+.light .sentry-code-surface {
+  background-color: var(--gray-900);
+}
+
+/* Light mode follows the Timeplus Console surface model:
+   gray-900 page background, white containers, gray-700 dividers. */
+.light .bg-gray-800 {
+  background-color: #ffffff !important;
+}
+
+.light .available-rule-card {
+  background-color: #ffffff !important;
+}
+
+.light .bg-gray-900 {
+  background-color: var(--background) !important;
+}
+
+.light .border-outline-variant\/5,
+.light .border-outline-variant\/10,
+.light .border-outline-variant\/20,
+.light .border-outline-variant\/30,
+.light .border-outline-variant\/40,
+.light .border-outline-variant\/60 {
+  border-color: var(--gray-700) !important;
+}
+
+.light .divide-outline-variant\/20 > :not([hidden]) ~ :not([hidden]),
+.light .divide-gray-700\/50 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--gray-700) !important;
+}
+
+/* Dark mode uses the dark gray-700 divider color, mirroring the light mode's
+   gray-700 divider treatment. */
+.dark .border-outline-variant\/5,
+.dark .border-outline-variant\/10,
+.dark .border-outline-variant\/20,
+.dark .border-outline-variant\/30,
+.dark .border-outline-variant\/40,
+.dark .border-outline-variant\/60 {
+  border-color: var(--gray-700) !important;
+}
+
+.dark .divide-outline-variant\/5 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-outline-variant\/10 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-outline-variant\/20 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-gray-700\/50 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--gray-700) !important;
+}
+
+/* Dashboard light-mode refinements: gray page, white panels, stronger Timeplus
+   accent colors for text controls and positive status copy. */
+.light .dashboard-page {
+  background-color: var(--background) !important;
+}
+
+.light .dashboard-page main .bg-gray-800,
+.light .dashboard-page main .bg-gray-800\/60,
+.light .dashboard-page main .bg-gray-800\/80,
+.light .dashboard-page main .hover\:bg-gray-800\/60:hover {
+  background-color: #ffffff !important;
+}
+
+.light .dashboard-page main .text-primary,
+.light .dashboard-page main .text-pink-400,
+.light .dashboard-page main .hover\:text-pink-300:hover {
+  color: var(--pink-600) !important;
+}
+
+.light .dashboard-page main .text-emerald-400,
+.light .dashboard-page main .text-green-400 {
+  color: var(--green-600) !important;
+}
+
+/* Keep the global header and left navigation identical to dark mode even when
+   the page body is using the light theme. */
+.app-chrome,
+.app-chrome.bg-gray-800,
+.app-chrome .bg-gray-800 {
+  background-color: var(--chrome-bg) !important;
+}
+
+.app-chrome.border-gray-700,
+.app-chrome .border-gray-700,
+.app-chrome.border-gray-600,
+.app-chrome .border-gray-600 {
+  border-color: var(--chrome-border) !important;
+}
+
+.app-chrome .bg-gray-700,
+.app-chrome .hover\:bg-gray-700:hover {
+  background-color: var(--chrome-bg-active) !important;
+}
+
+.app-chrome .text-gray-100 {
+  color: var(--chrome-text) !important;
+}
+
+.app-chrome .text-gray-300,
+.app-chrome .text-gray-400 {
+  color: var(--chrome-text-muted) !important;
+}
+
+.app-chrome .hover\:text-gray-100:hover {
+  color: var(--chrome-text) !important;
 }
 
 /* Neutralise prism-tomorrow's default background so it doesn't bleed into the editor */

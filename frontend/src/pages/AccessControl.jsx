@@ -66,13 +66,13 @@ export default function AccessControl() {
             </div>
           )}
 
-          <div className="flex gap-1">
+          <div className="flex items-center gap-8 border-b border-gray-700">
             {['roles', 'users'].map((tabKey) => (
               <button
                 key={tabKey}
                 onClick={() => setTab(tabKey)}
-                className={`px-4 py-2 text-xs font-semibold rounded-sm capitalize transition-colors ${
-                  tab === tabKey ? 'bg-gray-700 text-primary' : 'text-gray-400 hover:bg-gray-700'
+                className={`pb-3 text-sm font-semibold capitalize border-b-2 transition-colors ${
+                  tab === tabKey ? 'border-pink-500 text-gray-100' : 'border-transparent text-gray-400 hover:text-gray-100'
                 }`}
               >
                 {t(`accessControl.tabs.${tabKey}`)}
@@ -121,7 +121,7 @@ function RolesTab({ catalog, roles, onChanged, setBanner }) {
       {!editing && (
         <>
           <div className="flex justify-end">
-            <button onClick={startNew} className="px-4 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023]">
+            <button onClick={startNew} className="px-4 py-2 text-xs font-semibold rounded-sm bg-pink-500 text-white hover:bg-pink-400 transition-colors">
               {t('accessControl.role.newRole')}
             </button>
           </div>
@@ -260,7 +260,7 @@ function RoleEditor({ resources, editing, setEditing, onDone, setBanner }) {
 
       {!readOnly && (
         <div className="flex justify-end">
-          <button onClick={save} className="px-4 py-2 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023]">
+          <button onClick={save} className="px-4 py-2 text-xs font-semibold rounded-sm bg-pink-500 text-white hover:bg-pink-400 transition-colors">
             {t('accessControl.editor.save')}
           </button>
         </div>
@@ -316,7 +316,7 @@ function UsersTab({ roles, users, me, onChanged, setBanner }) {
             {roleNames.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
-        <button onClick={addUser} className="px-4 py-2 text-xs font-semibold rounded-sm bg-gray-700 text-gray-100 hover:bg-secondary-container">
+        <button onClick={addUser} className="px-4 py-2 text-xs font-semibold rounded-sm bg-pink-500 text-white hover:bg-pink-400 transition-colors">
           {t('accessControl.users.assign')}
         </button>
       </div>

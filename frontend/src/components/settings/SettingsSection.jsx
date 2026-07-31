@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import Toggle from '../Toggle'
 import DLPConfigEditor from '../DLPConfigEditor'
 import SentryConfigEditor from '../SentryConfigEditor'
+import { useTheme } from '../../context/ThemeContext'
 
 // DLP keys that remain server-config (config.yaml): the enable switch and the
 // embedding dimension (baked into the stream/index). Everything else — endpoint,
@@ -125,6 +126,47 @@ function KeyField({ k, draftValue, onChange }) {
   )
 }
 
+function ThemeField() {
+  const { t } = useTranslation('settings')
+  const { theme, setTheme } = useTheme()
+  const options = [
+    { value: 'light', label: t('section.ui.themeLight') },
+    { value: 'dark', label: t('section.ui.themeDark') },
+  ]
+
+  return (
+    <div className="py-3">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-sm text-gray-100">{t('section.ui.themeLabel')}</span>
+        <span className="text-[10px] uppercase tracking-wide rounded-full px-2 py-0.5 bg-gray-700 text-gray-300">
+          {t('section.ui.browserChip')}
+        </span>
+      </div>
+      <p className="text-xs text-gray-400 mb-2">{t('section.ui.themeDescription')}</p>
+      <div className="inline-flex border border-gray-700 rounded-sm overflow-hidden bg-white">
+        {options.map((option) => {
+          const active = theme === option.value
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setTheme(option.value)}
+              className={`h-8 px-4 text-sm font-semibold transition-colors ${
+                active
+                  ? 'bg-pink-500 text-white'
+                  : 'bg-white text-gray-200 hover:bg-gray-900'
+              }`}
+              aria-pressed={active}
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // Renders one settings section card. Section-specific extras: the Timeplus
 // test-connection row, and the DLP card's three tonal sub-groups
 // (server config / runtime config / operations).
@@ -186,6 +228,7 @@ export default function SettingsSection({
       <section className="bg-gray-800 rounded-sm px-6 py-4">
         <h3 className="text-base font-medium text-gray-100 mb-2">{t('configSections.' + section.id, { defaultValue: section.title })}</h3>
         {keyList}
+        {section.id === 'ui' && <ThemeField />}
         {section.id === 'timeplus' && (
           <div className="mt-3 flex items-center gap-3">
             <button onClick={onTestTimeplus} className="rounded-sm px-3 py-1.5 text-xs bg-gray-700 text-gray-100 hover:bg-gray-600">{t('section.timeplus.testConnection')}</button>

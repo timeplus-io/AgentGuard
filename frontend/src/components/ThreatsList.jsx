@@ -145,7 +145,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
   return (
     <>
       {showFilters && (
-        <section className="bg-surface-container rounded p-6 mb-6 flex flex-wrap items-center gap-6">
+        <div className="mb-6 flex flex-wrap items-center gap-6">
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">{t('list.filters.severityLabel')}</label>
             <div className="flex gap-1">
@@ -187,7 +187,7 @@ export default function ThreatsList({ ruleId, hideRuleCol = false, showFilters =
               ))}
             </div>
           </div>
-        </section>
+        </div>
       )}
 
       {actionError && (

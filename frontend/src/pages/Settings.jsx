@@ -6,12 +6,12 @@ import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import SettingsNav from '../components/settings/SettingsNav'
 import SettingsSection from '../components/settings/SettingsSection'
-import LanguageSelector from '../components/settings/LanguageSelector'
 import {
   keyToSectionMap,
   dirtyCountsBySection,
   sectionIdsWithFlag,
   activeSectionFromHash,
+  groupSettingsSections,
 } from '../utils/settingsNav'
 import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext'
@@ -113,10 +113,11 @@ export default function Settings() {
   }
 
   const sections = data?.sections || []
-  const activeId = activeSectionFromHash(location.hash, sections)
-  const dirtyCounts = dirtyCountsBySection(drafts, keyToSectionMap(sections))
-  const restartIds = sectionIdsWithFlag(sections, 'restart')
-  const reprovisionIds = sectionIdsWithFlag(sections, 'reprovision')
+  const navSections = groupSettingsSections(sections)
+  const activeId = activeSectionFromHash(location.hash, navSections)
+  const dirtyCounts = dirtyCountsBySection(drafts, keyToSectionMap(navSections))
+  const restartIds = sectionIdsWithFlag(navSections, 'restart')
+  const reprovisionIds = sectionIdsWithFlag(navSections, 'reprovision')
 
   return (
     <div className="min-h-screen bg-surface text-gray-100">
@@ -125,8 +126,6 @@ export default function Settings() {
       <main className="pl-sidebar pt-16 pb-24 min-h-screen">
         <div className="p-8 max-w-5xl">
           <PageHeader title={t('page.title')} subtitle={t('page.subtitle')} />
-
-          <div className="mb-6"><LanguageSelector /></div>
 
           {loading && <p className="text-gray-400 text-sm">{t('page.loading')}</p>}
           {error && <p className="text-error text-sm">{error}</p>}
@@ -156,10 +155,10 @@ export default function Settings() {
             </div>
           )}
 
-          {sections.length > 0 && (
-            <div className="flex gap-6 items-start">
+          {navSections.length > 0 && (
+            <div className="space-y-6">
               <SettingsNav
-                sections={sections}
+                sections={navSections}
                 activeId={activeId}
                 dirtyCounts={dirtyCounts}
                 restartIds={restartIds}
@@ -168,20 +167,25 @@ export default function Settings() {
                 showReprovision={!!data?.reprovision_required}
                 onSelect={(id) => { navigate(`#${id}`, { replace: true }); window.scrollTo(0, 0) }}
               />
-              <div className="flex-1 min-w-0">
-                {sections.map((s) => (
+              <div className="min-w-0">
+                {navSections.map((s) => (
                   <div key={s.id} className={s.id === activeId ? '' : 'hidden'}>
-                    <SettingsSection
-                      section={s}
-                      draftFor={draftFor}
-                      setDraft={setDraft}
-                      fieldErrors={fieldErrors}
-                      tpTest={tpTest}
-                      onTestTimeplus={testTimeplus}
-                      reprovisioning={reprovisioning}
-                      onReprovision={reprovisionDLP}
-                      configSavedAt={configSavedAt}
-                    />
+                    <div className="space-y-6">
+                      {(s.children || [s]).map((section) => (
+                        <SettingsSection
+                          key={section.id}
+                          section={section}
+                          draftFor={draftFor}
+                          setDraft={setDraft}
+                          fieldErrors={fieldErrors}
+                          tpTest={tpTest}
+                          onTestTimeplus={testTimeplus}
+                          reprovisioning={reprovisioning}
+                          onReprovision={reprovisionDLP}
+                          configSavedAt={configSavedAt}
+                        />
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>

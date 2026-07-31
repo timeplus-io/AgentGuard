@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationsProvider } from './components/NotificationsProvider'
 import HoldToastContainer from './components/HoldToast'
 import NoAccess from './components/NoAccess'
+import SentryFloatingPanel from './components/SentryFloatingPanel'
 import { uiKey, NAV_RESOURCES } from './lib/perm'
 import { adoptServerDefault } from './i18n/resolveLocale'
 import Login from './pages/Login'
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="/access" element={<Gate resource="access"><AccessControl /></Gate>} />
             <Route path="/onboarding" element={<Gate resource="settings"><Onboarding /></Gate>} />
           </Routes>
+          <SentryFloatingPanel />
         </AuthGuard>
       </AuthProvider>
     </BrowserRouter>

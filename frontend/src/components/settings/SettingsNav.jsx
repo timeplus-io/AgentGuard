@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next'
 
-// Sticky section nav for the Settings page (issue #199). Purely
-// presentational: the page computes active id, dirty counts and flag sets.
+// Purely presentational: the page computes active id, dirty counts and flag sets.
 export default function SettingsNav({
   sections,
   activeId,
@@ -14,7 +13,7 @@ export default function SettingsNav({
 }) {
   const { t } = useTranslation('settings')
   return (
-    <nav className="w-48 shrink-0 sticky top-24 self-start flex flex-col gap-1">
+    <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-gray-700">
       {sections.map((s) => {
         const active = s.id === activeId
         const dirty = dirtyCounts[s.id] || 0
@@ -29,8 +28,8 @@ export default function SettingsNav({
             key={s.id}
             onClick={() => onSelect(s.id)}
             aria-current={active ? 'true' : undefined}
-            className={`flex items-center gap-2 px-3 py-2 rounded-sm text-left text-xs font-medium transition-all ${
-              active ? 'text-pink-400 bg-gray-700' : 'text-gray-400 hover:bg-gray-700 hover:text-gray-100'
+            className={`shrink-0 flex items-center gap-2 pb-3 text-sm font-semibold border-b-2 transition-colors ${
+              active ? 'border-pink-500 text-gray-100' : 'border-transparent text-gray-400 hover:text-gray-100'
             }`}
           >
             <span className="flex-1 truncate">{t('configSections.' + s.id, { defaultValue: s.title })}</span>

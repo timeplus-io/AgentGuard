@@ -31,14 +31,14 @@ function makeCodeRenderer(prismStyle) {
     const isInline = !className && !text.includes('\n')
     if (isInline) {
       return (
-        <code className="bg-surface-container-high rounded-sm px-1 py-0.5 text-[0.85em] font-mono text-gray-100">
+        <code className="sentry-code-surface rounded-sm px-1 py-0.5 text-[0.85em] font-mono text-gray-100">
           {children}
         </code>
       )
     }
     const language = match ? match[1] : 'text'
     return (
-      <div className="bg-surface-container-high rounded-sm overflow-x-auto my-2">
+      <div className="sentry-code-surface rounded-sm overflow-x-auto my-2">
         <SyntaxHighlighter
           language={language}
           style={prismStyle}
