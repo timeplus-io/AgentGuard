@@ -101,9 +101,6 @@ The server reads `config.yaml` from the working directory (or a path passed via 
 server:
   port: 8080
 
-agentguard:
-  url: "http://localhost:8080"   # URL Timeplus uses to call back AgentGuard for alerts
-
 timeplus:
   host: localhost
   port: 3218
@@ -115,14 +112,13 @@ timeplus:
 | Variable | Default | Description |
 |---|---|---|
 | `SERVER_PORT` | `8080` | HTTP port the server listens on |
-| `AGENTGUARD_URL` | `http://localhost:8080` | AgentGuard's own base URL — see [Alert UDF webhook](#alert-udf-webhook) below |
 | `TIMEPLUS_HOST` | `localhost` | Timeplus hostname |
 | `TIMEPLUS_PORT` | `3218` | HTTP query port |
 | `TIMEPLUS_NATIVE_PORT` | `8463` | native TCP port (used for streaming inserts) |
-| `TIMEPLUS_USER` | _(unset)_ | **Service credentials** for plugin/server-to-server endpoints (`/api/holds`, `/api/holds/_abandon-session`, `/api/holds/_drain`, `/api/alerts/webhook`). Required for the synchronous tool-call blocking flow — endpoints return `HTTP 503 service credentials not configured` when unset. **Not** used for user-facing UI requests, which always borrow the logged-in user's session credentials from the wizard / login form. The bundled `docker-compose.yaml` pre-sets this to `proton`. |
+| `TIMEPLUS_USER` | _(unset)_ | **Service credentials** for plugin/server-to-server endpoints (`/api/holds`, `/api/holds/_abandon-session`, `/api/holds/_drain`) and the backend notify watcher (`internal/notify`, #258). Required for the synchronous tool-call blocking flow — endpoints return `HTTP 503 service credentials not configured` when unset. **Not** used for user-facing UI requests, which always borrow the logged-in user's session credentials from the wizard / login form. The bundled `docker-compose.yaml` pre-sets this to `proton`. |
 | `TIMEPLUS_PASSWORD` | _(unset)_ | Password for `TIMEPLUS_USER`. Same constraints as above. The bundled `docker-compose.yaml` pre-sets this to `timeplus@t+`. |
 
-> User credentials (the ones you see in the dashboard) are not accepted via environment variables — use the setup wizard or login form. The `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD` env vars above are a **separate** server-to-server service identity, used only by plugin endpoints and the alert webhook.
+> User credentials (the ones you see in the dashboard) are not accepted via environment variables — use the setup wizard or login form. The `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD` env vars above are a **separate** server-to-server service identity, used only by plugin endpoints and the backend notify watcher.
 
 ### CLI flags
 
@@ -132,29 +128,14 @@ timeplus:
 Flags:
   --config string                config file path
   --port int                     server port (default 8080)
-  --agentguard-url string        AgentGuard base URL used by the alert UDF (default "http://localhost:8080")
   --timeplus-host string         Timeplus host (default "localhost")
   --timeplus-port int            Timeplus HTTP port (default 3218)
   --timeplus-native-port int     Timeplus native TCP port (default 8463)
 ```
 
-### Alert UDF webhook
+### Alert delivery
 
-When a security rule fires, Timeplus executes a Python UDF (`notify_agentguard_udf`) that HTTP-POSTs the alert to AgentGuard at:
-
-```
-<AGENTGUARD_URL>/api/alerts/webhook
-```
-
-This call goes from **Timeplus → AgentGuard**, so it must use the address where AgentGuard is reachable _from Timeplus's perspective_, which differs by deployment:
-
-| Deployment | `AGENTGUARD_URL` |
-|---|---|
-| Local dev (everything on host) | `http://localhost:8080` _(default — no action needed)_ |
-| Docker Compose | `http://agentguard:8080` _(pre-set in `docker-compose.yaml`)_ |
-| Docker, custom host/port | `http://<host-or-ip>:<port>` |
-
-If this URL is wrong, security rules will still detect events and write to the `agentguard_security_events` stream, but no live alerts will appear in the dashboard notification stream.
+When a security rule fires, its materialized view writes a row to `agentguard_notify_events`. A backend watcher (`internal/notify`, #258) tails that stream directly via a streaming SQL query — no Timeplus→AgentGuard network callback is involved — and fans matches out over the existing `/api/notifications/stream` SSE pipeline. Seen-state is persisted per threat identity in the `agentguard_notifications` mutable stream so the browser can backfill unconfirmed notifications (`GET /api/notifications/unconfirmed`) on reconnect and confirm them explicitly (`POST /api/notifications/confirm`).
 
 ---
 

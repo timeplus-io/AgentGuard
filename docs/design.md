@@ -60,7 +60,7 @@ Supported agents: **OpenClaw**, **Claude Code**, and **Hermes Agent**.
 │                                              agentguard_cim_metrics  │
 └──────────────────────────┬───────────────────────────────────────────┘
                            │ SQL queries :3218 (HTTP) / :8463 (native TCP)
-                           │ Alert UDF callback → POST /api/alerts/webhook
+                           │ Backend notify watcher tails agentguard_notify_events → SSE fan-out
                            ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │  AgentGuard Backend  (Go / Gin, :8080)                               │
@@ -87,7 +87,7 @@ All resource overview
 | Backend | Go 1.23, Gin, Cobra, Viper |
 | Frontend | React 18, Vite, React Router v6, Tailwind CSS |
 | Agent telemetry | OpenTelemetry OTLP/HTTP (logs, traces, metrics) |
-| Hook events | Custom HTTP POST to `/api/alerts/webhook` + SSE fan-out |
+| Hook events | Backend notify watcher tails `agentguard_notify_events` (streaming SQL) → SSE fan-out |
 
 ### Two Timeplus Clients
 
@@ -117,12 +117,11 @@ The backend uses two separate connections to Timeplus:
 13. Seed 6 default pricing rows (skipped if any rows exist) — warning only
 14. Seed catalog rules as disabled (skipped if any rows exist) — warning only
 15. Drop 4 legacy named security MVs — warning only
-16. `CREATE OR REPLACE` the `notify_agentguard_udf` Python UDF — warning only
-17. Create `mv_notify_filter` — warning only
-18. Drop and recreate `agentguard_notifier` alert — warning only
-19. Sync per-rule MVs to match current `agentguard_rules` state — warning only
+16. Create `agentguard_notifications` (mutable, notification seen-state) and `mv_notify_filter` — warning only
+17. Drop the legacy `agentguard_notifier` alert and `notify_agentguard_udf` UDF, best-effort (superseded by the #258 backend notify watcher) — warning only
+18. Sync per-rule MVs to match current `agentguard_rules` state — warning only
 
-> Steps 10–19 are non-fatal: logged as warnings but the server starts regardless.
+> Steps 10–18 are non-fatal: logged as warnings but the server starts regardless.
 
 ---
 
@@ -319,8 +318,9 @@ CREATE STREAM agentguard_hook_events (
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/alerts/webhook` | Receives `AlertWebhookPayload` from the Timeplus alert UDF and fans it out to all SSE clients |
-| GET | `/api/notifications/stream` | SSE long-poll stream; sends `event: alert\ndata: {...}` on each detection; 20 s keepalive |
+| GET | `/api/notifications/stream` | SSE long-poll stream; sends `event: alert\ndata: {...}` on each detection; 20 s keepalive. Fed by a backend notify watcher (`internal/notify`, #258) that tails `agentguard_notify_events` directly — no Timeplus→AgentGuard callback |
+| GET | `/api/notifications/unconfirmed` | Backfills unconfirmed threat notifications on SSE connect (≤20, newest-first) |
+| POST | `/api/notifications/confirm` | Marks a notification seen (explicit toast dismiss/click only) |
 | POST | `/api/onboarding/generate` | Returns plugin config snippet for `openclaw` or `claude_code` agent types |
 | POST | `/api/proton/query` | Streams arbitrary SQL directly to Timeplus; returns NDJSON rows line-by-line |
 
@@ -768,50 +768,17 @@ cross-referenced against the rule's `enabled` state.
 
 ### 4.3 Alert Pipeline
 
-#### UDF — `notify_agentguard_udf`
-
-A Python UDF that POSTs each detection to the AgentGuard backend webhook endpoint. The backend then fans the event to all SSE-connected browser clients.
-
-```sql
-CREATE OR REPLACE FUNCTION notify_agentguard_udf(
-  rule_id string, rule_name string, severity string,
-  agent_id string, deployment_id string, session_id string,
-  hook_name string, tool_name string, message string, detected_at string
-) RETURNS string LANGUAGE PYTHON AS $$
-import requests
-def notify_agentguard_udf(rule_ids, rule_names, severities,
-                            agent_ids, deployment_ids, session_ids,
-                            hook_names, tool_names, messages, detected_ats):
-    for i in range(len(rule_ids)):
-        try:
-            requests.post("http://agentguard:8080/api/alerts/webhook", json={
-                "rule_id":     rule_ids[i],
-                "rule_name":   rule_names[i],
-                "severity":    severities[i],
-                "agent_id":    agent_ids[i],
-                "message":     messages[i],
-                "detected_at": detected_ats[i]
-            }, timeout=3)
-        except Exception:
-            pass
-    return rule_ids
-$$
-```
-
-#### Alert — `agentguard_notifier`
-
-Batches up to 1 event at a time with a 5 s timeout, rate-limited to 10 alerts per minute.
-
-```sql
-CREATE ALERT agentguard_notifier
-  BATCH 1 EVENTS WITH TIMEOUT 5s
-  LIMIT 10 ALERTS PER 1m
-  CALL notify_agentguard_udf
-AS SELECT
-  rule_id, rule_name, severity, agent_id, deployment_id,
-  session_id, hook_name, tool_name, message, detected_at
-FROM agentguard_notify_events
-```
+> **Superseded by #258.** This section previously documented a Timeplus→AgentGuard
+> callback — a `notify_agentguard_udf` Python UDF wrapping `requests.post(...)` to
+> `/api/alerts/webhook`, invoked by a `CREATE ALERT agentguard_notifier` batching
+> rule. Both the UDF and the alert have been removed. A backend watcher
+> (`internal/notify`) now tails `agentguard_notify_events` directly via a streaming
+> SQL query and publishes matches straight into the existing SSE pipeline, keyed by
+> a stable id (`deployment|agent|session|rule`). Seen-state persists in the
+> `agentguard_notifications` mutable stream (PK = threat identity), read on SSE
+> connect via `GET /api/notifications/unconfirmed` and written by
+> `POST /api/notifications/confirm`. `mv_notify_filter` and
+> `agentguard_notify_events` themselves are unchanged.
 
 ### 4.4 Threat Identity and Status
 

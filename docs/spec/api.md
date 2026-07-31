@@ -27,7 +27,7 @@ AgentGuard is a real-time security monitoring and governance platform for AI cod
 All data is sourced from **Timeplus Enterprise** streaming SQL. The server falls back gracefully when Timeplus is unavailable.
 
 ### Authentication
-Most endpoints require an active session. Call `POST /auth/login` with Timeplus credentials to receive an `agentguard_session` httpOnly cookie. Include `credentials: 'include'` on all fetch calls. The exceptions are `/auth/*`, `/setup/*`, and `/alerts/webhook`, which are unauthenticated.
+Most endpoints require an active session. Call `POST /auth/login` with Timeplus credentials to receive an `agentguard_session` httpOnly cookie. Include `credentials: 'include'` on all fetch calls. The exceptions are `/auth/*` and `/setup/*`, which are unauthenticated.
 
 On first launch the setup wizard must run before login is possible. Call `GET /auth/status` to check `setup_complete` and `logged_in`.
 
@@ -3189,97 +3189,7 @@ cookieAuth
 
 <h1 id="agentguard-api-alerts">Alerts</h1>
 
-Real-time alert delivery — webhook receiver and SSE notification stream.
-
-## Receive a rule-triggered alert
-
-<a id="opIdalertWebhook"></a>
-
-> Code samples
-
-```shell
-# You can also use wget
-curl -X POST /api/alerts/webhook \
-  -H 'Content-Type: application/json'
-
-```
-
-```javascript
-const inputBody = '{
-  "rule_id": "string",
-  "rule_name": "string",
-  "severity": "critical",
-  "agent_id": "string",
-  "deployment_id": "string",
-  "message": "string",
-  "detected_at": "string"
-}';
-const headers = {
-  'Content-Type':'application/json'
-};
-
-fetch('/api/alerts/webhook',
-{
-  method: 'POST',
-  body: inputBody,
-  headers: headers
-})
-.then(function(res) {
-    return res.json();
-}).then(function(body) {
-    console.log(body);
-});
-
-```
-
-```python
-import requests
-headers = {
-  'Content-Type': 'application/json'
-}
-
-r = requests.post('/api/alerts/webhook', headers = headers)
-
-print(r.json())
-
-```
-
-`POST /alerts/webhook`
-
-Webhook endpoint called by the Proton `notify_agentguard_udf` Python UDF. The UDF is invoked by the `agentguard_notifier` Proton alert when new rows appear in `agentguard_security_events`.
-
-Received alerts are fanned out to all connected SSE clients on `/notifications/stream`. You can also POST to this endpoint manually for testing.
-
-> Body parameter
-
-```json
-{
-  "rule_id": "string",
-  "rule_name": "string",
-  "severity": "critical",
-  "agent_id": "string",
-  "deployment_id": "string",
-  "message": "string",
-  "detected_at": "string"
-}
-```
-
-<h3 id="receive-a-rule-triggered-alert-parameters">Parameters</h3>
-
-|Name|In|Type|Required|Description|
-|---|---|---|---|---|
-|body|body|[Alert](#schemaalert)|true|none|
-
-<h3 id="receive-a-rule-triggered-alert-responses">Responses</h3>
-
-|Status|Meaning|Description|Schema|
-|---|---|---|---|
-|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|Alert accepted and forwarded to SSE clients.|None|
-
-<aside class="warning">
-To perform this operation, you must be authenticated by means of one of the following methods:
-cookieAuth
-</aside>
+Real-time alert delivery — SSE notification stream.
 
 ## Live alert SSE stream
 
@@ -4097,8 +4007,7 @@ const inputBody = '{
   "port": 3218,
   "native_port": 8463,
   "username": "default",
-  "password": "",
-  "agentguard_url": "http://localhost:8080"
+  "password": ""
 }';
 const headers = {
   'Content-Type':'application/json',
@@ -4152,8 +4061,7 @@ This endpoint is unauthenticated. On success it writes `config.yaml` with `setup
   "port": 3218,
   "native_port": 8463,
   "username": "default",
-  "password": "",
-  "agentguard_url": "http://localhost:8080"
+  "password": ""
 }
 ```
 
@@ -6436,8 +6344,7 @@ Connection parameters for POST /setup/test-connection.
   "port": 3218,
   "native_port": 8463,
   "username": "default",
-  "password": "",
-  "agentguard_url": "http://localhost:8080"
+  "password": ""
 }
 
 ```
@@ -6453,7 +6360,6 @@ Full connection details for POST /setup/provision.
 |native_port|integer|true|none|Timeplus native TCP port.|
 |username|string|true|none|Timeplus username.|
 |password|string|false|none|Timeplus password.|
-|agentguard_url|string|false|none|URL where AgentGuard is reachable from Timeplus's network — used for alert webhook callbacks.|
 
 <h2 id="tocS_ProvisionEvent">ProvisionEvent</h2>
 <!-- backwards compatibility -->

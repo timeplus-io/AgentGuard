@@ -14,8 +14,8 @@ info:
 
     Most endpoints require an active session. Call `POST /auth/login` with Timeplus
     credentials to receive an `agentguard_session` httpOnly cookie. Include `credentials:
-    ''include''` on all fetch calls. The exceptions are `/auth/*`, `/setup/*`, and
-    `/alerts/webhook`, which are unauthenticated.
+    ''include''` on all fetch calls. The exceptions are `/auth/*` and `/setup/*`,
+    which are unauthenticated.
 
 
     On first launch the setup wizard must run before login is possible. Call `GET
@@ -63,7 +63,7 @@ tags:
     binary as YAML files; users can override entries or add new ones via import. Proton
     tracks *install state*; the catalog tracks *definitions*.
 - name: Alerts
-  description: Real-time alert delivery — webhook receiver and SSE notification stream.
+  description: Real-time alert delivery — SSE notification stream.
 - name: Investigate
   description: Ad-hoc SQL query interface against Proton streams.
 - name: Proton
@@ -1835,35 +1835,6 @@ paths:
               schema:
                 type: string
                 format: binary
-  /alerts/webhook:
-    post:
-      tags:
-      - Alerts
-      summary: Receive a rule-triggered alert
-      description: 'Webhook endpoint called by the Proton `notify_agentguard_udf`
-        Python UDF. The UDF is invoked by the `agentguard_notifier` Proton alert when
-        new rows appear in `agentguard_security_events`.
-
-
-        Received alerts are fanned out to all connected SSE clients on `/notifications/stream`.
-        You can also POST to this endpoint manually for testing.'
-      operationId: alertWebhook
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Alert'
-            example:
-              rule_id: rp-001
-              rule_name: Prompt Injection Shield
-              severity: critical
-              agent_id: claude-code
-              message: Potential prompt injection in llm_input from agent claude-code
-              detected_at: '2026-04-09T10:00:00Z'
-      responses:
-        '200':
-          description: Alert accepted and forwarded to SSE clients.
   /notifications/stream:
     get:
       tags:
@@ -2182,7 +2153,6 @@ paths:
               native_port: 8463
               username: default
               password: ''
-              agentguard_url: http://localhost:8080
       responses:
         '200':
           description: SSE stream of provisioning progress events.
@@ -3236,11 +3206,6 @@ components:
           type: string
           description: Timeplus password.
           example: ''
-        agentguard_url:
-          type: string
-          description: URL where AgentGuard is reachable from Timeplus's network —
-            used for alert webhook callbacks.
-          example: http://localhost:8080
     ProvisionEvent:
       type: object
       description: A single SSE event from POST /setup/provision.

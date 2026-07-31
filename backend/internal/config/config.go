@@ -22,7 +22,8 @@ type TimeplusConfig struct {
 	NativePort int
 	// User and Password come from TIMEPLUS_USER / TIMEPLUS_PASSWORD env vars on
 	// the AgentGuard process — service credentials used for server-to-server
-	// endpoints (plugin → /api/holds, Timeplus → /api/alerts/webhook). UI-facing
+	// endpoints (plugin → /api/holds) and by the backend notify watcher
+	// (internal/notify, #258) that tails agentguard_notify_events. UI-facing
 	// handlers use credentials from the user's session cookie (auth.RequestCfg)
 	// instead.
 	User     string
@@ -131,9 +132,10 @@ type Config struct {
 //  4. CLI flags (bound by the caller via viper.BindPFlag)
 //
 // User-facing UI handlers always require an authenticated session cookie.
-// Server-to-server handlers (plugin → /api/holds, Timeplus → /api/alerts/webhook)
-// require TIMEPLUS_USER + TIMEPLUS_PASSWORD env vars; if those are unset the
-// handlers return 503 with an actionable message — there is no fallback.
+// Server-to-server handlers (plugin → /api/holds) and the backend notify
+// watcher (internal/notify, #258) require TIMEPLUS_USER + TIMEPLUS_PASSWORD
+// env vars; if those are unset the handlers return 503 with an actionable
+// message — there is no fallback.
 func Load() (*Config, error) {
 	return load(viper.GetViper(), true)
 }
