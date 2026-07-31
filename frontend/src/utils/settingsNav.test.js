@@ -4,6 +4,7 @@ import {
   dirtyCountsBySection,
   sectionIdsWithFlag,
   activeSectionFromHash,
+  groupSettingsSections,
 } from './settingsNav.js'
 
 // Shape mirrors GET /api/config: sections -> keys, with static per-key
@@ -13,6 +14,26 @@ const sections = [
   { id: 'timeplus', title: 'Timeplus Connection', keys: [{ key: 'timeplus.host' }, { key: 'timeplus.port' }] },
   { id: 'dlp', title: 'Semantic DLP', keys: [{ key: 'dlp.enabled' }, { key: 'dlp.embedding_model', reprovision: true }] },
 ]
+
+describe('groupSettingsSections', () => {
+  it('groups low-level connection sections into one nav item', () => {
+    const grouped = groupSettingsSections([
+      { id: 'server', title: 'Server', keys: [{ key: 'server.port' }] },
+      { id: 'timeplus', title: 'Timeplus Connection', keys: [{ key: 'timeplus.host' }] },
+      { id: 'agentguard', title: 'AgentGuard', keys: [{ key: 'agentguard.url' }] },
+      { id: 'catalog', title: 'Catalog', keys: [{ key: 'catalog.dir' }] },
+      { id: 'sentry', title: 'Sentry Agent', keys: [{ key: 'sentry.enabled' }] },
+    ])
+
+    expect(grouped.map((s) => s.id)).toEqual(['connection', 'sentry'])
+    expect(grouped[0].children.map((s) => s.id)).toEqual(['server', 'timeplus', 'agentguard', 'catalog'])
+    expect(grouped[0].keys.map((k) => k.key)).toEqual(['server.port', 'timeplus.host', 'agentguard.url', 'catalog.dir'])
+  })
+
+  it('does not create a connection group for a single connection section', () => {
+    expect(groupSettingsSections([{ id: 'server', title: 'Server', keys: [] }])).toEqual([{ id: 'server', title: 'Server', keys: [] }])
+  })
+})
 
 describe('keyToSectionMap', () => {
   it('maps every dotted key to its section id', () => {
@@ -70,6 +91,16 @@ describe('activeSectionFromHash', () => {
 
   it('accepts a hash without the leading #', () => {
     expect(activeSectionFromHash('timeplus', sections)).toBe('timeplus')
+  })
+
+  it('maps child section hashes to their grouped parent', () => {
+    const grouped = groupSettingsSections([
+      { id: 'server', title: 'Server', keys: [] },
+      { id: 'timeplus', title: 'Timeplus Connection', keys: [] },
+      { id: 'sentry', title: 'Sentry Agent', keys: [] },
+    ])
+
+    expect(activeSectionFromHash('#timeplus', grouped)).toBe('connection')
   })
 
   it('falls back to the first section for an unknown hash', () => {

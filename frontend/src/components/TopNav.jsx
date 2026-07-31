@@ -75,7 +75,7 @@ function NotificationsDrawer({ open, onClose, threats, loading, error }) {
   )
 }
 
-export default function TopNav({ title }) {
+export default function TopNav() {
   const { t } = useTranslation()
   const { auth, setAuth } = useAuth()
   const { theme, toggleTheme } = useTheme()
@@ -113,7 +113,7 @@ export default function TopNav({ title }) {
   const activeThreatCount = openThreats.length
 
   return (
-    <header className="top-nav h-10 bg-gray-800 border-b border-gray-700 z-[60] flex justify-between items-center pl-6 pr-4 backdrop-blur-md">
+    <header className="app-chrome top-nav h-10 bg-gray-800 border-b border-gray-700 z-[60] flex justify-between items-center pl-6 pr-4 backdrop-blur-md">
       <div className="flex items-center gap-4 flex-1">
         <div className="flex items-center gap-2">
           <img
@@ -125,9 +125,6 @@ export default function TopNav({ title }) {
             {t('topNav.byTimeplus')}
           </span>
         </div>
-        {title && (
-          <h2 className="text-lg font-semibold text-gray-100 tracking-tight">{title}</h2>
-        )}
       </div>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3 text-gray-400">

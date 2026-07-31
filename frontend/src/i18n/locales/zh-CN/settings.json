@@ -57,6 +57,13 @@
       "testing": "测试中…",
       "connectionOk": "连接正常",
       "connectionFailed": "失败：{{error}}"
+    },
+    "ui": {
+      "themeLabel": "主题",
+      "themeDescription": "此浏览器使用的主题。",
+      "themeLight": "浅色模式",
+      "themeDark": "深色模式",
+      "browserChip": "浏览器"
     }
   },
   "field": {
@@ -75,6 +82,7 @@
     "flagTitle": "由 --{{flag}} 设置 — 文件中的编辑不会生效"
   },
   "configSections": {
+    "connection": "连接",
     "server": "服务器",
     "timeplus": "Timeplus 连接",
     "agentguard": "AgentGuard",
@@ -83,7 +91,7 @@
     "dlp": "语义 DLP",
     "sentry": "Sentry 智能体",
     "rules": "规则",
-    "ui": "用户界面",
+    "ui": "语言和主题",
     "setup": "设置"
   },
   "configKeys": {

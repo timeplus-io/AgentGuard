@@ -563,7 +563,7 @@ export default function RulePacks() {
               <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('list.availableToInstall.heading')} ({uninstalledCatalog.length})</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 {pagedCatalog.map(entry => (
-                  <div key={entry.id} className="bg-surface-container-low/60 border border-dashed border-zinc-700/40 p-5 rounded-sm flex flex-col gap-4">
+                  <div key={entry.id} className="available-rule-card bg-surface-container-low/60 border border-dashed border-zinc-700/40 p-5 rounded-sm flex flex-col gap-4">
                     <div className="flex justify-between items-start">
                       <div className="w-10 h-10 bg-surface-container-lowest flex items-center justify-center rounded-sm text-gray-400">
                         <span className="material-symbols-outlined">{entry.is_custom ? 'tune' : (CATEGORY_ICONS[entry.category] || 'shield')}</span>

@@ -48,7 +48,7 @@ export default function Sidebar() {
   }, [collapsed, userCollapsed])
 
   return (
-    <aside className={`h-[calc(100vh-2.5rem)] fixed left-0 top-10 bg-gray-800 border-r border-gray-700 flex flex-col py-8 gap-2 z-40 transition-all duration-200 ${collapsed ? 'w-16 px-2' : 'w-64 px-4'}`}>
+    <aside className={`app-chrome h-[calc(100vh-2.5rem)] fixed left-0 top-10 bg-gray-800 border-r border-gray-700 flex flex-col py-8 gap-2 z-40 transition-all duration-200 ${collapsed ? 'w-16 px-2' : 'w-64 px-4'}`}>
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-1">

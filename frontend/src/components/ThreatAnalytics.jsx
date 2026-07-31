@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -649,9 +649,11 @@ function StackedChart({ rows, series, hoveredKey, onHover, xKey = 'label' }) {
 
 export default function ThreatAnalytics() {
   const { t } = useTranslation('dashboard')
+  const postureHeaderRef = useRef(null)
   const [windowKey, setWindowKey] = useState('1h')
   const [statusFilter, setStatusFilter] = useState('all')
   const [now, setNow] = useState(() => Date.now())
+  const [postureHeaderStuck, setPostureHeaderStuck] = useState(false)
   const [volumeMode, setVolumeMode] = useState('chart')
   const [agentMode, setAgentMode] = useState('chart')
   const [volumeBreakdown, setVolumeBreakdown] = useState('severity')
@@ -822,11 +824,33 @@ export default function ThreatAnalytics() {
     })
   }, [agentBreakdown, agentOptionKey])
 
+  useEffect(() => {
+    const updateStickyState = () => {
+      const el = postureHeaderRef.current
+      if (!el) return
+      const stickyTop = parseFloat(getComputedStyle(el).top) || 0
+      setPostureHeaderStuck(el.getBoundingClientRect().top <= stickyTop)
+    }
+
+    updateStickyState()
+    window.addEventListener('scroll', updateStickyState, { passive: true })
+    window.addEventListener('resize', updateStickyState)
+    return () => {
+      window.removeEventListener('scroll', updateStickyState)
+      window.removeEventListener('resize', updateStickyState)
+    }
+  }, [])
+
   return (
     <section className="space-y-6">
       <div className="border-t border-gray-700" />
 
-      <div className="sticky top-10 z-20 -mx-6 lg:-mx-10 px-6 lg:px-10 py-4 bg-gray-900/95 border-b border-gray-700 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div
+        ref={postureHeaderRef}
+        className={`sticky top-10 z-20 -mx-6 lg:-mx-10 px-6 lg:px-10 py-4 border-b border-gray-700 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between transition-colors ${
+          postureHeaderStuck ? 'bg-surface-container' : 'bg-gray-900'
+        }`}
+      >
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-semibold text-gray-100">{t('posture.title')}</h2>
           <span className="text-[10px] font-mono text-gray-400">{t('posture.refreshing')}</span>

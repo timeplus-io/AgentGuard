@@ -15,6 +15,8 @@ function localId(prefix) {
   return `${prefix}-${Date.now()}-${localSeq}`
 }
 
+const primaryButtonClass = 'bg-pink-500 text-white hover:bg-pink-400 transition-colors disabled:opacity-50 disabled:hover:bg-pink-500'
+
 // prettyJSON best-effort pretty-prints a JSON string for display; falls back
 // to the raw string when it isn't valid JSON (tool args/results are opaque
 // strings from the model/tool's point of view).
@@ -25,6 +27,24 @@ function prettyJSON(text) {
   } catch {
     return text
   }
+}
+
+function parseMessageTime(value) {
+  if (!value) return null
+  const direct = new Date(value)
+  if (!Number.isNaN(direct.getTime())) return direct
+  const normalized = new Date(String(value).replace(' ', 'T'))
+  return Number.isNaN(normalized.getTime()) ? null : normalized
+}
+
+function messageTimestamp(value) {
+  const date = parseMessageTime(value)
+  if (!date) return ''
+  const elapsed = Date.now() - date.getTime()
+  const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date)
+  if (elapsed < 24 * 60 * 60 * 1000) return time
+  const day = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)
+  return `${day}, ${time}`
 }
 
 // toolArgsFromRow unwraps a replayed role="tool" SentryMessage's tool_args
@@ -87,7 +107,7 @@ function ApprovalCard({ item, onDecide }) {
       <div className="px-4 pb-3 flex flex-col gap-2">
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{t('approval.proposedAction')}</p>
-          <code className="block bg-surface-container-high rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono">
+          <code className="block sentry-code-surface rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono">
             {prettyJSON(item.args) || t('approval.noArguments')}
           </code>
         </div>
@@ -96,7 +116,7 @@ function ApprovalCard({ item, onDecide }) {
             <button
               onClick={() => onDecide(item, true)}
               disabled={item.deciding}
-              className="px-4 py-1.5 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-[0.98] transition-transform disabled:opacity-50"
+              className={`px-4 py-1.5 text-xs font-semibold rounded-sm ${primaryButtonClass}`}
             >
               {t('approval.approve')}
             </button>
@@ -112,7 +132,7 @@ function ApprovalCard({ item, onDecide }) {
         {item.decision === 'approved' && item.result != null && (
           <div>
             <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{t('card.resultLabel')}</p>
-            <code className="block bg-surface-container-high rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono max-h-64 overflow-y-auto">
+            <code className="block sentry-code-surface rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono max-h-64 overflow-y-auto">
               {prettyJSON(item.result)}
             </code>
           </div>
@@ -141,7 +161,7 @@ function ToolCard({ item }) {
         {item.args && (
           <div>
             <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{t('card.argsLabel')}</p>
-            <code className="block bg-surface-container-high rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono">
+            <code className="block sentry-code-surface rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono">
               {prettyJSON(item.args)}
             </code>
           </div>
@@ -149,7 +169,7 @@ function ToolCard({ item }) {
         {item.result != null && (
           <div>
             <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-400 mb-1">{t('card.resultLabel')}</p>
-            <code className="block bg-surface-container-high rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono max-h-64 overflow-y-auto">
+            <code className="block sentry-code-surface rounded-sm p-2.5 text-[11px] text-gray-100 whitespace-pre-wrap break-words font-mono max-h-64 overflow-y-auto">
               {prettyJSON(item.result)}
             </code>
           </div>
@@ -175,12 +195,14 @@ function ThinkingCard({ item }) {
 }
 
 function MessageBubble({ item }) {
+  const timestamp = messageTimestamp(item.event_time)
   if (item.role === 'user') {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-2xl bg-surface-container-high rounded-sm px-4 py-2.5 text-sm text-gray-100 whitespace-pre-wrap break-words">
+      <div className="group flex flex-col items-end">
+        <div className="max-w-2xl bg-[#FFEEF6] rounded-sm px-4 py-2.5 text-sm text-gray-100 whitespace-pre-wrap break-words">
           {item.content}
         </div>
+        {timestamp && <div className="mt-1 text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">{timestamp}</div>}
       </div>
     )
   }
@@ -195,9 +217,10 @@ function MessageBubble({ item }) {
   // assistant — render Markdown (headings, GFM tables, lists, code); the
   // pending cursor follows the rendered content while streaming.
   return (
-    <div className="max-w-2xl">
+    <div className="group max-w-2xl">
       <Markdown>{item.content}</Markdown>
       {item.pending && <span className="inline-block w-1.5 h-3.5 bg-primary/70 ml-0.5 align-text-bottom animate-pulse" />}
+      {timestamp && <div className="mt-1 text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">{timestamp}</div>}
     </div>
   )
 }
@@ -284,7 +307,7 @@ export default function Sentry() {
               }]
             }
             if (m.role === 'assistant' && !m.content) return [] // tool-only turn, nothing to show as text
-            return [{ id: `s${m.seq}`, role: m.role, content: m.content }]
+            return [{ id: `s${m.seq}`, role: m.role, content: m.content, event_time: m.event_time }]
           })
         setMessages(msgs)
       })
@@ -373,7 +396,7 @@ export default function Sentry() {
     if (!text || streaming) return
     setInput('')
     setConvError(null)
-    setMessages(prev => [...prev, { id: localId('user'), role: 'user', content: text }])
+    setMessages(prev => [...prev, { id: localId('user'), role: 'user', content: text, event_time: new Date().toISOString() }])
     openAssistantIdRef.current = null
     openThinkingIdRef.current = null // clear any dangling ref from a prior aborted turn (#237)
 
@@ -409,7 +432,7 @@ export default function Sentry() {
               }
               const id = localId('assistant')
               openAssistantIdRef.current = id
-              return [...prev, { id, role: 'assistant', content: ev.text || '', pending: true }]
+              return [...prev, { id, role: 'assistant', content: ev.text || '', event_time: new Date().toISOString(), pending: true }]
             })
             break
 
@@ -554,7 +577,7 @@ export default function Sentry() {
                 <button
                   onClick={provisionNow}
                   disabled={provisioning}
-                  className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-[0.98] transition-transform disabled:opacity-50"
+                  className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-sm ${primaryButtonClass}`}
                 >
                   {provisioning ? t('provisionWarning.provisioning') : t('provisionWarning.provisionNow')}
                 </button>
@@ -567,7 +590,7 @@ export default function Sentry() {
                   <button
                     onClick={newConversation}
                     disabled={streaming}
-                    className="w-full px-4 py-2.5 text-xs font-semibold rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+                    className={`w-full px-4 py-2.5 text-xs font-semibold rounded-sm flex items-center justify-center gap-2 ${primaryButtonClass}`}
                   >
                     <span className="material-symbols-outlined text-base">add</span>
                     {t('rail.newConversation')}
@@ -582,10 +605,10 @@ export default function Sentry() {
                     <div
                       key={c.conversation_id}
                       onClick={() => openConversation(c.conversation_id)}
-                      className={`group flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded-sm text-xs transition-colors ${
+                      className={`group flex items-center gap-2 cursor-pointer px-3 py-2.5 rounded border border-gray-700 text-xs transition-colors hover:bg-gray-900 ${
                         c.conversation_id === activeId
                           ? 'bg-surface-container-high text-gray-100'
-                          : 'text-gray-400 hover:bg-surface-container-high hover:text-gray-100'
+                          : 'text-gray-400 hover:text-gray-100'
                       }`}
                     >
                       {editingId === c.conversation_id ? (
@@ -659,25 +682,25 @@ export default function Sentry() {
                 <div className="p-4 bg-surface-container shrink-0">
                   {canWrite ? (
                     <>
-                      <div className="flex items-end gap-3">
-                        <textarea
-                          value={input}
-                          onChange={e => setInput(e.target.value)}
-                          onKeyDown={handleKeyDown}
-                          disabled={streaming}
-                          rows={2}
-                          placeholder={t('chat.composerPlaceholder')}
-                          className="flex-1 bg-surface-container-high text-gray-100 text-sm rounded-sm px-4 py-2.5 placeholder-gray-500 resize-none focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-60"
-                        />
+                      <textarea
+                        value={input}
+                        onChange={e => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        disabled={streaming}
+                        rows={2}
+                        placeholder={t('chat.composerPlaceholder')}
+                        className="w-full bg-surface-container-high text-gray-100 text-sm rounded-sm px-4 py-2.5 placeholder-gray-500 resize-none border border-gray-700 focus:border-pink-500 focus:outline-none disabled:opacity-60"
+                      />
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <p className="text-[10px] text-gray-400">{t('chat.sendHint')}</p>
                         <button
                           onClick={send}
                           disabled={streaming || !input.trim()}
-                          className="px-5 py-2.5 text-xs font-semibold rounded bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] hover:scale-95 transition-transform disabled:opacity-50 whitespace-nowrap"
+                          className={`px-5 py-2.5 text-xs font-semibold rounded-sm whitespace-nowrap ${primaryButtonClass}`}
                         >
                           {streaming ? t('chat.sending') : t('chat.send')}
                         </button>
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-1.5">{t('chat.sendHint')}</p>
                     </>
                   ) : (
                     <p className="text-xs text-gray-400 text-center py-2">

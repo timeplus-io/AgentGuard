@@ -57,6 +57,13 @@
       "testing": "Testing…",
       "connectionOk": "Connection OK",
       "connectionFailed": "Failed: {{error}}"
+    },
+    "ui": {
+      "themeLabel": "Theme",
+      "themeDescription": "Theme used in this browser.",
+      "themeLight": "Light mode",
+      "themeDark": "Dark mode",
+      "browserChip": "browser"
     }
   },
   "field": {
@@ -75,6 +82,7 @@
     "flagTitle": "Set by --{{flag}} — file edits have no effect"
   },
   "configSections": {
+    "connection": "Connection",
     "server": "Server",
     "timeplus": "Timeplus Connection",
     "agentguard": "AgentGuard",
@@ -83,7 +91,7 @@
     "dlp": "Semantic DLP",
     "sentry": "Sentry Agent",
     "rules": "Rules",
-    "ui": "User Interface",
+    "ui": "Language and Theme",
     "setup": "Setup"
   },
   "configKeys": {
