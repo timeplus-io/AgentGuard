@@ -30,7 +30,7 @@ func TestSentryChat_DisabledReturns503(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/sentry/chat", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	SentryChat(cfg, nil, nil, nil, nil)(c)
+	SentryChat(cfg, nil, nil, nil, nil, nil)(c)
 
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503, body = %s", w.Code, w.Body.String())
@@ -48,7 +48,7 @@ func TestSentryChat_EmptyMessageReturns400(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/sentry/chat", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	SentryChat(cfg, nil, nil, nil, nil)(c)
+	SentryChat(cfg, nil, nil, nil, nil, nil)(c)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())
@@ -65,7 +65,7 @@ func TestSentryChat_MissingBodyReturns400(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/sentry/chat", bytes.NewReader(nil))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	SentryChat(cfg, nil, nil, nil, nil)(c)
+	SentryChat(cfg, nil, nil, nil, nil, nil)(c)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())
@@ -75,7 +75,7 @@ func TestSentryChat_MissingBodyReturns400(t *testing.T) {
 // wantSentrySkills is the full tool surface with agentguard_tools_enabled on.
 var wantSentrySkills = []string{
 	"load_skill", "load_skill_reference", "list_streams", "describe_stream",
-	"run_sql", "dlp_search", "get_threats", "get_holds", "get_rule_status",
+	"run_sql", "ask_user", "dlp_search", "get_threats", "get_holds", "get_rule_status",
 	"get_cost_summary", "get_session_timeline", "get_rule_catalog",
 	"acknowledge_threat", "clear_threat", "decide_hold",
 	"install_rule", "configure_rule", "set_rule_enabled", "set_rule_policy",
@@ -87,6 +87,7 @@ var wantSentrySkills = []string{
 // generic Timeplus SQL analyst.
 var baseSentrySkills = []string{
 	"load_skill", "load_skill_reference", "list_streams", "describe_stream", "run_sql",
+	"ask_user",
 	"get_sentry_config",
 }
 
@@ -115,7 +116,7 @@ func TestSentryRegistry_AgentGuardToolsDefaultOff(t *testing.T) {
 	t.Setenv("SENTRY_DEMO_WRITE", "")
 	reg := testRegistry(t, &config.Config{}) // zero ChatCfg => disabled
 
-	defs := reg.Defs(skills.GatedWrite)
+	defs := reg.Defs(skills.Interactive) // widest access class: every registered skill must show up
 	if len(defs) != len(baseSentrySkills) {
 		t.Fatalf("got %d skills, want %d: %+v", len(defs), len(baseSentrySkills), defs)
 	}
@@ -150,7 +151,7 @@ func TestSentryRegistry_HasAllSkills(t *testing.T) {
 	cfg := &config.Config{}
 	reg := sentryRegistryWithCC(t, cfg, sentry.ChatCfg{AgentGuardToolsEnabled: true})
 
-	defs := reg.Defs(skills.GatedWrite) // widest access class: every registered skill must show up
+	defs := reg.Defs(skills.Interactive) // widest access class: every registered skill must show up
 	if len(defs) != len(wantSentrySkills) {
 		t.Fatalf("got %d skills, want %d: %+v", len(defs), len(wantSentrySkills), defs)
 	}
@@ -239,5 +240,46 @@ func TestSentryConfigToolView(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("tool view missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func clarificationCtx(t *testing.T, id, user, body string) (*httptest.ResponseRecorder, *gin.Context) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/sentry/clarifications/"+id+"/answer", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = gin.Params{{Key: "clarification_id", Value: id}}
+	c.Set("timeplus_user", user)
+	return w, c
+}
+
+func TestAnswerSentryClarification_UnknownID404(t *testing.T) {
+	reg := sentry.NewClarificationRegistry()
+	w, c := clarificationCtx(t, "nope", "alice", `{"skipped":true}`)
+	AnswerSentryClarification(reg)(c)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404, body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAnswerSentryClarification_BadBody400(t *testing.T) {
+	reg := sentry.NewClarificationRegistry()
+	w, c := clarificationCtx(t, "x", "alice", `{`)
+	AnswerSentryClarification(reg)(c)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())
+	}
+}
+
+// Neither answers nor skipped is a client error: an accidental empty submit
+// must not consume the single-answer slot.
+func TestAnswerSentryClarification_EmptyAnswer400(t *testing.T) {
+	reg := sentry.NewClarificationRegistry()
+	w, c := clarificationCtx(t, "x", "alice", `{}`)
+	AnswerSentryClarification(reg)(c)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", w.Code, w.Body.String())
 	}
 }

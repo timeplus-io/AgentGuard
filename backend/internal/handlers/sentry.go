@@ -237,6 +237,7 @@ func sentryRegistry(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycl
 		skills.NewListStreams(),
 		skills.NewDescribeStream(),
 		skills.NewRunSQL(),
+		skills.NewAskUser(), // Interactive clarification (#264): always registered, offered only in interactive chat
 		skills.NewGetSentryConfig(sentrySelfConfigFn(cfg, cc)),
 	}
 	if cc.AgentGuardToolsEnabled {
@@ -308,7 +309,7 @@ func ownedActiveConversation(c *gin.Context, store *sentry.Store) (models.Sentry
 // plain JSON (disabled, bad input, chat-config load, conversation
 // resolution/ownership) happens BEFORE any header is written; once streaming
 // begins, only NDJSON error events can report a failure.
-func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, approvals *sentry.ApprovalRegistry, holdReg *holdregistry.Registry) gin.HandlerFunc {
+func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, approvals *sentry.ApprovalRegistry, clarifications *sentry.ClarificationRegistry, holdReg *holdregistry.Registry) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rcfg := auth.RequestCfg(c, cfg)
 		if !rcfg.Sentry.Enabled {
@@ -371,7 +372,8 @@ func SentryChat(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle, a
 			}
 		}
 
-		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc, holdReg, cc), Store: store, Cfg: rcfg, Approvals: approvals,
+		loop := &sentry.Loop{LLM: llm, Reg: sentryRegistry(rcfg, mgr, lc, holdReg, cc), Store: store, Cfg: rcfg,
+			Approvals: approvals, Clarifications: clarifications,
 			Memory: sentry.LoadMemoryCfg(&rcfg.Timeplus)}
 		if err := loop.Run(c.Request.Context(), cc, conv, message, emit); err != nil {
 			log.Printf("sentry: chat: %v", err)
@@ -506,6 +508,45 @@ func DecideSentryApproval(approvals *sentry.ApprovalRegistry) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusOK, gin.H{"status": "decided", "approved": body.Approve})
+		}
+	}
+}
+
+// AnswerSentryClarification handles POST
+// /sentry/clarifications/:clarification_id/answer: resolve one pending
+// ask_user clarification ({answers?: [...], skipped?: bool}). Owner-only —
+// the registry enforces that only the conversation's user may answer (403);
+// an unknown or already-resolved clarification is 404. skipped:true tells
+// Sentry to proceed with its own defaults; otherwise a non-empty answers
+// array is required so an accidental empty submit never consumes the
+// single-answer slot (#264).
+func AnswerSentryClarification(clarifications *sentry.ClarificationRegistry) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Answers are operator-authored free-form JSON relayed into the
+		// model's context; cap the body so the tool result stays sane.
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
+		var body struct {
+			Answers json.RawMessage `json:"answers"`
+			Skipped bool            `json:"skipped"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "body must be {answers?: [...], skipped?: bool}"})
+			return
+		}
+		if !body.Skipped && len(body.Answers) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "answers are required unless skipped is true"})
+			return
+		}
+		err := clarifications.Answer(c.Param("clarification_id"), sessionUser(c), body.Answers, body.Skipped)
+		switch {
+		case errors.Is(err, sentry.ErrClarificationNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, sentry.ErrClarificationForbidden):
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		case err != nil:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusOK, gin.H{"status": "answered", "skipped": body.Skipped})
 		}
 	}
 }
