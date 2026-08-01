@@ -53,6 +53,10 @@ func (s *TimeplusStore) Get(e Event) (*State, error) {
 		return nil, nil
 	}
 	st := &State{}
+	// Inline decode (bool or 0/1 json.Number): handlers' parseBool covers the
+	// same shapes but sits behind an import cycle (handlers → notify), and its
+	// semantics are tied to the native-driver type family. Extract a shared
+	// helper only if more Proton-row decoding accumulates here (#267).
 	switch v := rows[0]["confirmed"].(type) {
 	case bool:
 		st.Confirmed = v
