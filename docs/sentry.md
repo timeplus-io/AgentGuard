@@ -362,6 +362,38 @@ There is **no auto-approve setting, by design**. A Loop constructed without
 an approval registry (e.g. future headless runs) never offers gated tools to
 the model at all.
 
+## Clarifying questions (`ask_user`, #264)
+
+When a request is ambiguous or hinges on a deployment-specific definition
+(which tools count as unauthorized, which data is sensitive, scope, time
+window, target agents/sessions), Sentry can ask before investigating: the
+model calls the `ask_user` tool with 1–4 structured questions (each a short
+`header` chip, the question text, and 2–4 options, recommended first).
+`ask_user` is always registered — it works even with
+`agentguard_tools_enabled` off — but is only offered in interactive chat.
+
+1. The loop registers the exchange in an in-memory clarification registry
+   and emits a `clarification_request` NDJSON event carrying
+   `clarification_id`, the verbatim questions, and the timeout, then blocks.
+2. The `/sentry` page renders the questions as option chips (multi-select
+   when the model says so) plus a free-text "Other" per question. The
+   conversation owner answers via
+   `POST /api/sentry/clarifications/:clarification_id/answer`
+   (`{answers: [{selected, other}], skipped?}`) — owner-only, single-answer,
+   404 once resolved. A **Skip — let Sentry decide** button posts
+   `{skipped: true}`.
+3. The loop emits `clarification_result`
+   (`answered`/`skipped`/`timeout`/`abandoned`) and feeds the outcome back
+   to the model as the tool result. Skip and timeout (reuses
+   `approval_timeout_ms`) both resolve as "proceed with your recommended
+   defaults and state your assumptions" — an unanswered question never kills
+   the investigation. The Q&A is persisted in the tool row's meta
+   (`toolCallMeta.clarification`), so replay shows the full exchange.
+
+Unlike gated writes there is nothing to authorize here — the tool is
+read-only and interactive; the registry only guarantees the answer comes
+from the conversation's owner.
+
 ## Anthropic provider extras (#212)
 
 When the chat row's `api_type` is `anthropic`, three additional knobs apply
