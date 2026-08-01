@@ -143,8 +143,9 @@ and unknown JSON fields are ignored by older readers.
 - Body size capped (reject oversized payloads with 400); answers passed
   through as raw JSON — the model is tolerant of shape, the server validates
   only JSON well-formedness and size.
-- Documented in `handlers/docs.go` (OpenAPI) and the CLAUDE.md endpoint
-  table.
+- Documented in the CLAUDE.md endpoint table and `docs/sentry.md`
+  (`handlers/docs.go` documents no Sentry endpoints today, so none is added
+  there — matching the existing approvals endpoint's convention).
 
 ## Frontend (`/sentry` page)
 
