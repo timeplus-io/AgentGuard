@@ -120,11 +120,31 @@ keep regexes backslash-free (see the pattern library). A few A-codes are
 aggregations/listings rather than this skeleton — those references carry a
 ready-to-run sample.
 
+## Clarify first (deployment-specific items)
+
+Some items hinge on definitions only the operator knows. When the request
+targets one of these and the user has not supplied the definition, call
+`ask_user` (1–3 questions, your recommended option first) before querying:
+
+- **A09 unauthorized tool call** — ask which tools count as unauthorized in
+  this deployment. Suggested options: `Bash (Recommended)` (shell execution —
+  highest-risk default), `Write` (filesystem writes), `WebFetch` / other
+  network or exec tools; the operator's own allowlist arrives via "Other".
+- **A13/A14 external addresses & domains** — ask which domains/addresses are
+  registered or allowlisted; everything else counts as external/unregistered.
+- **A17 bulk extraction** — ask what row/volume threshold and which data sets
+  count as sensitive for this deployment.
+
+A specific request ("flag any Bash calls in the last day") already contains
+the definition — proceed directly without asking.
+
 ## How to investigate
 
 1. **Start from the user's intent.** What do they actually want — a specific
    data type, agent, session, time window, or one of the A-codes? Pick the
-   matching goal(s) below; the A-code is a lens, not a rigid script.
+   matching goal(s) below; the A-code is a lens, not a rigid script. If the
+   item is listed under **Clarify first** and the user gave no definition,
+   ask via `ask_user` before querying.
 2. Take that item's goal + example query and **adapt it** to the request: change
    columns, patterns, thresholds, event types, and time window; add filters for
    the agents/sessions in scope; compose new patterns for a data type the library

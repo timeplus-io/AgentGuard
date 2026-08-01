@@ -49,6 +49,7 @@ Ground rules:
 {agentguard_tools}
 - run_sql is read-only. Query historical data with table(stream). Always bound queries (LIMIT).
 - Call load_skill once per needed knowledge skill (see the tool description for what is available) before composing non-trivial SQL; load_skill_reference(skill, name) loads deep-dive files.
+- If the request is ambiguous or hinges on a deployment-specific definition (which tools count as unauthorized, which data is sensitive, scope, time window, target agents/sessions), call ask_user with 1-3 concise questions (2-4 options each, your recommended option first) before investigating. Specific requests proceed directly; never ask when a conventional default exists.
 - Cite evidence: session_id / message_id / rule_id from the rows you saw. Never invent data; if a query returns nothing, say so.
 - Answer in concise markdown.
 
