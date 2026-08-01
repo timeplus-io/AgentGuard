@@ -98,30 +98,40 @@ The backend uses two separate connections to Timeplus:
 | `proton-go-driver` | 8463 | Native TCP | Startup `Init()` only — stream/MV/UDF creation |
 | HTTP client | 3218 | HTTP | All runtime queries (`Query()`) and DDL (`ExecHTTP()`) |
 
-### Startup Initialization Sequence
+### Provisioning Sequence
 
-`timeplus.Init()` runs at server start (non-fatal — server starts even if Timeplus is unavailable):
+`timeplus.Init()` runs from the setup wizard (`POST /api/setup/provision`), not at
+server start — the binary starts cleanly even when Timeplus is unreachable, and
+provisioning simply fails until it isn't. The sequence (one entry per `Init()` call,
+in order):
 
-1. Wait for Timeplus native port 8463 to respond (polls every 5 s indefinitely)
-2. Create 5 OTel streams (`otel_traces`, `otel_logs`, `otel_metrics_gauge/sum/histogram`)
+1. Connect once to Timeplus with the wizard-supplied credentials (fatal on failure)
+2. Create the OTel streams (`otel_traces`, `otel_logs`, and the `otel_metrics_*` family)
 3. Create `agentguard_otel_input` (OTLP/HTTP input on port 4318)
-4. Create `agentguard_hook_events`
+4. Create the AgentGuard raw streams (`agentguard_hook_events`, …)
 5. Create `agentguard_cim_event` (CIM unified event stream)
-6. Drop and recreate `mv_cim_claudecode` and `mv_cim_openclaw` (CIM normalization MVs — always recreated so DDL fixes apply without manual drops)
-7. Create `agentguard_session_agents` (mutable, session→agent_id lookup), `agentguard_run_latency` (mutable, run→latency lookup), and `agentguard_cim_metrics` (CIM metrics sink stream)
-8. Drop and recreate 6 CIM metrics MVs in dependency order: `mv_session_agents`, `mv_run_latency`, `mv_cim_metrics_openclaw_llm`, `mv_cim_metrics_openclaw_tools`, `mv_cim_metrics_claudecode_otel`, `mv_cim_metrics_claudecode_tools`
-9. Create `agentguard_security_events`, `agentguard_notify_events`, `agentguard_rules`
+6. Create the CIM normalization MVs (`mv_cim_claudecode`, `mv_cim_openclaw`, `mv_cim_hermes`, `mv_cim_openinference`, `mv_hook_bridge_openinference`)
+7. Create `agentguard_cim_metrics` plus its lookup streams (`agentguard_session_agents`, `agentguard_run_latency`) — warning only
+8. Create the CIM metrics MVs in dependency order (lookup feeders `mv_session_agents`/`mv_run_latency` first, then the per-agent-type `mv_cim_metrics_*` views) — warning only
+9. Create `agentguard_security_events`, `agentguard_notify_events`, and the empty `agentguard_rules` snapshot stream (catalog definitions never auto-install)
 10. Create `agentguard_threats` (mutable stream) — warning only
 11. Create `mv_threats` — warning only
 12. Create `agentguard_pricing` (mutable stream) — warning only
-13. Seed 6 default pricing rows (skipped if any rows exist) — warning only
-14. Seed catalog rules as disabled (skipped if any rows exist) — warning only
-15. Drop 4 legacy named security MVs — warning only
-16. Create `agentguard_notifications` (mutable, notification seen-state) and `mv_notify_filter` — warning only
-17. Drop the legacy `agentguard_notifier` alert and `notify_agentguard_udf` UDF, best-effort (superseded by the #258 backend notify watcher) — warning only
-18. Sync per-rule MVs to match current `agentguard_rules` state — warning only
+13. Seed default pricing rows (skipped if any rows exist) — warning only
+14. Create `agentguard_cost_budgets` — warning only
+15. Create `agentguard_skills` and the skills MVs (`mv_skills_loaded_*`, `mv_skills_invoked_*`) — warning only
+16. Create `agentguard_memory_ops` and the memory MVs (`mv_memory_*`) — warning only
+17. Create `agentguard_notifications` (mutable, notification seen-state) and `mv_notify_filter` — warning only
+18. Drop the legacy `agentguard_notifier` alert and `notify_agentguard_udf` UDF, best-effort (superseded by the #258 backend notify watcher) — warning only
+19. Sync per-rule MVs to match current `agentguard_rules` state — warning only
+20. Set up holds storage (`agentguard_holds` stream + MV) — warning only (`/api/holds` returns 503 until it succeeds)
+21. Provision Semantic DLP (skipped when `dlp.enabled: false`) — non-fatal
+22. Provision the Sentry conversational core — non-fatal
 
-> Steps 10–18 are non-fatal: logged as warnings but the server starts regardless.
+> Steps 7–22 are non-fatal: failures are logged (and surfaced in the wizard's progress
+> stream) but provisioning continues. Deployments provisioned before a feature shipped
+> are migrated lazily by the `Ensure*` helpers (e.g. `EnsureCostBudgetsStream`,
+> `EnsureNotificationsSetup`) and by `POST /api/rules/sync`.
 
 ---
 
