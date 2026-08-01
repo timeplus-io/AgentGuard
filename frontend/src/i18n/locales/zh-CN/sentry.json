@@ -59,6 +59,21 @@
       "abandoned": "写入操作已放弃——未执行"
     }
   },
+  "clarification": {
+    "defaultName": "澄清问题",
+    "awaiting": "等待你的回答…",
+    "otherPlaceholder": "其他——输入你自己的回答…",
+    "submit": "提交回答",
+    "skip": "跳过——由 Sentry 决定",
+    "noAnswer": "—",
+    "status": {
+      "answeredBy": "已由 {{by}} 回答",
+      "operator": "操作员",
+      "skipped": "已跳过——Sentry 将按默认假设继续",
+      "timeout": "已超时——Sentry 将按默认假设继续",
+      "abandoned": "已放弃——未收集到回答"
+    }
+  },
   "errors": {
     "loadStatusFailed": "加载 Sentry 状态失败",
     "loadConversationsFailed": "加载对话列表失败",
@@ -68,7 +83,8 @@
     "decisionFailed": "提交决定失败",
     "chatRequestFailed": "对话请求失败",
     "provisioningFailed": "配置失败",
-    "genericChatError": "Sentry 出错"
+    "genericChatError": "Sentry 出错",
+    "clarificationFailed": "提交回答失败"
   },
   "config": {
     "intro": {

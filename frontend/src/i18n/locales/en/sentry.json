@@ -59,6 +59,21 @@
       "abandoned": "write abandoned — not executed"
     }
   },
+  "clarification": {
+    "defaultName": "clarifying questions",
+    "awaiting": "awaiting your answers…",
+    "otherPlaceholder": "Other — type your own answer…",
+    "submit": "Submit answers",
+    "skip": "Skip — let Sentry decide",
+    "noAnswer": "—",
+    "status": {
+      "answeredBy": "answered by {{by}}",
+      "operator": "operator",
+      "skipped": "skipped — Sentry proceeds with defaults",
+      "timeout": "timed out — Sentry proceeds with defaults",
+      "abandoned": "abandoned — no answer collected"
+    }
+  },
   "errors": {
     "loadStatusFailed": "Failed to load Sentry status",
     "loadConversationsFailed": "Failed to load conversations",
@@ -68,7 +83,8 @@
     "decisionFailed": "Failed to submit decision",
     "chatRequestFailed": "Chat request failed",
     "provisioningFailed": "Provisioning failed",
-    "genericChatError": "Sentry error"
+    "genericChatError": "Sentry error",
+    "clarificationFailed": "Failed to submit answers"
   },
   "config": {
     "intro": {
