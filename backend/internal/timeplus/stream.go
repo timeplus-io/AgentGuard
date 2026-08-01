@@ -29,6 +29,14 @@ func (e *StreamHTTPError) Error() string {
 // line. It deliberately uses http.DefaultClient (no timeout): streaming
 // SELECTs are open-ended by design — protonHTTPClient's 60s cap would kill
 // them. Cancellation comes from ctx.
+//
+// Half-open connections: if the peer dies without a FIN (network partition,
+// hard kill), the read blocks silently until the transport's TCP keepalive
+// probes (enabled by default on http.DefaultClient's dialer) detect the dead
+// peer and fail the read — typically within a couple of minutes. Callers that
+// need gap-free delivery should pair reconnects with a replay window (e.g.
+// the notify watcher's seek_to='-24h') rather than an application-level
+// heartbeat.
 func StreamLines(ctx context.Context, cfg *config.TimeplusConfig, sql string, onConnected func(), onLine func(line []byte) error) error {
 	url := fmt.Sprintf("http://%s:%d/?default_format=JSONEachRow", cfg.Host, cfg.Port)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(sql))

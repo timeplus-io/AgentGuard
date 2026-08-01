@@ -27,7 +27,6 @@ type Event struct {
 	AgentID      string `json:"agent_id"`
 	DeploymentID string `json:"deployment_id"`
 	SessionID    string `json:"session_id"`
-	HookName     string `json:"hook_name"`
 	Message      string `json:"message"`
 }
 
@@ -73,7 +72,7 @@ func shouldNotify(st *State, detectedAt string) bool {
 // watchSQL replays the last 24h on (re)connect so a server restart recovers
 // missed threats; shouldNotify filters out rows already notified/confirmed.
 const watchSQL = `SELECT detected_at, rule_id, rule_name, severity,
-  agent_id, deployment_id, session_id, hook_name, message
+  agent_id, deployment_id, session_id, message
 FROM agentguard_notify_events
 SETTINGS seek_to='-24h'`
 
@@ -150,6 +149,9 @@ func (w *Watcher) Run(ctx context.Context) {
 		}
 		log.Printf("notify: stream ended (%v), reconnecting in %s", err, backoff)
 		sleepCtx(ctx, backoff)
+		if ctx.Err() != nil {
+			return
+		}
 		backoff *= 2
 		if backoff > maxBackoff {
 			backoff = maxBackoff
