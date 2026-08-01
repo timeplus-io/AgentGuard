@@ -14,6 +14,7 @@ const (
 	ReadOnly    AccessClass = iota
 	MemoryWrite             // chat-only, no approval (Phase 2)
 	GatedWrite              // chat-only, approval required (Phase 4)
+	Interactive             // chat-only, blocks on a human answer mid-turn (#264)
 )
 
 type RunContext struct {
