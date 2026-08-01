@@ -149,6 +149,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// to each request's Timeplus config via lifecycle.For(cfg).
 	lifecycle := rules.NewLifecycle(mgr)
 	sentryApprovals := sentry.NewApprovalRegistry()
+	sentryClarifications := sentry.NewClarificationRegistry()
 	if os.Getenv("SENTRY_DEMO_WRITE") == "1" {
 		fmt.Println("Sentry: demo_write gated tool ENABLED (SENTRY_DEMO_WRITE=1) — approval-flow verification only")
 	}
@@ -245,8 +246,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 			protected.GET("/dlp/profiles", handlers.DLPProfilesHandler(cfg))
 			protected.GET("/dlp/config", handlers.GetDLPConfig(cfg))
 			protected.PUT("/dlp/config/:key", handlers.UpsertDLPConfig(cfg))
-			protected.POST("/sentry/chat", handlers.SentryChat(cfg, mgr, lifecycle, sentryApprovals, holdReg))
+			protected.POST("/sentry/chat", handlers.SentryChat(cfg, mgr, lifecycle, sentryApprovals, sentryClarifications, holdReg))
 			protected.POST("/sentry/approvals/:proposal_id/decide", handlers.DecideSentryApproval(sentryApprovals))
+			protected.POST("/sentry/clarifications/:clarification_id/answer", handlers.AnswerSentryClarification(sentryClarifications))
 			protected.GET("/sentry/conversations", handlers.ListSentryConversations(cfg))
 			protected.GET("/sentry/conversations/:id", handlers.GetSentryConversation(cfg))
 			protected.PATCH("/sentry/conversations/:id", handlers.RenameSentryConversation(cfg))

@@ -15,7 +15,7 @@ func TestDataAuditGuideLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"A01", "A27", "investigate"} {
+	for _, want := range []string{"A01", "A27", "investigate", "Clarify first", "ask_user"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("SKILL.md missing %q; got %.120q", want, out)
 		}

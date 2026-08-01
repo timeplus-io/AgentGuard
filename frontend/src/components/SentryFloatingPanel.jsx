@@ -114,7 +114,9 @@ function MessageBubble({ item }) {
   if (item.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] bg-[#FFEEF6] rounded-sm px-3 py-2 text-sm text-gray-100 whitespace-pre-wrap break-words">
+        {/* Fixed dark text on the fixed pink bubble — text-gray-100 flips
+            near-white in dark mode and vanishes (see Sentry.jsx MessageBubble). */}
+        <div className="max-w-[85%] bg-[#FFEEF6] rounded-sm px-3 py-2 text-sm text-[#3d0023] whitespace-pre-wrap break-words">
           {item.content}
         </div>
       </div>
@@ -397,7 +399,7 @@ export default function SentryFloatingPanel() {
                       type="button"
                       onClick={() => send(suggestion)}
                       disabled={!canWrite || streaming}
-                      className="max-w-[85%] text-left bg-[#FFEEF6] text-gray-100 rounded-sm px-3 py-2 text-sm hover:bg-pink-100 transition-colors disabled:opacity-60"
+                      className="max-w-[85%] text-left bg-[#FFEEF6] text-[#3d0023] rounded-sm px-3 py-2 text-sm hover:bg-pink-100 transition-colors disabled:opacity-60"
                     >
                       {suggestion}
                     </button>

@@ -66,6 +66,7 @@ func testChatCfg() ChatCfg {
 		MaxIterations:      5,
 		TurnTokenBudget:    32000,
 		ToolResultMaxBytes: 16384,
+		ApprovalTimeoutMs:  60000,
 		SystemPrompt:       "You are Sentry. {schema_card}",
 	}
 }

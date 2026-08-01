@@ -19,11 +19,11 @@ import (
 // approval_request → approval_result → tool_result-on-approve), ending in
 // exactly one done or error.
 type Event struct {
-	Type             string `json:"event"`                        // meta|token|thinking|tool_call|tool_result|approval_request|approval_result|done|error
+	Type             string `json:"event"`                        // meta|token|thinking|tool_call|tool_result|approval_request|approval_result|clarification_request|clarification_result|done|error
 	Text             string `json:"text,omitempty"`               // token
-	ID               string `json:"id,omitempty"`                 // tool_call/tool_result/approval_*
-	Name             string `json:"name,omitempty"`               // tool_call/tool_result/approval_*
-	Args             string `json:"args,omitempty"`               // tool_call/approval_request (verbatim)
+	ID               string `json:"id,omitempty"`                 // tool_call/tool_result/approval_*/clarification_*
+	Name             string `json:"name,omitempty"`               // tool_call/tool_result/approval_*/clarification_*
+	Args             string `json:"args,omitempty"`               // tool_call/approval_request/clarification_request (verbatim)
 	Result           string `json:"result,omitempty"`             // tool_result
 	Truncated        bool   `json:"truncated,omitempty"`          // tool_result
 	ConvID           string `json:"conversation_id,omitempty"`    // meta
@@ -34,24 +34,30 @@ type Event struct {
 	CacheWriteTokens int    `json:"cache_write_tokens,omitempty"` // done (anthropic prompt caching)
 	Message          string `json:"message,omitempty"`            // error / approval_result reason
 	ProposalID       string `json:"proposal_id,omitempty"`        // approval_request/approval_result
-	TimeoutMs        int    `json:"timeout_ms,omitempty"`         // approval_request
+	TimeoutMs        int    `json:"timeout_ms,omitempty"`         // approval_request/clarification_request
 	Decision         string `json:"decision,omitempty"`           // approval_result: approved|denied|timeout|abandoned
 	DecidedBy        string `json:"decided_by,omitempty"`         // approval_result
+	ClarificationID  string `json:"clarification_id,omitempty"`   // clarification_request/clarification_result
+	Outcome          string `json:"outcome,omitempty"`            // clarification_result: answered|skipped|timeout|abandoned
+	Answers          string `json:"answers,omitempty"`            // clarification_result (raw answers JSON)
+	AnsweredBy       string `json:"answered_by,omitempty"`        // clarification_result
 }
 
 // Loop is AgentGuard Sentry's ReAct agent harness: it wires an LLM to a
 // skills.Registry and a Store, running model -> tools -> model until the
 // model stops requesting tools or cc.MaxIterations is hit. ReadOnly skills
 // execute directly; GatedWrite skills go through the in-chat approval flow
-// (#221) and require Approvals to be set — a nil Approvals registry keeps
-// the surface read-only (gated defs are not offered to the model).
+// (#221) and require Approvals to be set; the Interactive ask_user skill
+// blocks on a human answer via Clarifications (#264). Nil registries keep
+// the corresponding surface un-offered to the model.
 type Loop struct {
-	LLM       LLM
-	Reg       *skills.Registry
-	Store     *Store
-	Cfg       *config.Config // request-scoped (user creds)
-	Approvals *ApprovalRegistry
-	Memory    MemoryCfg // summary of the memory config row, for {self_context}
+	LLM            LLM
+	Reg            *skills.Registry
+	Store          *Store
+	Cfg            *config.Config // request-scoped (user creds)
+	Approvals      *ApprovalRegistry
+	Clarifications *ClarificationRegistry // ask_user answers (#264); nil keeps ask_user un-offered
+	Memory         MemoryCfg              // summary of the memory config row, for {self_context}
 }
 
 // toolCallMeta is the JSON shape persisted in a role="tool" SentryMessage's
@@ -66,10 +72,11 @@ type Loop struct {
 // decision, who made it, and their stated reason. Unknown JSON fields are
 // ignored by older readers, so history replay is unaffected.
 type toolCallMeta struct {
-	ID       string        `json:"id"`
-	Name     string        `json:"name"`
-	Args     string        `json:"args"`
-	Approval *approvalMeta `json:"approval,omitempty"`
+	ID            string             `json:"id"`
+	Name          string             `json:"name"`
+	Args          string             `json:"args"`
+	Approval      *approvalMeta      `json:"approval,omitempty"`
+	Clarification *clarificationMeta `json:"clarification,omitempty"`
 }
 
 // approvalMeta is the persisted audit trail of one GatedWrite proposal.
@@ -78,6 +85,14 @@ type approvalMeta struct {
 	Decision   string `json:"decision"` // approved|denied|timeout|abandoned
 	DecidedBy  string `json:"decided_by,omitempty"`
 	Reason     string `json:"reason,omitempty"`
+}
+
+// clarificationMeta is the persisted audit record of one ask_user exchange.
+type clarificationMeta struct {
+	ClarificationID string          `json:"clarification_id"`
+	Outcome         string          `json:"outcome"` // answered|skipped|timeout|abandoned
+	Answers         json.RawMessage `json:"answers,omitempty"`
+	AnsweredBy      string          `json:"answered_by,omitempty"`
 }
 
 // Run executes one user turn: persists the user message, iterates
@@ -123,11 +138,15 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 	seq++
 
 	// Interactive chat with an approval registry offers the gated write
-	// surface too; without one (and in future headless runs) the model only
-	// ever sees read-only tools.
+	// surface too; adding a clarification registry offers ask_user on top.
+	// Without registries (future headless runs) the model only ever sees
+	// read-only tools.
 	maxAccess := skills.ReadOnly
 	if l.Approvals != nil {
 		maxAccess = skills.GatedWrite
+	}
+	if l.Approvals != nil && l.Clarifications != nil {
+		maxAccess = skills.Interactive
 	}
 	tools := defsToTools(l.Reg.Defs(maxAccess))
 	totalIn, totalOut := 0, 0
@@ -173,16 +192,21 @@ func (l *Loop) Run(ctx context.Context, cc ChatCfg, conv models.SentryConversati
 		for _, tc := range res.ToolCalls {
 			var out string
 			var appr *approvalMeta
-			if sk, ok := l.Reg.Get(tc.Name); ok && sk.Access() == skills.GatedWrite && l.Approvals != nil {
+			var clar *clarificationMeta
+			sk, known := l.Reg.Get(tc.Name)
+			switch {
+			case known && sk.Access() == skills.Interactive && l.Clarifications != nil:
+				out, clar = l.runClarification(ctx, cc, conv, tc, emit)
+			case known && sk.Access() == skills.GatedWrite && l.Approvals != nil:
 				out, appr = l.runGated(ctx, cc, conv, rc, tc, emit)
-			} else {
+			default:
 				emit(Event{Type: "tool_call", ID: tc.ID, Name: tc.Name, Args: tc.Args})
 				out = runTool(ctx, l.Reg, rc, tc)
 			}
 			outStr, cut := skills.Truncate(out, cc.ToolResultMaxBytes)
 			emit(Event{Type: "tool_result", ID: tc.ID, Name: tc.Name, Result: outStr, Truncated: cut})
 
-			metaJSON, err := json.Marshal(toolCallMeta{ID: tc.ID, Name: tc.Name, Args: tc.Args, Approval: appr})
+			metaJSON, err := json.Marshal(toolCallMeta{ID: tc.ID, Name: tc.Name, Args: tc.Args, Approval: appr, Clarification: clar})
 			if err != nil {
 				log.Printf("sentry: marshal tool_call metadata for %s failed: %v", tc.ID, err)
 				metaJSON = nil
@@ -266,6 +290,110 @@ func (l *Loop) runGated(ctx context.Context, cc ChatCfg, conv models.SentryConve
 	default: // abandoned — client disconnected while waiting
 		return "error: approval abandoned (connection closed) — not executed", meta
 	}
+}
+
+// runClarification runs one ask_user call through the in-chat clarification
+// flow (#264, mirroring runGated/#221): validate the questions, register
+// the clarification (BEFORE emitting, so an answer can never race
+// registration), emit clarification_request with the verbatim args, block
+// until a human answer / skip / timeout / client disconnect, emit
+// clarification_result, and feed the outcome back to the model as the tool
+// result. Unanswered (skip/timeout) resolves as "proceed with your
+// recommended defaults" — the turn always continues; there is no
+// auto-answer path.
+func (l *Loop) runClarification(ctx context.Context, cc ChatCfg, conv models.SentryConversation, tc ToolCall, emit func(Event)) (string, *clarificationMeta) {
+	questions, err := skills.ParseAskUserQuestions(json.RawMessage(tc.Args))
+	if err != nil {
+		// Malformed call: correct the model without involving the UI.
+		return "error: " + err.Error(), nil
+	}
+	cid, err := newConversationID() // same 32-hex crypto/rand generator
+	if err != nil {
+		return "error: could not create clarification: " + err.Error(), nil
+	}
+	ch := l.Clarifications.register(cid, conv.User)
+	defer l.Clarifications.remove(cid)
+
+	emit(Event{Type: "clarification_request", ClarificationID: cid, ID: tc.ID, Name: tc.Name,
+		Args: tc.Args, TimeoutMs: cc.ApprovalTimeoutMs})
+
+	timer := time.NewTimer(time.Duration(cc.ApprovalTimeoutMs) * time.Millisecond)
+	defer timer.Stop()
+
+	outcomeOf := func(a ClarificationAnswer) string {
+		if a.Skipped {
+			return "skipped"
+		}
+		return "answered"
+	}
+	var a ClarificationAnswer
+	var outcome string
+	select {
+	case a = <-ch:
+		outcome = outcomeOf(a)
+	case <-timer.C:
+		// An answer can win the registry race in the same instant the timer
+		// fires. Drain once so it is honored rather than dropped.
+		select {
+		case a = <-ch:
+			outcome = outcomeOf(a)
+		default:
+			outcome = "timeout"
+		}
+	case <-ctx.Done():
+		outcome = "abandoned"
+	}
+
+	meta := &clarificationMeta{ClarificationID: cid, Outcome: outcome, Answers: a.Answers, AnsweredBy: a.AnsweredBy}
+	emit(Event{Type: "clarification_result", ClarificationID: cid, ID: tc.ID, Name: tc.Name,
+		Outcome: outcome, Answers: string(a.Answers), AnsweredBy: a.AnsweredBy})
+
+	switch outcome {
+	case "answered":
+		return formatClarificationResult(questions, a.Answers), meta
+	case "skipped":
+		return clarificationNoAnswer("the user skipped the questions"), meta
+	case "timeout":
+		return clarificationNoAnswer(fmt.Sprintf("no answer after %ds", cc.ApprovalTimeoutMs/1000)), meta
+	default: // abandoned — client disconnected while waiting
+		return "error: clarification abandoned (connection closed) — no answer collected", meta
+	}
+}
+
+// formatClarificationResult pairs each question with the UI's index-aligned
+// answers ({selected, other}) into the tool result the model reads. The
+// answers payload is operator-controlled; unparseable answers degrade to
+// question-only entries rather than failing the turn.
+func formatClarificationResult(questions []skills.AskUserQuestion, answers json.RawMessage) string {
+	var parsed []struct {
+		Selected []string `json:"selected"`
+		Other    string   `json:"other"`
+	}
+	_ = json.Unmarshal(answers, &parsed)
+	type qa struct {
+		Question string   `json:"question"`
+		Selected []string `json:"selected,omitempty"`
+		Other    string   `json:"other,omitempty"`
+	}
+	out := make([]qa, len(questions))
+	for i, q := range questions {
+		out[i] = qa{Question: q.Question}
+		if i < len(parsed) {
+			out[i].Selected = parsed[i].Selected
+			out[i].Other = parsed[i].Other
+		}
+	}
+	b, err := json.Marshal(map[string]any{"answers": out})
+	if err != nil {
+		return "error: could not format answers: " + err.Error()
+	}
+	return "The user answered your questions:\n" + string(b)
+}
+
+// clarificationNoAnswer is the skip/timeout tool result: the turn continues
+// on the model's own judgment, with the assumptions made explicit.
+func clarificationNoAnswer(why string) string {
+	return "No answer received (" + why + "). Proceed with your recommended defaults and clearly state the assumptions you made in your final answer."
 }
 
 // persist appends m to the Store, logging (never failing the turn) if the

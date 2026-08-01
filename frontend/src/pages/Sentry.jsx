@@ -72,6 +72,56 @@ function approvalFromRow(raw) {
   return null
 }
 
+// clarificationFromRow pulls the persisted ask_user audit record
+// ({clarification_id, outcome, answers, answered_by}) out of a replayed
+// tool row's meta, if any.
+function clarificationFromRow(raw) {
+  if (!raw) return null
+  try {
+    const meta = JSON.parse(raw)
+    if (meta && typeof meta === 'object' && meta.clarification) return meta.clarification
+  } catch { /* not toolCallMeta JSON */ }
+  return null
+}
+
+// questionsFromArgs parses an ask_user call's verbatim args into its
+// questions array ([] on any malformed input — render nothing, never throw).
+function questionsFromArgs(args) {
+  try {
+    const q = JSON.parse(args)?.questions
+    return Array.isArray(q) ? q : []
+  } catch {
+    return []
+  }
+}
+
+// parseAnswers normalizes the answers payload — a raw JSON string on the
+// live clarification_result event, an already-parsed array in replayed meta.
+function parseAnswers(raw) {
+  if (!raw) return null
+  if (Array.isArray(raw)) return raw
+  try {
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v : null
+  } catch {
+    return null
+  }
+}
+
+// clarificationStatusLine renders one compact line describing a resolved
+// ask_user exchange (live card and replayed rows).
+function clarificationStatusLine(item, t) {
+  if (!item.outcome) return null
+  const label = {
+    answered: t('clarification.status.answeredBy', { by: item.answeredBy || item.answered_by || t('clarification.status.operator') }),
+    skipped: t('clarification.status.skipped'),
+    timeout: t('clarification.status.timeout'),
+    abandoned: t('clarification.status.abandoned'),
+  }[item.outcome] || item.outcome
+  const cls = item.outcome === 'answered' ? 'text-primary' : 'text-gray-400'
+  return <span className={`text-[10px] ${cls}`}>{label}</span>
+}
+
 // approvalStatusLine renders one compact line describing a resolved
 // GatedWrite decision (used in both the live card and replayed tool rows).
 // t is passed in (not a component) — the em-dash-prefixed reason is
@@ -142,6 +192,111 @@ function ApprovalCard({ item, onDecide }) {
   )
 }
 
+// ClarificationCard renders an ask_user exchange: the model's structured
+// questions as selectable chips (radio for single-select, toggle for
+// multiSelect) plus a free-text "Other" per question, with Submit / Skip
+// while pending, then a compact Q&A summary. Question and option text is
+// LLM-generated and rendered verbatim (it follows the conversation
+// language); only the chrome strings are translated.
+function ClarificationCard({ item, onAnswer }) {
+  const { t } = useTranslation('sentry')
+  const pending = !item.outcome
+  const [selections, setSelections] = useState(() => (item.questions || []).map(() => ({ selected: [], other: '' })))
+
+  function toggleOption(qi, label, multi) {
+    setSelections(prev => prev.map((s, i) => {
+      if (i !== qi) return s
+      if (multi) {
+        const selected = s.selected.includes(label) ? s.selected.filter(l => l !== label) : [...s.selected, label]
+        return { ...s, selected }
+      }
+      return { ...s, selected: s.selected.includes(label) ? [] : [label] }
+    }))
+  }
+
+  function setOther(qi, text) {
+    setSelections(prev => prev.map((s, i) => (i === qi ? { ...s, other: text } : s)))
+  }
+
+  const canSubmit = selections.some(s => s.selected.length > 0 || s.other.trim())
+  const answers = item.answers || []
+
+  return (
+    <div className="bg-surface-container rounded-sm text-xs max-w-2xl">
+      <div className="px-4 py-2.5 flex items-center gap-2 text-gray-100">
+        <span className="material-symbols-outlined text-sm shrink-0 text-primary">help</span>
+        <span className="font-mono text-[11px]">{item.name || t('clarification.defaultName')}</span>
+        {pending
+          ? <span className="text-[10px] text-primary animate-pulse ml-1">{t('clarification.awaiting')}</span>
+          : <span className="ml-1">{clarificationStatusLine(item, t)}</span>}
+      </div>
+      <div className="px-4 pb-3 flex flex-col gap-3">
+        {(item.questions || []).map((q, qi) => (
+          <div key={qi}>
+            <div className="flex items-center gap-2 mb-1.5">
+              {q.header && (
+                <span className="text-[9px] font-semibold uppercase tracking-widest rounded-full px-2 py-0.5 bg-surface-container-high text-gray-400 whitespace-nowrap">{q.header}</span>
+              )}
+              <p className="text-[11px] text-gray-100">{q.question}</p>
+            </div>
+            {pending ? (
+              <>
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  {(q.options || []).map(o => {
+                    const on = selections[qi]?.selected.includes(o.label)
+                    return (
+                      <button
+                        key={o.label}
+                        type="button"
+                        onClick={() => toggleOption(qi, o.label, !!q.multiSelect)}
+                        title={o.description || ''}
+                        className={`px-2.5 py-1 rounded-full text-[11px] ${on
+                          ? 'bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] font-semibold'
+                          : 'bg-surface-container-high text-gray-100 hover:text-primary'}`}
+                      >
+                        {o.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <input
+                  type="text"
+                  value={selections[qi]?.other || ''}
+                  onChange={e => setOther(qi, e.target.value)}
+                  placeholder={t('clarification.otherPlaceholder')}
+                  className="w-full bg-surface-container-high text-gray-100 text-[11px] rounded-sm px-2.5 py-1.5 placeholder-gray-500 focus:outline-none"
+                />
+              </>
+            ) : (
+              <p className="text-[11px] text-gray-400">
+                {[...(answers[qi]?.selected || []), ...(answers[qi]?.other ? [answers[qi].other] : [])].join(', ') || t('clarification.noAnswer')}
+              </p>
+            )}
+          </div>
+        ))}
+        {pending && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onAnswer(item, selections, false)}
+              disabled={item.submitting || !canSubmit}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-sm ${primaryButtonClass}`}
+            >
+              {t('clarification.submit')}
+            </button>
+            <button
+              onClick={() => onAnswer(item, null, true)}
+              disabled={item.submitting}
+              className="px-4 py-1.5 text-xs font-semibold rounded-sm bg-surface-container-high text-gray-100 hover:text-primary disabled:opacity-50"
+            >
+              {t('clarification.skip')}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ToolCard({ item }) {
   const { t } = useTranslation('sentry')
   return (
@@ -199,7 +354,10 @@ function MessageBubble({ item }) {
   if (item.role === 'user') {
     return (
       <div className="group flex flex-col items-end">
-        <div className="max-w-2xl bg-[#FFEEF6] rounded-sm px-4 py-2.5 text-sm text-gray-100 whitespace-pre-wrap break-words">
+        {/* Fixed light-pink bubble needs a FIXED dark text color: the gray ramp
+            is theme-inverted, so text-gray-100 goes near-white in dark mode and
+            vanishes on this background. #3d0023 is the design system's on-pink. */}
+        <div className="max-w-2xl bg-[#FFEEF6] rounded-sm px-4 py-2.5 text-sm text-[#3d0023] whitespace-pre-wrap break-words">
           {item.content}
         </div>
         {timestamp && <div className="mt-1 text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">{timestamp}</div>}
@@ -299,6 +457,15 @@ export default function Sentry() {
           .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
           .flatMap(m => {
             if (m.role === 'tool') {
+              const clar = clarificationFromRow(m.tool_args)
+              if (clar) {
+                return [{
+                  id: `s${m.seq}`, role: 'clarification', clarificationId: clar.clarification_id,
+                  name: m.tool_name, questions: questionsFromArgs(toolArgsFromRow(m.tool_args)),
+                  outcome: clar.outcome, answers: parseAnswers(clar.answers),
+                  answeredBy: clar.answered_by, submitting: false,
+                }]
+              }
               return [{
                 id: `s${m.seq}`, role: 'tool', name: m.tool_name,
                 args: toolArgsFromRow(m.tool_args), result: m.tool_result,
@@ -370,6 +537,20 @@ export default function Sentry() {
     } catch (err) {
       setMessages(prev => prev.map(m => m.id === item.id ? { ...m, deciding: false } : m))
       setConvError(err?.message || t('errors.decisionFailed'))
+    }
+  }
+
+  // answerClarification resolves one pending ask_user exchange. The card's
+  // state flips when the loop's clarification_result event echoes back —
+  // the local `submitting` flag only debounces the buttons.
+  async function answerClarification(item, selections, skipped) {
+    setMessages(prev => prev.map(m => m.id === item.id ? { ...m, submitting: true } : m))
+    try {
+      await api.answerSentryClarification(item.clarificationId,
+        skipped ? { skipped: true } : { answers: selections })
+    } catch (err) {
+      setMessages(prev => prev.map(m => m.id === item.id ? { ...m, submitting: false } : m))
+      setConvError(err?.message || t('errors.clarificationFailed'))
     }
   }
 
@@ -459,6 +640,24 @@ export default function Sentry() {
           case 'approval_result':
             setMessages(prev => prev.map(m => m.id === ev.id
               ? { ...m, decision: ev.decision, decidedBy: ev.decided_by, reason: ev.message, deciding: false }
+              : m))
+            break
+
+          case 'clarification_request':
+            finalizeOpenBubble()
+            finalizeOpenThinking() // stop the reasoning ellipsis during the (possibly long) wait
+            setMessages(prev => prev.some(m => m.id === ev.id)
+              ? prev
+              : [...prev, {
+                  id: ev.id, role: 'clarification', clarificationId: ev.clarification_id,
+                  name: ev.name, questions: questionsFromArgs(ev.args),
+                  outcome: null, answers: null, submitting: false,
+                }])
+            break
+
+          case 'clarification_result':
+            setMessages(prev => prev.map(m => m.id === ev.id
+              ? { ...m, outcome: ev.outcome, answers: parseAnswers(ev.answers), answeredBy: ev.answered_by, submitting: false }
               : m))
             break
 
@@ -672,9 +871,11 @@ export default function Sentry() {
                       ? <ToolCard key={item.id} item={item} />
                       : item.role === 'approval'
                         ? <ApprovalCard key={item.id} item={item} onDecide={decideApproval} />
-                        : item.role === 'thinking'
-                          ? <ThinkingCard key={item.id} item={item} />
-                          : <MessageBubble key={item.id} item={item} />
+                        : item.role === 'clarification'
+                          ? <ClarificationCard key={item.id} item={item} onAnswer={answerClarification} />
+                          : item.role === 'thinking'
+                            ? <ThinkingCard key={item.id} item={item} />
+                            : <MessageBubble key={item.id} item={item} />
                     )
                   )}
                 </div>

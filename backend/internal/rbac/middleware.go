@@ -88,16 +88,17 @@ var routePermissions = map[string]string{
 	"PUT /api/dlp/config/:key":  WriteKey("dlp"),
 
 	// sentry
-	"POST /api/sentry/chat":                          WriteKey("sentry"),
-	"POST /api/sentry/approvals/:proposal_id/decide": WriteKey("sentry"),
-	"GET /api/sentry/conversations":                  ReadKey("sentry"),
-	"GET /api/sentry/conversations/:id":              ReadKey("sentry"),
-	"PATCH /api/sentry/conversations/:id":            WriteKey("sentry"),
-	"DELETE /api/sentry/conversations/:id":           WriteKey("sentry"),
-	"GET /api/sentry/status":                         ReadKey("sentry"),
-	"GET /api/sentry/config":                         ReadKey("sentry"),
-	"PUT /api/sentry/config/:key":                    WriteKey("sentry"),
-	"POST /api/sentry/config/test":                   ReadKey("sentry"), // test-only
+	"POST /api/sentry/chat":                                    WriteKey("sentry"),
+	"POST /api/sentry/approvals/:proposal_id/decide":           WriteKey("sentry"),
+	"POST /api/sentry/clarifications/:clarification_id/answer": WriteKey("sentry"),
+	"GET /api/sentry/conversations":                            ReadKey("sentry"),
+	"GET /api/sentry/conversations/:id":                        ReadKey("sentry"),
+	"PATCH /api/sentry/conversations/:id":                      WriteKey("sentry"),
+	"DELETE /api/sentry/conversations/:id":                     WriteKey("sentry"),
+	"GET /api/sentry/status":                                   ReadKey("sentry"),
+	"GET /api/sentry/config":                                   ReadKey("sentry"),
+	"PUT /api/sentry/config/:key":                              WriteKey("sentry"),
+	"POST /api/sentry/config/test":                             ReadKey("sentry"), // test-only
 
 	// settings (config + onboarding)
 	"GET /api/config":                    ReadKey("settings"),

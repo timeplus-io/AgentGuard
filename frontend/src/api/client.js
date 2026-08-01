@@ -281,6 +281,8 @@ export const api = {
   sentryDelete: (id) => del(`/sentry/conversations/${encodeURIComponent(id)}`),
   sentryDecideApproval: (proposalId, approve, reason = '') =>
     post(`/sentry/approvals/${encodeURIComponent(proposalId)}/decide`, { approve, reason }),
+  answerSentryClarification: (clarificationId, payload) =>
+    post(`/sentry/clarifications/${encodeURIComponent(clarificationId)}/answer`, payload),
 
   // Runtime Sentry config stream (agentguard_sentry_config): chat/memory rows.
   getSentryConfig: () => get('/sentry/config'),
