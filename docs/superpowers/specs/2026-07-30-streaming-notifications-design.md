@@ -137,7 +137,8 @@ notifying, matching current behavior) and logs the error.
 Both in the `protected` route group:
 
 - `GET /api/notifications/unconfirmed` — newest-first unconfirmed notifications,
-  `limit` capped at 20. Backs browser backfill.
+  fixed at the 20 most recent (no `limit` query parameter — no consumer needs a
+  tunable size; the browser's visible toast cap is 5). Backs browser backfill.
 - `POST /api/notifications/confirm` — body `{agent_id, deployment_id, session_id,
   rule_id}` → upsert `confirmed = true, confirmed_at = now()`. Idempotent.
 
@@ -191,7 +192,7 @@ Both in the `protected` route group:
 - **Watcher decision logic**: table-driven unit tests against a fake store — new
   threat / pending unconfirmed / confirmed-then-reoccurred / replayed-old-event.
 - **Handlers**: `unconfirmed` + `confirm` with a stubbed Timeplus client; input
-  validation and limit capping.
+  validation and the fixed LIMIT 20 query shape.
 - **Provisioning**: assert teardown DDL is emitted and notify UDF/ALERT DDL is gone;
   `agentguard_notifications` DDL created idempotently.
 - **End-to-end (manual, docker-compose)**: threat fires → exactly one toast; dismiss →
