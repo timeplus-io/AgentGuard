@@ -266,33 +266,3 @@ func TestOrphanedInstalledRuleIDs(t *testing.T) {
 		}
 	})
 }
-
-// The alert webhook is unauthenticated, so the dedup query's identifiers are
-// attacker-controllable. Proton interprets \' as an escaped quote inside a
-// string literal, so quote-only doubling ('' escaping) is bypassable with a
-// preceding backslash; the query must use the backslash-aware escaper.
-func TestThreatOpenCheckSQL_EscapesBackslashQuoteBypass(t *testing.T) {
-	payload := `\' OR 1=1 --`
-
-	sql := threatOpenCheckSQL(payload, payload, payload)
-	// escapeSQLStr doubles backslashes first, then quotes: \' → \\''.
-	if !strings.Contains(sql, `\\''`) {
-		t.Fatalf("payload not backslash-escaped: %s", sql)
-	}
-	// The raw breakout sequence must not survive into the SQL.
-	if strings.Contains(sql, `\' OR`) {
-		t.Fatalf("raw \\' escape sequence survived into SQL: %s", sql)
-	}
-
-	// The no-deployment query shape must escape identically.
-	sql2 := threatOpenCheckSQL(payload, "", payload)
-	if strings.Contains(sql2, `\' OR`) {
-		t.Fatalf("raw \\' survived in no-deployment shape: %s", sql2)
-	}
-	if !strings.Contains(sql2, `\\''`) {
-		t.Fatalf("no-deployment shape not backslash-escaped: %s", sql2)
-	}
-	if strings.Contains(sql2, "deployment_id") {
-		t.Errorf("empty deployment must not add a deployment_id predicate: %s", sql2)
-	}
-}

@@ -22,7 +22,8 @@ type TimeplusConfig struct {
 	NativePort int
 	// User and Password come from TIMEPLUS_USER / TIMEPLUS_PASSWORD env vars on
 	// the AgentGuard process — service credentials used for server-to-server
-	// endpoints (plugin → /api/holds, Timeplus → /api/alerts/webhook). UI-facing
+	// endpoints (plugin → /api/holds) and by the backend notify watcher
+	// (internal/notify, #258) that tails agentguard_notify_events. UI-facing
 	// handlers use credentials from the user's session cookie (auth.RequestCfg)
 	// instead.
 	User     string
@@ -112,7 +113,6 @@ type Config struct {
 	Server         ServerConfig
 	Timeplus       TimeplusConfig
 	CatalogDir     string
-	AgentGuardURL  string
 	SetupComplete  bool
 	Holds          HoldsConfig    `mapstructure:"holds"`
 	UI             UIConfig       `mapstructure:"ui"`
@@ -132,9 +132,10 @@ type Config struct {
 //  4. CLI flags (bound by the caller via viper.BindPFlag)
 //
 // User-facing UI handlers always require an authenticated session cookie.
-// Server-to-server handlers (plugin → /api/holds, Timeplus → /api/alerts/webhook)
-// require TIMEPLUS_USER + TIMEPLUS_PASSWORD env vars; if those are unset the
-// handlers return 503 with an actionable message — there is no fallback.
+// Server-to-server handlers (plugin → /api/holds) and the backend notify
+// watcher (internal/notify, #258) require TIMEPLUS_USER + TIMEPLUS_PASSWORD
+// env vars; if those are unset the handlers return 503 with an actionable
+// message — there is no fallback.
 func Load() (*Config, error) {
 	return load(viper.GetViper(), true)
 }
@@ -157,7 +158,6 @@ func LoadFrom(path string) (*Config, error) {
 func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("catalog.dir", "./catalog")
-	v.SetDefault("agentguard.url", "http://localhost:8080")
 	v.SetDefault("ui.default_language", "en")
 	v.SetDefault("rules.visible_packages", []string{"core", "data-security-audit"})
 	v.SetDefault("timeplus.host", "localhost")
@@ -237,7 +237,6 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg := &Config{}
 	cfg.Server.Port = v.GetInt("server.port")
 	cfg.CatalogDir = v.GetString("catalog.dir")
-	cfg.AgentGuardURL = v.GetString("agentguard.url")
 	cfg.Timeplus.Host = v.GetString("timeplus.host")
 	cfg.Timeplus.Port = v.GetInt("timeplus.port")
 	cfg.Timeplus.NativePort = v.GetInt("timeplus.native-port")
@@ -306,7 +305,6 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("server.port", "SERVER_PORT")
 	_ = v.BindEnv("catalog.dir", "CATALOG_DIR")
-	_ = v.BindEnv("agentguard.url", "AGENTGUARD_URL")
 	_ = v.BindEnv("setup.complete", "SETUP_COMPLETE")
 	_ = v.BindEnv("timeplus.host", "TIMEPLUS_HOST")
 	_ = v.BindEnv("timeplus.port", "TIMEPLUS_PORT")
@@ -349,7 +347,6 @@ func Save(cfg *Config, path string) error {
 	v.SetConfigType("yaml")
 	v.Set("server.port", cfg.Server.Port)
 	v.Set("catalog.dir", cfg.CatalogDir)
-	v.Set("agentguard.url", cfg.AgentGuardURL)
 	v.Set("timeplus.host", cfg.Timeplus.Host)
 	v.Set("timeplus.port", cfg.Timeplus.Port)
 	v.Set("timeplus.native-port", cfg.Timeplus.NativePort)

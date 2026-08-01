@@ -41,7 +41,6 @@ func Sections() []SectionMeta {
 	return []SectionMeta{
 		{"server", "Server"},
 		{"timeplus", "Timeplus Connection"},
-		{"agentguard", "AgentGuard"},
 		{"catalog", "Catalog"},
 		{"holds", "Approval Holds"},
 		{"dlp", "Semantic DLP"},
@@ -76,11 +75,6 @@ func Registry() []KeyMeta {
 		{Key: "timeplus.password", Section: "timeplus", Label: "Service password",
 			Description: "Service account password. Set via the TIMEPLUS_PASSWORD environment variable only.",
 			Type:        TypeSecret, EnvVar: "TIMEPLUS_PASSWORD", ReadOnly: true},
-
-		// ── agentguard ──
-		{Key: "agentguard.url", Section: "agentguard", Label: "Webhook base URL",
-			Description: "URL Timeplus uses to call back into AgentGuard (alerts, holds).",
-			Type:        TypeString, EnvVar: "AGENTGUARD_URL", FlagName: "agentguard-url"},
 
 		// ── ui ──
 		{Key: "ui.default_language", Section: "ui", Label: "Default UI language",

@@ -738,6 +738,13 @@ func SyncMVs(cfg *config.Config, mgr *catalog.Manager, lc *rules.Lifecycle) gin.
 				log.Printf("rules: SyncMVs Sentry sync: %v", err)
 			}
 		}
+		// Migration path for deployments that finished setup before #258
+		// shipped: ensure the notifications seen-state stream exists and the
+		// legacy notifier callback objects are dropped. Best-effort, same
+		// rationale as DLP/Sentry above.
+		if err := tp.EnsureNotificationsSetup(&reqCfg.Timeplus); err != nil {
+			log.Printf("rules: SyncMVs notifications ensure: %v", err)
+		}
 
 		c.JSON(http.StatusOK, gin.H{"results": results, "orphaned": orphaned})
 	}
@@ -756,72 +763,6 @@ func orphanedInstalledRuleIDs(results []rules.SyncResult, mgr *catalog.Manager) 
 		}
 	}
 	return orphaned
-}
-
-// threatOpenCheckSQL builds the open-threat dedup query for the alert webhook.
-// The three identifiers arrive on the UNAUTHENTICATED /api/alerts/webhook
-// endpoint, so they must go through escapeSQLStr (backslash-aware): with the
-// quote-only escapeSQL, a value like `\' OR (...) --` terminates the literal,
-// because Proton reads \' as an escaped single quote. Extracted from
-// isThreatAlreadyOpen so the escaping is pinned by a unit test.
-func threatOpenCheckSQL(agentID, deploymentID, ruleID string) string {
-	if deploymentID != "" {
-		return fmt.Sprintf(
-			`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND deployment_id = '%s' AND rule_id = '%s' AND (status = '' OR status = 'open')`,
-			escapeSQLStr(agentID), escapeSQLStr(deploymentID), escapeSQLStr(ruleID),
-		)
-	}
-	return fmt.Sprintf(
-		`SELECT count() AS cnt FROM table(agentguard_threats) WHERE agent_id = '%s' AND rule_id = '%s' AND (status = '' OR status = 'open')`,
-		escapeSQLStr(agentID), escapeSQLStr(ruleID),
-	)
-}
-
-// isThreatAlreadyOpen queries agentguard_threats to check whether an open
-// threat already exists for the given (agent_id, deployment_id, rule_id)
-// combination. When deployment_id is empty the check is by (agent_id, rule_id)
-// alone. Returns false on any error so the caller fails open.
-func isThreatAlreadyOpen(cfg *config.Config, agentID, deploymentID, ruleID string) bool {
-	if agentID == "" || ruleID == "" {
-		return false
-	}
-	rows, err := tp.Query(&cfg.Timeplus, threatOpenCheckSQL(agentID, deploymentID, ruleID))
-	if err != nil || len(rows) == 0 {
-		return false
-	}
-	return parseInt64(rows[0]["cnt"]) > 0
-}
-
-func AlertWebhook(cfg *config.Config) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		queryCfg, errMsg := pluginCfg(cfg)
-		if errMsg != "" {
-			log.Printf("alert: AlertWebhook: %s", errMsg)
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": errMsg})
-			return
-		}
-
-		var payload models.AlertWebhookPayload
-		if err := c.ShouldBindJSON(&payload); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
-			return
-		}
-		log.Printf("alert: rule=%s severity=%s agent=%s deployment=%s msg=%s",
-			payload.RuleID, payload.Severity, payload.AgentID, payload.DeploymentID, payload.Message)
-
-		// Deduplicate: suppress the SSE notification when an open threat already
-		// exists for this (agent, deployment, rule) — the MV occasionally fires
-		// multiple times for the same active threat.
-		if isThreatAlreadyOpen(queryCfg, payload.AgentID, payload.DeploymentID, payload.RuleID) {
-			log.Printf("alert: suppressed duplicate notification for rule=%s agent=%s (threat already open)",
-				payload.RuleID, payload.AgentID)
-			c.JSON(http.StatusOK, gin.H{"received": true, "suppressed": true})
-			return
-		}
-
-		GlobalAlertBroadcaster.Publish(payload)
-		c.JSON(http.StatusOK, gin.H{"received": true})
-	}
 }
 
 // ── Read helpers ────────────────────────────────────────────────────────────────

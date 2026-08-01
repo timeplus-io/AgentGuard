@@ -1,11 +1,9 @@
 package handlers
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -13,14 +11,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/timeplus/agentguard/internal/auth"
 	"github.com/timeplus/agentguard/internal/config"
+	tp "github.com/timeplus/agentguard/internal/timeplus"
 )
 
 type protonQueryRequest struct {
 	SQL string `json:"sql" binding:"required"`
 }
 
+// errClientGone marks a write failure to the browser (navigated away). It ends
+// the stream without logging — this is the normal end of a live tail.
+var errClientGone = errors.New("client gone")
+
 // ProtonQueryHandler returns a Gin handler that proxies SQL queries to the
 // configured Proton/Timeplus server and streams NDJSON rows back to the client.
+// Rows are forwarded byte-for-byte (no re-marshalling) and flushed per line so
+// live events reach the browser immediately.
 func ProtonQueryHandler(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := auth.RequestCfg(c, cfg)
@@ -34,81 +39,56 @@ func ProtonQueryHandler(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		protonURL := fmt.Sprintf("http://%s:%d/?default_format=JSONEachRow",
-			cfg.Timeplus.Host, cfg.Timeplus.Port)
-
-		httpReq, err := http.NewRequestWithContext(
-			c.Request.Context(),
-			http.MethodPost,
-			protonURL,
-			strings.NewReader(req.SQL),
-		)
-		if err != nil {
-			log.Printf("proton: ProtonQueryHandler NewRequestWithContext: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		flusher, canFlush := c.Writer.(http.Flusher)
+		newline := []byte{'\n'}
+		err := tp.StreamLines(c.Request.Context(), &cfg.Timeplus, req.SQL,
+			func() {
+				// Disable proxy buffering and stream NDJSON directly to the client.
+				c.Header("Content-Type", "application/x-ndjson")
+				c.Header("X-Accel-Buffering", "no")
+				c.Header("Cache-Control", "no-cache")
+				c.Status(http.StatusOK)
+			},
+			func(line []byte) error {
+				if _, werr := c.Writer.Write(line); werr != nil {
+					return errClientGone
+				}
+				if _, werr := c.Writer.Write(newline); werr != nil {
+					return errClientGone
+				}
+				if canFlush {
+					flusher.Flush()
+				}
+				return nil
+			})
+		if err == nil || errors.Is(err, errClientGone) {
 			return
 		}
-		httpReq.Header.Set("Content-Type", "text/plain")
-		if cfg.Timeplus.User != "" {
-			httpReq.SetBasicAuth(cfg.Timeplus.User, cfg.Timeplus.Password)
+		var httpErr *tp.StreamHTTPError
+		if errors.As(err, &httpErr) {
+			c.JSON(httpErr.Status, gin.H{"error": httpErr.Body})
+			return
 		}
-
-		resp, err := http.DefaultClient.Do(httpReq)
-		if err != nil {
+		// context.Canceled is normal: the browser navigated away or the component
+		// unmounted, closing the streaming connection. Not an error. This must be
+		// checked before the !Written() branch below: Gin's Written() stays false
+		// until bytes are actually written (c.Status(200) alone doesn't count), so
+		// a client that cancels after Timeplus returned 200 but before the first
+		// row would otherwise be misclassified as a 502 "cannot reach Proton".
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+		if !c.Writer.Written() {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf(
 				"cannot reach Proton at %s:%d — %s", cfg.Timeplus.Host, cfg.Timeplus.Port, err.Error(),
 			)})
 			return
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			c.JSON(resp.StatusCode, gin.H{"error": string(body)})
-			return
+		// Headers already sent so we can't change status, but we can log.
+		sql := req.SQL
+		if len(sql) > 200 {
+			sql = sql[:200] + "…"
 		}
-
-		// Disable proxy buffering and stream NDJSON directly to the client.
-		c.Header("Content-Type", "application/x-ndjson")
-		c.Header("X-Accel-Buffering", "no")
-		c.Header("Cache-Control", "no-cache")
-		c.Status(http.StatusOK)
-
-		// Stream line-by-line and flush after each row so live events reach the
-		// browser immediately. io.Copy + http.ResponseWriter buffers up to 4 KB
-		// before writing, which means individual live rows stall until the buffer
-		// fills — unacceptable for real-time streaming.
-		flusher, canFlush := c.Writer.(http.Flusher)
-		newline := []byte{'\n'}
-		scanner := bufio.NewScanner(resp.Body)
-		scanner.Buffer(make([]byte, 256*1024), 256*1024) // 256 KB max line (large event_data)
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			if len(line) == 0 {
-				continue
-			}
-			if _, err := c.Writer.Write(line); err != nil {
-				break
-			}
-			if _, err := c.Writer.Write(newline); err != nil {
-				break
-			}
-			if canFlush {
-				flusher.Flush()
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			// context.Canceled is normal: the browser navigated away or the component
-			// unmounted, closing the SSE/streaming connection. Not an error.
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return
-			}
-			// headers already sent so we can't change status, but we can log
-			sql := req.SQL
-			if len(sql) > 200 {
-				sql = sql[:200] + "…"
-			}
-			log.Printf("[proton] stream error: %v | client=%s | sql=%s", err, c.ClientIP(), sql)
-		}
+		log.Printf("[proton] stream error: %v | client=%s | sql=%s", err, c.ClientIP(), sql)
 	}
 }

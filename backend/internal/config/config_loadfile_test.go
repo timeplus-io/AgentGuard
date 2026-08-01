@@ -20,7 +20,7 @@ func isolate(t *testing.T) {
 	for _, k := range []string{
 		"TIMEPLUS", "TIMEPLUS_HOST", "TIMEPLUS_PORT", "TIMEPLUS_NATIVE_PORT",
 		"TIMEPLUS_USER", "TIMEPLUS_PASSWORD",
-		"SERVER_PORT", "CATALOG_DIR", "AGENTGUARD_URL", "SETUP_COMPLETE",
+		"SERVER_PORT", "CATALOG_DIR", "SETUP_COMPLETE",
 		"AGENTGUARD_HOLD_MV_WAIT_MS", "AGENTGUARD_HOLD_TIMEOUT_SECONDS",
 		"AGENTGUARD_HOLDS_FAIL_POLICY", "AGENTGUARD_HOLDS_DISABLED",
 		"DLP_ENABLED", "DLP_BASE_URL", "DLP_API_KEY", "DLP_EMBEDDING_MODEL",
@@ -57,7 +57,6 @@ func TestLoad_HonorsExplicitConfigFile(t *testing.T) {
 		"server:\n  port: 9999\n" +
 		"catalog:\n  dir: /custom/catalog\n" +
 		"timeplus:\n  host: tphost\n  port: 1234\n  native-port: 5678\n" +
-		"agentguard:\n  url: http://agentguard.test\n" +
 		"setup:\n  complete: true\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -84,9 +83,6 @@ func TestLoad_HonorsExplicitConfigFile(t *testing.T) {
 	if cfg.Timeplus.NativePort != 5678 {
 		t.Errorf("Timeplus.NativePort = %d, want 5678 (explicit --config ignored)", cfg.Timeplus.NativePort)
 	}
-	if cfg.AgentGuardURL != "http://agentguard.test" {
-		t.Errorf("AgentGuardURL = %q, want http://agentguard.test (explicit --config ignored)", cfg.AgentGuardURL)
-	}
 	if !cfg.SetupComplete {
 		t.Errorf("SetupComplete = false, want true (explicit --config ignored)")
 	}
@@ -100,7 +96,6 @@ func TestLoad_ExplicitEnvOverridesConfig(t *testing.T) {
 	t.Setenv("TIMEPLUS_NATIVE_PORT", "3333")
 	t.Setenv("SERVER_PORT", "4444")
 	t.Setenv("CATALOG_DIR", "/env/catalog")
-	t.Setenv("AGENTGUARD_URL", "http://env-agentguard.test")
 	t.Setenv("SETUP_COMPLETE", "true")
 	t.Setenv("AGENTGUARD_HOLD_MV_WAIT_MS", "1500")
 	t.Setenv("AGENTGUARD_HOLD_TIMEOUT_SECONDS", "120")
@@ -115,7 +110,6 @@ func TestLoad_ExplicitEnvOverridesConfig(t *testing.T) {
 		"server:\n  port: 9999\n" +
 		"catalog:\n  dir: /file/catalog\n" +
 		"timeplus:\n  host: filehost\n  port: 1234\n  native-port: 5678\n" +
-		"agentguard:\n  url: http://file-agentguard.test\n" +
 		"setup:\n  complete: false\n" +
 		"holds:\n  mv_wait_ms: 500\n  timeout_seconds: 300\n  fail_policy: deny\n  disabled: false\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -133,9 +127,6 @@ func TestLoad_ExplicitEnvOverridesConfig(t *testing.T) {
 	}
 	if cfg.CatalogDir != "/env/catalog" {
 		t.Errorf("CatalogDir = %q, want env override /env/catalog", cfg.CatalogDir)
-	}
-	if cfg.AgentGuardURL != "http://env-agentguard.test" {
-		t.Errorf("AgentGuardURL = %q, want env override http://env-agentguard.test", cfg.AgentGuardURL)
 	}
 	if cfg.Timeplus.Host != "envhost" {
 		t.Errorf("Timeplus.Host = %q, want env override envhost", cfg.Timeplus.Host)

@@ -140,7 +140,7 @@ func TestDLPStatusHealthy(t *testing.T) {
 		case strings.Contains(q, "system.tables"):
 			_, _ = io.WriteString(w, `{"data":[{"name":"agentguard_dlp_enriched"},{"name":"mv_dlp_enrich"}]}`)
 		case strings.Contains(q, "SHOW FUNCTIONS"):
-			_, _ = io.WriteString(w, `{"data":[{"name":"dlp_config_resolve"},{"name":"dlp_extract_entities"},{"name":"dlp_embed"},{"name":"dlp_risk"},{"name":"dlp_understand_query"},{"name":"dlp_rerank"},{"name":"dlp_summarize"},{"name":"notify_agentguard_udf"}]}`)
+			_, _ = io.WriteString(w, `{"data":[{"name":"dlp_config_resolve"},{"name":"dlp_extract_entities"},{"name":"dlp_embed"},{"name":"dlp_risk"},{"name":"dlp_understand_query"},{"name":"dlp_rerank"},{"name":"dlp_summarize"}]}`)
 		case strings.Contains(q, "count()"):
 			_, _ = io.WriteString(w, `{"data":[{"total":"100","embedded":"80","flagged":"7"}]}`)
 		default:

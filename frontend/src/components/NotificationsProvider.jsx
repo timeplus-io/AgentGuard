@@ -50,7 +50,7 @@ function Toast({ n, onDismiss }) {
             <span className="text-xs font-semibold text-gray-100 truncate">{n.rule_name || t('notifications.fallbackTitle')}</span>
           </div>
           <button
-            onClick={() => onDismiss(n.id)}
+            onClick={() => onDismiss(n)}
             className="text-gray-400 hover:text-gray-100 transition-colors flex-shrink-0"
           >
             <span className="material-symbols-outlined text-[14px]">close</span>
@@ -65,6 +65,7 @@ function Toast({ n, onDismiss }) {
           )}
           <Link
             to="/threats"
+            onClick={() => onDismiss(n)}
             className="text-[10px] font-semibold text-primary hover:underline underline-offset-2 ml-auto"
           >
             {t('notifications.viewThreats')}
@@ -87,9 +88,27 @@ export function NotificationsProvider({ children }) {
   }, [])
 
   const push = useCallback((notification) => {
-    setToasts(prev => [notification, ...prev].slice(0, 5))
-    // Auto-dismiss after 6 seconds
+    setToasts(prev => {
+      if (prev.some(t => t.id === notification.id)) return prev
+      return [notification, ...prev].slice(0, 5)
+    })
+    // Auto-dismiss after 6 seconds. Auto-dismiss does NOT confirm — an unseen
+    // toast reappears via backfill on the next connect (that's the point of
+    // the persisted seen-state).
+    clearTimeout(timersRef.current[notification.id])
     timersRef.current[notification.id] = setTimeout(() => dismiss(notification.id), 6000)
+  }, [dismiss])
+
+  const confirm = useCallback((n) => {
+    if (n.rule_id) {
+      api.confirmNotification({
+        agent_id: n.agent_id ?? '',
+        deployment_id: n.deployment_id ?? '',
+        session_id: n.session_id ?? '',
+        rule_id: n.rule_id,
+      }).catch(() => { /* best-effort — it will re-toast on next connect */ })
+    }
+    dismiss(n.id)
   }, [dismiss])
 
   const reconcileHolds = useCallback(async () => {
@@ -105,7 +124,20 @@ export function NotificationsProvider({ children }) {
     const es = new EventSource('/api/notifications/stream', { withCredentials: true })
     let cancelled = false
 
-    es.onopen = () => { if (!cancelled) reconcileHolds() }
+    es.onopen = () => {
+      if (cancelled) return
+      reconcileHolds()
+      // Backfill notifications delivered-but-never-confirmed (missed while
+      // disconnected, auto-dismissed unseen, or from before a restart).
+      api.getUnconfirmedNotifications()
+        .then(r => {
+          if (cancelled) return
+          // The list arrives newest-first; push oldest-first so the newest
+          // end up on top of the stack and survive the 5-toast cap.
+          for (const n of [...(r.notifications ?? [])].reverse()) push(n)
+        })
+        .catch(() => { /* best-effort */ })
+    }
 
     es.addEventListener('alert', (e) => {
       try {
@@ -161,7 +193,7 @@ export function NotificationsProvider({ children }) {
         <div className="fixed top-20 right-4 z-50 flex flex-col gap-2 pointer-events-none">
           {toasts.map(n => (
             <div key={n.id} className="pointer-events-auto">
-              <Toast n={n} onDismiss={dismiss} />
+              <Toast n={n} onDismiss={confirm} />
             </div>
           ))}
         </div>

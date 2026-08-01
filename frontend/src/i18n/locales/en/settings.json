@@ -119,10 +119,6 @@
       "label": "Service password",
       "description": "Service account password. Set via the TIMEPLUS_PASSWORD environment variable only."
     },
-    "agentguard_url": {
-      "label": "Webhook base URL",
-      "description": "URL Timeplus uses to call back into AgentGuard (alerts, holds)."
-    },
     "rules_visible_packages": {
       "label": "Visible rule packages",
       "description": "Rule packages surfaced on the Rules page. Packages left unchecked (and their not-yet-installed rules) are hidden. Applied live."

@@ -14,7 +14,6 @@ func TestSave_RoundTrip(t *testing.T) {
 	cfg := &config.Config{
 		Server:        config.ServerConfig{Port: 9090},
 		Timeplus:      config.TimeplusConfig{Host: "myhost", Port: 3218, NativePort: 8463},
-		AgentGuardURL: "http://example.com:8080",
 		SetupComplete: true,
 		Sentry: config.SentryConfig{
 			Enabled:               true,
@@ -57,9 +56,6 @@ func TestSave_RoundTrip(t *testing.T) {
 	}
 	if loaded.Timeplus.NativePort != 8463 {
 		t.Errorf("native_port: want 8463, got %d", loaded.Timeplus.NativePort)
-	}
-	if loaded.AgentGuardURL != "http://example.com:8080" {
-		t.Errorf("agentguard_url: want http://example.com:8080, got %s", loaded.AgentGuardURL)
 	}
 	if !loaded.Sentry.Enabled {
 		t.Error("want sentry.enabled=true")

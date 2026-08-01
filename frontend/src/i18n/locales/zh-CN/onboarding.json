@@ -168,14 +168,12 @@
       "fields": {
         "host": "Timeplus 主机",
         "httpPort": "HTTP 端口",
-        "nativePort": "原生端口",
-        "agentguardUrl": "AgentGuard URL"
+        "nativePort": "原生端口"
       },
       "placeholders": {
         "host": "localhost",
         "httpPort": "3218",
-        "nativePort": "8463",
-        "agentguardUrl": "http://localhost:8080"
+        "nativePort": "8463"
       }
     },
     "credentials": {

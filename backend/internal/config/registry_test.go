@@ -13,7 +13,7 @@ func TestRegistryCoversAllKeys(t *testing.T) {
 	// Spot-check a representative key from each section.
 	want := []string{
 		"server.port", "timeplus.host", "timeplus.native-port",
-		"timeplus.user", "timeplus.password", "agentguard.url",
+		"timeplus.user", "timeplus.password",
 		"catalog.dir", "holds.fail_policy", "dlp.enabled",
 		"dlp.api_key", "dlp.embedding_dim", "sentry.enabled",
 		"sentry.skill_dir", "sentry.chat_base_url", "sentry.chat_api_key",

@@ -91,7 +91,7 @@ const openAPISpec = `{
   "info": {
     "title": "AgentGuard API",
     "version": "1.0.0",
-    "description": "AgentGuard is a real-time security monitoring and governance platform for AI coding agents (OpenClaw, Claude Code).\n\nAll data is sourced from **Timeplus Enterprise** streaming SQL. The server falls back gracefully when Timeplus is unavailable.\n\n### Authentication\nMost endpoints require an active session. Call \u0060POST /auth/login\u0060 with Timeplus credentials to receive an \u0060agentguard_session\u0060 httpOnly cookie. Include \u0060credentials: 'include'\u0060 on all fetch calls. The exceptions are \u0060/auth/*\u0060, \u0060/setup/*\u0060, and \u0060/alerts/webhook\u0060, which are unauthenticated.\n\nOn first launch the setup wizard must run before login is possible. Call \u0060GET /auth/status\u0060 to check \u0060setup_complete\u0060 and \u0060logged_in\u0060.\n\n### Agent ID format\nMany endpoints accept an \u0060:id\u0060 path parameter in the compound form \u0060{deploymentId}__{agentId}\u0060 (double underscore separator). Both parts must match \u0060^[a-zA-Z0-9._:-]+$\u0060.\n\n### Time filtering\n\u0060since\u0060 / \u0060until\u0060 query parameters accept **RFC 3339** timestamps, e.g. \u00602026-04-01T00:00:00Z\u0060.\n\n### Pagination\nList endpoints accept \u0060?page=1&limit=15\u0060 and return \u0060total\u0060 so clients can compute page count."
+    "description": "AgentGuard is a real-time security monitoring and governance platform for AI coding agents (OpenClaw, Claude Code).\n\nAll data is sourced from **Timeplus Enterprise** streaming SQL. The server falls back gracefully when Timeplus is unavailable.\n\n### Authentication\nMost endpoints require an active session. Call \u0060POST /auth/login\u0060 with Timeplus credentials to receive an \u0060agentguard_session\u0060 httpOnly cookie. Include \u0060credentials: 'include'\u0060 on all fetch calls. The exceptions are \u0060/auth/*\u0060 and \u0060/setup/*\u0060, which are unauthenticated.\n\nOn first launch the setup wizard must run before login is possible. Call \u0060GET /auth/status\u0060 to check \u0060setup_complete\u0060 and \u0060logged_in\u0060.\n\n### Agent ID format\nMany endpoints accept an \u0060:id\u0060 path parameter in the compound form \u0060{deploymentId}__{agentId}\u0060 (double underscore separator). Both parts must match \u0060^[a-zA-Z0-9._:-]+$\u0060.\n\n### Time filtering\n\u0060since\u0060 / \u0060until\u0060 query parameters accept **RFC 3339** timestamps, e.g. \u00602026-04-01T00:00:00Z\u0060.\n\n### Pagination\nList endpoints accept \u0060?page=1&limit=15\u0060 and return \u0060total\u0060 so clients can compute page count."
   },
   "servers": [
     { "url": "/api", "description": "AgentGuard backend (same origin)" }
@@ -105,7 +105,7 @@ const openAPISpec = `{
     { "name": "Cost",        "description": "Token-based cost estimates computed from configurable per-model pricing." },
     { "name": "Rules",       "description": "Security rule packs. Each enabled rule has a corresponding Proton materialized view that writes matches to agentguard_security_events." },
     { "name": "Catalog",     "description": "File-based rule catalog. The initial catalog ships embedded in the binary as YAML files; users can override entries or add new ones via import. Proton tracks *install state*; the catalog tracks *definitions*." },
-    { "name": "Alerts",      "description": "Real-time alert delivery — webhook receiver and SSE notification stream." },
+    { "name": "Alerts",      "description": "Real-time alert delivery — SSE notification stream." },
     { "name": "Proton",      "description": "Streaming proxy — send arbitrary SQL to Timeplus and receive NDJSON rows." },
     { "name": "Onboarding",  "description": "Agent onboarding wizard — generates configuration snippets for connecting agents." },
     { "name": "Auth",        "description": "Session authentication — login, logout, and status check. These endpoints are **unauthenticated** (no session cookie required)." },
@@ -1249,31 +1249,6 @@ const openAPISpec = `{
       }
     },
 
-    "/alerts/webhook": {
-      "post": {
-        "tags": ["Alerts"],
-        "summary": "Receive a rule-triggered alert",
-        "description": "Webhook endpoint called by the Proton \u0060notify_agentguard_udf\u0060 Python UDF. The UDF is invoked by the \u0060agentguard_notifier\u0060 Proton alert when new rows appear in \u0060agentguard_security_events\u0060.\n\nReceived alerts are fanned out to all connected SSE clients on \u0060/notifications/stream\u0060. You can also POST to this endpoint manually for testing.",
-        "operationId": "alertWebhook",
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Alert" },
-            "example": {
-              "rule_id": "rp-001",
-              "rule_name": "Prompt Injection Shield",
-              "severity": "critical",
-              "agent_id": "claude-code",
-              "message": "Potential prompt injection in llm_input from agent claude-code",
-              "detected_at": "2026-04-09T10:00:00Z"
-            }
-          }}
-        },
-        "responses": {
-          "200": { "description": "Alert accepted and forwarded to SSE clients." }
-        }
-      }
-    },
-
     "/notifications/stream": {
       "get": {
         "tags": ["Alerts"],
@@ -1287,6 +1262,52 @@ const openAPISpec = `{
               "example": "data: {\"rule_id\":\"rp-001\",\"severity\":\"critical\",\"agent_id\":\"claude-code\",\"message\":\"Prompt injection detected\"}\n\n"
             }}
           }
+        }
+      }
+    },
+
+    "/notifications/unconfirmed": {
+      "get": {
+        "tags": ["Alerts"],
+        "summary": "List unconfirmed alert notifications",
+        "description": "Returns unconfirmed threat notifications, newest-first, for SSE-reconnect backfill (a browser that missed live events while disconnected). Backed by the \u0060agentguard_notifications\u0060 mutable stream; \u0060id\u0060 is the stable identity key \u0060deployment_id|agent_id|session_id|rule_id\u0060 used by \u0060POST /notifications/confirm\u0060.\n\nBest-effort: if the underlying query fails (e.g. stream not yet provisioned) this returns \u0060200\u0060 with an empty list rather than an error, so the toast UI stays quiet.",
+        "operationId": "listUnconfirmedNotifications",
+        "responses": {
+          "200": { "description": "Unconfirmed notifications, max 20.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UnconfirmedNotificationsResponse" },
+            "example": {
+              "notifications": [{
+                "id": "eng-team|claude-code|a1b2c3d4-0000-0000-0000-000000000001|rp-001",
+                "rule_id": "rp-001",
+                "rule_name": "Prompt Injection Guard",
+                "severity": "critical",
+                "agent_id": "claude-code",
+                "deployment_id": "eng-team",
+                "session_id": "a1b2c3d4-0000-0000-0000-000000000001",
+                "message": "Prompt injection detected",
+                "detected_at": "2026-04-09 10:00:05.000"
+              }]
+            }
+          }}}
+        }
+      }
+    },
+
+    "/notifications/confirm": {
+      "post": {
+        "tags": ["Alerts"],
+        "summary": "Confirm an alert notification",
+        "description": "Marks a threat notification as seen — the user dismissed or clicked the toast. Upserts \u0060confirmed=true\u0060 into the \u0060agentguard_notifications\u0060 mutable stream for the given identity; idempotent.",
+        "operationId": "confirmNotification",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotificationConfirmRequest" },
+            "example": { "agent_id": "claude-code", "deployment_id": "eng-team", "session_id": "a1b2c3d4-0000-0000-0000-000000000001", "rule_id": "rp-001" }
+          }}
+        },
+        "responses": {
+          "200": { "description": "Confirmed.", "content": { "application/json": { "example": { "ok": true } } } },
+          "400": { "description": "Missing agent_id or rule_id." },
+          "500": { "description": "Upsert into agentguard_notifications failed." }
         }
       }
     },
@@ -1445,7 +1466,7 @@ const openAPISpec = `{
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProvisionRequest" },
-            "example": { "host": "localhost", "port": 3218, "native_port": 8463, "username": "default", "password": "", "agentguard_url": "http://localhost:8080" }
+            "example": { "host": "localhost", "port": 3218, "native_port": 8463, "username": "default", "password": "" }
           }}
         },
         "responses": {
@@ -2058,8 +2079,7 @@ const openAPISpec = `{
           "port":           { "type": "integer", "description": "Timeplus HTTP API port.", "example": 3218 },
           "native_port":    { "type": "integer", "description": "Timeplus native TCP port.", "example": 8463 },
           "username":       { "type": "string",  "description": "Timeplus username.", "example": "default" },
-          "password":       { "type": "string",  "description": "Timeplus password.", "example": "" },
-          "agentguard_url": { "type": "string",  "description": "URL where AgentGuard is reachable from Timeplus's network — used for alert webhook callbacks.", "example": "http://localhost:8080" }
+          "password":       { "type": "string",  "description": "Timeplus password.", "example": "" }
         }
       },
       "ProvisionEvent": {
@@ -2155,6 +2175,39 @@ const openAPISpec = `{
         "properties": {
           "events": { "type": "array", "items": { "$ref": "#/components/schemas/ActivityEvent" } },
           "total":  { "type": "integer" }
+        }
+      },
+      "UnconfirmedNotification": {
+        "type": "object",
+        "description": "One unconfirmed threat notification, as returned by GET /notifications/unconfirmed.",
+        "properties": {
+          "id":            { "type": "string", "description": "Stable identity key: deployment_id|agent_id|session_id|rule_id." },
+          "rule_id":       { "type": "string" },
+          "rule_name":     { "type": "string" },
+          "severity":      { "type": "string", "enum": ["critical", "warning", "info", ""] },
+          "agent_id":      { "type": "string" },
+          "deployment_id": { "type": "string" },
+          "session_id":    { "type": "string" },
+          "message":       { "type": "string" },
+          "detected_at":   { "type": "string", "description": "Timeplus datetime64 text, e.g. 2026-04-09 10:00:05.000 (NOT RFC 3339)." }
+        }
+      },
+      "UnconfirmedNotificationsResponse": {
+        "type": "object",
+        "description": "Response from GET /notifications/unconfirmed.",
+        "properties": {
+          "notifications": { "type": "array", "items": { "$ref": "#/components/schemas/UnconfirmedNotification" } }
+        }
+      },
+      "NotificationConfirmRequest": {
+        "type": "object",
+        "description": "Request body for POST /notifications/confirm. deployment_id and session_id may legitimately be empty on older/partial events.",
+        "required": ["agent_id", "rule_id"],
+        "properties": {
+          "agent_id":      { "type": "string" },
+          "deployment_id": { "type": "string" },
+          "session_id":    { "type": "string" },
+          "rule_id":       { "type": "string" }
         }
       }
     },

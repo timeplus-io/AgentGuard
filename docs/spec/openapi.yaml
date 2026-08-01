@@ -14,8 +14,8 @@ info:
 
     Most endpoints require an active session. Call `POST /auth/login` with Timeplus
     credentials to receive an `agentguard_session` httpOnly cookie. Include `credentials:
-    ''include''` on all fetch calls. The exceptions are `/auth/*`, `/setup/*`, and
-    `/alerts/webhook`, which are unauthenticated.
+    ''include''` on all fetch calls. The exceptions are `/auth/*` and `/setup/*`,
+    which are unauthenticated.
 
 
     On first launch the setup wizard must run before login is possible. Call `GET
@@ -63,7 +63,7 @@ tags:
     binary as YAML files; users can override entries or add new ones via import. Proton
     tracks *install state*; the catalog tracks *definitions*.
 - name: Alerts
-  description: Real-time alert delivery — webhook receiver and SSE notification stream.
+  description: Real-time alert delivery — SSE notification stream.
 - name: Investigate
   description: Ad-hoc SQL query interface against Proton streams.
 - name: Proton
@@ -1835,35 +1835,6 @@ paths:
               schema:
                 type: string
                 format: binary
-  /alerts/webhook:
-    post:
-      tags:
-      - Alerts
-      summary: Receive a rule-triggered alert
-      description: 'Webhook endpoint called by the Proton `notify_agentguard_udf`
-        Python UDF. The UDF is invoked by the `agentguard_notifier` Proton alert when
-        new rows appear in `agentguard_security_events`.
-
-
-        Received alerts are fanned out to all connected SSE clients on `/notifications/stream`.
-        You can also POST to this endpoint manually for testing.'
-      operationId: alertWebhook
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Alert'
-            example:
-              rule_id: rp-001
-              rule_name: Prompt Injection Shield
-              severity: critical
-              agent_id: claude-code
-              message: Potential prompt injection in llm_input from agent claude-code
-              detected_at: '2026-04-09T10:00:00Z'
-      responses:
-        '200':
-          description: Alert accepted and forwarded to SSE clients.
   /notifications/stream:
     get:
       tags:
@@ -1897,6 +1868,70 @@ paths:
 
 
                 '
+  /notifications/unconfirmed:
+    get:
+      tags:
+      - Alerts
+      summary: List unconfirmed alert notifications
+      description: 'Returns unconfirmed threat notifications, newest-first, for SSE-reconnect
+        backfill (a browser that missed live events while disconnected). Backed by
+        the `agentguard_notifications` mutable stream; `id` is the stable identity
+        key `deployment_id|agent_id|session_id|rule_id` used by `POST /notifications/confirm`.
+
+
+        Best-effort: if the underlying query fails (e.g. stream not yet provisioned)
+        this returns `200` with an empty list rather than an error, so the toast UI
+        stays quiet.'
+      operationId: listUnconfirmedNotifications
+      responses:
+        '200':
+          description: Unconfirmed notifications, max 20.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnconfirmedNotificationsResponse'
+              example:
+                notifications:
+                - id: eng-team|claude-code|a1b2c3d4-0000-0000-0000-000000000001|rp-001
+                  rule_id: rp-001
+                  rule_name: Prompt Injection Guard
+                  severity: critical
+                  agent_id: claude-code
+                  deployment_id: eng-team
+                  session_id: a1b2c3d4-0000-0000-0000-000000000001
+                  message: Prompt injection detected
+                  detected_at: '2026-04-09 10:00:05.000'
+  /notifications/confirm:
+    post:
+      tags:
+      - Alerts
+      summary: Confirm an alert notification
+      description: Marks a threat notification as seen — the user dismissed or clicked
+        the toast. Upserts `confirmed=true` into the `agentguard_notifications` mutable
+        stream for the given identity; idempotent.
+      operationId: confirmNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationConfirmRequest'
+            example:
+              agent_id: claude-code
+              deployment_id: eng-team
+              session_id: a1b2c3d4-0000-0000-0000-000000000001
+              rule_id: rp-001
+      responses:
+        '200':
+          description: Confirmed.
+          content:
+            application/json:
+              example:
+                ok: true
+        '400':
+          description: Missing agent_id or rule_id.
+        '500':
+          description: Upsert into agentguard_notifications failed.
   /investigate/tables:
     get:
       tags:
@@ -2182,7 +2217,6 @@ paths:
               native_port: 8463
               username: default
               password: ''
-              agentguard_url: http://localhost:8080
       responses:
         '200':
           description: SSE stream of provisioning progress events.
@@ -3236,11 +3270,6 @@ components:
           type: string
           description: Timeplus password.
           example: ''
-        agentguard_url:
-          type: string
-          description: URL where AgentGuard is reachable from Timeplus's network —
-            used for alert webhook callbacks.
-          example: http://localhost:8080
     ProvisionEvent:
       type: object
       description: A single SSE event from POST /setup/provision.
@@ -3452,6 +3481,60 @@ components:
             $ref: '#/components/schemas/ActivityEvent'
         total:
           type: integer
+    UnconfirmedNotification:
+      type: object
+      description: One unconfirmed threat notification, as returned by GET /notifications/unconfirmed.
+      properties:
+        id:
+          type: string
+          description: 'Stable identity key: deployment_id|agent_id|session_id|rule_id.'
+        rule_id:
+          type: string
+        rule_name:
+          type: string
+        severity:
+          type: string
+          enum:
+          - critical
+          - warning
+          - info
+          - ''
+        agent_id:
+          type: string
+        deployment_id:
+          type: string
+        session_id:
+          type: string
+        message:
+          type: string
+        detected_at:
+          type: string
+          description: Timeplus datetime64 text, e.g. 2026-04-09 10:00:05.000 (NOT
+            RFC 3339).
+    UnconfirmedNotificationsResponse:
+      type: object
+      description: Response from GET /notifications/unconfirmed.
+      properties:
+        notifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnconfirmedNotification'
+    NotificationConfirmRequest:
+      type: object
+      description: Request body for POST /notifications/confirm. deployment_id and
+        session_id may legitimately be empty on older/partial events.
+      required:
+      - agent_id
+      - rule_id
+      properties:
+        agent_id:
+          type: string
+        deployment_id:
+          type: string
+        session_id:
+          type: string
+        rule_id:
+          type: string
   securitySchemes:
     cookieAuth:
       type: apiKey

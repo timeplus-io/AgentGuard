@@ -152,7 +152,7 @@ func validateInt(key string, v int) error {
 
 func validateString(key, v string) error {
 	switch key {
-	case "agentguard.url", "dlp.base_url":
+	case "dlp.base_url":
 		if v == "" {
 			return errors.New("must not be empty")
 		}
@@ -206,8 +206,6 @@ func EffectiveValue(cfg *Config, key string) any {
 		return cfg.Timeplus.User
 	case "timeplus.password":
 		return cfg.Timeplus.Password
-	case "agentguard.url":
-		return cfg.AgentGuardURL
 	case "catalog.dir":
 		return cfg.CatalogDir
 	case "holds.mv_wait_ms":
@@ -284,8 +282,6 @@ func ApplyChange(cfg *Config, key string, value any) error {
 		return setInt(&cfg.Timeplus.Port, value)
 	case "timeplus.native-port":
 		return setInt(&cfg.Timeplus.NativePort, value)
-	case "agentguard.url":
-		return setString(&cfg.AgentGuardURL, value)
 	case "catalog.dir":
 		return setString(&cfg.CatalogDir, value)
 	case "holds.mv_wait_ms":

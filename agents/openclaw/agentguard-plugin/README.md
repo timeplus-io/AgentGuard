@@ -161,25 +161,9 @@ HTTP 503
 
 For the standard `docker-compose.yaml` setup these are pre-set to `proton` / `timeplus@t+`. Edit them if your wizard credentials differ, then `docker compose up -d --build agentguard`.
 
-### AgentGuard server URL (Proton → AgentGuard)
+### Alert delivery (Timeplus → AgentGuard)
 
-Security rule alerts flow in the opposite direction: Proton (Timeplus) calls back to the AgentGuard server via a Python UDF when a rule fires. AgentGuard must be told its own externally-reachable URL so the UDF is created with the correct address.
-
-Set `AGENTGUARD_URL` on the **AgentGuard server** (not the plugin):
-
-| Environment variable | CLI flag            | Default                   | When to change                                     |
-|----------------------|---------------------|---------------------------|----------------------------------------------------|
-| `AGENTGUARD_URL`     | `--agentguard-url`  | `http://localhost:8080`   | Any deployment where Proton cannot reach localhost |
-
-Common values:
-
-| Deployment                     | `AGENTGUARD_URL`               |
-|--------------------------------|--------------------------------|
-| Local dev (everything on host) | `http://localhost:8080` *(default — no action needed)* |
-| Docker Compose (`docker-compose.yaml`) | `http://agentguard:8080` *(pre-configured)* |
-| Remote / cloud server          | `http://<host-or-ip>:8080`     |
-
-> **Docker note:** `docker-compose.yaml` already sets `AGENTGUARD_URL=http://agentguard:8080` so Proton (running in the `timeplus` container) can reach AgentGuard (running in the `agentguard` container) by Docker service name. No manual change is needed for the standard Compose setup.
+Security rule alerts no longer flow through a Timeplus callback. A backend watcher (`internal/notify`, #258) tails the `agentguard_notify_events` stream directly via a streaming SQL query and fans matches out over AgentGuard's own SSE pipeline — there is nothing to configure on the plugin or Timeplus side for this.
 
 ## Installation
 

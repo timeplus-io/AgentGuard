@@ -1,0 +1,69 @@
+package timeplus
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+
+	"github.com/timeplus/agentguard/internal/config"
+)
+
+// StreamHTTPError is returned by StreamLines when Timeplus answers with a
+// non-200 status (bad SQL, missing stream) before any row is streamed.
+type StreamHTTPError struct {
+	Status int
+	Body   string
+}
+
+func (e *StreamHTTPError) Error() string {
+	return fmt.Sprintf("timeplus stream: status %d: %s", e.Status, e.Body)
+}
+
+// StreamLines POSTs sql to the Timeplus HTTP interface with
+// default_format=JSONEachRow and invokes onLine for every non-empty NDJSON
+// line until the stream ends, ctx is cancelled, or onLine returns an error.
+// onConnected (optional) fires once after a 200 response, before the first
+// line. It deliberately uses http.DefaultClient (no timeout): streaming
+// SELECTs are open-ended by design — protonHTTPClient's 60s cap would kill
+// them. Cancellation comes from ctx.
+func StreamLines(ctx context.Context, cfg *config.TimeplusConfig, sql string, onConnected func(), onLine func(line []byte) error) error {
+	url := fmt.Sprintf("http://%s:%d/?default_format=JSONEachRow", cfg.Host, cfg.Port)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(sql))
+	if err != nil {
+		return fmt.Errorf("timeplus stream: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "text/plain")
+	if cfg.User != "" {
+		req.SetBasicAuth(cfg.User, cfg.Password)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("timeplus stream: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return &StreamHTTPError{Status: resp.StatusCode, Body: string(body)}
+	}
+	if onConnected != nil {
+		onConnected()
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 256*1024), 256*1024) // 256 KB max line (large event_data)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		if err := onLine(line); err != nil {
+			return err
+		}
+	}
+	return scanner.Err()
+}

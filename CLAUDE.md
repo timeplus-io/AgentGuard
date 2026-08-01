@@ -126,7 +126,7 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | POST | `/api/rules/catalog/import` | `ImportCatalog` | Import rules from JSON |
 | GET | `/api/rules/catalog/export` | `ExportCatalog` | Export catalog as JSON |
 | GET | `/api/rules/mv-status` | `MVStatus` | MV health: `system.tables` + `system.v_failed_mat_views`, cross-referenced with enabled |
-| POST | `/api/rules/sync` | `SyncMVs` | Reconcile MVs with snapshots (create missing/drop disabled) via the lifecycle service |
+| POST | `/api/rules/sync` | `SyncMVs` | Reconcile MVs with snapshots (create missing/drop disabled) via the lifecycle service; also ensures the notifications seen-state stream + legacy notifier teardown (#258) |
 | GET | `/api/rules/packages` | `ListPackages` | Named rule bundles (localized name/desc, member IDs, per-package installed/enabled counts). `default_enabled` marks the "Recommended" (core) package; recommendation only — never auto-installs |
 | POST | `/api/rules/packages/:id/enable` | `EnablePackage` | Bulk-install a package's member rules via the lifecycle service (idempotent — already-installed skipped); returns `{installed, skipped, missing, failed}` |
 | POST | `/api/rules` | `CreateRule` | Thin create-custom: zero-param custom definition (template ≡ rendered SQL) installed via the service |
@@ -144,8 +144,9 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
 | POST | `/api/holds/_drain` | `DrainHolds` | Operator: abandon all pending holds |
 | POST | `/api/holds/_abandon-session/:session_id` | `AbandonSession` | Plugin fire-and-forget on SessionEnd (unauthenticated) |
 | GET | `/api/activity` | `ListActivity` | Recent tool calls across all sessions |
-| POST | `/api/alerts/webhook` | `AlertWebhook` | Receives rule-triggered alerts (unauthenticated) |
 | GET | `/api/notifications/stream` | `NotificationsSSEHandler` | SSE stream of live alerts |
+| GET | `/api/notifications/unconfirmed` | `ListUnconfirmedNotifications` | Unconfirmed threat notifications for browser backfill (newest-first, ≤20) |
+| POST | `/api/notifications/confirm` | `ConfirmNotification` | Marks a notification seen (`{agent_id, deployment_id, session_id, rule_id}`); explicit toast dismiss/click only |
 | POST | `/api/onboarding/generate` | `GenerateConfig` | |
 | GET | `/api/onboarding/install-script` | `ServeInstallScript` | Returns agent install script |
 | POST | `/api/proton/query` | `ProtonQueryHandler` | Streaming proxy to Timeplus (NDJSON) |
@@ -180,7 +181,7 @@ All endpoints return JSON. List endpoints support `?page=` and `?limit=` query p
   - `Footer` — Fixed status bar.
   - `Toggle` — Accessible switch.
   - `Badge` — `SeverityBadge` and `StatusBadge`.
-  - `NotificationsProvider` — Context provider that opens the SSE stream and exposes live alert notifications to the whole app.
+  - `NotificationsProvider` — Context provider that opens the SSE stream and exposes live alert notifications to the whole app. Threat toasts are driven by a backend watcher (`internal/notify`) tailing `agentguard_notify_events` — there is no Timeplus→AgentGuard callback; explicit dismiss confirms via `/api/notifications/confirm`, and unconfirmed notifications backfill on SSE connect.
   - `PageHeader` — Shared page section header.
 - **`pages/`** — One file per route. Each page follows the same pattern: fetch data in `useEffect` → `useState` for data/loading/error → render Sidebar + TopNav + Footer layout with `<main className="pl-64 pt-16 pb-8 min-h-screen">`.
 - **`App.jsx`** — React Router v6 routes. `/` redirects to `/dashboard`.
@@ -246,6 +247,7 @@ AgentGuard uses a **Common Information Model (CIM)** to normalize heterogeneous 
 | `agentguard_cim_metrics` | Pre-computed scalar metrics per call (tokens, cost, latency) |
 | `agentguard_rules` | Append-only Rule Instance snapshot log; current state via `arg_max(col, revision) GROUP BY rule_id` (ordered by per-rule monotonic `revision`, NOT `updated_at`) |
 | `agentguard_security_events` | Rule-triggered detections written by MVs |
+| `agentguard_notifications` | Persisted per-threat notification seen-state (#258); PK = threat identity, upserted by the backend notify watcher (`internal/notify`) and the confirm endpoint |
 | `agentguard_cost_budgets` | Per-deployment monthly budget mutation log; current state via `arg_max(…updated_at) GROUP BY deployment_id HAVING NOT deleted` |
 | `agentguard_dlp_enriched` | One enriched row per conversation message (entities, risk tags/score, inline embedding); written by `mv_dlp_enrich`. See **Semantic DLP** below. |
 | `agentguard_dlp_config` | Mutable `key → JSON value` stream: a `shared` row (base_url/api_key/timeout/model-catalog common to all network UDFs) + one row per UDF (model/max_tokens/prompt). A pure `dlp_config_resolve(shared, config)` UDF folds `shared ⊕ own` (own wins) and resolves the model catalog into ONE flat config, so a network UDF only ever sees its own resolved endpoint — never `shared` or other models. Read live by the ingest MV (LEFT JOIN, wrapped per-row in `dlp_config_resolve`) and the funnel (scalar sub-queries wrapped in `dlp_config_resolve`); operators upsert a row to change endpoint/models/timeouts/entity catalog/prompts at runtime with no re-provision. Seeded seed-if-absent from `config.yaml`. Sentry has its own separate config stream (`agentguard_sentry_config` below) and no longer reads this one. |

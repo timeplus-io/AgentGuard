@@ -27,7 +27,6 @@ func TestCoerceAndValidate(t *testing.T) {
 		{"dlp.embedding_dim", float64(0), true, nil}, // must be >= 1
 		{"dlp.base_url", "http://x:4000/v1", false, "http://x:4000/v1"},
 		{"dlp.base_url", "not a url", true, nil},
-		{"agentguard.url", "https://h:8080", false, "https://h:8080"},
 		{"dlp.api_key", "sk-123", false, "sk-123"},
 		{"holds.timeout_seconds", float64(-1), true, nil},
 		{"holds.timeout_seconds", float64(300), false, 300}, // within ceiling

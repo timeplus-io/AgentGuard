@@ -49,16 +49,15 @@ type provisionEvent struct {
 // Provision runs Init() in-process and streams progress as SSE events.
 // On success it writes config.yaml; the frontend then calls /api/auth/login.
 //
-// Body: {"host":"...","port":3218,"native_port":8463,"username":"...","password":"...","agentguard_url":"..."}
+// Body: {"host":"...","port":3218,"native_port":8463,"username":"...","password":"..."}
 func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
-			Host          string `json:"host"           binding:"required"`
-			Port          int    `json:"port"           binding:"required"`
-			NativePort    int    `json:"native_port"    binding:"required"`
-			Username      string `json:"username"       binding:"required"`
-			Password      string `json:"password"`
-			AgentGuardURL string `json:"agentguard_url"`
+			Host       string `json:"host"           binding:"required"`
+			Port       int    `json:"port"           binding:"required"`
+			NativePort int    `json:"native_port"    binding:"required"`
+			Username   string `json:"username"       binding:"required"`
+			Password   string `json:"password"`
 		}
 		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -93,11 +92,6 @@ func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 			flusher.Flush()
 		}
 
-		agentGuardURL := body.AgentGuardURL
-		if agentGuardURL == "" {
-			agentGuardURL = cfg.AgentGuardURL
-		}
-
 		timeplusCfg := config.TimeplusConfig{
 			Host:       body.Host,
 			Port:       body.Port,
@@ -106,7 +100,7 @@ func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 			Password:   body.Password,
 		}
 
-		if err := tp.Init(timeplusCfg, agentGuardURL, cfg.DLP, cfg.Sentry, sendEvent); err != nil {
+		if err := tp.Init(timeplusCfg, cfg.DLP, cfg.Sentry, sendEvent); err != nil {
 			sendEvent("error", "Setup failed: "+err.Error())
 			return
 		}
@@ -143,7 +137,6 @@ func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 		newCfg.Timeplus.Host = body.Host
 		newCfg.Timeplus.Port = body.Port
 		newCfg.Timeplus.NativePort = body.NativePort
-		newCfg.AgentGuardURL = agentGuardURL
 		newCfg.SetupComplete = true
 		newCfg.DLP.EmbeddingDim = embDim
 		newCfg.ProvisionedDLP = config.ProvisionedDLP{
@@ -165,7 +158,6 @@ func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 		cfg.Timeplus.Host = body.Host
 		cfg.Timeplus.Port = body.Port
 		cfg.Timeplus.NativePort = body.NativePort
-		cfg.AgentGuardURL = agentGuardURL
 		cfg.SetupComplete = true
 		cfg.DLP.EmbeddingDim = embDim
 		cfg.ProvisionedDLP = newCfg.ProvisionedDLP

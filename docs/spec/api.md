@@ -27,7 +27,7 @@ AgentGuard is a real-time security monitoring and governance platform for AI cod
 All data is sourced from **Timeplus Enterprise** streaming SQL. The server falls back gracefully when Timeplus is unavailable.
 
 ### Authentication
-Most endpoints require an active session. Call `POST /auth/login` with Timeplus credentials to receive an `agentguard_session` httpOnly cookie. Include `credentials: 'include'` on all fetch calls. The exceptions are `/auth/*`, `/setup/*`, and `/alerts/webhook`, which are unauthenticated.
+Most endpoints require an active session. Call `POST /auth/login` with Timeplus credentials to receive an `agentguard_session` httpOnly cookie. Include `credentials: 'include'` on all fetch calls. The exceptions are `/auth/*` and `/setup/*`, which are unauthenticated.
 
 On first launch the setup wizard must run before login is possible. Call `GET /auth/status` to check `setup_complete` and `logged_in`.
 
@@ -3189,97 +3189,7 @@ cookieAuth
 
 <h1 id="agentguard-api-alerts">Alerts</h1>
 
-Real-time alert delivery — webhook receiver and SSE notification stream.
-
-## Receive a rule-triggered alert
-
-<a id="opIdalertWebhook"></a>
-
-> Code samples
-
-```shell
-# You can also use wget
-curl -X POST /api/alerts/webhook \
-  -H 'Content-Type: application/json'
-
-```
-
-```javascript
-const inputBody = '{
-  "rule_id": "string",
-  "rule_name": "string",
-  "severity": "critical",
-  "agent_id": "string",
-  "deployment_id": "string",
-  "message": "string",
-  "detected_at": "string"
-}';
-const headers = {
-  'Content-Type':'application/json'
-};
-
-fetch('/api/alerts/webhook',
-{
-  method: 'POST',
-  body: inputBody,
-  headers: headers
-})
-.then(function(res) {
-    return res.json();
-}).then(function(body) {
-    console.log(body);
-});
-
-```
-
-```python
-import requests
-headers = {
-  'Content-Type': 'application/json'
-}
-
-r = requests.post('/api/alerts/webhook', headers = headers)
-
-print(r.json())
-
-```
-
-`POST /alerts/webhook`
-
-Webhook endpoint called by the Proton `notify_agentguard_udf` Python UDF. The UDF is invoked by the `agentguard_notifier` Proton alert when new rows appear in `agentguard_security_events`.
-
-Received alerts are fanned out to all connected SSE clients on `/notifications/stream`. You can also POST to this endpoint manually for testing.
-
-> Body parameter
-
-```json
-{
-  "rule_id": "string",
-  "rule_name": "string",
-  "severity": "critical",
-  "agent_id": "string",
-  "deployment_id": "string",
-  "message": "string",
-  "detected_at": "string"
-}
-```
-
-<h3 id="receive-a-rule-triggered-alert-parameters">Parameters</h3>
-
-|Name|In|Type|Required|Description|
-|---|---|---|---|---|
-|body|body|[Alert](#schemaalert)|true|none|
-
-<h3 id="receive-a-rule-triggered-alert-responses">Responses</h3>
-
-|Status|Meaning|Description|Schema|
-|---|---|---|---|
-|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|Alert accepted and forwarded to SSE clients.|None|
-
-<aside class="warning">
-To perform this operation, you must be authenticated by means of one of the following methods:
-cookieAuth
-</aside>
+Real-time alert delivery — SSE notification stream.
 
 ## Live alert SSE stream
 
@@ -3346,6 +3256,112 @@ curl -N http://localhost:8080/api/notifications/stream
 |Status|Meaning|Description|Schema|
 |---|---|---|---|
 |200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|SSE stream — one JSON alert per `data:` line.|string|
+
+<aside class="warning">
+To perform this operation, you must be authenticated by means of one of the following methods:
+cookieAuth
+</aside>
+
+## List unconfirmed alert notifications
+
+<a id="opIdlistUnconfirmedNotifications"></a>
+
+> Code samples
+
+```shell
+curl -X GET /api/notifications/unconfirmed \
+  -H 'Accept: application/json'
+```
+
+`GET /notifications/unconfirmed`
+
+Returns unconfirmed threat notifications, newest-first, for SSE-reconnect backfill (a browser that missed live events while disconnected). Backed by the `agentguard_notifications` mutable stream; `id` is the stable identity key `deployment_id|agent_id|session_id|rule_id` used by `POST /notifications/confirm`.
+
+Best-effort: if the underlying query fails (e.g. stream not yet provisioned) this returns `200` with an empty list rather than an error, so the toast UI stays quiet.
+
+> Example responses
+
+> 200 Response
+
+```json
+{
+  "notifications": [
+    {
+      "id": "eng-team|claude-code|a1b2c3d4-0000-0000-0000-000000000001|rp-001",
+      "rule_id": "rp-001",
+      "rule_name": "Prompt Injection Guard",
+      "severity": "critical",
+      "agent_id": "claude-code",
+      "deployment_id": "eng-team",
+      "session_id": "a1b2c3d4-0000-0000-0000-000000000001",
+      "message": "Prompt injection detected",
+      "detected_at": "2026-04-09 10:00:05.000"
+    }
+  ]
+}
+```
+
+<h3 id="list-unconfirmed-alert-notifications-responses">Responses</h3>
+
+|Status|Meaning|Description|Schema|
+|---|---|---|---|
+|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|Unconfirmed notifications, max 20.|[UnconfirmedNotificationsResponse](#schemaunconfirmednotificationsresponse)|
+
+<aside class="warning">
+To perform this operation, you must be authenticated by means of one of the following methods:
+cookieAuth
+</aside>
+
+## Confirm an alert notification
+
+<a id="opIdconfirmNotification"></a>
+
+> Code samples
+
+```shell
+curl -X POST /api/notifications/confirm \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json'
+```
+
+`POST /notifications/confirm`
+
+Marks a threat notification as seen — the user dismissed or clicked the toast. Upserts `confirmed=true` into the `agentguard_notifications` mutable stream for the given identity; idempotent.
+
+> Body parameter
+
+```json
+{
+  "agent_id": "claude-code",
+  "deployment_id": "eng-team",
+  "session_id": "a1b2c3d4-0000-0000-0000-000000000001",
+  "rule_id": "rp-001"
+}
+```
+
+<h3 id="confirm-an-alert-notification-parameters">Parameters</h3>
+
+|Name|In|Type|Required|Description|
+|---|---|---|---|---|
+|body|body|[NotificationConfirmRequest](#schemanotificationconfirmrequest)|true|`agent_id` and `rule_id` are required; `deployment_id`/`session_id` may be empty on older/partial events.|
+
+> Example responses
+
+> 200 Response
+
+```json
+{
+  "ok": true
+}
+```
+
+<h3 id="confirm-an-alert-notification-responses">Responses</h3>
+
+|Status|Meaning|Description|Schema|
+|---|---|---|---|
+|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|Confirmed.|None|
+|400|[Bad Request](https://tools.ietf.org/html/rfc7231#section-6.5.1)|Missing agent_id or rule_id.|None|
+|500|[Internal Server Error](https://tools.ietf.org/html/rfc7231#section-6.6.1)|Upsert into agentguard_notifications failed.|None|
 
 <aside class="warning">
 To perform this operation, you must be authenticated by means of one of the following methods:
@@ -4097,8 +4113,7 @@ const inputBody = '{
   "port": 3218,
   "native_port": 8463,
   "username": "default",
-  "password": "",
-  "agentguard_url": "http://localhost:8080"
+  "password": ""
 }';
 const headers = {
   'Content-Type':'application/json',
@@ -4152,8 +4167,7 @@ This endpoint is unauthenticated. On success it writes `config.yaml` with `setup
   "port": 3218,
   "native_port": 8463,
   "username": "default",
-  "password": "",
-  "agentguard_url": "http://localhost:8080"
+  "password": ""
 }
 ```
 
@@ -6436,8 +6450,7 @@ Connection parameters for POST /setup/test-connection.
   "port": 3218,
   "native_port": 8463,
   "username": "default",
-  "password": "",
-  "agentguard_url": "http://localhost:8080"
+  "password": ""
 }
 
 ```
@@ -6453,7 +6466,6 @@ Full connection details for POST /setup/provision.
 |native_port|integer|true|none|Timeplus native TCP port.|
 |username|string|true|none|Timeplus username.|
 |password|string|false|none|Timeplus password.|
-|agentguard_url|string|false|none|URL where AgentGuard is reachable from Timeplus's network — used for alert webhook callbacks.|
 
 <h2 id="tocS_ProvisionEvent">ProvisionEvent</h2>
 <!-- backwards compatibility -->
@@ -6777,4 +6789,113 @@ Response from GET /activity.
 |---|---|---|---|---|
 |events|[[ActivityEvent](#schemaactivityevent)]|false|none|[One event in the activity feed. Sourced from agentguard_holds (is_hold_event=true) or agentguard_hook_events when include_allowed=true (is_hold_event=false).]|
 |total|integer|false|none|none|
+
+<h2 id="tocS_UnconfirmedNotification">UnconfirmedNotification</h2>
+<!-- backwards compatibility -->
+<a id="schemaunconfirmednotification"></a>
+<a id="schema_UnconfirmedNotification"></a>
+<a id="tocSunconfirmednotification"></a>
+<a id="tocsunconfirmednotification"></a>
+
+```json
+{
+  "id": "string",
+  "rule_id": "string",
+  "rule_name": "string",
+  "severity": "critical",
+  "agent_id": "string",
+  "deployment_id": "string",
+  "session_id": "string",
+  "message": "string",
+  "detected_at": "2019-08-24T14:15:22Z"
+}
+
+```
+
+One unconfirmed threat notification, as returned by GET /notifications/unconfirmed.
+
+### Properties
+
+|Name|Type|Required|Restrictions|Description|
+|---|---|---|---|---|
+|id|string|false|none|Stable identity key: deployment_id\|agent_id\|session_id\|rule_id.|
+|rule_id|string|false|none|none|
+|rule_name|string|false|none|none|
+|severity|string|false|none|none|
+|agent_id|string|false|none|none|
+|deployment_id|string|false|none|none|
+|session_id|string|false|none|none|
+|message|string|false|none|none|
+|detected_at|string|false|none|none|
+
+#### Enumerated Values
+
+|Property|Value|
+|---|---|
+|severity|critical|
+|severity|warning|
+|severity|info|
+|severity||
+
+<h2 id="tocS_UnconfirmedNotificationsResponse">UnconfirmedNotificationsResponse</h2>
+<!-- backwards compatibility -->
+<a id="schemaunconfirmednotificationsresponse"></a>
+<a id="schema_UnconfirmedNotificationsResponse"></a>
+<a id="tocSunconfirmednotificationsresponse"></a>
+<a id="tocsunconfirmednotificationsresponse"></a>
+
+```json
+{
+  "notifications": [
+    {
+      "id": "string",
+      "rule_id": "string",
+      "rule_name": "string",
+      "severity": "critical",
+      "agent_id": "string",
+      "deployment_id": "string",
+      "session_id": "string",
+      "message": "string",
+      "detected_at": "2019-08-24T14:15:22Z"
+    }
+  ]
+}
+
+```
+
+Response from GET /notifications/unconfirmed.
+
+### Properties
+
+|Name|Type|Required|Restrictions|Description|
+|---|---|---|---|---|
+|notifications|[[UnconfirmedNotification](#schemaunconfirmednotification)]|false|none|[One unconfirmed threat notification, as returned by GET /notifications/unconfirmed.]|
+
+<h2 id="tocS_NotificationConfirmRequest">NotificationConfirmRequest</h2>
+<!-- backwards compatibility -->
+<a id="schemanotificationconfirmrequest"></a>
+<a id="schema_NotificationConfirmRequest"></a>
+<a id="tocSnotificationconfirmrequest"></a>
+<a id="tocsnotificationconfirmrequest"></a>
+
+```json
+{
+  "agent_id": "string",
+  "deployment_id": "string",
+  "session_id": "string",
+  "rule_id": "string"
+}
+
+```
+
+Request body for POST /notifications/confirm. deployment_id and session_id may legitimately be empty on older/partial events.
+
+### Properties
+
+|Name|Type|Required|Restrictions|Description|
+|---|---|---|---|---|
+|agent_id|string|true|none|none|
+|deployment_id|string|false|none|none|
+|session_id|string|false|none|none|
+|rule_id|string|true|none|none|
 

@@ -90,15 +90,12 @@ docker run -d \
   --name agentguard \
   -p 8080:8080 \
   -e TIMEPLUS_HOST=<timeplus-host> \
-  -e AGENTGUARD_URL=http://<agentguard-host>:8080 \
   -v agentguard-data:/app/data \
   --restart unless-stopped \
   ghcr.io/timeplus-io/agentguard:latest
 ```
 
 Replace `<timeplus-host>` with the hostname or IP where Timeplus is running (use `host.docker.internal` on macOS/Windows when Timeplus runs on the host machine).
-
-Replace `<agentguard-host>` with the address Timeplus will use to call back AgentGuard for alert webhooks — see [Alert UDF webhook](#alert-udf-webhook) below.
 
 The `-v agentguard-data:/app/data` volume persists the `config.yaml` written by the setup wizard across container restarts and image upgrades. Without it, setup runs again after every restart.
 
@@ -140,8 +137,6 @@ services:
       TIMEPLUS_HOST: timeplus
       TIMEPLUS_PORT: 3218
       SERVER_PORT: 8080
-      # Timeplus calls this URL for alert webhooks; use the Docker service name.
-      AGENTGUARD_URL: "http://agentguard:8080"
     volumes:
       # Persists config.yaml and custom catalog rules across restarts and image upgrades.
       # Mounted at /app/data only — the binary is never shadowed by the volume.
@@ -163,7 +158,6 @@ docker compose up -d
 Open [http://localhost:8080](http://localhost:8080) — the **setup wizard** appears on first launch.
 
 - AgentGuard waits for Timeplus to pass its health check before starting.
-- `AGENTGUARD_URL=http://agentguard:8080` ensures Timeplus Enterprise can call back AgentGuard using the Docker service name.
 - Credentials are entered in the setup wizard, not in the compose file.
 
 To stop and remove all data (requires re-setup):
@@ -171,22 +165,9 @@ To stop and remove all data (requires re-setup):
 docker compose down -v
 ```
 
-### Alert UDF webhook
+### Alert delivery
 
-When a security rule fires, Timeplus executes a Python UDF (`notify_agentguard_udf`) that HTTP-POSTs the alert back to AgentGuard at:
-
-```
-<AGENTGUARD_URL>/api/alerts/webhook
-```
-
-This is a **Timeplus → AgentGuard** call, so `AGENTGUARD_URL` must be the address where AgentGuard is reachable _from Timeplus's network perspective_:
-
-| Deployment | `AGENTGUARD_URL` |
-|---|---|
-| Both on host | `http://localhost:8080` _(default)_ |
-| Docker Compose | `http://agentguard:8080` _(pre-configured)_ |
-| AgentGuard in Docker, Timeplus on host | `http://host.docker.internal:8080` |
-| Remote / cloud | `http://<public-ip-or-hostname>:8080` |
+When a security rule fires, its materialized view writes a row to `agentguard_notify_events`. A backend watcher (`internal/notify`, #258) tails that stream directly via a streaming SQL query — there is no Timeplus→AgentGuard network callback — and fans matches out over the existing `/api/notifications/stream` SSE pipeline. Seen-state persists per threat identity in the `agentguard_notifications` mutable stream, so the browser backfills unconfirmed notifications on reconnect (`GET /api/notifications/unconfirmed`) and confirms them explicitly (`POST /api/notifications/confirm`).
 
 ---
 
@@ -194,7 +175,7 @@ This is a **Timeplus → AgentGuard** call, so `AGENTGUARD_URL` must be the addr
 
 On first launch, AgentGuard shows a 3-step setup wizard instead of the dashboard.
 
-**Step 1 — Connection:** Enter your Timeplus host, HTTP port (3218), native TCP port (8463), and the AgentGuard URL (used for alert callbacks). Defaults are pre-filled from environment variables if set.
+**Step 1 — Connection:** Enter your Timeplus host, HTTP port (3218), and native TCP port (8463). Defaults are pre-filled from environment variables if set.
 
 **Step 2 — Credentials:** Enter your Timeplus username and password. Click **Test Connection** to verify — the Next button is disabled until the test passes. Credentials are never stored on disk or in the config file; they live only in the server's in-memory session.
 
