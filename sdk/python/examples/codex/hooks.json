@@ -1,0 +1,10 @@
+{
+    "description": "Sample Codex hooks for AgentGuard",
+    "hooks": {
+        "SessionStart": [ { "hooks": [ { "type": "command", "command": "python main.py --agent-id codex-agent --deployment-id test --deployment-name Test" } ] } ],
+        "SessionEnd": [ { "hooks": [ { "type": "command", "command": "python main.py --agent-id codex-agent --deployment-id test --deployment-name Test" } ] } ],
+        "UserPromptSubmit": [ { "hooks": [ { "type": "command", "command": "python main.py --agent-id codex-agent --deployment-id test --deployment-name Test" } ] } ],
+        "PreToolUse": [ { "hooks": [ { "type": "command", "command": "python main.py --agent-id codex-agent --deployment-id test --deployment-name Test" } ] } ],
+        "PostToolUse": [ { "hooks": [ { "type": "command", "command": "python main.py --agent-id codex-agent --deployment-id test --deployment-name Test" } ] } ]
+    }
+}
