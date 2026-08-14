@@ -85,5 +85,41 @@ class TestMapping(unittest.TestCase):
         self.assertTrue(all(r["deployment_id"] == "audit-demo" for r in rows))
 
 
+class TestPayload(unittest.TestCase):
+    def _cases(self):
+        return g.load_scenarios(FIX)
+
+    def test_jsoneachrow_one_line_per_row(self):
+        now = dt.datetime(2026, 8, 14, 12, 0, 0, tzinfo=dt.timezone.utc)
+        rows = g.case_to_rows(self._cases()[0], now, "audit-demo")
+        body = g.rows_to_jsoneachrow(rows)
+        self.assertEqual(len(body.splitlines()), len(rows))
+        for line in body.splitlines():
+            obj = _json.loads(line)
+            self.assertEqual(set(obj.keys()), set(g.CIM_COLUMNS))
+
+    def test_insert_payload_prefix(self):
+        now = dt.datetime(2026, 8, 14, 12, 0, 0, tzinfo=dt.timezone.utc)
+        rows = g.case_to_rows(self._cases()[0], now, "audit-demo")
+        payload = g.build_insert_payload(rows)
+        self.assertTrue(payload.startswith(
+            b"INSERT INTO agentguard_cim_event FORMAT JSONEachRow\n"))
+
+    def test_build_all_rows_staggers_cases(self):
+        now = dt.datetime(2026, 8, 14, 12, 0, 0, tzinfo=dt.timezone.utc)
+        cases = self._cases()
+        rows = g.build_all_rows(cases, now, "audit-demo", repeat=1)
+        # every case represented
+        sids = set(r["session_id"] for r in rows)
+        self.assertEqual(len(sids), len(cases))
+
+    def test_repeat_creates_distinct_sessions(self):
+        now = dt.datetime(2026, 8, 14, 12, 0, 0, tzinfo=dt.timezone.utc)
+        cases = [self._cases()[0]]
+        rows = g.build_all_rows(cases, now, "audit-demo", repeat=2)
+        sids = set(r["session_id"] for r in rows)
+        self.assertEqual(len(sids), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -6,10 +6,12 @@ agentguard_cim_event and scores the installed dsa-* detectors against the
 description-derived ground truth. Stdlib only.
 """
 import argparse
+import base64
 import datetime as dt
 import glob
 import json
 import os
+import urllib.request
 
 CIM_COLUMNS = [
     "event_time", "event_type", "agent_type", "agent_id", "deployment_id",
@@ -169,3 +171,66 @@ def case_to_rows(case, now, deployment_id, suffix=""):
         }
         rows.append(row)
     return rows
+
+
+INSERT_PREFIX = b"INSERT INTO agentguard_cim_event FORMAT JSONEachRow\n"
+
+
+def rows_to_jsoneachrow(rows):
+    return "\n".join(json.dumps(r, ensure_ascii=False) for r in rows)
+
+
+def build_insert_payload(rows):
+    return INSERT_PREFIX + rows_to_jsoneachrow(rows).encode("utf-8")
+
+
+def build_all_rows(cases, now, deployment_id, repeat=1):
+    rows = []
+    for r in range(max(1, repeat)):
+        suffix = "" if r == 0 else f"-r{r}"
+        for idx, case in enumerate(cases):
+            case_now = now - dt.timedelta(milliseconds=idx * CASE_GAP_MS)
+            rows.extend(case_to_rows(case, case_now, deployment_id, suffix))
+    return rows
+
+
+def http_exec(cfg, payload):
+    url = f"http://{cfg['host']}:{cfg['port']}/"
+    req = urllib.request.Request(url, data=payload, method="POST")
+    token = base64.b64encode(f"{cfg['user']}:{cfg['password']}".encode()).decode()
+    req.add_header("Authorization", f"Basic {token}")
+    with urllib.request.urlopen(req, timeout=cfg.get("timeout", 30)) as resp:
+        return resp.read().decode("utf-8", "replace")
+
+
+def _cfg_from_args(args):
+    return {"host": args.host, "port": args.port, "user": args.user,
+            "password": args.password}
+
+
+def _scenarios_dir(args):
+    return args.scenarios or os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenarios")
+
+
+def cmd_load(args):
+    codes = args.codes.split(",") if args.codes else None
+    cases = load_scenarios(_scenarios_dir(args), codes)
+    if args.count:
+        by_code = {}
+        capped = []
+        for c in cases:
+            by_code.setdefault(c["audit_code"], 0)
+            if by_code[c["audit_code"]] < args.count:
+                capped.append(c)
+                by_code[c["audit_code"]] += 1
+        cases = capped
+    now = dt.datetime.now(dt.timezone.utc)
+    rows = build_all_rows(cases, now, args.deployment_id, args.repeat)
+    payload = build_insert_payload(rows)
+    if args.dry_run:
+        print(f"[dry-run] {len(cases)} cases -> {len(rows)} rows "
+              f"(deployment_id={args.deployment_id})")
+        return
+    http_exec(_cfg_from_args(args), payload)
+    print(f"Loaded {len(cases)} cases -> {len(rows)} rows into agentguard_cim_event "
+          f"(deployment_id={args.deployment_id})")
