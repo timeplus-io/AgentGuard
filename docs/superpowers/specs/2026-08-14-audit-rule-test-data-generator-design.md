@@ -58,7 +58,7 @@ The three without a rule are still authored: their positives become documented d
 
 One JSON file per code: `scenarios/A01.json … A15.json`. Each file is a list of **cases**; each case is one complete multi-turn session.
 
-Default **5 positive + 5 negative** per code (configurable at authoring time). ~15 × 10 = ~150 cases, plus ~10 fully-benign background sessions (no code) for realism. Each case is a realistic conversation of **multiple turns** — several `(user_input → llm_response)` rounds with interleaved tool calls, bracketed by `session_start`/`session_end` — with the rule-relevant content sitting naturally inside the longer flow.
+Default **6 positive + 6 negative** per code (≥5 minimum, configurable at authoring time). 15 × 12 = 180 cases total, plus ~10 fully-benign background sessions (no code) for realism. Each case is a realistic conversation of **multiple turns** — several `(user_input → llm_response)` rounds with interleaved tool calls, bracketed by `session_start`/`session_end` — with the rule-relevant content sitting naturally inside the longer flow.
 
 ```json
 {
@@ -97,7 +97,7 @@ The corpus is generated **once** by an LLM and committed to the repo. Authoring 
 3. the **real-world research** (Samsung/ChatGPT source-code paste, ChatGPT Redis cross-user leak, EchoLeak, McHire IDOR, InjecAgent/AgentDojo, etc.),
 4. a **fake-but-format-valid value library** (`fake_values.py`): 身份证 with MOD-11 checksum, UnionPay Luhn card, `1[3-9]` mobile, AWS `AKIA…`, GitHub `ghp_…`, JWT, PEM — all clearly fake but format-valid,
 
-and explicitly **not** the `dsa-*` SQL. The agent returns 5 positive + 5 negative multi-turn cases with rationales. Output is human-reviewed for realism and correct labeling, then committed. Re-running authoring with a different count is supported but not required.
+and explicitly **not** the `dsa-*` SQL. The agent returns 6 positive + 6 negative multi-turn cases with rationales. Output is human-reviewed for realism and correct labeling, then committed. Re-running authoring with a different count is supported but not required.
 
 ## 7. The tool — `backend/scripts/gen_audit_data.py`
 

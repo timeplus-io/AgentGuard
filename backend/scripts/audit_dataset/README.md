@@ -104,8 +104,9 @@ Flags:
 ### Environment variables
 
 Connection settings read from the environment (overridable with
-`--host`/`--user`/`--password`; there is no `--port` flag — the HTTP port
-is fixed at `8123`):
+`--host`/`--user`/`--password`; there is no `TIMEPLUS_PORT` environment
+variable, but the port can be overridden with the `--port` flag, default
+`8123`):
 
 | Variable | Default |
 |---|---|
