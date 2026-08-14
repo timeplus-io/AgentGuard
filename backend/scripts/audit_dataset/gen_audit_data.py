@@ -234,3 +234,44 @@ def cmd_load(args):
     http_exec(_cfg_from_args(args), payload)
     print(f"Loaded {len(cases)} cases -> {len(rows)} rows into agentguard_cim_event "
           f"(deployment_id={args.deployment_id})")
+
+
+def expected_rule_id(code):
+    if code.upper() in CODES_WITHOUT_RULE:
+        return None
+    return "dsa-" + code.lower()
+
+
+def score_cases(cases, fired):
+    by_code = {}
+    for case in cases:
+        by_code.setdefault(case["audit_code"], []).append(case)
+    report = {}
+    for code, code_cases in sorted(by_code.items()):
+        rule = expected_rule_id(code)
+        tp = fp = fn = tn = 0
+        misses, false_alarms = [], []
+        for case in code_cases:
+            sid = case_session_id(case)
+            hit = rule is not None and (rule, sid) in fired
+            if case["label"] == "positive":
+                if hit:
+                    tp += 1
+                else:
+                    fn += 1
+                    misses.append(case["case_id"])
+            else:
+                if hit:
+                    fp += 1
+                    false_alarms.append(case["case_id"])
+                else:
+                    tn += 1
+        precision = tp / (tp + fp) if (tp + fp) else None
+        recall = tp / (tp + fn) if (tp + fn) else None
+        report[code] = {
+            "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+            "precision": precision, "recall": recall,
+            "no_rule": rule is None,
+            "misses": misses, "false_alarms": false_alarms,
+        }
+    return report

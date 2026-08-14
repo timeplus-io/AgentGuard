@@ -121,5 +121,43 @@ class TestPayload(unittest.TestCase):
         self.assertEqual(len(sids), 2)
 
 
+class TestScoring(unittest.TestCase):
+    def test_expected_rule_id(self):
+        self.assertEqual(g.expected_rule_id("A01"), "dsa-a01")
+        self.assertIsNone(g.expected_rule_id("A02"))
+
+    def test_confusion_matrix(self):
+        cases = [
+            {"case_id": "A01-pos-001", "audit_code": "A01", "label": "positive", "events": []},
+            {"case_id": "A01-pos-002", "audit_code": "A01", "label": "positive", "events": []},
+            {"case_id": "A01-neg-001", "audit_code": "A01", "label": "negative", "events": []},
+            {"case_id": "A01-neg-002", "audit_code": "A01", "label": "negative", "events": []},
+        ]
+        fired = {
+            ("dsa-a01", "audit-A01-pos-001"),   # TP
+            ("dsa-a01", "audit-A01-neg-001"),   # FP
+            # pos-002 not fired -> FN ; neg-002 not fired -> TN
+        }
+        rep = g.score_cases(cases, fired)["A01"]
+        self.assertEqual((rep["tp"], rep["fp"], rep["fn"], rep["tn"]), (1, 1, 1, 1))
+        self.assertAlmostEqual(rep["precision"], 0.5)
+        self.assertAlmostEqual(rep["recall"], 0.5)
+        self.assertEqual(rep["misses"], ["A01-pos-002"])
+        self.assertEqual(rep["false_alarms"], ["A01-neg-001"])
+
+    def test_no_rule_code(self):
+        cases = [{"case_id": "A02-pos-001", "audit_code": "A02", "label": "positive", "events": []}]
+        rep = g.score_cases(cases, set())["A02"]
+        self.assertTrue(rep["no_rule"])
+        self.assertEqual(rep["fn"], 1)  # positive undetected (known gap)
+
+    def test_cross_fire_ignored_for_other_code(self):
+        # dsa-a06 firing on an A06 session must not affect A01's matrix
+        cases = [{"case_id": "A01-neg-001", "audit_code": "A01", "label": "negative", "events": []}]
+        fired = {("dsa-a06", "audit-A01-neg-001")}
+        rep = g.score_cases(cases, fired)["A01"]
+        self.assertEqual((rep["fp"], rep["tn"]), (0, 1))
+
+
 if __name__ == "__main__":
     unittest.main()
