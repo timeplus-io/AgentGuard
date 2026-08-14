@@ -159,5 +159,16 @@ class TestScoring(unittest.TestCase):
         self.assertEqual((rep["fp"], rep["tn"]), (0, 1))
 
 
+class TestQueryParse(unittest.TestCase):
+    def test_parse_tsv(self):
+        text = "dsa-a01\taudit-A01-pos-001\ndsa-a06\taudit-A06-pos-002\n"
+        fired = g.parse_security_events_tsv(text)
+        self.assertIn(("dsa-a01", "audit-A01-pos-001"), fired)
+        self.assertIn(("dsa-a06", "audit-A06-pos-002"), fired)
+
+    def test_parse_tsv_ignores_blank_lines(self):
+        self.assertEqual(g.parse_security_events_tsv("\n\n"), set())
+
+
 if __name__ == "__main__":
     unittest.main()

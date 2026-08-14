@@ -11,6 +11,8 @@ import datetime as dt
 import glob
 import json
 import os
+import sys
+import time
 import urllib.request
 
 CIM_COLUMNS = [
@@ -199,8 +201,15 @@ def http_exec(cfg, payload):
     req = urllib.request.Request(url, data=payload, method="POST")
     token = base64.b64encode(f"{cfg['user']}:{cfg['password']}".encode()).decode()
     req.add_header("Authorization", f"Basic {token}")
-    with urllib.request.urlopen(req, timeout=cfg.get("timeout", 30)) as resp:
-        return resp.read().decode("utf-8", "replace")
+    try:
+        with urllib.request.urlopen(req, timeout=cfg.get("timeout", 30)) as resp:
+            return resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        sys.stderr.write(f"error: HTTP {e.code}: {e.read().decode(errors='replace')}\n")
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        sys.stderr.write(f"error: cannot reach Timeplus at {url}: {e.reason}\n")
+        sys.exit(1)
 
 
 def _cfg_from_args(args):
@@ -275,3 +284,93 @@ def score_cases(cases, fired):
             "misses": misses, "false_alarms": false_alarms,
         }
     return report
+
+
+def parse_security_events_tsv(text):
+    fired = set()
+    for line in text.splitlines():
+        line = line.strip("\n")
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 2:
+            fired.add((parts[0].strip(), parts[1].strip()))
+    return fired
+
+
+def query_fired(cfg, deployment_id):
+    sql = (
+        "SELECT rule_id, session_id FROM table(agentguard_security_events) "
+        f"WHERE deployment_id = '{deployment_id}' FORMAT TabSeparated"
+    )
+    text = http_exec(cfg, sql.encode("utf-8"))
+    return parse_security_events_tsv(text)
+
+
+def _fmt_pct(x):
+    return "  n/a" if x is None else f"{x*100:5.1f}%"
+
+
+def cmd_score(args):
+    codes = args.codes.split(",") if args.codes else None
+    cases = load_scenarios(_scenarios_dir(args), codes)
+    if args.settle:
+        time.sleep(args.settle)
+    fired = query_fired(_cfg_from_args(args), args.deployment_id)
+    report = score_cases(cases, fired)
+    print(f"{'code':5} {'TP':>3} {'FP':>3} {'FN':>3} {'TN':>3} "
+          f"{'prec':>6} {'recall':>6}  notes")
+    for code, r in report.items():
+        note = "NO RULE (gap)" if r["no_rule"] else ""
+        print(f"{code:5} {r['tp']:>3} {r['fp']:>3} {r['fn']:>3} {r['tn']:>3} "
+              f"{_fmt_pct(r['precision'])} {_fmt_pct(r['recall'])}  {note}")
+        if r["misses"]:
+            print(f"      false negatives: {', '.join(r['misses'])}")
+        if r["false_alarms"]:
+            print(f"      false positives: {', '.join(r['false_alarms'])}")
+
+
+def cmd_clear(args):
+    print("agentguard_cim_event is append-only; seeded rows cannot be deleted "
+          "in place.\nTo remove this run's data, drop and recreate the stream, "
+          "or filter it out by:\n"
+          f"  deployment_id = '{args.deployment_id}'\n"
+          "Seeded security_events are similarly append-only.")
+
+
+def _add_common(p):
+    p.add_argument("--host", default=os.environ.get("TIMEPLUS_HOST", "localhost"))
+    p.add_argument("--port", default="8123")
+    p.add_argument("--user", default=os.environ.get("TIMEPLUS_USER", "proton"))
+    p.add_argument("--password", default=os.environ.get("TIMEPLUS_PASSWORD", ""))
+    p.add_argument("--deployment-id", default=DEFAULT_DEPLOYMENT_ID)
+    p.add_argument("--codes", default="", help="comma-separated, e.g. A01,A03")
+    p.add_argument("--scenarios", default="", help="override scenarios dir")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Audit-rule test-data generator (#280)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    lp = sub.add_parser("load", help="ingest corpus into agentguard_cim_event")
+    _add_common(lp)
+    lp.add_argument("--count", type=int, default=0, help="cap cases per code (0 = all)")
+    lp.add_argument("--repeat", type=int, default=1)
+    lp.add_argument("--dry-run", action="store_true")
+    lp.set_defaults(func=cmd_load)
+
+    sp = sub.add_parser("score", help="score dsa-* detectors vs. labels")
+    _add_common(sp)
+    sp.add_argument("--settle", type=float, default=5.0)
+    sp.set_defaults(func=cmd_score)
+
+    cp = sub.add_parser("clear", help="print teardown guidance (append-only stream)")
+    _add_common(cp)
+    cp.set_defaults(func=cmd_clear)
+
+    args = ap.parse_args(argv)
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
