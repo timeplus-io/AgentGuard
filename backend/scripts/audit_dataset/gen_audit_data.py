@@ -90,3 +90,82 @@ def load_scenarios(scenarios_dir, codes=None):
             cases.append(case)
     cases.sort(key=lambda c: c["case_id"])
     return cases
+
+
+def case_session_id(case, suffix=""):
+    return "audit-" + case["case_id"] + suffix
+
+
+def _fmt_time(t):
+    return t.strftime("%Y-%m-%d %H:%M:%S.") + f"{t.microsecond // 1000:03d}"
+
+
+def _raw_event_data(event_type, ev):
+    """Synthesize a minimal, non-empty raw hook payload JSON string."""
+    payload = {}
+    if event_type in ("user_input", "llm_request"):
+        payload = {"prompt": ev.get("user_message", "")}
+    elif event_type == "llm_response":
+        payload = {"last_assistant_message": ev.get("assistant_message", "")}
+    elif event_type == "tool_invoke":
+        payload = {"tool_name": ev.get("tool_name", ""), "tool_input": ev.get("tool_input", "")}
+    elif event_type == "tool_complete":
+        payload = {"tool_name": ev.get("tool_name", ""),
+                   "tool_response": ev.get("tool_result", "")}
+    else:
+        payload = {"event": event_type}
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def case_to_rows(case, now, deployment_id, suffix=""):
+    session = dict(case.get("session", {}))
+    agent_type = session.get("agent_type") or case.get("agent_type") or "openclaw"
+    hooks = HOOK_NAMES[agent_type]
+    sid = case_session_id(case, suffix)
+    events = case["events"]
+    n = len(events)
+    rows = []
+    run_index = 0
+    for i, ev in enumerate(events):
+        et = ev["event_type"]
+        if et == "user_input":
+            run_index += 1
+        if agent_type in ("claudecode", "hermes"):
+            run_id = sid
+        elif et in ("session_start", "session_end"):
+            run_id = sid
+        else:
+            run_id = f"{sid}::run{max(run_index, 1)}"
+        t = now - dt.timedelta(milliseconds=(n - 1 - i) * STEP_MS)
+
+        def pick(field, default=""):
+            if field in ev:
+                return ev[field]
+            if field in session:
+                return session[field]
+            return default
+
+        row = {
+            "event_time": _fmt_time(t),
+            "event_type": et,
+            "agent_type": agent_type,
+            "agent_id": pick("agent_id", "audit-agent"),
+            "deployment_id": deployment_id,
+            "session_id": sid,
+            "run_id": run_id,
+            "provider": pick("provider", ""),
+            "model": pick("model", ""),
+            "tool_name": ev.get("tool_name", ""),
+            "tool_input": ev.get("tool_input", ""),
+            "tool_result": ev.get("tool_result", ""),
+            "tool_success": bool(ev.get("tool_success", True)),
+            "tool_duration_ms": int(ev.get("tool_duration_ms", 0)),
+            "user_message": ev.get("user_message", ""),
+            "assistant_message": ev.get("assistant_message", ""),
+            "hook_decision": ev.get("hook_decision", "observe"),
+            "block_reason": ev.get("block_reason", ""),
+            "raw_hook_name": hooks.get(et, et),
+            "raw_event_data": _raw_event_data(et, ev),
+        }
+        rows.append(row)
+    return rows
