@@ -6,6 +6,7 @@
         compose-up compose-down compose-restart \
         scripts-sync package-plugins \
         dlp-mock dlp-seed dlp-integration \
+        audit-data-seed audit-data-score \
         sentry-sync-skill sentry-integration \
         docs-api
 
@@ -167,6 +168,16 @@ dlp-seed:
 ## dlp-integration: end-to-end DLP test (mock + provision + enrich + query round-trip) against a live Timeplus
 dlp-integration:
 	bash backend/scripts/dlp_integration.sh
+
+# ── Audit test data ──────────────────────────────────────────────────────────
+
+## audit-data-seed: ingest the audit A01-A15 test-data corpus into agentguard_cim_event
+audit-data-seed:
+	cd backend/scripts/audit_dataset && python3 gen_audit_data.py load
+
+## audit-data-score: score dsa-* detectors against the audit corpus labels
+audit-data-score:
+	cd backend/scripts/audit_dataset && python3 gen_audit_data.py score
 
 # ── Sentry ───────────────────────────────────────────────────────────────────
 
