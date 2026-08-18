@@ -217,9 +217,12 @@ genuinely violates the description and each negative is genuinely benign —
 the rationale field is there to make that check fast.
 
 For agents authoring cases directly (hand-writing rather than the
-`generate` pipeline), the repo ships a skill encoding these rules:
-`.claude/skills/audit-case-authoring/SKILL.md` — schema, label semantics,
-the never-read-the-detector-SQL rule, and `fake_values.py` usage.
+`generate` pipeline), the repo ships a **self-contained** skill encoding
+these rules: `.claude/skills/audit-case-authoring/SKILL.md` — schema, the
+full A01–A15 description catalog, label semantics, the
+never-read-the-detector-SQL rule, and inline checksum-valid fake-value
+generators. It references no repo files, so it can be shared verbatim with
+agents that have no access to this repository.
 
 ## Prerequisites for a meaningful `score`
 
