@@ -89,6 +89,14 @@ python3 gen_audit_data.py score --cases A01-pos-001
 
 # Print teardown guidance for seeded data
 python3 gen_audit_data.py clear
+
+# LLM-generate NEW candidate cases into scenarios_generated/ (staged, not corpus)
+OPENAI_API_KEY=... python3 gen_audit_data.py generate --codes A03,A10 \
+    --base-url https://api.openai.com/v1 --model gpt-5.2 [--per-code 6] \
+    [--label positive|negative|both] [--api-type openai|anthropic]
+
+# After human review of the staged labels, fold them into scenarios/
+python3 gen_audit_data.py merge [--codes A03]
 ```
 
 Flags:
@@ -126,6 +134,95 @@ variable, but the port can be overridden with the `--port` flag, default
 | `TIMEPLUS_HOST` | `localhost` |
 | `TIMEPLUS_USER` | `proton` |
 | `TIMEPLUS_PASSWORD` | `` (empty) |
+
+## Generating more cases with an LLM
+
+`generate` asks an LLM to author NEW candidate cases from an audit code's
+**rule description** plus two few-shot format examples — never from the
+`dsa-*` detector SQL, preserving the corpus's label-independence contract.
+Fresh format-valid fake PII from `fake_values.py` is minted into the prompt
+so positives look real.
+
+Candidates land in **`scenarios_generated/`** (staging), never directly in
+`scenarios/`. Every case is schema-validated (`validate_case` + the
+multi-turn rule + id uniqueness); invalid ones are dropped and re-requested
+(`--retries`, default 2). Ids continue the corpus numbering
+(`A03-pos-007`, …) and each staged case carries a `generated_by: <model>`
+marker.
+
+The workflow is generate → **human-review the staged labels** → merge:
+
+```bash
+python3 gen_audit_data.py generate --codes A03 --base-url ... --model ...
+# review scenarios_generated/A03.json — check each label + rationale
+# optional trial run without touching the corpus:
+python3 gen_audit_data.py load  --scenarios scenarios_generated --codes A03
+python3 gen_audit_data.py score --scenarios scenarios_generated --codes A03
+python3 gen_audit_data.py merge --codes A03
+python3 -m unittest test_corpus       # re-check the corpus contract
+```
+
+`merge` is all-or-nothing: it validates every staged case against the corpus
+before writing, refuses duplicates/invalid cases, and deletes the staged
+file on success. Endpoint config: `--api-type openai` (default) uses
+`--base-url`/`--api-key` or `OPENAI_BASE_URL`/`OPENAI_API_KEY`;
+`--api-type anthropic` uses `ANTHROPIC_API_KEY` (base URL defaults to
+`https://api.anthropic.com`).
+
+### Volume control
+
+Total generated = codes × labels × per-code:
+
+- `--codes A03,A10` — which audit codes (required; no default).
+- `--per-code N` — cases per code **per label** (default 6, matching the
+  corpus's 6+6 convention).
+- `--label positive|negative|both` — which label batches (default `both`).
+
+```bash
+# 2 codes × 2 labels × 6 = 24 cases
+... generate --codes A03,A10 --label both --per-code 6
+
+# exactly one positive for A12
+... generate --codes A12 --label positive --per-code 1
+```
+
+You may get slightly fewer than asked: invalid LLM output is dropped and
+re-requested up to `--retries` times (default 2); any shortfall is printed
+as a warning, never silent. Note this is a different knob from
+`load --count/--repeat`, which controls how many *existing* cases are
+replayed into Timeplus — the two don't interact.
+
+### Write semantics: append-only, never overwrite
+
+- **`generate` appends to staging** (`scenarios_generated/AXX.json`) and
+  never writes to `scenarios/` at all. Successive runs accumulate: ids are
+  allocated past the max used in both the corpus and staging
+  (`A03-pos-007`, then `-008`, …), so nothing collides or gets lost.
+- **`merge` appends to the corpus** (`scenarios/AXX.json`), all-or-nothing:
+  every staged case is validated (schema, multi-turn, duplicate ids against
+  both the corpus and the staged set) *before* anything is written. On any
+  error nothing changes anywhere and the staging file is kept for
+  inspection; on success the staged file is deleted — its cases now live in
+  the corpus.
+
+The only failure mode for a stale staged id (e.g. someone merged other
+cases with the same numbers first) is an explicit merge refusal — never a
+silent overwrite. These semantics are pinned by unit tests
+(`test_staged_ids_not_reused`, `test_merge_appends_and_removes_staging`,
+`test_merge_rejects_duplicate_id`).
+
+**Review is not optional.** An LLM mislabel that gets merged becomes ground
+truth and silently corrupts every future `score`. Check that each positive
+genuinely violates the description and each negative is genuinely benign —
+the rationale field is there to make that check fast.
+
+For agents authoring cases directly (hand-writing rather than the
+`generate` pipeline), the repo ships a **self-contained** skill encoding
+these rules: `skills/audit-case-authoring/SKILL.md` — schema, the
+full A01–A15 description catalog, label semantics, the
+never-read-the-detector-SQL rule, and inline checksum-valid fake-value
+generators. It references no repo files, so it can be shared verbatim with
+agents that have no access to this repository.
 
 ## Prerequisites for a meaningful `score`
 

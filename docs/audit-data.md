@@ -198,7 +198,33 @@ filter and a reminder that truly removing the rows means dropping and
 recreating the stream — destructive to *everything* in it, deliberately not
 automated.
 
-### 2.7 Tests
+### 2.7 Growing the corpus with an LLM
+
+`gen_audit_data.py generate` uses an LLM (OpenAI-compatible endpoint or the
+Anthropic API) to author **new candidate cases** for chosen codes. The
+prompt is built from the code's rule description, two few-shot format
+examples, and freshly minted format-valid fake PII — never the detector
+SQL, so labels stay description-derived. Candidates are schema-validated
+and staged in `scenarios_generated/` for **mandatory human label review**;
+`gen_audit_data.py merge` then folds reviewed cases into `scenarios/`
+(all-or-nothing, duplicate/invalid-safe). Staged cases can be trial-run
+against a live stack first via `load/score --scenarios scenarios_generated`.
+
+Volume is `--codes × --label × --per-code` (default 6 per code per label);
+both `generate` and `merge` are strictly **append-only** — `generate`
+accumulates into staging with ids continuing the corpus numbering, `merge`
+appends validated cases to `scenarios/` or refuses without writing anything
+(never a silent overwrite). Full workflow and semantics: the tool README.
+
+For AI agents authoring cases by hand, the project skill
+`skills/audit-case-authoring/SKILL.md` encodes the corpus contract:
+schema, the full A01–A15 description catalog, label semantics, the
+never-read-the-detector-SQL rule, and inline checksum-valid fake-value
+generators. The skill is **self-contained** (no repo file references), so
+it can be handed verbatim to agents outside this repository and still
+produce schema-correct candidate cases for review.
+
+### 2.8 Tests
 
 The corpus and loader are guarded by stdlib-`unittest` suites (no
 dependencies), run from `backend/scripts/audit_dataset/`:

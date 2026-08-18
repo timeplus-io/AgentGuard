@@ -45,3 +45,6 @@ backend/config.yaml
 # Logs
 *.log
 npm-debug.log*
+
+# LLM-generated audit cases awaiting review (merge into scenarios/ after review)
+backend/scripts/audit_dataset/scenarios_generated/

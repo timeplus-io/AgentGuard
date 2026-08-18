@@ -351,6 +351,66 @@ def cmd_score(args):
             print(f"      false positives: {', '.join(r['false_alarms'])}")
 
 
+def _default_staging(args):
+    return args.staging or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "scenarios_generated")
+
+
+def cmd_generate(args):
+    import llm_gen  # local import: llm_gen imports this module
+    codes = [c.strip().upper() for c in args.codes.split(",") if c.strip()]
+    if not codes:
+        sys.stderr.write("error: generate requires --codes (e.g. --codes A03)\n")
+        sys.exit(1)
+    labels = ["positive", "negative"] if args.label == "both" else [args.label]
+    if args.api_type == "anthropic":
+        base_url = args.base_url or os.environ.get(
+            "ANTHROPIC_BASE_URL", llm_gen.ANTHROPIC_DEFAULT_BASE)
+        api_key = args.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    else:
+        base_url = args.base_url or os.environ.get("OPENAI_BASE_URL", "")
+        api_key = args.api_key or os.environ.get("OPENAI_API_KEY", "")
+    if not base_url:
+        sys.stderr.write("error: no --base-url (or OPENAI_BASE_URL) set\n")
+        sys.exit(1)
+    cfg = {"api_type": args.api_type, "base_url": base_url, "api_key": api_key,
+           "model": args.model, "max_tokens": args.max_tokens,
+           "timeout": args.timeout}
+    staging = _default_staging(args)
+    for code in codes:
+        existing = load_scenarios(_scenarios_dir(args), [code])
+        for label in labels:
+            staged = llm_gen.load_staged(staging, code)
+            cases = llm_gen.generate_for_code(
+                code, existing, staged, label, args.per_code, cfg,
+                complete=llm_gen.llm_complete, retries=args.retries)
+            if cases:
+                path = llm_gen.write_staging(staging, code, cases)
+                print(f"{code}: staged {len(cases)} {label} case(s) -> {path}")
+            if len(cases) < args.per_code:
+                sys.stderr.write(
+                    f"warn: {code}/{label}: only {len(cases)}/{args.per_code} "
+                    "valid cases after retries\n")
+    print("Review the staged files, then run: gen_audit_data.py merge")
+
+
+def cmd_merge(args):
+    import llm_gen  # local import: llm_gen imports this module
+    codes = [c for c in args.codes.split(",") if c.strip()] or None
+    try:
+        merged = llm_gen.merge_generated(
+            _scenarios_dir(args), _default_staging(args), codes)
+    except ValueError as e:
+        sys.stderr.write(f"error: {e} (nothing merged)\n")
+        sys.exit(1)
+    if not merged:
+        print("Nothing staged to merge.")
+        return
+    for code, n in sorted(merged.items()):
+        print(f"{code}: merged {n} case(s) into scenarios/{code}.json")
+    print("Run `python3 -m unittest test_corpus` to re-check the corpus contract.")
+
+
 def cmd_clear(args):
     print("agentguard_cim_event is append-only; seeded rows cannot be deleted "
           "in place.\nTo remove this run's data, drop and recreate the stream, "
@@ -390,6 +450,37 @@ def main(argv=None):
     cp = sub.add_parser("clear", help="print teardown guidance (append-only stream)")
     _add_common(cp)
     cp.set_defaults(func=cmd_clear)
+
+    gp = sub.add_parser("generate",
+                        help="LLM-generate new cases into the staging dir")
+    gp.add_argument("--codes", default="", help="comma-separated, e.g. A03,A10")
+    gp.add_argument("--scenarios", default="", help="override scenarios dir")
+    gp.add_argument("--staging", default="",
+                    help="override staging dir (default scenarios_generated/)")
+    gp.add_argument("--per-code", type=int, default=6,
+                    help="cases per code per label (default 6)")
+    gp.add_argument("--label", choices=["positive", "negative", "both"],
+                    default="both")
+    gp.add_argument("--api-type", choices=["openai", "anthropic"],
+                    default="openai")
+    gp.add_argument("--base-url", default="",
+                    help="LLM endpoint (env: OPENAI_BASE_URL / ANTHROPIC_BASE_URL)")
+    gp.add_argument("--api-key", default="",
+                    help="env: OPENAI_API_KEY / ANTHROPIC_API_KEY")
+    gp.add_argument("--model", required=True)
+    gp.add_argument("--max-tokens", type=int, default=8192)
+    gp.add_argument("--timeout", type=float, default=300.0)
+    gp.add_argument("--retries", type=int, default=2,
+                    help="extra LLM calls to refill dropped invalid cases")
+    gp.set_defaults(func=cmd_generate)
+
+    mp = sub.add_parser("merge",
+                        help="fold reviewed staged cases into scenarios/")
+    mp.add_argument("--codes", default="", help="comma-separated, e.g. A03,A10")
+    mp.add_argument("--scenarios", default="", help="override scenarios dir")
+    mp.add_argument("--staging", default="",
+                    help="override staging dir (default scenarios_generated/)")
+    mp.set_defaults(func=cmd_merge)
 
     args = ap.parse_args(argv)
     args.func(args)
