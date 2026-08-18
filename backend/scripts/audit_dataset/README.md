@@ -166,6 +166,31 @@ python3 -m unittest test_corpus       # re-check the corpus contract
 before writing, refuses duplicates/invalid cases, and deletes the staged
 file on success.
 
+### Directories: `scenarios/` vs `scenarios_generated/`
+
+Two folders, one rule: **`scenarios/` is reviewed ground truth,
+`scenarios_generated/` is unreviewed candidates.** Every command already
+knows which one to use — the normal workflow needs **no folder flags**:
+
+| Command | Reads | Writes |
+|---|---|---|
+| `generate` | `scenarios/` (descriptions, few-shot examples, id numbering) | `scenarios_generated/` |
+| `merge` | `scenarios_generated/` + `scenarios/` (duplicate check) | `scenarios/` (and deletes the staged file) |
+| `load` / `score` | `scenarios/` **only** | — |
+
+The one time you name a folder is when you want `load`/`score` to use the
+**staged** data — a trial run before deciding to merge:
+
+```bash
+python3 gen_audit_data.py load  --scenarios scenarios_generated --codes A03
+python3 gen_audit_data.py score --scenarios scenarios_generated --codes A03
+```
+
+That is deliberate: a bare `load` never silently includes unreviewed
+candidates. After `merge`, the cases live in `scenarios/` and a bare
+`load`/`score` picks them up automatically. (`--staging` on
+`generate`/`merge` relocates the staging dir itself; rarely needed.)
+
 Endpoint config — every flag has an env fallback (flag always wins), so a
 fully env-driven `generate --codes A03` works:
 
@@ -187,8 +212,9 @@ Total generated = codes × labels × per-code:
 - `--codes A03,A10` — which audit codes; omitted = **all** codes present in
   the scenarios dir (one LLM call per code per label — for the full corpus
   that is 30 calls per pass, so mind the cost).
-- `--per-code N` — cases per code **per label** (default 6, matching the
-  corpus's 6+6 convention).
+- `--per-code N` — cases **per code, per label** (default 6, matching the
+  corpus's 6+6 convention). With `--label both` that means N positives AND
+  N negatives per code (2N cases per code), not N total.
 - `--label positive|negative|both` — which label batches (default `both`).
 
 ```bash
@@ -198,6 +224,12 @@ Total generated = codes × labels × per-code:
 # exactly one positive for A12
 ... generate --codes A12 --label positive --per-code 1
 ```
+
+Each code+label batch is ONE LLM call returning all N cases in a single
+JSON reply, bounded by `--max-tokens` (default 8192) — so keep `--per-code`
+around 6–8 and run **multiple passes** for large volume (runs accumulate in
+staging and ids continue) rather than asking for 20 cases in one reply,
+which truncates and burns retries.
 
 You may get slightly fewer than asked: invalid LLM output is dropped and
 re-requested up to `--retries` times (default 2); any shortfall is printed

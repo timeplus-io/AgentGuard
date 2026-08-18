@@ -210,11 +210,19 @@ and staged in `scenarios_generated/` for **mandatory human label review**;
 (all-or-nothing, duplicate/invalid-safe). Staged cases can be trial-run
 against a live stack first via `load/score --scenarios scenarios_generated`.
 
-Volume is `--codes × --label × --per-code` (default 6 per code per label);
-both `generate` and `merge` are strictly **append-only** — `generate`
-accumulates into staging with ids continuing the corpus numbering, `merge`
-appends validated cases to `scenarios/` or refuses without writing anything
-(never a silent overwrite). Full workflow and semantics: the tool README.
+Volume is `--codes × --label × --per-code` (`--per-code` = cases per code
+**per label**, default 6; `--codes` omitted = all codes); both `generate`
+and `merge` are strictly **append-only** — `generate` accumulates into
+staging with ids continuing the corpus numbering, `merge` appends validated
+cases to `scenarios/` or refuses without writing anything (never a silent
+overwrite).
+
+The two directories divide by trust, and the defaults follow it —
+`scenarios/` is reviewed ground truth, `scenarios_generated/` is
+unreviewed candidates. `generate` and `merge` need no folder flags; a bare
+`load`/`score` reads `scenarios/` only and never silently includes
+unreviewed data — pass `--scenarios scenarios_generated` explicitly to
+trial-run staged cases. Full workflow and semantics: the tool README.
 
 For AI agents authoring cases by hand, the project skill
 `skills/audit-case-authoring/SKILL.md` encodes the corpus contract:
