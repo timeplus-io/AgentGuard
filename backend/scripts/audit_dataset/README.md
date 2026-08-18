@@ -184,7 +184,9 @@ provider, so setting both pairs is harmless.
 
 Total generated = codes × labels × per-code:
 
-- `--codes A03,A10` — which audit codes (required; no default).
+- `--codes A03,A10` — which audit codes; omitted = **all** codes present in
+  the scenarios dir (one LLM call per code per label — for the full corpus
+  that is 30 calls per pass, so mind the cost).
 - `--per-code N` — cases per code **per label** (default 6, matching the
   corpus's 6+6 convention).
 - `--label positive|negative|both` — which label batches (default `both`).

@@ -200,7 +200,7 @@ class TestMerge(unittest.TestCase):
 
 
 class TestCLIWiring(unittest.TestCase):
-    def _run_generate(self, argv, env=None, expect_exit=False):
+    def _run_generate(self, argv, env=None, expect_exit=False, codes="A01"):
         """Run `generate` with a mocked LLM; return (cfgs_seen, staging_dir)."""
         import contextlib, io
         from unittest import mock
@@ -216,9 +216,11 @@ class TestCLIWiring(unittest.TestCase):
         with mock.patch.object(llm_gen, "llm_complete", fake_complete):
             with mock.patch.dict(os.environ, full_env, clear=True):
                 with contextlib.redirect_stdout(io.StringIO()):
-                    argv = ["generate", "--scenarios", FIX, "--staging", tmp,
-                            "--codes", "A01", "--per-code", "1",
-                            "--label", "positive"] + argv
+                    base = ["generate", "--scenarios", FIX, "--staging", tmp,
+                            "--per-code", "1", "--label", "positive"]
+                    if codes:
+                        base += ["--codes", codes]
+                    argv = base + argv
                     if expect_exit:
                         with self.assertRaises(SystemExit):
                             g.main(argv)
@@ -260,6 +262,13 @@ class TestCLIWiring(unittest.TestCase):
             ["--api-type", "openai", "--model", "m", "--base-url", "http://x"],
             env={"AUDIT_GEN_API_TYPE": "anthropic"})
         self.assertEqual(cfgs[0]["api_type"], "openai")
+
+    def test_no_codes_generates_for_all_scenario_codes(self):
+        # fixtures dir holds A01.json and A11.json -> both get staged
+        cfgs, tmp = self._run_generate(
+            ["--model", "m", "--base-url", "http://x"], codes=None)
+        staged_files = sorted(f for f in os.listdir(tmp) if f.endswith(".json"))
+        self.assertEqual(staged_files, ["A01.json", "A11.json"])
 
     def test_invalid_env_api_type_errors(self):
         self._run_generate(

@@ -360,7 +360,12 @@ def cmd_generate(args):
     import llm_gen  # local import: llm_gen imports this module
     codes = [c.strip().upper() for c in args.codes.split(",") if c.strip()]
     if not codes:
-        sys.stderr.write("error: generate requires --codes (e.g. --codes A03)\n")
+        # default: every code present in the scenarios dir
+        codes = sorted(
+            os.path.splitext(os.path.basename(p))[0].upper()
+            for p in glob.glob(os.path.join(_scenarios_dir(args), "A*.json")))
+    if not codes:
+        sys.stderr.write("error: no codes given and no scenarios/A*.json found\n")
         sys.exit(1)
     labels = ["positive", "negative"] if args.label == "both" else [args.label]
     args.api_type = (args.api_type
@@ -465,7 +470,8 @@ def main(argv=None):
 
     gp = sub.add_parser("generate",
                         help="LLM-generate new cases into the staging dir")
-    gp.add_argument("--codes", default="", help="comma-separated, e.g. A03,A10")
+    gp.add_argument("--codes", default="",
+                    help="comma-separated, e.g. A03,A10 (default: all codes)")
     gp.add_argument("--scenarios", default="", help="override scenarios dir")
     gp.add_argument("--staging", default="",
                     help="override staging dir (default scenarios_generated/)")
