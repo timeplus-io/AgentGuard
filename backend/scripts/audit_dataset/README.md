@@ -216,6 +216,11 @@ truth and silently corrupts every future `score`. Check that each positive
 genuinely violates the description and each negative is genuinely benign —
 the rationale field is there to make that check fast.
 
+For agents authoring cases directly (hand-writing rather than the
+`generate` pipeline), the repo ships a skill encoding these rules:
+`.claude/skills/audit-case-authoring/SKILL.md` — schema, label semantics,
+the never-read-the-detector-SQL rule, and `fake_values.py` usage.
+
 ## Prerequisites for a meaningful `score`
 
 `load` only needs a reachable Timeplus with `agentguard_cim_event`

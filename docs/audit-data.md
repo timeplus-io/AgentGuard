@@ -216,6 +216,12 @@ accumulates into staging with ids continuing the corpus numbering, `merge`
 appends validated cases to `scenarios/` or refuses without writing anything
 (never a silent overwrite). Full workflow and semantics: the tool README.
 
+For AI agents authoring cases by hand, the project skill
+`.claude/skills/audit-case-authoring/SKILL.md` encodes the corpus contract
+(schema, label semantics, checksum-valid fake values, the
+never-read-the-detector-SQL rule, and the staging workflow) so any Claude
+Code agent in this repo produces merge-ready cases.
+
 ### 2.8 Tests
 
 The corpus and loader are guarded by stdlib-`unittest` suites (no
