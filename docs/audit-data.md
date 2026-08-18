@@ -198,7 +198,20 @@ filter and a reminder that truly removing the rows means dropping and
 recreating the stream — destructive to *everything* in it, deliberately not
 automated.
 
-### 2.7 Tests
+### 2.7 Growing the corpus with an LLM
+
+`gen_audit_data.py generate` uses an LLM (OpenAI-compatible endpoint or the
+Anthropic API) to author **new candidate cases** for chosen codes. The
+prompt is built from the code's rule description, two few-shot format
+examples, and freshly minted format-valid fake PII — never the detector
+SQL, so labels stay description-derived. Candidates are schema-validated
+and staged in `scenarios_generated/` for **mandatory human label review**;
+`gen_audit_data.py merge` then folds reviewed cases into `scenarios/`
+(all-or-nothing, duplicate/invalid-safe). Staged cases can be trial-run
+against a live stack first via `load/score --scenarios scenarios_generated`.
+Full workflow: the tool README.
+
+### 2.8 Tests
 
 The corpus and loader are guarded by stdlib-`unittest` suites (no
 dependencies), run from `backend/scripts/audit_dataset/`:

@@ -89,6 +89,14 @@ python3 gen_audit_data.py score --cases A01-pos-001
 
 # Print teardown guidance for seeded data
 python3 gen_audit_data.py clear
+
+# LLM-generate NEW candidate cases into scenarios_generated/ (staged, not corpus)
+OPENAI_API_KEY=... python3 gen_audit_data.py generate --codes A03,A10 \
+    --base-url https://api.openai.com/v1 --model gpt-5.2 [--per-code 6] \
+    [--label positive|negative|both] [--api-type openai|anthropic]
+
+# After human review of the staged labels, fold them into scenarios/
+python3 gen_audit_data.py merge [--codes A03]
 ```
 
 Flags:
@@ -126,6 +134,45 @@ variable, but the port can be overridden with the `--port` flag, default
 | `TIMEPLUS_HOST` | `localhost` |
 | `TIMEPLUS_USER` | `proton` |
 | `TIMEPLUS_PASSWORD` | `` (empty) |
+
+## Generating more cases with an LLM
+
+`generate` asks an LLM to author NEW candidate cases from an audit code's
+**rule description** plus two few-shot format examples — never from the
+`dsa-*` detector SQL, preserving the corpus's label-independence contract.
+Fresh format-valid fake PII from `fake_values.py` is minted into the prompt
+so positives look real.
+
+Candidates land in **`scenarios_generated/`** (staging), never directly in
+`scenarios/`. Every case is schema-validated (`validate_case` + the
+multi-turn rule + id uniqueness); invalid ones are dropped and re-requested
+(`--retries`, default 2). Ids continue the corpus numbering
+(`A03-pos-007`, …) and each staged case carries a `generated_by: <model>`
+marker.
+
+The workflow is generate → **human-review the staged labels** → merge:
+
+```bash
+python3 gen_audit_data.py generate --codes A03 --base-url ... --model ...
+# review scenarios_generated/A03.json — check each label + rationale
+# optional trial run without touching the corpus:
+python3 gen_audit_data.py load  --scenarios scenarios_generated --codes A03
+python3 gen_audit_data.py score --scenarios scenarios_generated --codes A03
+python3 gen_audit_data.py merge --codes A03
+python3 -m unittest test_corpus       # re-check the corpus contract
+```
+
+`merge` is all-or-nothing: it validates every staged case against the corpus
+before writing, refuses duplicates/invalid cases, and deletes the staged
+file on success. Endpoint config: `--api-type openai` (default) uses
+`--base-url`/`--api-key` or `OPENAI_BASE_URL`/`OPENAI_API_KEY`;
+`--api-type anthropic` uses `ANTHROPIC_API_KEY` (base URL defaults to
+`https://api.anthropic.com`).
+
+**Review is not optional.** An LLM mislabel that gets merged becomes ground
+truth and silently corrupts every future `score`. Check that each positive
+genuinely violates the description and each negative is genuinely benign —
+the rationale field is there to make that check fast.
 
 ## Prerequisites for a meaningful `score`
 
