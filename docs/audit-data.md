@@ -217,7 +217,7 @@ appends validated cases to `scenarios/` or refuses without writing anything
 (never a silent overwrite). Full workflow and semantics: the tool README.
 
 For AI agents authoring cases by hand, the project skill
-`.claude/skills/audit-case-authoring/SKILL.md` encodes the corpus contract:
+`skills/audit-case-authoring/SKILL.md` encodes the corpus contract:
 schema, the full A01–A15 description catalog, label semantics, the
 never-read-the-detector-SQL rule, and inline checksum-valid fake-value
 generators. The skill is **self-contained** (no repo file references), so
