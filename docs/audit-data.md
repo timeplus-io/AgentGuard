@@ -89,6 +89,11 @@ the corpus into `agentguard_cim_event` and scores the installed `dsa-*`
 detectors against the corpus's ground-truth labels. Full CLI/flag detail:
 [`backend/scripts/audit_dataset/README.md`](../backend/scripts/audit_dataset/README.md).
 
+The tool's lifecycle is **generate (optional, §2.7) → load (§2.3) → score
+(§2.4) → validate/clean up (§2.6–2.8)**. Generation is optional because the
+corpus ships pre-authored and reviewed — a fresh clone can load and score
+immediately; `generate` exists to grow it.
+
 ### 2.1 What the data looks like
 
 - **15 audit codes** (`A01`–`A15`), one JSON file per code under

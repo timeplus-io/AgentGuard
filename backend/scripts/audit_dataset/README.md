@@ -71,35 +71,56 @@ false negatives — they're already known-missing, not newly discovered.
   derived deterministically from `case_id` at load time
   (`case_session_id`).
 
-## Usage
+## Usage — the workflow
 
-Run from `backend/scripts/audit_dataset/`:
+The tool follows a four-step lifecycle: **1. generate → 2. load → 3. score
+→ 4. validate/clean up**. Step 1 is optional on a fresh clone —
+`scenarios/` already ships with the reviewed 180-case corpus, so you can
+start at step 2 immediately; run step 1 whenever you want to grow the
+corpus. Run everything from `backend/scripts/audit_dataset/`.
+
+### 1. Generate (optional) — LLM-author new cases, review, merge
 
 ```bash
-# Ingest the corpus into agentguard_cim_event
-python3 gen_audit_data.py load [--codes A01,A03] [--cases A01-pos-001] \
-    [--count N] [--repeat K] [--deployment-id audit-demo] [--dry-run]
-
-# Score installed dsa-* detectors against the corpus labels
-python3 gen_audit_data.py score [--codes A01,A03] [--cases A01-pos-001] [--settle 5]
-
-# Trigger a single specific case end-to-end
-python3 gen_audit_data.py load --cases A01-pos-001
-python3 gen_audit_data.py score --cases A01-pos-001
-
-# Print teardown guidance for seeded data
-python3 gen_audit_data.py clear
-
 # LLM-generate NEW candidate cases into scenarios_generated/ (staged, not corpus)
-OPENAI_API_KEY=... python3 gen_audit_data.py generate --codes A03,A10 \
+OPENAI_API_KEY=... python3 gen_audit_data.py generate [--codes A03,A10] \
     --base-url https://api.openai.com/v1 --model gpt-5.2 [--per-code 6] \
     [--label positive|negative|both] [--api-type openai|anthropic]
 
-# After human review of the staged labels, fold them into scenarios/
+# Human-review the staged labels, then fold them into scenarios/
 python3 gen_audit_data.py merge [--codes A03]
 ```
 
-Flags:
+Details: [Generating more cases with an LLM](#generating-more-cases-with-an-llm).
+
+### 2. Load — ingest the corpus into the stack
+
+```bash
+python3 gen_audit_data.py load [--codes A01,A03] [--cases A01-pos-001] \
+    [--count N] [--repeat K] [--deployment-id audit-demo] [--dry-run]
+```
+
+Prerequisite: the `dsa-*` rules should already be installed and enabled
+(their MVs only see events that arrive while live).
+
+### 3. Score — confusion matrix per code
+
+```bash
+python3 gen_audit_data.py score [--codes A01,A03] [--cases A01-pos-001] [--settle 5]
+
+# Or trigger a single specific case end-to-end:
+python3 gen_audit_data.py load  --cases A01-pos-001
+python3 gen_audit_data.py score --cases A01-pos-001
+```
+
+### 4. Validate & clean up
+
+```bash
+python3 -m unittest -v              # corpus contract + loader/scorer tests
+python3 gen_audit_data.py clear     # teardown guidance for seeded data
+```
+
+Flags for `load`/`score`:
 
 - `--codes` — comma-separated audit codes to restrict to (e.g. `A01,A03`).
   Applies to both `load` and `score`. Default: all 15.
