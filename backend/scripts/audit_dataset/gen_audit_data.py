@@ -96,6 +96,17 @@ def load_scenarios(scenarios_dir, codes=None):
     return cases
 
 
+def filter_cases(cases, case_ids):
+    """Keep only the named case_ids (case-insensitive); error on unknown ids."""
+    wanted = {cid.lower() for cid in case_ids}
+    picked = [c for c in cases if c["case_id"].lower() in wanted]
+    found = {c["case_id"].lower() for c in picked}
+    unknown = sorted(cid for cid in case_ids if cid.lower() not in found)
+    if unknown:
+        raise ValueError(f"unknown case id(s): {', '.join(unknown)}")
+    return picked
+
+
 def case_session_id(case, suffix=""):
     return "audit-" + case["case_id"] + suffix
 
@@ -221,9 +232,20 @@ def _scenarios_dir(args):
     return args.scenarios or os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenarios")
 
 
-def cmd_load(args):
+def _select_cases(args):
     codes = args.codes.split(",") if args.codes else None
     cases = load_scenarios(_scenarios_dir(args), codes)
+    if args.cases:
+        try:
+            cases = filter_cases(cases, args.cases.split(","))
+        except ValueError as e:
+            sys.stderr.write(f"error: {e}\n")
+            sys.exit(1)
+    return cases
+
+
+def cmd_load(args):
+    cases = _select_cases(args)
     if args.count:
         by_code = {}
         capped = []
@@ -312,8 +334,7 @@ def _fmt_pct(x):
 
 
 def cmd_score(args):
-    codes = args.codes.split(",") if args.codes else None
-    cases = load_scenarios(_scenarios_dir(args), codes)
+    cases = _select_cases(args)
     if args.settle:
         time.sleep(args.settle)
     fired = query_fired(_cfg_from_args(args), args.deployment_id)
@@ -345,6 +366,8 @@ def _add_common(p):
     p.add_argument("--password", default=os.environ.get("TIMEPLUS_PASSWORD", ""))
     p.add_argument("--deployment-id", default=DEFAULT_DEPLOYMENT_ID)
     p.add_argument("--codes", default="", help="comma-separated, e.g. A01,A03")
+    p.add_argument("--cases", default="",
+                   help="comma-separated case ids, e.g. A01-pos-001")
     p.add_argument("--scenarios", default="", help="override scenarios dir")
 
 

@@ -44,6 +44,40 @@ class TestLoader(unittest.TestCase):
                              "events": [{"event_type": "user_input"}]}, "A01")
 
 
+class TestFilterCases(unittest.TestCase):
+    def _cases(self):
+        return g.load_scenarios(FIX)
+
+    def test_selects_only_named_case(self):
+        picked = g.filter_cases(self._cases(), ["A01-pos-001"])
+        self.assertEqual([c["case_id"] for c in picked], ["A01-pos-001"])
+
+    def test_selects_multiple_cases(self):
+        picked = g.filter_cases(self._cases(), ["A01-neg-001", "A11-pos-001"])
+        self.assertEqual(sorted(c["case_id"] for c in picked),
+                         ["A01-neg-001", "A11-pos-001"])
+
+    def test_case_insensitive_match(self):
+        picked = g.filter_cases(self._cases(), ["a01-POS-001"])
+        self.assertEqual([c["case_id"] for c in picked], ["A01-pos-001"])
+
+    def test_unknown_id_raises_with_id_in_message(self):
+        with self.assertRaises(ValueError) as ctx:
+            g.filter_cases(self._cases(), ["A01-pos-999"])
+        self.assertIn("A01-pos-999", str(ctx.exception))
+
+
+class TestCasesFlag(unittest.TestCase):
+    def test_load_dry_run_with_cases_flag(self):
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            g.main(["load", "--scenarios", FIX, "--cases", "A01-pos-001",
+                    "--dry-run"])
+        self.assertIn("1 cases", buf.getvalue())
+
+
 class TestMapping(unittest.TestCase):
     def setUp(self):
         self.now = dt.datetime(2026, 8, 14, 12, 0, 0, tzinfo=dt.timezone.utc)
