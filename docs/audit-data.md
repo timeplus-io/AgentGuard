@@ -209,7 +209,12 @@ and staged in `scenarios_generated/` for **mandatory human label review**;
 `gen_audit_data.py merge` then folds reviewed cases into `scenarios/`
 (all-or-nothing, duplicate/invalid-safe). Staged cases can be trial-run
 against a live stack first via `load/score --scenarios scenarios_generated`.
-Full workflow: the tool README.
+
+Volume is `--codes × --label × --per-code` (default 6 per code per label);
+both `generate` and `merge` are strictly **append-only** — `generate`
+accumulates into staging with ids continuing the corpus numbering, `merge`
+appends validated cases to `scenarios/` or refuses without writing anything
+(never a silent overwrite). Full workflow and semantics: the tool README.
 
 ### 2.8 Tests
 

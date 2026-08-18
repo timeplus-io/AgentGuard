@@ -169,6 +169,48 @@ file on success. Endpoint config: `--api-type openai` (default) uses
 `--api-type anthropic` uses `ANTHROPIC_API_KEY` (base URL defaults to
 `https://api.anthropic.com`).
 
+### Volume control
+
+Total generated = codes × labels × per-code:
+
+- `--codes A03,A10` — which audit codes (required; no default).
+- `--per-code N` — cases per code **per label** (default 6, matching the
+  corpus's 6+6 convention).
+- `--label positive|negative|both` — which label batches (default `both`).
+
+```bash
+# 2 codes × 2 labels × 6 = 24 cases
+... generate --codes A03,A10 --label both --per-code 6
+
+# exactly one positive for A12
+... generate --codes A12 --label positive --per-code 1
+```
+
+You may get slightly fewer than asked: invalid LLM output is dropped and
+re-requested up to `--retries` times (default 2); any shortfall is printed
+as a warning, never silent. Note this is a different knob from
+`load --count/--repeat`, which controls how many *existing* cases are
+replayed into Timeplus — the two don't interact.
+
+### Write semantics: append-only, never overwrite
+
+- **`generate` appends to staging** (`scenarios_generated/AXX.json`) and
+  never writes to `scenarios/` at all. Successive runs accumulate: ids are
+  allocated past the max used in both the corpus and staging
+  (`A03-pos-007`, then `-008`, …), so nothing collides or gets lost.
+- **`merge` appends to the corpus** (`scenarios/AXX.json`), all-or-nothing:
+  every staged case is validated (schema, multi-turn, duplicate ids against
+  both the corpus and the staged set) *before* anything is written. On any
+  error nothing changes anywhere and the staging file is kept for
+  inspection; on success the staged file is deleted — its cases now live in
+  the corpus.
+
+The only failure mode for a stale staged id (e.g. someone merged other
+cases with the same numbers first) is an explicit merge refusal — never a
+silent overwrite. These semantics are pinned by unit tests
+(`test_staged_ids_not_reused`, `test_merge_appends_and_removes_staging`,
+`test_merge_rejects_duplicate_id`).
+
 **Review is not optional.** An LLM mislabel that gets merged becomes ground
 truth and silently corrupts every future `score`. Check that each positive
 genuinely violates the description and each negative is genuinely benign —
