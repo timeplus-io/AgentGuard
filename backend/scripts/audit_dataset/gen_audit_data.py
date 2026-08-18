@@ -360,9 +360,26 @@ def cmd_generate(args):
     import llm_gen  # local import: llm_gen imports this module
     codes = [c.strip().upper() for c in args.codes.split(",") if c.strip()]
     if not codes:
-        sys.stderr.write("error: generate requires --codes (e.g. --codes A03)\n")
+        # default: every code present in the scenarios dir
+        codes = sorted(
+            os.path.splitext(os.path.basename(p))[0].upper()
+            for p in glob.glob(os.path.join(_scenarios_dir(args), "A*.json")))
+    if not codes:
+        sys.stderr.write("error: no codes given and no scenarios/A*.json found\n")
         sys.exit(1)
     labels = ["positive", "negative"] if args.label == "both" else [args.label]
+    args.api_type = (args.api_type
+                     or os.environ.get("AUDIT_GEN_API_TYPE", "").strip()
+                     or "openai")
+    if args.api_type not in ("openai", "anthropic"):
+        sys.stderr.write(
+            f"error: invalid api type {args.api_type!r} "
+            "(--api-type / AUDIT_GEN_API_TYPE must be 'openai' or 'anthropic')\n")
+        sys.exit(1)
+    args.model = args.model or os.environ.get("AUDIT_GEN_MODEL", "").strip()
+    if not args.model:
+        sys.stderr.write("error: no --model (or AUDIT_GEN_MODEL) set\n")
+        sys.exit(1)
     if args.api_type == "anthropic":
         base_url = args.base_url or os.environ.get(
             "ANTHROPIC_BASE_URL", llm_gen.ANTHROPIC_DEFAULT_BASE)
@@ -453,7 +470,8 @@ def main(argv=None):
 
     gp = sub.add_parser("generate",
                         help="LLM-generate new cases into the staging dir")
-    gp.add_argument("--codes", default="", help="comma-separated, e.g. A03,A10")
+    gp.add_argument("--codes", default="",
+                    help="comma-separated, e.g. A03,A10 (default: all codes)")
     gp.add_argument("--scenarios", default="", help="override scenarios dir")
     gp.add_argument("--staging", default="",
                     help="override staging dir (default scenarios_generated/)")
@@ -461,13 +479,13 @@ def main(argv=None):
                     help="cases per code per label (default 6)")
     gp.add_argument("--label", choices=["positive", "negative", "both"],
                     default="both")
-    gp.add_argument("--api-type", choices=["openai", "anthropic"],
-                    default="openai")
+    gp.add_argument("--api-type", choices=["openai", "anthropic"], default="",
+                    help="env: AUDIT_GEN_API_TYPE; default openai")
     gp.add_argument("--base-url", default="",
                     help="LLM endpoint (env: OPENAI_BASE_URL / ANTHROPIC_BASE_URL)")
     gp.add_argument("--api-key", default="",
                     help="env: OPENAI_API_KEY / ANTHROPIC_API_KEY")
-    gp.add_argument("--model", required=True)
+    gp.add_argument("--model", default="", help="env: AUDIT_GEN_MODEL")
     gp.add_argument("--max-tokens", type=int, default=8192)
     gp.add_argument("--timeout", type=float, default=300.0)
     gp.add_argument("--retries", type=int, default=2,

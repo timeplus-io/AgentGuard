@@ -71,35 +71,56 @@ false negatives — they're already known-missing, not newly discovered.
   derived deterministically from `case_id` at load time
   (`case_session_id`).
 
-## Usage
+## Usage — the workflow
 
-Run from `backend/scripts/audit_dataset/`:
+The tool follows a four-step lifecycle: **1. generate → 2. load → 3. score
+→ 4. validate/clean up**. Step 1 is optional on a fresh clone —
+`scenarios/` already ships with the reviewed 180-case corpus, so you can
+start at step 2 immediately; run step 1 whenever you want to grow the
+corpus. Run everything from `backend/scripts/audit_dataset/`.
+
+### 1. Generate (optional) — LLM-author new cases, review, merge
 
 ```bash
-# Ingest the corpus into agentguard_cim_event
-python3 gen_audit_data.py load [--codes A01,A03] [--cases A01-pos-001] \
-    [--count N] [--repeat K] [--deployment-id audit-demo] [--dry-run]
-
-# Score installed dsa-* detectors against the corpus labels
-python3 gen_audit_data.py score [--codes A01,A03] [--cases A01-pos-001] [--settle 5]
-
-# Trigger a single specific case end-to-end
-python3 gen_audit_data.py load --cases A01-pos-001
-python3 gen_audit_data.py score --cases A01-pos-001
-
-# Print teardown guidance for seeded data
-python3 gen_audit_data.py clear
-
 # LLM-generate NEW candidate cases into scenarios_generated/ (staged, not corpus)
-OPENAI_API_KEY=... python3 gen_audit_data.py generate --codes A03,A10 \
+OPENAI_API_KEY=... python3 gen_audit_data.py generate [--codes A03,A10] \
     --base-url https://api.openai.com/v1 --model gpt-5.2 [--per-code 6] \
     [--label positive|negative|both] [--api-type openai|anthropic]
 
-# After human review of the staged labels, fold them into scenarios/
+# Human-review the staged labels, then fold them into scenarios/
 python3 gen_audit_data.py merge [--codes A03]
 ```
 
-Flags:
+Details: [Generating more cases with an LLM](#generating-more-cases-with-an-llm).
+
+### 2. Load — ingest the corpus into the stack
+
+```bash
+python3 gen_audit_data.py load [--codes A01,A03] [--cases A01-pos-001] \
+    [--count N] [--repeat K] [--deployment-id audit-demo] [--dry-run]
+```
+
+Prerequisite: the `dsa-*` rules should already be installed and enabled
+(their MVs only see events that arrive while live).
+
+### 3. Score — confusion matrix per code
+
+```bash
+python3 gen_audit_data.py score [--codes A01,A03] [--cases A01-pos-001] [--settle 5]
+
+# Or trigger a single specific case end-to-end:
+python3 gen_audit_data.py load  --cases A01-pos-001
+python3 gen_audit_data.py score --cases A01-pos-001
+```
+
+### 4. Validate & clean up
+
+```bash
+python3 -m unittest -v              # corpus contract + loader/scorer tests
+python3 gen_audit_data.py clear     # teardown guidance for seeded data
+```
+
+Flags for `load`/`score`:
 
 - `--codes` — comma-separated audit codes to restrict to (e.g. `A01,A03`).
   Applies to both `load` and `score`. Default: all 15.
@@ -164,18 +185,57 @@ python3 -m unittest test_corpus       # re-check the corpus contract
 
 `merge` is all-or-nothing: it validates every staged case against the corpus
 before writing, refuses duplicates/invalid cases, and deletes the staged
-file on success. Endpoint config: `--api-type openai` (default) uses
-`--base-url`/`--api-key` or `OPENAI_BASE_URL`/`OPENAI_API_KEY`;
-`--api-type anthropic` uses `ANTHROPIC_API_KEY` (base URL defaults to
-`https://api.anthropic.com`).
+file on success.
+
+### Directories: `scenarios/` vs `scenarios_generated/`
+
+Two folders, one rule: **`scenarios/` is reviewed ground truth,
+`scenarios_generated/` is unreviewed candidates.** Every command already
+knows which one to use — the normal workflow needs **no folder flags**:
+
+| Command | Reads | Writes |
+|---|---|---|
+| `generate` | `scenarios/` (descriptions, few-shot examples, id numbering) | `scenarios_generated/` |
+| `merge` | `scenarios_generated/` + `scenarios/` (duplicate check) | `scenarios/` (and deletes the staged file) |
+| `load` / `score` | `scenarios/` **only** | — |
+
+The one time you name a folder is when you want `load`/`score` to use the
+**staged** data — a trial run before deciding to merge:
+
+```bash
+python3 gen_audit_data.py load  --scenarios scenarios_generated --codes A03
+python3 gen_audit_data.py score --scenarios scenarios_generated --codes A03
+```
+
+That is deliberate: a bare `load` never silently includes unreviewed
+candidates. After `merge`, the cases live in `scenarios/` and a bare
+`load`/`score` picks them up automatically. (`--staging` on
+`generate`/`merge` relocates the staging dir itself; rarely needed.)
+
+Endpoint config — every flag has an env fallback (flag always wins), so a
+fully env-driven `generate --codes A03` works:
+
+| Flag | Env fallback | Default |
+|---|---|---|
+| `--api-type` | `AUDIT_GEN_API_TYPE` | `openai` |
+| `--model` | `AUDIT_GEN_MODEL` | *(required — error if neither set)* |
+| `--base-url` | `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL` | openai: required; anthropic: `https://api.anthropic.com` |
+| `--api-key` | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | empty |
+
+The provider is selected ONLY by `--api-type`/`AUDIT_GEN_API_TYPE` — the
+`OPENAI_*`/`ANTHROPIC_*` pairs are read exclusively for the selected
+provider, so setting both pairs is harmless.
 
 ### Volume control
 
 Total generated = codes × labels × per-code:
 
-- `--codes A03,A10` — which audit codes (required; no default).
-- `--per-code N` — cases per code **per label** (default 6, matching the
-  corpus's 6+6 convention).
+- `--codes A03,A10` — which audit codes; omitted = **all** codes present in
+  the scenarios dir (one LLM call per code per label — for the full corpus
+  that is 30 calls per pass, so mind the cost).
+- `--per-code N` — cases **per code, per label** (default 6, matching the
+  corpus's 6+6 convention). With `--label both` that means N positives AND
+  N negatives per code (2N cases per code), not N total.
 - `--label positive|negative|both` — which label batches (default `both`).
 
 ```bash
@@ -185,6 +245,12 @@ Total generated = codes × labels × per-code:
 # exactly one positive for A12
 ... generate --codes A12 --label positive --per-code 1
 ```
+
+Each code+label batch is ONE LLM call returning all N cases in a single
+JSON reply, bounded by `--max-tokens` (default 8192) — so keep `--per-code`
+around 6–8 and run **multiple passes** for large volume (runs accumulate in
+staging and ids continue) rather than asking for 20 cases in one reply,
+which truncates and burns retries.
 
 You may get slightly fewer than asked: invalid LLM output is dropped and
 re-requested up to `--retries` times (default 2); any shortfall is printed

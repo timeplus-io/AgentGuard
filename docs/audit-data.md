@@ -89,6 +89,11 @@ the corpus into `agentguard_cim_event` and scores the installed `dsa-*`
 detectors against the corpus's ground-truth labels. Full CLI/flag detail:
 [`backend/scripts/audit_dataset/README.md`](../backend/scripts/audit_dataset/README.md).
 
+The tool's lifecycle is **generate (optional, §2.7) → load (§2.3) → score
+(§2.4) → validate/clean up (§2.6–2.8)**. Generation is optional because the
+corpus ships pre-authored and reviewed — a fresh clone can load and score
+immediately; `generate` exists to grow it.
+
 ### 2.1 What the data looks like
 
 - **15 audit codes** (`A01`–`A15`), one JSON file per code under
@@ -210,11 +215,19 @@ and staged in `scenarios_generated/` for **mandatory human label review**;
 (all-or-nothing, duplicate/invalid-safe). Staged cases can be trial-run
 against a live stack first via `load/score --scenarios scenarios_generated`.
 
-Volume is `--codes × --label × --per-code` (default 6 per code per label);
-both `generate` and `merge` are strictly **append-only** — `generate`
-accumulates into staging with ids continuing the corpus numbering, `merge`
-appends validated cases to `scenarios/` or refuses without writing anything
-(never a silent overwrite). Full workflow and semantics: the tool README.
+Volume is `--codes × --label × --per-code` (`--per-code` = cases per code
+**per label**, default 6; `--codes` omitted = all codes); both `generate`
+and `merge` are strictly **append-only** — `generate` accumulates into
+staging with ids continuing the corpus numbering, `merge` appends validated
+cases to `scenarios/` or refuses without writing anything (never a silent
+overwrite).
+
+The two directories divide by trust, and the defaults follow it —
+`scenarios/` is reviewed ground truth, `scenarios_generated/` is
+unreviewed candidates. `generate` and `merge` need no folder flags; a bare
+`load`/`score` reads `scenarios/` only and never silently includes
+unreviewed data — pass `--scenarios scenarios_generated` explicitly to
+trial-run staged cases. Full workflow and semantics: the tool README.
 
 For AI agents authoring cases by hand, the project skill
 `skills/audit-case-authoring/SKILL.md` encodes the corpus contract:

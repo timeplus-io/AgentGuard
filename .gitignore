@@ -48,3 +48,6 @@ npm-debug.log*
 
 # LLM-generated audit cases awaiting review (merge into scenarios/ after review)
 backend/scripts/audit_dataset/scenarios_generated/
+
+# Local LLM endpoint/env settings for testing (audit-data generate etc.)
+backend/scripts/env.sh
