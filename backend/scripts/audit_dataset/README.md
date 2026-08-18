@@ -6,6 +6,10 @@ issue #250). `gen_audit_data.py` loads a corpus of simulated multi-turn agent
 sessions straight into `agentguard_cim_event` and scores what the installed
 `dsa-*` detectors actually caught against the corpus's ground-truth labels.
 
+For the bigger picture — how this tool, the `dsa-*` rule package, and the
+`data-audit-guide` Sentry skill fit together — see
+[`docs/audit-data.md`](../../../docs/audit-data.md).
+
 ## Purpose
 
 The dataset exists to answer one question: **do the `dsa-*` rules correctly
@@ -73,11 +77,15 @@ Run from `backend/scripts/audit_dataset/`:
 
 ```bash
 # Ingest the corpus into agentguard_cim_event
-python3 gen_audit_data.py load [--codes A01,A03] [--count N] [--repeat K] \
-    [--deployment-id audit-demo] [--dry-run]
+python3 gen_audit_data.py load [--codes A01,A03] [--cases A01-pos-001] \
+    [--count N] [--repeat K] [--deployment-id audit-demo] [--dry-run]
 
 # Score installed dsa-* detectors against the corpus labels
-python3 gen_audit_data.py score [--codes A01,A03] [--settle 5]
+python3 gen_audit_data.py score [--codes A01,A03] [--cases A01-pos-001] [--settle 5]
+
+# Trigger a single specific case end-to-end
+python3 gen_audit_data.py load --cases A01-pos-001
+python3 gen_audit_data.py score --cases A01-pos-001
 
 # Print teardown guidance for seeded data
 python3 gen_audit_data.py clear
@@ -87,6 +95,11 @@ Flags:
 
 - `--codes` — comma-separated audit codes to restrict to (e.g. `A01,A03`).
   Applies to both `load` and `score`. Default: all 15.
+- `--cases` — comma-separated exact case ids (e.g. `A01-pos-001`,
+  case-insensitive) to trigger specific cases. Applies to both `load` and
+  `score`; errors on unknown ids. Note `--count N` alone selects by
+  `case_id` sort order, where `neg` sorts before `pos` — use `--cases` when
+  you need a specific (e.g. positive) case.
 - `--count` — cap the number of cases loaded per code (0 = all). `load`
   only.
 - `--repeat K` — replay the (possibly `--count`-capped) case set `K` times,
