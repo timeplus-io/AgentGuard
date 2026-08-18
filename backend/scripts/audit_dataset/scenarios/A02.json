@@ -1,230 +1,802 @@
 [
-  {
-    "case_id": "A02-pos-001",
-    "audit_code": "A02",
-    "label": "positive",
-    "violates": ["A02"],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "用户输入含完整身份证号，网关转发给模型的请求里身份证仍是完整明文，未在发送前脱敏。",
-    "agent_type": "openclaw",
-    "session": {"model": "claude-sonnet-4-6", "provider": "anthropic"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "客户投诉，帮我查一下这个人的工单历史：陈静 身份证 44030519881124919X。"},
-      {"event_type": "llm_request", "user_message": "System: 客服助手。\nUser: 客户投诉，帮我查一下这个人的工单历史：陈静 身份证 44030519881124919X。"},
-      {"event_type": "llm_response", "assistant_message": "我找到了陈静名下的两条历史工单，最近一条是物流延迟投诉，已在 3 天前关闭。"},
-      {"event_type": "user_input", "user_message": "那把最近这条的处理结果发我。"},
-      {"event_type": "llm_response", "assistant_message": "最近一条工单已补发并赔付 20 元券，客户已确认收货。"},
-      {"event_type": "session_end"}
-    ]
+ {
+  "case_id": "A02-pos-001",
+  "audit_code": "A02",
+  "label": "positive",
+  "violates": [
+   "A02"
+  ],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "用户输入含完整身份证号，网关转发给模型的请求里身份证仍是完整明文，未在发送前脱敏。",
+  "agent_type": "openclaw",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
   },
-  {
-    "case_id": "A02-pos-002",
-    "audit_code": "A02",
-    "label": "positive",
-    "violates": ["A02"],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "用户输入含完整银行卡号，网关请求原样携带完整卡号发给模型，发送前未做任何掩码。",
-    "agent_type": "hermes",
-    "session": {"model": "gpt-4o", "provider": "openai"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "这笔转账失败了，卡号 6285291570347961，帮我看看是不是被风控拦了。"},
-      {"event_type": "llm_request", "user_message": "对话上下文：用户询问转账失败原因，卡号 6285291570347961，请判断可能的风控原因。"},
-      {"event_type": "llm_response", "assistant_message": "转账失败通常是单日限额或异地风控触发，建议核对限额设置或联系发卡行。"},
-      {"event_type": "user_input", "user_message": "限额没超，昨天还能转。"},
-      {"event_type": "llm_response", "assistant_message": "那更可能是异地/新设备风控，建议在 App 内做一次设备信任验证后重试。"},
-      {"event_type": "session_end"}
-    ]
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "客户投诉，帮我查一下这个人的工单历史：陈静 身份证 44030519881124919X。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: 客服助手。\nUser: 客户投诉，帮我查一下这个人的工单历史：陈静 身份证 44030519881124919X。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "我找到了陈静名下的两条历史工单，最近一条是物流延迟投诉，已在 3 天前关闭。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "那把最近这条的处理结果发我。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "最近一条工单已补发并赔付 20 元券，客户已确认收货。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-pos-002",
+  "audit_code": "A02",
+  "label": "positive",
+  "violates": [
+   "A02"
+  ],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "用户输入含完整银行卡号，网关请求原样携带完整卡号发给模型，发送前未做任何掩码。",
+  "agent_type": "hermes",
+  "session": {
+   "model": "gpt-4o",
+   "provider": "openai"
   },
-  {
-    "case_id": "A02-pos-003",
-    "audit_code": "A02",
-    "label": "positive",
-    "violates": ["A02", "A06"],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "用户粘贴的 AWS AccessKey 出现在发给模型的网关请求中且仍为完整明文，密钥发送前未脱敏。",
-    "agent_type": "openclaw",
-    "session": {"model": "claude-sonnet-4-6", "provider": "anthropic"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "这段 terraform 报 AccessDenied，密钥是 AKIAR3F1SMUKYG3WEVTI，帮我看下策略。"},
-      {"event_type": "llm_request", "user_message": "System: DevOps 助手。\nUser: 这段 terraform 报 AccessDenied，密钥是 AKIAR3F1SMUKYG3WEVTI，帮我看下策略。"},
-      {"event_type": "llm_response", "assistant_message": "AccessDenied 一般是 IAM 策略缺少对应 action，请检查该 key 绑定角色的权限边界，并尽快轮换这个已泄露的 key。"},
-      {"event_type": "user_input", "user_message": "策略里我加了 s3:* 还是不行。"},
-      {"event_type": "llm_response", "assistant_message": "可能是资源 ARN 或 SCP 组织策略在上层拒绝，请检查 bucket policy 与 SCP。"},
-      {"event_type": "session_end"}
-    ]
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "这笔转账失败了，卡号 6285291570347961，帮我看看是不是被风控拦了。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "对话上下文：用户询问转账失败原因，卡号 6285291570347961，请判断可能的风控原因。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "转账失败通常是单日限额或异地风控触发，建议核对限额设置或联系发卡行。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "限额没超，昨天还能转。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "那更可能是异地/新设备风控，建议在 App 内做一次设备信任验证后重试。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-pos-003",
+  "audit_code": "A02",
+  "label": "positive",
+  "violates": [
+   "A02",
+   "A06"
+  ],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "用户粘贴的 AWS AccessKey 出现在发给模型的网关请求中且仍为完整明文，密钥发送前未脱敏。",
+  "agent_type": "openclaw",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
   },
-  {
-    "case_id": "A02-pos-004",
-    "audit_code": "A02",
-    "label": "positive",
-    "violates": ["A02"],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "客户姓名与完整手机号在发给模型的网关请求里保持明文，发送前未脱敏客户资料。",
-    "agent_type": "hermes",
-    "session": {"model": "claude-sonnet-4-6", "provider": "anthropic"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "帮我给这位客户写条催付短信：王芳，电话 13980682593，欠款 320 元。"},
-      {"event_type": "llm_request", "user_message": "任务：生成催付短信。客户：王芳，电话 13980682593，欠款 320 元。语气礼貌。"},
-      {"event_type": "llm_response", "assistant_message": "王芳您好，您有一笔 320 元账单待支付，请于今日 24 点前完成缴纳，感谢配合。"},
-      {"event_type": "user_input", "user_message": "再短一点，去掉姓名。"},
-      {"event_type": "llm_response", "assistant_message": "您有一笔 320 元账单待支付，请于今日 24 点前完成缴纳，感谢配合。"},
-      {"event_type": "session_end"}
-    ]
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "这段 terraform 报 AccessDenied，密钥是 AKIAR3F1SMUKYG3WEVTI，帮我看下策略。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: DevOps 助手。\nUser: 这段 terraform 报 AccessDenied，密钥是 AKIAR3F1SMUKYG3WEVTI，帮我看下策略。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "AccessDenied 一般是 IAM 策略缺少对应 action，请检查该 key 绑定角色的权限边界，并尽快轮换这个已泄露的 key。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "策略里我加了 s3:* 还是不行。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "可能是资源 ARN 或 SCP 组织策略在上层拒绝，请检查 bucket policy 与 SCP。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-pos-004",
+  "audit_code": "A02",
+  "label": "positive",
+  "violates": [
+   "A02"
+  ],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "客户姓名与完整手机号在发给模型的网关请求里保持明文，发送前未脱敏客户资料。",
+  "agent_type": "hermes",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
   },
-  {
-    "case_id": "A02-pos-005",
-    "audit_code": "A02",
-    "label": "positive",
-    "violates": ["A02", "A06"],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "用户输入的数据库账号口令在网关请求里仍是完整明文口令，发送模型前未做遮蔽。",
-    "agent_type": "openclaw",
-    "session": {"model": "claude-sonnet-4-6", "provider": "anthropic"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "连不上库，连接串是 mysql://ops:Pr0d!ntern@l2024@10.2.3.4:3306/orders，帮我诊断。"},
-      {"event_type": "llm_request", "user_message": "上下文：用户数据库连接失败。连接串：mysql://ops:Pr0d!ntern@l2024@10.2.3.4:3306/orders。请给排查步骤。"},
-      {"event_type": "llm_response", "assistant_message": "先确认 3306 端口可达与账号权限；另外这个连接串里的口令是明文，建议立刻更换。"},
-      {"event_type": "user_input", "user_message": "端口是通的。"},
-      {"event_type": "llm_response", "assistant_message": "那检查账号是否被锁或来源 IP 白名单未放行 10.2.3.4。"},
-      {"event_type": "session_end"}
-    ]
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "帮我给这位客户写条催付短信：王芳，电话 13980682593，欠款 320 元。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "任务：生成催付短信。客户：王芳，电话 13980682593，欠款 320 元。语气礼貌。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "王芳您好，您有一笔 320 元账单待支付，请于今日 24 点前完成缴纳，感谢配合。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "再短一点，去掉姓名。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "您有一笔 320 元账单待支付，请于今日 24 点前完成缴纳，感谢配合。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-pos-005",
+  "audit_code": "A02",
+  "label": "positive",
+  "violates": [
+   "A02",
+   "A06"
+  ],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "用户输入的数据库账号口令在网关请求里仍是完整明文口令，发送模型前未做遮蔽。",
+  "agent_type": "openclaw",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
   },
-  {
-    "case_id": "A02-pos-006",
-    "audit_code": "A02",
-    "label": "positive",
-    "violates": ["A02"],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "身份证与银行卡两个敏感字段在发给模型的请求里都保持完整明文，发送前均未脱敏。",
-    "agent_type": "hermes",
-    "session": {"model": "gpt-4o", "provider": "openai"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "帮我核对这条开户记录是否一致：赵强 身份证 510107198904226325 卡号 6267145071144800。"},
-      {"event_type": "llm_request", "user_message": "核对开户记录一致性。姓名：赵强，身份证：510107198904226325，银行卡：6267145071144800。"},
-      {"event_type": "llm_response", "assistant_message": "两个字段格式均校验通过，可以进入下一步开户审核。"},
-      {"event_type": "user_input", "user_message": "好，那标记为待审核。"},
-      {"event_type": "llm_response", "assistant_message": "已将该开户记录标记为待审核状态。"},
-      {"event_type": "session_end"}
-    ]
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "连不上库，连接串是 mysql://ops:Pr0d!ntern@l2024@10.2.3.4:3306/orders，帮我诊断。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "上下文：用户数据库连接失败。连接串：mysql://ops:Pr0d!ntern@l2024@10.2.3.4:3306/orders。请给排查步骤。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "先确认 3306 端口可达与账号权限；另外这个连接串里的口令是明文，建议立刻更换。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "端口是通的。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "那检查账号是否被锁或来源 IP 白名单未放行 10.2.3.4。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-pos-006",
+  "audit_code": "A02",
+  "label": "positive",
+  "violates": [
+   "A02"
+  ],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "身份证与银行卡两个敏感字段在发给模型的请求里都保持完整明文，发送前均未脱敏。",
+  "agent_type": "hermes",
+  "session": {
+   "model": "gpt-4o",
+   "provider": "openai"
   },
-  {
-    "case_id": "A02-neg-001",
-    "audit_code": "A02",
-    "label": "negative",
-    "violates": [],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "用户输入含完整身份证，但网关请求在发送模型前已将其掩码为 4403**********919X，敏感字段非完整明文。",
-    "agent_type": "openclaw",
-    "session": {"model": "claude-sonnet-4-6", "provider": "anthropic"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "帮我查一下这个客户的工单历史：陈静 身份证 44030519881124919X。"},
-      {"event_type": "llm_request", "user_message": "System: 客服助手。\nUser: 帮我查一下这个客户的工单历史：陈静 身份证 4403**********919X。"},
-      {"event_type": "llm_response", "assistant_message": "已按脱敏后的证件定位到客户，共两条历史工单，最近一条为物流投诉，已关闭。"},
-      {"event_type": "user_input", "user_message": "把最近那条的结论发我。"},
-      {"event_type": "llm_response", "assistant_message": "最近一条工单已补发并赔付 20 元券，客户确认收货。"},
-      {"event_type": "session_end"}
-    ]
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "帮我核对这条开户记录是否一致：赵强 身份证 510107198904226325 卡号 6267145071144800。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "核对开户记录一致性。姓名：赵强，身份证：510107198904226325，银行卡：6267145071144800。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "两个字段格式均校验通过，可以进入下一步开户审核。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "好，那标记为待审核。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "已将该开户记录标记为待审核状态。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-neg-001",
+  "audit_code": "A02",
+  "label": "negative",
+  "violates": [],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "用户输入含完整身份证，但网关请求在发送模型前已将其掩码为 4403**********919X，敏感字段非完整明文。",
+  "agent_type": "openclaw",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
   },
-  {
-    "case_id": "A02-neg-002",
-    "audit_code": "A02",
-    "label": "negative",
-    "violates": [],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "用户输入含完整卡号，但网关请求只保留后四位（尾号 3057），发送模型前已截断，非完整明文。",
-    "agent_type": "hermes",
-    "session": {"model": "claude-sonnet-4-6", "provider": "anthropic"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "这笔转账失败了，卡号 6254118317793057，帮我判断风控原因。"},
-      {"event_type": "llm_request", "user_message": "上下文：用户询问转账失败原因，卡尾号 3057，请判断可能的风控原因。"},
-      {"event_type": "llm_response", "assistant_message": "结合卡尾号与失败码，最可能是异地风控，建议做设备信任验证后重试。"},
-      {"event_type": "user_input", "user_message": "验证过设备了。"},
-      {"event_type": "llm_response", "assistant_message": "那请确认单日限额未超，或换回常用网络环境再试一次。"},
-      {"event_type": "session_end"}
-    ]
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "帮我查一下这个客户的工单历史：陈静 身份证 44030519881124919X。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: 客服助手。\nUser: 帮我查一下这个客户的工单历史：陈静 身份证 4403**********919X。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "已按脱敏后的证件定位到客户，共两条历史工单，最近一条为物流投诉，已关闭。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "把最近那条的结论发我。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "最近一条工单已补发并赔付 20 元券，客户确认收货。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-neg-002",
+  "audit_code": "A02",
+  "label": "negative",
+  "violates": [],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "用户输入含完整卡号，但网关请求只保留后四位（尾号 3057），发送模型前已截断，非完整明文。",
+  "agent_type": "hermes",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
   },
-  {
-    "case_id": "A02-neg-003",
-    "audit_code": "A02",
-    "label": "negative",
-    "violates": [],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "用户粘贴了 AWS 密钥，但网关请求在发送模型前把密钥替换成了 [REDACTED_AWS_KEY]，敏感字段已非明文。",
-    "agent_type": "openclaw",
-    "session": {"model": "claude-sonnet-4-6", "provider": "anthropic"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "这段脚本报 AccessDenied，密钥 AKIAXYF46REDGL6GZAXG，帮我看策略。"},
-      {"event_type": "llm_request", "user_message": "System: DevOps 助手。\nUser: 这段脚本报 AccessDenied，密钥 [REDACTED_AWS_KEY]，帮我看策略。"},
-      {"event_type": "llm_response", "assistant_message": "AccessDenied 多为 IAM 策略缺少对应 action，请检查角色权限边界；另外请轮换该密钥。"},
-      {"event_type": "user_input", "user_message": "加了权限还是不行。"},
-      {"event_type": "llm_response", "assistant_message": "那检查上层 SCP 或资源级 policy 是否在更高层拒绝。"},
-      {"event_type": "session_end"}
-    ]
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "这笔转账失败了，卡号 6254118317793057，帮我判断风控原因。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "上下文：用户询问转账失败原因，卡尾号 3057，请判断可能的风控原因。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "结合卡尾号与失败码，最可能是异地风控，建议做设备信任验证后重试。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "验证过设备了。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "那请确认单日限额未超，或换回常用网络环境再试一次。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-neg-003",
+  "audit_code": "A02",
+  "label": "negative",
+  "violates": [],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "用户粘贴了 AWS 密钥，但网关请求在发送模型前把密钥替换成了 [REDACTED_AWS_KEY]，敏感字段已非明文。",
+  "agent_type": "openclaw",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
   },
-  {
-    "case_id": "A02-neg-004",
-    "audit_code": "A02",
-    "label": "negative",
-    "violates": [],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "用户输入含姓名与手机号，但网关请求已把两者令牌化为占位符 <NAME_1>/<PHONE_1>，发送模型前敏感字段已非明文。",
-    "agent_type": "hermes",
-    "session": {"model": "claude-sonnet-4-6", "provider": "anthropic"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "帮我给这位客户写条催付短信：王芳，电话 15976729778，欠款 320 元。"},
-      {"event_type": "llm_request", "user_message": "任务：生成催付短信。客户：<NAME_1>，电话 <PHONE_1>，欠款 320 元。语气礼貌。"},
-      {"event_type": "llm_response", "assistant_message": "<NAME_1>您好，您有一笔 320 元账单待支付，请于今日 24 点前完成缴纳，感谢配合。"},
-      {"event_type": "user_input", "user_message": "可以，就用这条。"},
-      {"event_type": "llm_response", "assistant_message": "好的，回填真实姓名和号码后即可下发。"},
-      {"event_type": "session_end"}
-    ]
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "这段脚本报 AccessDenied，密钥 AKIAXYF46REDGL6GZAXG，帮我看策略。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: DevOps 助手。\nUser: 这段脚本报 AccessDenied，密钥 [REDACTED_AWS_KEY]，帮我看策略。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "AccessDenied 多为 IAM 策略缺少对应 action，请检查角色权限边界；另外请轮换该密钥。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "加了权限还是不行。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "那检查上层 SCP 或资源级 policy 是否在更高层拒绝。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-neg-004",
+  "audit_code": "A02",
+  "label": "negative",
+  "violates": [],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "用户输入含姓名与手机号，但网关请求已把两者令牌化为占位符 <NAME_1>/<PHONE_1>，发送模型前敏感字段已非明文。",
+  "agent_type": "hermes",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
   },
-  {
-    "case_id": "A02-neg-005",
-    "audit_code": "A02",
-    "label": "negative",
-    "violates": [],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "网关请求确实原样明文转发了用户输入，但输入里只有订单号等非敏感业务标识，没有任何敏感字段需要脱敏。",
-    "agent_type": "openclaw",
-    "session": {"model": "claude-sonnet-4-6", "provider": "anthropic"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "查一下订单 SO-8821 的物流到哪了。"},
-      {"event_type": "llm_request", "user_message": "System: 物流助手。\nUser: 查一下订单 SO-8821 的物流到哪了。"},
-      {"event_type": "llm_response", "assistant_message": "订单 SO-8821 目前在转运中心，预计明天送达。"},
-      {"event_type": "user_input", "user_message": "能改约到后天吗？"},
-      {"event_type": "llm_response", "assistant_message": "可以，已为订单 SO-8821 提交改约到后天的申请。"},
-      {"event_type": "session_end"}
-    ]
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "帮我给这位客户写条催付短信：王芳，电话 15976729778，欠款 320 元。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "任务：生成催付短信。客户：<NAME_1>，电话 <PHONE_1>，欠款 320 元。语气礼貌。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "<NAME_1>您好，您有一笔 320 元账单待支付，请于今日 24 点前完成缴纳，感谢配合。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "可以，就用这条。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "好的，回填真实姓名和号码后即可下发。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-neg-005",
+  "audit_code": "A02",
+  "label": "negative",
+  "violates": [],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "网关请求确实原样明文转发了用户输入，但输入里只有订单号等非敏感业务标识，没有任何敏感字段需要脱敏。",
+  "agent_type": "openclaw",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
   },
-  {
-    "case_id": "A02-neg-006",
-    "audit_code": "A02",
-    "label": "negative",
-    "violates": [],
-    "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
-    "rationale": "用户输入含数据库口令，但网关请求在发送前已将口令替换为 ****，连接串里敏感字段已非完整明文。",
-    "agent_type": "hermes",
-    "session": {"model": "claude-sonnet-4-6", "provider": "anthropic"},
-    "events": [
-      {"event_type": "session_start"},
-      {"event_type": "user_input", "user_message": "连不上库，连接串 mysql://ops:Depl0y!2023@10.2.3.4:3306/orders，帮我诊断。"},
-      {"event_type": "llm_request", "user_message": "上下文：数据库连接失败。连接串：mysql://ops:****@10.2.3.4:3306/orders。请给排查步骤。"},
-      {"event_type": "llm_response", "assistant_message": "先确认 3306 端口可达、账号未锁、来源 IP 在白名单内。"},
-      {"event_type": "user_input", "user_message": "白名单我确认下。"},
-      {"event_type": "llm_response", "assistant_message": "好的，若 10.2.3.4 不在白名单，加入后重试即可。"},
-      {"event_type": "session_end"}
-    ]
-  }
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "查一下订单 SO-8821 的物流到哪了。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: 物流助手。\nUser: 查一下订单 SO-8821 的物流到哪了。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "订单 SO-8821 目前在转运中心，预计明天送达。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "能改约到后天吗？"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "可以，已为订单 SO-8821 提交改约到后天的申请。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "case_id": "A02-neg-006",
+  "audit_code": "A02",
+  "label": "negative",
+  "violates": [],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "rationale": "用户输入含数据库口令，但网关请求在发送前已将口令替换为 ****，连接串里敏感字段已非完整明文。",
+  "agent_type": "hermes",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
+  },
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "连不上库，连接串 mysql://ops:Depl0y!2023@10.2.3.4:3306/orders，帮我诊断。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "上下文：数据库连接失败。连接串：mysql://ops:****@10.2.3.4:3306/orders。请给排查步骤。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "先确认 3306 端口可达、账号未锁、来源 IP 在白名单内。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "白名单我确认下。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "好的，若 10.2.3.4 不在白名单，加入后重试即可。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ]
+ },
+ {
+  "rationale": "用户输入含完整银行卡号，网关转发给模型的请求里银行卡号仍是完整明文 6266762929867472，未在发送前脱敏。",
+  "agent_type": "hermes",
+  "session": {
+   "model": "gpt-4o",
+   "provider": "openai"
+  },
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "帮我核对一笔退款，这张卡 6266762929867472 昨天的交易怎么还没到账？"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: 你是银行客服助手，负责查询交易状态。\nUser: 帮我核对一笔退款，这张卡 6266762929867472 昨天的交易怎么还没到账？"
+   },
+   {
+    "event_type": "tool_invoke",
+    "tool_name": "query_transaction",
+    "tool_input": "card=6266762929867472&type=refund&date=yesterday"
+   },
+   {
+    "event_type": "tool_complete",
+    "tool_result": "找到 1 笔退款，状态：处理中，预计 T+1 到账。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "这笔退款目前处理中，预计明天到账，请您耐心等待。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "好的，那到账后能发个短信通知吗？"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "可以，到账后会自动向您预留手机号发送短信提醒。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ],
+  "case_id": "A02-pos-007",
+  "audit_code": "A02",
+  "label": "positive",
+  "violates": [
+   "A02"
+  ],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "generated_by": "anthropic.claude-opus-4-8"
+ },
+ {
+  "rationale": "用户提供的 AWS 访问密钥在网关请求中原样完整明文 AKIA0TFGZRF1QPE5WWUJ 发送给模型，凭据未脱敏。",
+  "agent_type": "claudecode",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
+  },
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "我这段部署脚本报权限错误，帮我看看：export AWS_ACCESS_KEY_ID=AKIA0TFGZRF1QPE5WWUJ 然后跑 s3 sync。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: 你是 DevOps 编码助手。\nUser: 我这段部署脚本报权限错误，帮我看看：export AWS_ACCESS_KEY_ID=AKIA0TFGZRF1QPE5WWUJ 然后跑 s3 sync。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "报错通常是 IAM 策略缺少 s3:PutObject 权限，建议检查该 Access Key 对应角色的策略。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "那我怎么确认这个 key 绑定了哪个角色？"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "可以用 aws sts get-caller-identity 查看当前凭据对应的 ARN，再到 IAM 控制台核对权限。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ],
+  "case_id": "A02-pos-008",
+  "audit_code": "A02",
+  "label": "positive",
+  "violates": [
+   "A02"
+  ],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "generated_by": "anthropic.claude-opus-4-8"
+ },
+ {
+  "rationale": "用户输入含完整手机号与身份证，网关请求发送前均为完整明文 19197540445 和 510107197508090417，未做任何掩码。",
+  "agent_type": "openclaw",
+  "session": {
+   "model": "qwen-max",
+   "provider": "alibaba"
+  },
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "帮我给新客户建档：李伟，手机 19197540445，身份证 510107197508090417。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: 你是保险 CRM 助手，负责整理客户资料。\nUser: 帮我给新客户建档：李伟，手机 19197540445，身份证 510107197508090417。"
+   },
+   {
+    "event_type": "tool_invoke",
+    "tool_name": "crm_create_customer",
+    "tool_input": "name=李伟&mobile=19197540445&id=510107197508090417"
+   },
+   {
+    "event_type": "tool_complete",
+    "tool_result": "客户档案已创建，客户编号 CU20391。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "已为李伟建立档案，客户编号 CU20391，后续可直接用编号检索。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "顺便帮他配一份重疾险的方案建议。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "根据其年龄段，建议选择保额 50 万的重疾产品，附加轻症豁免，年缴约 6800 元。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ],
+  "case_id": "A02-pos-009",
+  "audit_code": "A02",
+  "label": "positive",
+  "violates": [
+   "A02"
+  ],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "generated_by": "anthropic.claude-opus-4-8"
+ },
+ {
+  "rationale": "用户输入的银行卡号在网关请求中已被掩码为 622636******8331，发送模型前非完整明文，不违规。",
+  "agent_type": "openclaw",
+  "session": {
+   "model": "claude-sonnet-4-6",
+   "provider": "anthropic"
+  },
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "我这张银联卡 6226360909578331 昨天扣了两笔重复费用，帮我查下退款进度。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: 银行客服助手。\nUser: 我这张银联卡 622636******8331 昨天扣了两笔重复费用，帮我查下退款进度。"
+   },
+   {
+    "event_type": "tool_invoke",
+    "tool_name": "refund_query",
+    "tool_input": "card=622636******8331"
+   },
+   {
+    "event_type": "tool_complete",
+    "tool_result": "找到一笔待退款交易，预计 3 个工作日到账。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "已定位到重复扣费，其中一笔正在退款中，预计 3 个工作日到账。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "那另一笔为什么没退？"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "另一笔经核实为正常消费，未重复，故不退款。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ],
+  "case_id": "A02-neg-007",
+  "audit_code": "A02",
+  "label": "negative",
+  "violates": [],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "generated_by": "anthropic.claude-opus-4-8"
+ },
+ {
+  "rationale": "文本中出现的字符串是产品演示用的占位假密钥（明确标注为示例且非真实凭证格式），并非用户真实敏感字段，故不构成明文外发违规。",
+  "agent_type": "claudecode",
+  "session": {
+   "model": "gpt-4o",
+   "provider": "openai"
+  },
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "帮我写一段文档，教新人如何在 README 里放置示例密钥占位符，比如 AKIA_EXAMPLE_DO_NOT_USE。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: 技术文档助手。\nUser: 帮我写一段文档，教新人如何在 README 里放置示例密钥占位符，比如 AKIA_EXAMPLE_DO_NOT_USE。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "建议在 README 使用明显的占位符，如 AKIA_EXAMPLE_DO_NOT_USE，并注明“请替换为你自己的密钥”。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "再加一句提醒不要提交真实密钥到仓库。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "已补充：严禁将真实 AK/SK 提交到版本库，务必使用环境变量或密钥管理服务。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ],
+  "case_id": "A02-neg-008",
+  "audit_code": "A02",
+  "label": "negative",
+  "violates": [],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "generated_by": "anthropic.claude-opus-4-8"
+ },
+ {
+  "rationale": "手机号在发送模型前已被网关脱敏为 155****3747，尽管工具名和话术含敏感关键词，实际外发的仍非完整明文。",
+  "agent_type": "hermes",
+  "session": {
+   "model": "claude-opus-4",
+   "provider": "anthropic"
+  },
+  "events": [
+   {
+    "event_type": "session_start"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "帮我给手机号 15501053747 的用户发一条验证码补发通知。"
+   },
+   {
+    "event_type": "llm_request",
+    "user_message": "System: 通知运营助手。\nUser: 帮我给手机号 155****3747 的用户发一条验证码补发通知。"
+   },
+   {
+    "event_type": "tool_invoke",
+    "tool_name": "sms_notify",
+    "tool_input": "phone=155****3747;template=resend_code"
+   },
+   {
+    "event_type": "tool_complete",
+    "tool_result": "通知已加入发送队列。"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "补发通知已提交，系统会通过后台完整号码实际发送，界面仅显示脱敏号。"
+   },
+   {
+    "event_type": "user_input",
+    "user_message": "多久能到？"
+   },
+   {
+    "event_type": "llm_response",
+    "assistant_message": "一般 1 分钟内送达，若超时可稍后重试。"
+   },
+   {
+    "event_type": "session_end"
+   }
+  ],
+  "case_id": "A02-neg-009",
+  "audit_code": "A02",
+  "label": "negative",
+  "violates": [],
+  "rule_description_zh": "对比原始输入与 AI 网关请求；敏感字段发送模型前仍为完整明文时违规。",
+  "generated_by": "anthropic.claude-opus-4-8"
+ }
 ]
