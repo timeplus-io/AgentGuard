@@ -200,26 +200,71 @@ class TestMerge(unittest.TestCase):
 
 
 class TestCLIWiring(unittest.TestCase):
-    def test_generate_writes_staging(self):
+    def _run_generate(self, argv, env=None, expect_exit=False):
+        """Run `generate` with a mocked LLM; return (cfgs_seen, staging_dir)."""
         import contextlib, io
         from unittest import mock
         tmp = tempfile.mkdtemp()
-        try:
-            def fake_complete(cfg, system, user):
-                return json.dumps([_valid_case_body()])
-            buf = io.StringIO()
-            with mock.patch.object(llm_gen, "llm_complete", fake_complete):
-                with contextlib.redirect_stdout(buf):
-                    g.main(["generate", "--scenarios", FIX, "--staging", tmp,
+        self.addCleanup(shutil.rmtree, tmp)
+        cfgs = []
+        def fake_complete(cfg, system, user):
+            cfgs.append(cfg)
+            return json.dumps([_valid_case_body()])
+        full_env = {k: v for k, v in os.environ.items()
+                    if not k.startswith(("AUDIT_GEN_", "OPENAI_", "ANTHROPIC_"))}
+        full_env.update(env or {})
+        with mock.patch.object(llm_gen, "llm_complete", fake_complete):
+            with mock.patch.dict(os.environ, full_env, clear=True):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    argv = ["generate", "--scenarios", FIX, "--staging", tmp,
                             "--codes", "A01", "--per-code", "1",
-                            "--label", "positive", "--model", "m",
-                            "--base-url", "http://unused"])
-            with open(os.path.join(tmp, "A01.json")) as f:
-                staged = json.load(f)
-            self.assertEqual(len(staged), 1)
-            self.assertEqual(staged[0]["case_id"], "A01-pos-002")
-        finally:
-            shutil.rmtree(tmp)
+                            "--label", "positive"] + argv
+                    if expect_exit:
+                        with self.assertRaises(SystemExit):
+                            g.main(argv)
+                    else:
+                        g.main(argv)
+        return cfgs, tmp
+
+    def test_generate_writes_staging(self):
+        cfgs, tmp = self._run_generate(["--model", "m", "--base-url", "http://x"])
+        with open(os.path.join(tmp, "A01.json")) as f:
+            staged = json.load(f)
+        self.assertEqual(len(staged), 1)
+        self.assertEqual(staged[0]["case_id"], "A01-pos-002")
+
+    def test_model_falls_back_to_env(self):
+        cfgs, _ = self._run_generate(
+            [], env={"AUDIT_GEN_MODEL": "env-model", "OPENAI_BASE_URL": "http://x"})
+        self.assertEqual(cfgs[0]["model"], "env-model")
+
+    def test_model_flag_beats_env(self):
+        cfgs, _ = self._run_generate(
+            ["--model", "flag-model", "--base-url", "http://x"],
+            env={"AUDIT_GEN_MODEL": "env-model"})
+        self.assertEqual(cfgs[0]["model"], "flag-model")
+
+    def test_missing_model_everywhere_errors(self):
+        self._run_generate(["--base-url", "http://x"], env={}, expect_exit=True)
+
+    def test_api_type_falls_back_to_env(self):
+        cfgs, _ = self._run_generate(
+            [], env={"AUDIT_GEN_API_TYPE": "anthropic",
+                     "AUDIT_GEN_MODEL": "m",
+                     "ANTHROPIC_BASE_URL": "http://a"})
+        self.assertEqual(cfgs[0]["api_type"], "anthropic")
+        self.assertEqual(cfgs[0]["base_url"], "http://a")
+
+    def test_api_type_flag_beats_env(self):
+        cfgs, _ = self._run_generate(
+            ["--api-type", "openai", "--model", "m", "--base-url", "http://x"],
+            env={"AUDIT_GEN_API_TYPE": "anthropic"})
+        self.assertEqual(cfgs[0]["api_type"], "openai")
+
+    def test_invalid_env_api_type_errors(self):
+        self._run_generate(
+            [], env={"AUDIT_GEN_API_TYPE": "nope", "AUDIT_GEN_MODEL": "m",
+                     "OPENAI_BASE_URL": "http://x"}, expect_exit=True)
 
 
 if __name__ == "__main__":

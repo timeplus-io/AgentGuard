@@ -164,10 +164,21 @@ python3 -m unittest test_corpus       # re-check the corpus contract
 
 `merge` is all-or-nothing: it validates every staged case against the corpus
 before writing, refuses duplicates/invalid cases, and deletes the staged
-file on success. Endpoint config: `--api-type openai` (default) uses
-`--base-url`/`--api-key` or `OPENAI_BASE_URL`/`OPENAI_API_KEY`;
-`--api-type anthropic` uses `ANTHROPIC_API_KEY` (base URL defaults to
-`https://api.anthropic.com`).
+file on success.
+
+Endpoint config — every flag has an env fallback (flag always wins), so a
+fully env-driven `generate --codes A03` works:
+
+| Flag | Env fallback | Default |
+|---|---|---|
+| `--api-type` | `AUDIT_GEN_API_TYPE` | `openai` |
+| `--model` | `AUDIT_GEN_MODEL` | *(required — error if neither set)* |
+| `--base-url` | `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL` | openai: required; anthropic: `https://api.anthropic.com` |
+| `--api-key` | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | empty |
+
+The provider is selected ONLY by `--api-type`/`AUDIT_GEN_API_TYPE` — the
+`OPENAI_*`/`ANTHROPIC_*` pairs are read exclusively for the selected
+provider, so setting both pairs is harmless.
 
 ### Volume control
 
