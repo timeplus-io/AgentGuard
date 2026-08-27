@@ -6,7 +6,7 @@ import { useTheme } from '../context/ThemeContext'
 import { api } from '../api/client'
 import { useOpenThreats } from '../hooks/useLiveThreatFeed'
 import { uiKey } from '../lib/perm'
-import { openTabby } from '../lib/tabby'
+import { openTabby, isTabbyPage } from '../lib/tabby'
 import { LiveThreatFeedList } from './LiveThreatFeed'
 import TabbyAvatar from './TabbyAvatar'
 
@@ -115,7 +115,7 @@ export default function TopNav() {
     ? auth.username.charAt(0).toUpperCase()
     : 'A'
   const activeThreatCount = openThreats.length
-  const showTabbyLauncher = can(uiKey('sentry')) && location.pathname !== '/sentry'
+  const showTabbyLauncher = can(uiKey('sentry')) && !isTabbyPage(location.pathname)
 
   return (
     <header className="app-chrome top-nav h-10 bg-gray-800 border-b border-gray-700 z-[60] flex justify-between items-center pl-6 pr-4 backdrop-blur-md">
@@ -137,11 +137,11 @@ export default function TopNav() {
             <button
               type="button"
               onClick={openTabby}
-              className="h-8 px-3 rounded-sm bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center gap-2 text-xs font-semibold hover:from-purple-600 hover:to-pink-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
+              className="h-8 px-3 rounded-sm bg-gradient-to-br from-[#ffb0cf] to-[#f256a3] text-[#3d0023] flex items-center gap-2 text-xs font-semibold hover:scale-[0.98] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
               title={t('topNav.talkToTabby')}
               aria-label={t('topNav.talkToTabby')}
             >
-              <TabbyAvatar className="h-5 w-5 ring-white/60" />
+              <TabbyAvatar className="h-5 w-5" ring="ring-[#3d0023]/30" />
               {t('topNav.talkToTabby')}
             </button>
           )}

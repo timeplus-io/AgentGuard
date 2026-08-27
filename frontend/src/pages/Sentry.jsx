@@ -9,6 +9,7 @@ import TabbyAvatar from '../components/TabbyAvatar'
 import { useAuth } from '../context/AuthContext'
 import { writeKey } from '../lib/perm'
 import { api } from '../api/client'
+import { TABBY_USER_BUBBLE_CLASS } from '../lib/tabby'
 
 let localSeq = 0
 function localId(prefix) {
@@ -355,7 +356,7 @@ function MessageBubble({ item }) {
   if (item.role === 'user') {
     return (
       <div className="group flex flex-col items-end">
-        <div className="max-w-2xl bg-[#FFEEF6] dark:bg-[#690F49] rounded-sm px-4 py-2.5 text-sm text-gray-100 whitespace-pre-wrap break-words">
+        <div className={`max-w-2xl ${TABBY_USER_BUBBLE_CLASS} rounded-sm px-4 py-2.5 text-sm whitespace-pre-wrap break-words`}>
           {item.content}
         </div>
         {timestamp && <div className="mt-1 text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">{timestamp}</div>}

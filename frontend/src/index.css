@@ -283,7 +283,19 @@ body.sidebar-collapsed .pl-sidebar {
 }
 
 .light .app-chrome .profile-menu-item:hover {
-  background-color: var(--gray-900) !important;
+  /* gray-900 (#f7f6f6) is invisible on the forced #ffffff menu — use the
+     next step down for a perceptible hover, and darken the text like the
+     dark-mode hover:text-gray-100 does. */
+  background-color: var(--gray-800) !important;
+  color: var(--gray-100) !important;
+}
+
+/* Restore the logout item's pink hover accent, which the always-applied
+   !important color above would otherwise suppress. pink-500 instead of
+   pink-400 for contrast on the white menu (same remap as emerald→green-600
+   above). */
+.light .app-chrome .profile-menu-item.hover\:text-pink-400:hover {
+  color: var(--pink-500) !important;
 }
 
 .light .app-chrome .profile-menu-divider {

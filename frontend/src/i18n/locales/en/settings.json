@@ -89,7 +89,7 @@
     "catalog": "Catalog",
     "holds": "Approval Holds",
     "dlp": "Semantic DLP",
-    "sentry": "Sentry Agent",
+    "sentry": "Tabby Assistant",
     "rules": "Rules",
     "ui": "Language and Theme",
     "setup": "Setup"
@@ -185,7 +185,7 @@
     },
     "sentry_enabled": {
       "label": "Enable Sentry agent",
-      "description": "Conversational security analyst agent (chat, SQL skills). Model settings live in agentguard_sentry_config, editable under Settings → Sentry Agent."
+      "description": "Conversational security analyst agent (chat, SQL skills). Model settings live in agentguard_sentry_config, editable under Settings → Tabby Assistant."
     },
     "sentry_skill_dir": {
       "label": "SQL skill directory override",
@@ -193,7 +193,7 @@
     },
     "sentry_chat_base_url": {
       "label": "Sentry chat base URL",
-      "description": "OpenAI-compatible endpoint for the Sentry chat model (boot default; edit live under Settings → Sentry Agent)."
+      "description": "OpenAI-compatible endpoint for the Sentry chat model (boot default; edit live under Settings → Tabby Assistant)."
     },
     "sentry_chat_api_key": {
       "label": "Sentry chat API key",

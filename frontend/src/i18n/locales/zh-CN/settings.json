@@ -89,7 +89,7 @@
     "catalog": "规则目录",
     "holds": "审批挂起",
     "dlp": "语义 DLP",
-    "sentry": "Sentry 智能体",
+    "sentry": "Tabby 助手",
     "rules": "规则",
     "ui": "语言和主题",
     "setup": "设置"
@@ -185,7 +185,7 @@
     },
     "sentry_enabled": {
       "label": "启用 Sentry 智能体",
-      "description": "对话式安全分析智能体（聊天、SQL 技能）。模型设置存放在 agentguard_sentry_config 中，可在“设置 → Sentry 智能体”下编辑。"
+      "description": "对话式安全分析智能体（聊天、SQL 技能）。模型设置存放在 agentguard_sentry_config 中，可在“设置 → Tabby 助手”下编辑。"
     },
     "sentry_skill_dir": {
       "label": "SQL 技能目录覆盖路径",
@@ -193,7 +193,7 @@
     },
     "sentry_chat_base_url": {
       "label": "Sentry 聊天基础 URL",
-      "description": "Sentry 聊天模型使用的、与 OpenAI 兼容的端点（启动默认值；可在“设置 → Sentry 智能体”下实时编辑）。"
+      "description": "Sentry 聊天模型使用的、与 OpenAI 兼容的端点（启动默认值；可在“设置 → Tabby 助手”下实时编辑）。"
     },
     "sentry_chat_api_key": {
       "label": "Sentry 聊天 API 密钥",
