@@ -1,14 +1,14 @@
 {
-  "title": "Sentry",
+  "title": "Tabby 助手",
   "subtitle": "与 AgentGuard 自带的安全分析代理对话——询问关于威胁、规则、成本以及 DLP 发现结果的问题，覆盖你的整个代理集群。",
   "loading": "加载中…",
   "disabled": {
-    "heading": "Sentry 已禁用",
+    "heading": "Tabby 已禁用",
     "hintPre": "请在设置中启用 ",
-    "hintPost": " 并完成配置，即可开始与 Sentry 对话。"
+    "hintPost": " 并完成配置，即可开始与 Tabby 对话。"
   },
   "provisionWarning": {
-    "default": "Sentry 数据流尚未完成配置。",
+    "default": "Tabby 的数据流尚未完成配置。",
     "provisioning": "配置中…",
     "provisionNow": "立即配置"
   },
@@ -22,17 +22,70 @@
   },
   "chat": {
     "loadingConversation": "正在加载对话…",
-    "emptyState": "向 Sentry 询问关于你的代理、威胁、成本、规则或 DLP 发现结果的问题。",
+    "emptyState": "Tabby 可以帮你调查什么？",
     "needsChatModel": {
-      "pre": "Sentry 尚未配置对话模型——请在",
-      "linkLabel": "设置 → Sentry 代理",
+      "pre": "Tabby 尚未配置对话模型——请在",
+      "linkLabel": "设置 → Tabby 助手",
       "post": "中进行设置。"
     },
-    "composerPlaceholder": "向 Sentry 提问…",
+    "composerPlaceholder": "向 Tabby 提问…",
     "send": "发送",
     "sending": "发送中…",
     "sendHint": "Ctrl/Cmd+Enter 发送 · Enter 换行",
-    "readOnlyHint": "你对 Sentry 拥有只读权限。请联系管理员获取写入权限以开始对话。"
+    "readOnlyHint": "你对 Tabby 拥有只读权限。请联系管理员获取写入权限以开始对话。"
+  },
+  "floating": {
+    "title": "Tabby",
+    "newChat": "新建对话",
+    "openFull": "打开 Tabby 助手页面",
+    "close": "关闭"
+  },
+  "suggestions": {
+    "rules": [
+      "我启用了哪些规则？",
+      "最近哪些规则触发了检测？",
+      "有推荐规则被禁用了吗？"
+    ],
+    "agents": [
+      "当前哪些智能体处于活跃状态？",
+      "显示该智能体的最近活动。",
+      "哪些智能体触发过威胁？"
+    ],
+    "threats": [
+      "总结我的未处理威胁。",
+      "我应该优先查看哪些威胁？",
+      "最新的威胁事件有什么变化？"
+    ],
+    "cost": [
+      "是什么在推高 token 成本？",
+      "哪些智能体的开销最大？",
+      "有模型超出预算了吗？"
+    ],
+    "investigate": [
+      "帮我调查最近的可疑活动。",
+      "在最近的智能体事件中查找规律。",
+      "接下来我应该查询什么？"
+    ],
+    "dlp": [
+      "最近检测到了哪些敏感数据？",
+      "哪些智能体存在 DLP 发现？",
+      "总结高风险的 DLP 暴露情况。"
+    ],
+    "settings": [
+      "Tabby 配置正确吗？",
+      "我应该检查哪些 AgentGuard 设置？",
+      "解释当前的 Tabby 模型配置。"
+    ],
+    "access": [
+      "谁有权访问 AgentGuard？",
+      "总结当前的角色与权限。",
+      "哪些用户可以修改安全规则？"
+    ],
+    "default": [
+      "我有哪些智能体？有最近的威胁吗？",
+      "总结我的安全态势。",
+      "我应该先调查什么？"
+    ]
   },
   "card": {
     "argsLabel": "参数",
@@ -64,18 +117,18 @@
     "awaiting": "等待你的回答…",
     "otherPlaceholder": "其他——输入你自己的回答…",
     "submit": "提交回答",
-    "skip": "跳过——由 Sentry 决定",
+    "skip": "跳过——由 Tabby 决定",
     "noAnswer": "—",
     "status": {
       "answeredBy": "已由 {{by}} 回答",
       "operator": "操作员",
-      "skipped": "已跳过——Sentry 将按默认假设继续",
-      "timeout": "已超时——Sentry 将按默认假设继续",
+      "skipped": "已跳过——Tabby 将按默认假设继续",
+      "timeout": "已超时——Tabby 将按默认假设继续",
       "abandoned": "已放弃——未收集到回答"
     }
   },
   "errors": {
-    "loadStatusFailed": "加载 Sentry 状态失败",
+    "loadStatusFailed": "加载 Tabby 状态失败",
     "loadConversationsFailed": "加载对话列表失败",
     "loadConversationFailed": "加载对话失败",
     "deleteConversationFailed": "删除对话失败",
@@ -83,7 +136,7 @@
     "decisionFailed": "提交决定失败",
     "chatRequestFailed": "对话请求失败",
     "provisioningFailed": "配置失败",
-    "genericChatError": "Sentry 出错",
+    "genericChatError": "Tabby 出错",
     "clarificationFailed": "提交回答失败"
   },
   "config": {
@@ -93,8 +146,8 @@
     },
     "loadingRuntime": "正在加载运行时配置…",
     "errors": {
-      "loadFailed": "加载 Sentry 配置失败",
-      "loadErrSuffix": " —— 只有在 Sentry 配置完成后才能使用运行时配置。",
+      "loadFailed": "加载 Tabby 配置失败",
+      "loadErrSuffix": " —— 只有在 Tabby 配置完成后才能使用运行时配置。",
       "saveFailed": "保存失败",
       "testFailed": "测试失败",
       "retry": "重试"
@@ -142,21 +195,21 @@
       "effortLabel": "投入程度",
       "promptCachingLabel": "提示词缓存",
       "agentguardToolsTitle": "AgentGuard 技能与工具",
-      "agentguardToolsDescription": " —— 允许 Sentry 读取并操作 AgentGuard 功能（威胁、挂起、规则、成本、DLP；写入操作仍需在对话中批准）。关闭时，Sentry 是一个通用的 Timeplus SQL 分析助手。",
+      "agentguardToolsDescription": " —— 允许 Tabby 读取并操作 AgentGuard 功能（威胁、挂起、规则、成本、DLP；写入操作仍需在对话中批准）。关闭时，Tabby 是一个通用的 Timeplus SQL 分析助手。",
       "dataAuditTitle": "数据安全审计技能",
       "dataAuditDescription": " —— 加载 data-audit-guide 技能：针对 agentguard_cim_event 的 A01–A27 数据安全审计手册（敏感数据、凭据、数据外传、注入、异常行为）。与上方开关相互独立；只读，仅使用 run_sql。",
       "saveButton": "保存对话配置"
     },
     "memory": {
       "heading": "记忆（嵌入）",
-      "subheading": "——供 Sentry 记忆功能使用（第二阶段）",
+      "subheading": "——供 Tabby 记忆功能使用（第二阶段）",
       "embeddingDimLabel": "嵌入维度",
-      "disabledHint": "已禁用——Sentry 记忆功能（第二阶段）尚未配置嵌入端点。",
+      "disabledHint": "已禁用——Tabby 记忆功能（第二阶段）尚未配置嵌入端点。",
       "saveButton": "保存记忆配置"
     },
     "banner": {
-      "savedChat": "对话配置已保存。更改将在 Sentry 下一轮对话中生效——无需重新配置。",
-      "savedMemory": "记忆配置已保存。更改将在 Sentry 下一轮对话中生效——无需重新配置。"
+      "savedChat": "对话配置已保存。更改将在 Tabby 下一轮对话中生效——无需重新配置。",
+      "savedMemory": "记忆配置已保存。更改将在 Tabby 下一轮对话中生效——无需重新配置。"
     },
     "test": {
       "button": "测试连接",

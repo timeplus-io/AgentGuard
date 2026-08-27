@@ -9,7 +9,7 @@
     "cost": "成本",
     "rules": "规则",
     "dlp": "语义 DLP",
-    "sentry": "Sentry",
+    "sentry": "Tabby 助手",
     "settings": "设置",
     "access": "访问控制",
     "pendingSuffix": "(待处理 {{count}} 个)",
@@ -18,6 +18,7 @@
   },
   "topNav": {
     "byTimeplus": "BY TIMEPLUS",
+    "talkToTabby": "与 Tabby 对话",
     "liveThreatFeed": "实时威胁动态",
     "closeNotifications": "关闭通知",
     "switchToLightMode": "切换到浅色模式",

@@ -1,14 +1,14 @@
 {
-  "title": "Sentry",
+  "title": "Tabby Assistant",
   "subtitle": "Chat with AgentGuard's own security analyst agent — ask about threats, rules, cost, and DLP findings across your fleet.",
   "loading": "Loading…",
   "disabled": {
-    "heading": "Sentry is disabled",
+    "heading": "Tabby is disabled",
     "hintPre": "Enable ",
-    "hintPost": " in Settings and provision to start chatting with Sentry."
+    "hintPost": " in Settings and provision to start chatting with Tabby."
   },
   "provisionWarning": {
-    "default": "Sentry streams are not provisioned yet.",
+    "default": "Tabby's backing streams are not provisioned yet.",
     "provisioning": "Provisioning…",
     "provisionNow": "Provision now"
   },
@@ -22,17 +22,70 @@
   },
   "chat": {
     "loadingConversation": "Loading conversation…",
-    "emptyState": "Ask Sentry about your agents, threats, cost, rules, or DLP findings.",
+    "emptyState": "What can Tabby help you investigate?",
     "needsChatModel": {
-      "pre": "Sentry has no chat model configured — set it in ",
-      "linkLabel": "Settings → Sentry Agent",
+      "pre": "Tabby has no chat model configured — set it in ",
+      "linkLabel": "Settings → Tabby Assistant",
       "post": "."
     },
-    "composerPlaceholder": "Ask Sentry…",
+    "composerPlaceholder": "Ask Tabby…",
     "send": "Send",
     "sending": "Sending…",
     "sendHint": "Ctrl/Cmd+Enter to send · Enter for a new line",
-    "readOnlyHint": "You have read-only access to Sentry. Ask an administrator for write access to start conversations."
+    "readOnlyHint": "You have read-only access to Tabby. Ask an administrator for write access to start conversations."
+  },
+  "floating": {
+    "title": "Tabby",
+    "newChat": "New chat",
+    "openFull": "Open Tabby Assistant page",
+    "close": "Close"
+  },
+  "suggestions": {
+    "rules": [
+      "What rules do I have enabled?",
+      "Which rules had detections recently?",
+      "Are any recommended rules disabled?"
+    ],
+    "agents": [
+      "Which agents are currently active?",
+      "Show me recent activity for this agent.",
+      "Which agents have triggered threats?"
+    ],
+    "threats": [
+      "Summarize my open threats.",
+      "Which threats should I review first?",
+      "What changed in the latest threat events?"
+    ],
+    "cost": [
+      "What is driving token cost?",
+      "Which agents are most expensive?",
+      "Are any models over budget?"
+    ],
+    "investigate": [
+      "Help me investigate recent suspicious activity.",
+      "Find patterns across recent agent events.",
+      "What should I query next?"
+    ],
+    "dlp": [
+      "What sensitive data was detected recently?",
+      "Which agents have DLP findings?",
+      "Summarize high-risk DLP exposure."
+    ],
+    "settings": [
+      "Is Tabby configured correctly?",
+      "What AgentGuard settings should I check?",
+      "Explain the current Tabby model configuration."
+    ],
+    "access": [
+      "Who has access to AgentGuard?",
+      "Summarize current roles and permissions.",
+      "Which users can change security rules?"
+    ],
+    "default": [
+      "What agents do I have and any recent threats?",
+      "Summarize my security posture.",
+      "What should I investigate first?"
+    ]
   },
   "card": {
     "argsLabel": "Args",
@@ -64,18 +117,18 @@
     "awaiting": "awaiting your answers…",
     "otherPlaceholder": "Other — type your own answer…",
     "submit": "Submit answers",
-    "skip": "Skip — let Sentry decide",
+    "skip": "Skip — let Tabby decide",
     "noAnswer": "—",
     "status": {
       "answeredBy": "answered by {{by}}",
       "operator": "operator",
-      "skipped": "skipped — Sentry proceeds with defaults",
-      "timeout": "timed out — Sentry proceeds with defaults",
+      "skipped": "skipped — Tabby proceeds with defaults",
+      "timeout": "timed out — Tabby proceeds with defaults",
       "abandoned": "abandoned — no answer collected"
     }
   },
   "errors": {
-    "loadStatusFailed": "Failed to load Sentry status",
+    "loadStatusFailed": "Failed to load Tabby status",
     "loadConversationsFailed": "Failed to load conversations",
     "loadConversationFailed": "Failed to load conversation",
     "deleteConversationFailed": "Failed to delete conversation",
@@ -83,7 +136,7 @@
     "decisionFailed": "Failed to submit decision",
     "chatRequestFailed": "Chat request failed",
     "provisioningFailed": "Provisioning failed",
-    "genericChatError": "Sentry error",
+    "genericChatError": "Tabby error",
     "clarificationFailed": "Failed to submit answers"
   },
   "config": {
@@ -93,8 +146,8 @@
     },
     "loadingRuntime": "Loading runtime config…",
     "errors": {
-      "loadFailed": "Failed to load Sentry config",
-      "loadErrSuffix": " — runtime config is available only after Sentry is provisioned.",
+      "loadFailed": "Failed to load Tabby config",
+      "loadErrSuffix": " — runtime config is available only after Tabby is provisioned.",
       "saveFailed": "Save failed",
       "testFailed": "test failed",
       "retry": "Retry"
@@ -142,21 +195,21 @@
       "effortLabel": "Effort",
       "promptCachingLabel": "Prompt caching",
       "agentguardToolsTitle": "AgentGuard skills & tools",
-      "agentguardToolsDescription": " — let Sentry read and act on AgentGuard features (threats, holds, rules, cost, DLP; write actions still require in-chat approval). Off: Sentry is a generic Timeplus SQL analyst.",
+      "agentguardToolsDescription": " — let Tabby read and act on AgentGuard features (threats, holds, rules, cost, DLP; write actions still require in-chat approval). Off: Tabby is a generic Timeplus SQL analyst.",
       "dataAuditTitle": "Data-security audit skill",
       "dataAuditDescription": " — load the data-audit-guide skill: the A01–A27 data-security audit playbook (sensitive data, credentials, exfiltration, injection, anomalies) over agentguard_cim_event. Independent of the switch above; read-only, run_sql only.",
       "saveButton": "Save chat config"
     },
     "memory": {
       "heading": "Memory (embedding)",
-      "subheading": "— used by Sentry memory (Phase 2)",
+      "subheading": "— used by Tabby memory (Phase 2)",
       "embeddingDimLabel": "Embedding dimension",
-      "disabledHint": "Disabled — Sentry memory (Phase 2) has no embedding endpoint configured.",
+      "disabledHint": "Disabled — Tabby memory (Phase 2) has no embedding endpoint configured.",
       "saveButton": "Save memory config"
     },
     "banner": {
-      "savedChat": "Chat config saved. Changes take effect on the next Sentry turn — no re-provision.",
-      "savedMemory": "Memory config saved. Changes take effect on the next Sentry turn — no re-provision."
+      "savedChat": "Chat config saved. Changes take effect on the next Tabby turn — no re-provision.",
+      "savedMemory": "Memory config saved. Changes take effect on the next Tabby turn — no re-provision."
     },
     "test": {
       "button": "Test connection",

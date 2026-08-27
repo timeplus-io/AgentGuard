@@ -5,9 +5,11 @@ import Sidebar from '../components/Sidebar'
 import TopNav from '../components/TopNav'
 import PageHeader from '../components/PageHeader'
 import Markdown from '../components/Markdown'
+import TabbyAvatar from '../components/TabbyAvatar'
 import { useAuth } from '../context/AuthContext'
 import { writeKey } from '../lib/perm'
 import { api } from '../api/client'
+import { TABBY_USER_BUBBLE_CLASS } from '../lib/tabby'
 
 let localSeq = 0
 function localId(prefix) {
@@ -354,10 +356,7 @@ function MessageBubble({ item }) {
   if (item.role === 'user') {
     return (
       <div className="group flex flex-col items-end">
-        {/* Fixed light-pink bubble needs a FIXED dark text color: the gray ramp
-            is theme-inverted, so text-gray-100 goes near-white in dark mode and
-            vanishes on this background. #3d0023 is the design system's on-pink. */}
-        <div className="max-w-2xl bg-[#FFEEF6] rounded-sm px-4 py-2.5 text-sm text-[#3d0023] whitespace-pre-wrap break-words">
+        <div className={`max-w-2xl ${TABBY_USER_BUBBLE_CLASS} rounded-sm px-4 py-2.5 text-sm whitespace-pre-wrap break-words`}>
           {item.content}
         </div>
         {timestamp && <div className="mt-1 text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">{timestamp}</div>}
@@ -760,7 +759,7 @@ export default function Sentry() {
         ) : !status.enabled ? (
           <div className="flex-1 flex items-center justify-center px-8 pb-8">
             <div className="max-w-md text-center bg-surface-container rounded-sm p-8 flex flex-col items-center gap-3">
-              <span className="material-symbols-outlined text-4xl text-gray-400">shield_person</span>
+              <TabbyAvatar className="h-12 w-12" />
               <h3 className="text-sm font-semibold text-gray-100">{t('disabled.heading')}</h3>
               <p className="text-xs text-gray-400">
                 {t('disabled.hintPre')}<code className="font-mono text-primary">sentry.enabled</code>{t('disabled.hintPost')}
@@ -856,7 +855,8 @@ export default function Sentry() {
                   ) : convError ? (
                     <p className="text-xs text-error">{convError}</p>
                   ) : messages.length === 0 ? (
-                    <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col items-center justify-center gap-3 text-center min-h-full">
+                      <TabbyAvatar className="h-16 w-16" />
                       <p className="text-xs text-gray-400">{t('chat.emptyState')}</p>
                       {needsChatModelHint && (
                         <p className="text-[11px] text-amber-400">

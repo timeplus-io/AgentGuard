@@ -5,6 +5,8 @@ import Markdown from './Markdown'
 import { useAuth } from '../context/AuthContext'
 import { uiKey, writeKey } from '../lib/perm'
 import { api } from '../api/client'
+import { OPEN_TABBY_EVENT, isTabbyPage, TABBY_USER_BUBBLE_CLASS, TABBY_USER_BUBBLE_HOVER_CLASS } from '../lib/tabby'
+import TabbyAvatar from './TabbyAvatar'
 
 let localSeq = 0
 function localId(prefix) {
@@ -46,77 +48,17 @@ function prettyJSON(text) {
   }
 }
 
-function suggestionsForPath(pathname) {
-  if (pathname.startsWith('/rules')) {
-    return [
-      'What rules do I have enabled?',
-      'Which rules had detections recently?',
-      'Are any recommended rules disabled?',
-    ]
-  }
-  if (pathname.startsWith('/agents')) {
-    return [
-      'Which agents are currently active?',
-      'Show me recent activity for this agent.',
-      'Which agents have triggered threats?',
-    ]
-  }
-  if (pathname.startsWith('/threats')) {
-    return [
-      'Summarize my open threats.',
-      'Which threats should I review first?',
-      'What changed in the latest threat events?',
-    ]
-  }
-  if (pathname.startsWith('/cost')) {
-    return [
-      'What is driving token cost?',
-      'Which agents are most expensive?',
-      'Are any models over budget?',
-    ]
-  }
-  if (pathname.startsWith('/investigate')) {
-    return [
-      'Help me investigate recent suspicious activity.',
-      'Find patterns across recent agent events.',
-      'What should I query next?',
-    ]
-  }
-  if (pathname.startsWith('/dlp')) {
-    return [
-      'What sensitive data was detected recently?',
-      'Which agents have DLP findings?',
-      'Summarize high-risk DLP exposure.',
-    ]
-  }
-  if (pathname.startsWith('/settings')) {
-    return [
-      'Is Sentry configured correctly?',
-      'What AgentGuard settings should I check?',
-      'Explain the current Sentry model configuration.',
-    ]
-  }
-  if (pathname.startsWith('/access')) {
-    return [
-      'Who has access to AgentGuard?',
-      'Summarize current roles and permissions.',
-      'Which users can change security rules?',
-    ]
-  }
-  return [
-    'What agents do I have and any recent threats?',
-    'Summarize my security posture.',
-    'What should I investigate first?',
-  ]
+const SUGGESTION_GROUPS = ['rules', 'agents', 'threats', 'cost', 'investigate', 'dlp', 'settings', 'access']
+
+function suggestionGroupForPath(pathname) {
+  return SUGGESTION_GROUPS.find(group => pathname.startsWith(`/${group}`)) || 'default'
 }
 
 function MessageBubble({ item }) {
   if (item.role === 'user') {
     return (
       <div className="flex justify-end">
-        {/* Fixed dark text on the fixed pink bubble — text-gray-100 flips
-            near-white in dark mode and vanishes (see Sentry.jsx MessageBubble). */}
-        <div className="max-w-[85%] bg-[#FFEEF6] rounded-sm px-3 py-2 text-sm text-[#3d0023] whitespace-pre-wrap break-words">
+        <div className={`max-w-[85%] ${TABBY_USER_BUBBLE_CLASS} rounded-sm px-3 py-2 text-sm whitespace-pre-wrap break-words`}>
           {item.content}
         </div>
       </div>
@@ -207,8 +149,9 @@ export default function SentryFloatingPanel() {
   const { can } = useAuth()
   const canRead = can(uiKey('sentry'))
   const canWrite = can(writeKey('sentry'))
-  const hiddenOnPage = location.pathname === '/sentry'
-  const suggestions = suggestionsForPath(location.pathname)
+  const hiddenOnPage = isTabbyPage(location.pathname)
+  const suggestionItems = t(`suggestions.${suggestionGroupForPath(location.pathname)}`, { returnObjects: true })
+  const suggestions = Array.isArray(suggestionItems) ? suggestionItems : []
   const savedChatRef = useRef(null)
   if (!savedChatRef.current) savedChatRef.current = loadSavedChat()
 
@@ -243,6 +186,12 @@ export default function SentryFloatingPanel() {
   }, [activeId, messages, input])
 
   useEffect(() => () => abortRef.current?.abort(), [])
+
+  useEffect(() => {
+    const handleOpenTabby = () => setOpen(true)
+    window.addEventListener(OPEN_TABBY_EVENT, handleOpenTabby)
+    return () => window.removeEventListener(OPEN_TABBY_EVENT, handleOpenTabby)
+  }, [])
 
   if (!canRead || hiddenOnPage) return null
 
@@ -348,33 +297,21 @@ export default function SentryFloatingPanel() {
 
   return (
     <div className="fixed inset-0 z-[90] pointer-events-none">
-      {!open && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="pointer-events-auto fixed bottom-6 right-6 h-14 px-5 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white border border-pink-500 flex items-center gap-2 text-sm font-semibold shadow-lg shadow-pink-500/30 hover:from-purple-600 hover:to-pink-600 transition-colors"
-          aria-label="Open Sentry"
-        >
-          <span className="material-symbols-outlined text-xl">shield_person</span>
-          Sentry
-        </button>
-      )}
-
       {open && (
         <aside className="sentry-floating-drawer pointer-events-auto fixed right-0 top-[41px] h-[calc(100vh-41px)] w-[min(460px,100vw)] bg-surface-container border-l border-gray-700 flex flex-col">
           <header className="h-14 px-4 border-b border-gray-700 flex items-center gap-3 shrink-0">
-            <span className="material-symbols-outlined text-xl text-pink-500">shield_person</span>
+            <TabbyAvatar className="h-8 w-8" />
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-gray-100">Sentry</h2>
+              <h2 className="text-sm font-semibold text-gray-100">{t('floating.title')}</h2>
               {status?.model && <p className="text-[10px] font-mono text-gray-400 truncate">{status.model}</p>}
             </div>
-            <button type="button" onClick={newConversation} disabled={streaming} className="h-8 w-8 rounded-sm text-pink-500 hover:text-pink-400 hover:bg-gray-800 transition-colors disabled:opacity-40" title="New chat">
+            <button type="button" onClick={newConversation} disabled={streaming} className="h-8 w-8 rounded-sm text-pink-500 hover:text-pink-400 hover:bg-gray-800 transition-colors disabled:opacity-40" title={t('floating.newChat')}>
               <span className="material-symbols-outlined text-xl">add</span>
             </button>
-            <Link to="/sentry" className="h-8 w-8 rounded-sm text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors flex items-center justify-center" title="Open Sentry page">
+            <Link to="/sentry" className="h-8 w-8 rounded-sm text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors flex items-center justify-center" title={t('floating.openFull')}>
               <span className="material-symbols-outlined text-xl">open_in_full</span>
             </Link>
-            <button type="button" onClick={() => setOpen(false)} className="h-8 w-8 rounded-sm text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors" title="Close">
+            <button type="button" onClick={() => setOpen(false)} className="h-8 w-8 rounded-sm text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors" title={t('floating.close')}>
               <span className="material-symbols-outlined text-xl">close</span>
             </button>
           </header>
@@ -390,7 +327,7 @@ export default function SentryFloatingPanel() {
               </div>
             ) : messages.length === 0 ? (
               <div className="mt-auto mb-auto space-y-4">
-                <span className="material-symbols-outlined text-3xl text-pink-500">shield_person</span>
+                <TabbyAvatar className="h-12 w-12" />
                 <p className="text-xl font-semibold text-gray-100 leading-snug">{t('chat.emptyState')}</p>
                 <div className="flex flex-col items-end gap-2">
                   {suggestions.map(suggestion => (
@@ -399,7 +336,7 @@ export default function SentryFloatingPanel() {
                       type="button"
                       onClick={() => send(suggestion)}
                       disabled={!canWrite || streaming}
-                      className="max-w-[85%] text-left bg-[#FFEEF6] text-[#3d0023] rounded-sm px-3 py-2 text-sm hover:bg-pink-100 transition-colors disabled:opacity-60"
+                      className={`max-w-[85%] text-left ${TABBY_USER_BUBBLE_CLASS} ${TABBY_USER_BUBBLE_HOVER_CLASS} rounded-sm px-3 py-2 text-sm transition-colors disabled:opacity-60`}
                     >
                       {suggestion}
                     </button>
@@ -426,13 +363,13 @@ export default function SentryFloatingPanel() {
                   disabled={streaming}
                   rows={3}
                   placeholder={t('chat.composerPlaceholder')}
-                  className="w-full bg-white border border-gray-700 text-gray-100 text-sm rounded-sm px-3 py-2 placeholder-gray-500 resize-none focus:outline-none focus:ring-2 focus:ring-pink-500/30 disabled:opacity-60"
+                  className="w-full bg-surface-container-high border border-gray-700 text-gray-100 text-sm rounded-sm px-3 py-2 placeholder-gray-500 resize-none focus:outline-none focus:ring-2 focus:ring-pink-500/30 disabled:opacity-60"
                 />
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <p className="text-[10px] text-gray-400">{t('chat.sendHint')}</p>
                   <button
                     type="button"
-                    onClick={send}
+                    onClick={() => send()}
                     disabled={streaming || !input.trim()}
                     className="px-4 py-2 text-xs font-semibold rounded-sm bg-pink-500 text-white hover:bg-pink-400 transition-colors disabled:opacity-50"
                   >
