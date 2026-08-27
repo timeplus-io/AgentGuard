@@ -1,11 +1,11 @@
 {
-  "title": "Sentry",
+  "title": "Tabby 助手",
   "subtitle": "与 AgentGuard 自带的安全分析代理对话——询问关于威胁、规则、成本以及 DLP 发现结果的问题，覆盖你的整个代理集群。",
   "loading": "加载中…",
   "disabled": {
-    "heading": "Sentry 已禁用",
+    "heading": "Tabby 已禁用",
     "hintPre": "请在设置中启用 ",
-    "hintPost": " 并完成配置，即可开始与 Sentry 对话。"
+    "hintPost": " 并完成配置，即可开始与 Tabby 对话。"
   },
   "provisionWarning": {
     "default": "Sentry 数据流尚未完成配置。",
@@ -22,17 +22,17 @@
   },
   "chat": {
     "loadingConversation": "正在加载对话…",
-    "emptyState": "向 Sentry 询问关于你的代理、威胁、成本、规则或 DLP 发现结果的问题。",
+    "emptyState": "Tabby 可以帮你调查什么？",
     "needsChatModel": {
-      "pre": "Sentry 尚未配置对话模型——请在",
-      "linkLabel": "设置 → Sentry 代理",
+      "pre": "Tabby 尚未配置对话模型——请在",
+      "linkLabel": "设置 → Tabby 助手",
       "post": "中进行设置。"
     },
-    "composerPlaceholder": "向 Sentry 提问…",
+    "composerPlaceholder": "向 Tabby 提问…",
     "send": "发送",
     "sending": "发送中…",
     "sendHint": "Ctrl/Cmd+Enter 发送 · Enter 换行",
-    "readOnlyHint": "你对 Sentry 拥有只读权限。请联系管理员获取写入权限以开始对话。"
+    "readOnlyHint": "你对 Tabby 拥有只读权限。请联系管理员获取写入权限以开始对话。"
   },
   "card": {
     "argsLabel": "参数",
@@ -64,18 +64,18 @@
     "awaiting": "等待你的回答…",
     "otherPlaceholder": "其他——输入你自己的回答…",
     "submit": "提交回答",
-    "skip": "跳过——由 Sentry 决定",
+    "skip": "跳过——由 Tabby 决定",
     "noAnswer": "—",
     "status": {
       "answeredBy": "已由 {{by}} 回答",
       "operator": "操作员",
-      "skipped": "已跳过——Sentry 将按默认假设继续",
-      "timeout": "已超时——Sentry 将按默认假设继续",
+      "skipped": "已跳过——Tabby 将按默认假设继续",
+      "timeout": "已超时——Tabby 将按默认假设继续",
       "abandoned": "已放弃——未收集到回答"
     }
   },
   "errors": {
-    "loadStatusFailed": "加载 Sentry 状态失败",
+    "loadStatusFailed": "加载 Tabby 状态失败",
     "loadConversationsFailed": "加载对话列表失败",
     "loadConversationFailed": "加载对话失败",
     "deleteConversationFailed": "删除对话失败",
@@ -83,7 +83,7 @@
     "decisionFailed": "提交决定失败",
     "chatRequestFailed": "对话请求失败",
     "provisioningFailed": "配置失败",
-    "genericChatError": "Sentry 出错",
+    "genericChatError": "Tabby 出错",
     "clarificationFailed": "提交回答失败"
   },
   "config": {

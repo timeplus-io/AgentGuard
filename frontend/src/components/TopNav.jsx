@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { api } from '../api/client'
 import { useOpenThreats } from '../hooks/useLiveThreatFeed'
+import { uiKey } from '../lib/perm'
+import { openTabby } from '../lib/tabby'
 import { LiveThreatFeedList } from './LiveThreatFeed'
+import TabbyAvatar from './TabbyAvatar'
 
 function NotificationsDrawer({ open, onClose, threats, loading, error }) {
   const { t } = useTranslation()
@@ -77,7 +80,8 @@ function NotificationsDrawer({ open, onClose, threats, loading, error }) {
 
 export default function TopNav() {
   const { t } = useTranslation()
-  const { auth, setAuth } = useAuth()
+  const { auth, can, setAuth } = useAuth()
+  const location = useLocation()
   const { theme, toggleTheme } = useTheme()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -111,6 +115,7 @@ export default function TopNav() {
     ? auth.username.charAt(0).toUpperCase()
     : 'A'
   const activeThreatCount = openThreats.length
+  const showTabbyLauncher = can(uiKey('sentry')) && location.pathname !== '/sentry'
 
   return (
     <header className="app-chrome top-nav h-10 bg-gray-800 border-b border-gray-700 z-[60] flex justify-between items-center pl-6 pr-4 backdrop-blur-md">
@@ -128,6 +133,18 @@ export default function TopNav() {
       </div>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3 text-gray-400">
+          {showTabbyLauncher && (
+            <button
+              type="button"
+              onClick={openTabby}
+              className="h-8 px-3 rounded-sm bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center gap-2 text-xs font-semibold hover:from-purple-600 hover:to-pink-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-800"
+              title={t('topNav.talkToTabby')}
+              aria-label={t('topNav.talkToTabby')}
+            >
+              <TabbyAvatar className="h-5 w-5 ring-white/60" />
+              {t('topNav.talkToTabby')}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setNotificationsOpen(true)}
@@ -142,17 +159,6 @@ export default function TopNav() {
                 {activeThreatCount}
               </span>
             )}
-          </button>
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="h-10 w-10 hover:bg-gray-700 rounded-sm transition-colors flex items-center justify-center"
-            title={theme === 'dark' ? t('topNav.switchToLightMode') : t('topNav.switchToDarkMode')}
-            aria-label={theme === 'dark' ? t('topNav.switchToLightMode') : t('topNav.switchToDarkMode')}
-          >
-            <span className="material-symbols-outlined text-lg text-gray-400">
-              {theme === 'dark' ? 'light_mode' : 'dark_mode'}
-            </span>
           </button>
         </div>
         <div className="h-8 w-px bg-outline-variant opacity-20"></div>
@@ -172,14 +178,30 @@ export default function TopNav() {
           )}
 
           {dropdownOpen && (
-            <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-600 rounded-sm shadow-lg min-w-[120px] z-[70]">
+            <div className="profile-menu absolute right-0 top-full mt-1 bg-gray-800 border border-gray-600 rounded-sm shadow-lg min-w-[184px] z-[70] overflow-hidden">
               <button
+                type="button"
+                onClick={() => {
+                  toggleTheme()
+                  setDropdownOpen(false)
+                }}
+                className="profile-menu-item w-full h-10 px-4 text-left text-xs text-gray-300 hover:bg-gray-700 hover:text-gray-100 transition-colors flex items-center gap-3"
+              >
+                <span className="material-symbols-outlined text-lg">
+                  {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+                </span>
+                {theme === 'dark' ? t('topNav.switchToLightMode') : t('topNav.switchToDarkMode')}
+              </button>
+              <div className="profile-menu-divider h-px bg-gray-600" />
+              <button
+                type="button"
                 onClick={() => {
                   handleLogout()
                   setDropdownOpen(false)
                 }}
-                className="w-full px-4 py-2 text-left text-xs text-gray-300 hover:bg-gray-700 hover:text-pink-400 transition-colors"
+                className="profile-menu-item w-full h-10 px-4 text-left text-xs text-gray-300 hover:bg-gray-700 hover:text-pink-400 transition-colors flex items-center gap-3"
               >
+                <span className="material-symbols-outlined text-lg">logout</span>
                 {t('topNav.logout')}
               </button>
             </div>

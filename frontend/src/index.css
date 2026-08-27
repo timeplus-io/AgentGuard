@@ -271,6 +271,25 @@ body.sidebar-collapsed .pl-sidebar {
   color: var(--chrome-text) !important;
 }
 
+/* Profile menus belong to the page theme even though they are anchored inside
+   the always-dark application chrome. */
+.light .app-chrome .profile-menu {
+  background-color: #ffffff !important;
+  border-color: var(--gray-700) !important;
+}
+
+.light .app-chrome .profile-menu-item {
+  color: var(--gray-200) !important;
+}
+
+.light .app-chrome .profile-menu-item:hover {
+  background-color: var(--gray-900) !important;
+}
+
+.light .app-chrome .profile-menu-divider {
+  background-color: var(--gray-700) !important;
+}
+
 /* Neutralise prism-tomorrow's default background so it doesn't bleed into the editor */
 code[class*="language-"],
 pre[class*="language-"] {
