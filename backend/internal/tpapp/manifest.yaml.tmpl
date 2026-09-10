@@ -10,8 +10,8 @@ description: >
   events, normalizes them into a Common Information Model (agentguard_cim_event),
   computes per-call token/cost/latency metrics, and ships four Core Protection
   detection rules (prompt injection, DLP, privilege escalation, supply chain)
-  installed PAUSED. Resume a rule with:
-    SYSTEM RESUME MATERIALIZED VIEW <db>.mv_rule_rp001;
+  that run from install. Pause one with:
+    SYSTEM PAUSE MATERIALIZED VIEW <db>.mv_rule_rp001;
   Generated from the AgentGuard backend - do not hand-edit the SQL.
 db_name: {{ .DBName }}
 categories:
