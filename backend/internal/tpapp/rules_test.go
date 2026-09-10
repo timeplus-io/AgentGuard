@@ -11,7 +11,7 @@ func TestRuleArtifacts_ShapeAndOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var mvs, pauses, udfs int
+	var mvs, udfs int
 	for i, r := range got {
 		switch r.Kind {
 		case "materialized_view":
@@ -29,13 +29,15 @@ func TestRuleArtifacts_ShapeAndOrder(t *testing.T) {
 			if !strings.Contains(r.SQL, "FROM {{ .DB }}.agentguard_cim_event") {
 				t.Errorf("%s: expected qualified FROM", r.Name)
 			}
-			// the very next artifact must pause this MV
-			if i+1 >= len(got) || got[i+1].Kind != "system" || got[i+1].Name != "pause_"+r.Name ||
-				got[i+1].SQL != "SYSTEM PAUSE MATERIALIZED VIEW {{ .DB }}."+r.Name {
-				t.Errorf("%s is not followed by its pause resource", r.Name)
+			// Rule MVs are installed RUNNING. A SYSTEM PAUSE issued right after
+			// a distributed CREATE fails on clusters (RESOURCE_NOT_FOUND on the
+			// replica the create has not reached yet), and a pause resource
+			// would also re-pause operator-enabled rules on every upgrade.
+			if strings.Contains(strings.ToLower(r.SQL), "pause") {
+				t.Errorf("%s: rule MV must not be paused: %.80q", r.Name, r.SQL)
 			}
 		case "system":
-			pauses++
+			t.Errorf("%s: system resources are not allowed (SYSTEM PAUSE races distributed CREATE on clusters)", r.Name)
 		case "udf":
 			udfs++
 			if strings.Contains(r.SQL, "{{ .DB }}") {
@@ -61,8 +63,8 @@ func TestRuleArtifacts_ShapeAndOrder(t *testing.T) {
 			t.Errorf("%s ends with ';'", r.Name)
 		}
 	}
-	if mvs != 4 || pauses != 4 {
-		t.Errorf("want 4 MVs + 4 pauses, got %d + %d", mvs, pauses)
+	if mvs != 4 {
+		t.Errorf("want 4 rule MVs, got %d", mvs)
 	}
 	if udfs < 1 {
 		t.Error("rp-002 ships ag_dlp_jwt_check; expected at least one udf artifact")
