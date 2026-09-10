@@ -65,6 +65,7 @@ cd agents/openclaw/agentguard-plugin  && npm test
 ```bash
 make build    # frontend-build → web-sync → backend-build (single binary with embedded UI)
 make lint     # golangci-lint (backend) + ESLint (frontend)
+make tpapp    # regenerate apps/agentguard (Timeplus app package) + zip; make tpapp-check verifies it is current
 ```
 
 ## Architecture
@@ -74,7 +75,7 @@ make lint     # golangci-lint (backend) + ESLint (frontend)
 Four-layer structure:
 
 - **`cmd/server/main.go`** — Entry point. Uses Cobra CLI + Viper for config. Sets up Gin router, CORS (allows localhost:5173 and :3000), registers all routes under `/api`, and serves the embedded SPA via `NoRoute`.
-- **`internal/config/config.go`** — Config loading: defaults → `config.yaml` → env vars (`TIMEPLUS_HOST`, `TIMEPLUS_PORT`, `TIMEPLUS_USER`, `TIMEPLUS_PASSWORD`, `SERVER_PORT`) → CLI flags.
+- **`internal/config/config.go`** — Config loading: defaults → `config.yaml` → env vars (`TIMEPLUS_HOST`, `TIMEPLUS_PORT`, `TIMEPLUS_DATABASE`, `TIMEPLUS_USER`, `TIMEPLUS_PASSWORD`, `SERVER_PORT`) → CLI flags. `timeplus.database` (default `default`) is applied as every connection's default database (HTTP `database=` param, native `Auth.Database`) so handler SQL stays unqualified; set it to `ag` to attach the UI to an app-installed pipeline.
 - **`internal/models/models.go`** — All shared Go structs.
 - **`internal/handlers/`** — One file per resource. All handlers receive `cfg *config.Config` via a closure and query Timeplus Enterprise directly. There is no mock data layer.
 - **`internal/timeplus/`** — Proton integration layer:
@@ -265,6 +266,8 @@ Each enabled rule has a corresponding materialized view named `mv_rule_<id>` (e.
 `timeplus.Init()` is called by the setup wizard (`POST /api/setup/provision`) to create missing streams and sync MVs from installed instance snapshots (`rendered_sql` + `deployed_udfs_json`, never current catalog artifacts). It does NOT seed instances from the catalog — a definition existing in the catalog never makes it an installed instance. Provisioning fails fast with a clean-reprovision message if it finds a legacy/incompatible `agentguard_rules` (it compares the full expected column set and key column types). The server starts independently of Timeplus availability — if Timeplus Enterprise is unreachable, provisioning will fail but the binary itself starts cleanly.
 
 **No backward compatibility:** the new `agentguard_rules` snapshot schema is not compatible with the pre-parameter one. Existing deployments must cleanly reprovision rule resources (drop the old stream + `mv_rule_*` views, re-provision, reinstall). No `ALTER STREAM`, compatibility readers, dual writes, or `query_sql` aliases. See `docs/design.md` §5.1.3.
+
+**Timeplus app export.** `apps/agentguard/` is a generated Timeplus app (`id: io.timeplus.agentguard`, `db_name: ag`) built by `internal/tpapp` from `timeplus.AppResources()` — the ordered pipeline subset of the `ddl*` constants `Init()` executes — via `make tpapp` (`cmd/tpapp-export`). It ships the data pipeline (OTel input/streams, hook events, CIM, metrics, security events/threats, skills, memory ops, cost schema, `agentguard_rules`) plus rules rp-001..004 as paused `mv_rule_*` MVs (rp-002's UDF as a global `udf` resource), and NOTHING from the control plane (notifications, holds, RBAC, Sentry, DLP). Every reference is `{{ .DB }}.`-qualified and every CREATE is `IF NOT EXISTS`. Never hand-edit `apps/agentguard/`: `TestAppExportUpToDate` enforces it, and `TestAppResources_CoverEveryDDLConstant` fails when a new `ddl*` constant is neither in `AppResources()` nor `AppExcludedDDL()`. Live check: `go test -tags integration ./internal/tpapp/`. See `docs/tpapp.md`.
 
 **Rule packages** (`internal/catalog/package.go`, manifests in `internal/catalog/packages/*.yaml`, separately embedded via `PackagesFS`) are named bundles that group rules for easier onboarding — a curated default-on `core` package (`rp-001..004`) plus per-threat-class functional packs (`prompt-injection`, `data-exfiltration`, …), all default-off. Manifests are the source of membership (a list of rule IDs; a rule may belong to several packages) and carry `translations` (localized like rule name/desc, guarded by `TestEmbeddedPackagesHaveChineseTranslations`). Manifests live OUTSIDE `seed/` on purpose: the rule loader (`loadFS`) would otherwise mis-parse a manifest as a Definition. `default_enabled` is **recommendation only** — it never auto-installs; `timeplus.Init()` still seeds zero instances. Enabling a package (`POST /api/rules/packages/:id/enable`) bulk-installs its members through the lifecycle service (idempotent). `TestEmbeddedPackageRulesExist` guards against dangling rule references.
 
