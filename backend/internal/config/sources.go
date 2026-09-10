@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -51,6 +53,13 @@ func CoerceAndValidate(key string, raw any) (any, error) {
 		s, ok := raw.(string)
 		if !ok {
 			return nil, errors.New("expected a string")
+		}
+		if key == "timeplus.database" {
+			// Empty means the server default database.
+			s = strings.TrimSpace(s)
+			if s == "" {
+				s = "default"
+			}
 		}
 		if err := validateString(key, s); err != nil {
 			return nil, err
@@ -150,8 +159,15 @@ func validateInt(key string, v int) error {
 	return nil
 }
 
+// dbNameRe mirrors the Timeplus apps installer's db_name rule.
+var dbNameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+
 func validateString(key, v string) error {
 	switch key {
+	case "timeplus.database":
+		if !dbNameRe.MatchString(v) {
+			return errors.New("must match ^[a-z][a-z0-9_]{0,31}$")
+		}
 	case "dlp.base_url":
 		if v == "" {
 			return errors.New("must not be empty")
@@ -202,6 +218,8 @@ func EffectiveValue(cfg *Config, key string) any {
 		return cfg.Timeplus.Port
 	case "timeplus.native-port":
 		return cfg.Timeplus.NativePort
+	case "timeplus.database":
+		return cfg.Timeplus.Database
 	case "timeplus.user":
 		return cfg.Timeplus.User
 	case "timeplus.password":
@@ -282,6 +300,8 @@ func ApplyChange(cfg *Config, key string, value any) error {
 		return setInt(&cfg.Timeplus.Port, value)
 	case "timeplus.native-port":
 		return setInt(&cfg.Timeplus.NativePort, value)
+	case "timeplus.database":
+		return setString(&cfg.Timeplus.Database, value)
 	case "catalog.dir":
 		return setString(&cfg.CatalogDir, value)
 	case "holds.mv_wait_ms":

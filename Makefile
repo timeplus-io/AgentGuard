@@ -4,7 +4,7 @@
         lint \
         docker-build docker-run docker-stop docker-push docker-release \
         compose-up compose-down compose-restart \
-        scripts-sync package-plugins \
+        scripts-sync package-plugins tpapp tpapp-check \
         dlp-mock dlp-seed dlp-integration \
         audit-data-seed audit-data-score \
         sentry-sync-skill sentry-integration \
@@ -67,6 +67,18 @@ package-plugins:
 	@echo ""
 	@echo "  ✓ Plugin packages written to packages/"
 	@ls -1 packages/
+
+# ── Timeplus app package ─────────────────────────────────────────────────────
+
+## tpapp: regenerate apps/agentguard from the backend DDL and zip it into apps/agentguard.tpapp
+tpapp:
+	cd backend && CGO_ENABLED=0 go run ./cmd/tpapp-export --out ../apps/agentguard
+	cd apps/agentguard && rm -f ../agentguard.tpapp && zip -qr ../agentguard.tpapp manifest.yaml ddl/ dashboards/
+	@echo "→ apps/agentguard.tpapp"
+
+## tpapp-check: fail if apps/agentguard is out of date with the backend DDL
+tpapp-check:
+	cd backend && CGO_ENABLED=0 go run ./cmd/tpapp-export --out ../apps/agentguard --check
 
 ## backend-tidy: sync Go module dependencies
 backend-tidy:

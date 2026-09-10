@@ -111,6 +111,10 @@
       "label": "原生端口",
       "description": "Timeplus 原生 TCP 端口。"
     },
+    "timeplus_database": {
+      "label": "数据库",
+      "description": "存放 AgentGuard 流的 Timeplus 数据库。向导式部署使用 \"default\";若数据管道是作为 Timeplus 应用安装的,则填写应用的 db_name(例如 \"ag\")。"
+    },
     "timeplus_user": {
       "label": "服务账号用户名",
       "description": "服务账号的用户名。仅可通过 TIMEPLUS_USER 环境变量设置。"

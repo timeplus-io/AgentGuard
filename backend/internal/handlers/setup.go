@@ -96,6 +96,7 @@ func Provision(cfg *config.Config, store *auth.SessionStore) gin.HandlerFunc {
 			Host:       body.Host,
 			Port:       body.Port,
 			NativePort: body.NativePort,
+			Database:   cfg.Timeplus.Database,
 			User:       body.Username,
 			Password:   body.Password,
 		}

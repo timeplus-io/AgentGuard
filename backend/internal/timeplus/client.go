@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -27,14 +28,34 @@ const queryNativeTimeout = 60 * time.Second
 // Row is a single result row from a Proton query.
 type Row = map[string]any
 
+// HTTPURL builds the Timeplus HTTP endpoint for cfg. extra is an optional
+// pre-encoded query string (e.g. "default_format=JSONEachRow"). When
+// cfg.Database is set and not "default", database=<name> is appended so every
+// unqualified stream name in handler SQL resolves inside that database — how
+// the UI attaches to an app-installed pipeline (db_name "ag").
+func HTTPURL(cfg *config.TimeplusConfig, extra string) string {
+	u := fmt.Sprintf("http://%s:%d/", cfg.Host, cfg.Port)
+	var params []string
+	if extra != "" {
+		params = append(params, extra)
+	}
+	if cfg.Database != "" && cfg.Database != "default" {
+		params = append(params, "database="+url.QueryEscape(cfg.Database))
+	}
+	if len(params) == 0 {
+		return u
+	}
+	return u + "?" + strings.Join(params, "&")
+}
+
 // Query executes a SELECT SQL statement against the Proton HTTP interface and
 // returns all rows. It appends "FORMAT JSON" to the query automatically.
 // Returns a wrapped error on non-2xx status or parse failure.
 func Query(cfg *config.TimeplusConfig, sql string) ([]Row, error) {
-	url := fmt.Sprintf("http://%s:%d/", cfg.Host, cfg.Port)
+	endpoint := HTTPURL(cfg, "")
 	body := strings.NewReader(sql + " FORMAT JSON")
 
-	req, err := http.NewRequest(http.MethodPost, url, body)
+	req, err := http.NewRequest(http.MethodPost, endpoint, body)
 	if err != nil {
 		return nil, fmt.Errorf("proton query: build request: %w", err)
 	}
@@ -158,10 +179,10 @@ func derefPtr(v interface{}) interface{} {
 // ExecHTTP executes a DDL or DML statement against the Proton HTTP interface.
 // Use for CREATE/DROP/PAUSE/RESUME statements from handler code.
 func ExecHTTP(cfg *config.TimeplusConfig, sql string) error {
-	url := fmt.Sprintf("http://%s:%d/", cfg.Host, cfg.Port)
+	endpoint := HTTPURL(cfg, "")
 	body := strings.NewReader(sql)
 
-	req, err := http.NewRequest(http.MethodPost, url, body)
+	req, err := http.NewRequest(http.MethodPost, endpoint, body)
 	if err != nil {
 		return fmt.Errorf("proton exec: build request: %w", err)
 	}

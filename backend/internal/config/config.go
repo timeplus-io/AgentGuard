@@ -20,6 +20,11 @@ type TimeplusConfig struct {
 	Host       string
 	Port       int
 	NativePort int
+	// Database is the default database for every Timeplus connection: "default"
+	// for a wizard-provisioned deployment, or the app's db_name (e.g. "ag")
+	// when the pipeline was installed as a Timeplus app (see docs/tpapp.md).
+	// Handlers keep unqualified stream names; the connection resolves them.
+	Database string
 	// User and Password come from TIMEPLUS_USER / TIMEPLUS_PASSWORD env vars on
 	// the AgentGuard process — service credentials used for server-to-server
 	// endpoints (plugin → /api/holds) and by the backend notify watcher
@@ -163,6 +168,7 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	v.SetDefault("timeplus.host", "localhost")
 	v.SetDefault("timeplus.port", 3218)
 	v.SetDefault("timeplus.native-port", 8463)
+	v.SetDefault("timeplus.database", "default")
 	v.SetDefault("timeplus.user", "")
 	v.SetDefault("timeplus.password", "")
 	v.SetDefault("setup.complete", false)
@@ -240,6 +246,7 @@ func load(v *viper.Viper, searchPaths bool) (*Config, error) {
 	cfg.Timeplus.Host = v.GetString("timeplus.host")
 	cfg.Timeplus.Port = v.GetInt("timeplus.port")
 	cfg.Timeplus.NativePort = v.GetInt("timeplus.native-port")
+	cfg.Timeplus.Database = v.GetString("timeplus.database")
 	cfg.SetupComplete = v.GetBool("setup.complete")
 	cfg.Holds.MVWaitMs = v.GetInt("holds.mv_wait_ms")
 	cfg.Holds.TimeoutSeconds = v.GetInt("holds.timeout_seconds")
@@ -309,6 +316,7 @@ func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("timeplus.host", "TIMEPLUS_HOST")
 	_ = v.BindEnv("timeplus.port", "TIMEPLUS_PORT")
 	_ = v.BindEnv("timeplus.native-port", "TIMEPLUS_NATIVE_PORT")
+	_ = v.BindEnv("timeplus.database", "TIMEPLUS_DATABASE")
 	_ = v.BindEnv("holds.mv_wait_ms", "AGENTGUARD_HOLD_MV_WAIT_MS")
 	_ = v.BindEnv("holds.timeout_seconds", "AGENTGUARD_HOLD_TIMEOUT_SECONDS")
 	_ = v.BindEnv("holds.fail_policy", "AGENTGUARD_HOLDS_FAIL_POLICY")
@@ -350,6 +358,7 @@ func Save(cfg *Config, path string) error {
 	v.Set("timeplus.host", cfg.Timeplus.Host)
 	v.Set("timeplus.port", cfg.Timeplus.Port)
 	v.Set("timeplus.native-port", cfg.Timeplus.NativePort)
+	v.Set("timeplus.database", cfg.Timeplus.Database)
 	v.Set("setup.complete", cfg.SetupComplete)
 	v.Set("holds.mv_wait_ms", cfg.Holds.MVWaitMs)
 	v.Set("holds.timeout_seconds", cfg.Holds.TimeoutSeconds)

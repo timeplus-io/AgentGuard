@@ -266,7 +266,7 @@ func TestTimeplusConfig(cfg *config.Config) gin.HandlerFunc {
 		}
 		rc := auth.RequestCfg(c, cfg)
 		testCfg := config.TimeplusConfig{
-			Host: body.Host, Port: body.Port,
+			Host: body.Host, Port: body.Port, Database: rc.Timeplus.Database,
 			User: rc.Timeplus.User, Password: rc.Timeplus.Password,
 		}
 		if _, err := tp.Query(&testCfg, "SELECT 1 AS ok"); err != nil {

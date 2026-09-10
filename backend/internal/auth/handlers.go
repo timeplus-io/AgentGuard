@@ -73,6 +73,7 @@ func Login(cfg *config.Config, store *SessionStore) gin.HandlerFunc {
 		testCfg := config.TimeplusConfig{
 			Host:     cfg.Timeplus.Host,
 			Port:     cfg.Timeplus.Port,
+			Database: cfg.Timeplus.Database,
 			User:     body.Username,
 			Password: body.Password,
 		}
