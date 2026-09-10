@@ -111,6 +111,10 @@
       "label": "Native port",
       "description": "Timeplus native TCP port."
     },
+    "timeplus_database": {
+      "label": "Database",
+      "description": "Timeplus database holding the AgentGuard streams. Use \"default\" for a wizard-provisioned deployment, or the app's db_name (e.g. \"ag\") when the pipeline was installed as a Timeplus app."
+    },
     "timeplus_user": {
       "label": "Service user",
       "description": "Service account username. Set via the TIMEPLUS_USER environment variable only."

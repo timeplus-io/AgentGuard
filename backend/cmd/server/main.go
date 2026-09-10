@@ -64,6 +64,7 @@ func newRootCmd() *cobra.Command {
 	flags.Int("port", 8080, "server port")
 	flags.String("timeplus-host", "localhost", "Timeplus host")
 	flags.Int("timeplus-port", 3218, "Timeplus HTTP port")
+	flags.String("timeplus-database", "default", "Timeplus database holding the AgentGuard streams (e.g. \"ag\" for an app install)")
 	flags.Int("timeplus-native-port", 8463, "Timeplus native TCP port")
 	flags.String("catalog-dir", "", "catalog directory (default: ./catalog)")
 
@@ -72,6 +73,7 @@ func newRootCmd() *cobra.Command {
 	_ = viper.BindPFlag("timeplus.host", flags.Lookup("timeplus-host"))
 	_ = viper.BindPFlag("timeplus.port", flags.Lookup("timeplus-port"))
 	_ = viper.BindPFlag("timeplus.native-port", flags.Lookup("timeplus-native-port"))
+	_ = viper.BindPFlag("timeplus.database", flags.Lookup("timeplus-database"))
 
 	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if cfgFile, _ := flags.GetString("config"); cfgFile != "" {

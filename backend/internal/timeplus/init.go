@@ -30,6 +30,7 @@ func connectOnce(cfg *config.TimeplusConfig) (proton.Conn, error) {
 	opts := &proton.Options{
 		Addr: []string{fmt.Sprintf("%s:%d", cfg.Host, cfg.NativePort)},
 		Auth: proton.Auth{
+			Database: cfg.Database, // empty → server default
 			Username: cfg.User,
 			Password: cfg.Password,
 		},

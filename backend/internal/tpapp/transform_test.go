@@ -7,11 +7,11 @@ import (
 
 func TestEnsureIfNotExists(t *testing.T) {
 	cases := map[string]string{
-		"\nCREATE STREAM otel_traces\n(\n a string\n)":                           "\nCREATE STREAM IF NOT EXISTS otel_traces\n(\n a string\n)",
-		"CREATE MUTABLE STREAM IF NOT EXISTS agentguard_threats (x string)":      "CREATE MUTABLE STREAM IF NOT EXISTS agentguard_threats (x string)",
-		"CREATE MUTABLE STREAM agentguard_pricing (x string)":                    "CREATE MUTABLE STREAM IF NOT EXISTS agentguard_pricing (x string)",
+		"\nCREATE STREAM otel_traces\n(\n a string\n)":                             "\nCREATE STREAM IF NOT EXISTS otel_traces\n(\n a string\n)",
+		"CREATE MUTABLE STREAM IF NOT EXISTS agentguard_threats (x string)":        "CREATE MUTABLE STREAM IF NOT EXISTS agentguard_threats (x string)",
+		"CREATE MUTABLE STREAM agentguard_pricing (x string)":                      "CREATE MUTABLE STREAM IF NOT EXISTS agentguard_pricing (x string)",
 		"CREATE MATERIALIZED VIEW mv_threats\nINTO agentguard_threats AS SELECT 1": "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_threats\nINTO agentguard_threats AS SELECT 1",
-		"CREATE INPUT agentguard_otel_input\nSETTINGS type='otel'":               "CREATE INPUT IF NOT EXISTS agentguard_otel_input\nSETTINGS type='otel'",
+		"CREATE INPUT agentguard_otel_input\nSETTINGS type='otel'":                 "CREATE INPUT IF NOT EXISTS agentguard_otel_input\nSETTINGS type='otel'",
 	}
 	for in, want := range cases {
 		got, err := EnsureIfNotExists(in)

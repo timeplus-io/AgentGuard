@@ -38,8 +38,8 @@ func (e *StreamHTTPError) Error() string {
 // the notify watcher's seek_to='-24h') rather than an application-level
 // heartbeat.
 func StreamLines(ctx context.Context, cfg *config.TimeplusConfig, sql string, onConnected func(), onLine func(line []byte) error) error {
-	url := fmt.Sprintf("http://%s:%d/?default_format=JSONEachRow", cfg.Host, cfg.Port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(sql))
+	endpoint := HTTPURL(cfg, "default_format=JSONEachRow")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(sql))
 	if err != nil {
 		return fmt.Errorf("timeplus stream: build request: %w", err)
 	}
