@@ -111,9 +111,7 @@ func TestBuild_EveryDDLFileIsOneQualifiedStatement(t *testing.T) {
 				t.Errorf("%s: udf must be CREATE OR REPLACE FUNCTION", r.File)
 			}
 		case "system":
-			if !strings.HasPrefix(sql, "SYSTEM PAUSE MATERIALIZED VIEW "+DBPlaceholder+".") {
-				t.Errorf("%s: %q", r.File, sql)
-			}
+			t.Errorf("%s: system resources are not allowed — they race distributed DDL on clusters", r.File)
 		default:
 			if !strings.Contains(sql, "IF NOT EXISTS "+DBPlaceholder+"."+r.Name) {
 				t.Errorf("%s: expected 'IF NOT EXISTS {{ .DB }}.%s' in head: %.100q", r.File, r.Name, sql)
@@ -130,7 +128,7 @@ func TestBuild_EveryDDLFileIsOneQualifiedStatement(t *testing.T) {
 	}
 }
 
-func TestBuild_RuleArtifactsComeLastAndPaired(t *testing.T) {
+func TestBuild_RuleArtifactsComeLast(t *testing.T) {
 	app, err := Build()
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +145,11 @@ func TestBuild_RuleArtifactsComeLastAndPaired(t *testing.T) {
 	}
 	if first == -1 {
 		t.Fatal("no rule artifacts")
+	}
+	for _, r := range app.Resources[first:] {
+		if strings.Contains(strings.ToLower(r.SQL), "pause") {
+			t.Errorf("%s: rule artifacts must not pause anything", r.Name)
+		}
 	}
 	for _, need := range []string{"agentguard_rules", "agentguard_security_events", "agentguard_cim_event"} {
 		found := false

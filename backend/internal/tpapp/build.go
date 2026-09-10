@@ -15,7 +15,7 @@ import (
 const (
 	AppID      = "io.timeplus.agentguard"
 	AppName    = "AgentGuard"
-	AppVersion = "0.1.0" // bump with releases; the drift test pins the output
+	AppVersion = "0.1.1" // bump with releases; the drift test pins the output (0.1.1: rules installed running, no SYSTEM PAUSE)
 	AppDBName  = "ag"
 )
 

@@ -88,13 +88,13 @@ func TestIntegration_TpappInstall(t *testing.T) {
 	if rows, err := timeplus.Query(cfg, fmt.Sprintf("SELECT name FROM system.inputs WHERE database = '%s' AND name = 'agentguard_otel_input'", db)); err != nil || len(rows) == 0 {
 		t.Errorf("agentguard_otel_input missing from system.inputs (err=%v)", err)
 	}
-	// Rule MVs are paused. system.local_system_states exposes one row per MV
-	// with state_name='status' and state_string_value 'Paused'/'Executing';
-	// the pause takes a moment to be reflected, so poll briefly.
+	// Rule MVs run from install. system.local_system_states exposes one row
+	// per MV with state_name='status' and state_string_value
+	// 'Executing'/'Paused'; startup takes a moment, so poll briefly.
 	for _, id := range tpapp.CoreRuleIDs {
 		mv := timeplus.MVName(id)
-		if got := waitForMVStatus(t, cfg, db, mv, "Paused", 15*time.Second); got != "Paused" {
-			t.Errorf("%s status = %q, want Paused", mv, got)
+		if got := waitForMVStatus(t, cfg, db, mv, "Executing", 15*time.Second); got != "Executing" {
+			t.Errorf("%s status = %q, want Executing", mv, got)
 		}
 	}
 	// Re-running every file must be a no-op (upgrade path).
