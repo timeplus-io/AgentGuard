@@ -19,9 +19,13 @@ services:
       AGENTGUARD_DEPLOYMENT_ID: ${AGENTGUARD_DEPLOYMENT_ID:-local-hermes}
       AGENTGUARD_DEPLOYMENT_NAME: ${AGENTGUARD_DEPLOYMENT_NAME:-Local Hermes}
       AGENTGUARD_TIMEPLUS_URL: ${AGENTGUARD_TIMEPLUS_URL:-http://host.docker.internal:3218}
+      AGENTGUARD_DATABASE: ${AGENTGUARD_DATABASE:-ag}
       AGENTGUARD_STREAM: ${AGENTGUARD_STREAM:-agentguard_hook_events}
       AGENTGUARD_USERNAME: ${AGENTGUARD_USERNAME:-proton}
       AGENTGUARD_PASSWORD: ${AGENTGUARD_PASSWORD:-timeplus@t+}
+      # Holds default to off — the app's data pipeline is observability-first.
+      # Set AGENTGUARD_HOLDS_ENABLED=true to opt in to synchronous blocking.
+      AGENTGUARD_HOLDS_ENABLED: ${AGENTGUARD_HOLDS_ENABLED:-false}
       # Hermes's `provider: custom` sends this value as the bearer token to
       # whatever base_url is set in .hermes/config.yaml. With base_url pointing
       # at NVIDIA Build, this needs to be your nvapi- key (loaded from .env).

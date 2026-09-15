@@ -14,7 +14,7 @@ For every hook except `pre_tool_call`, the plugin POSTs the normalized event to 
 
 ### Synchronous hold-and-wait path (`pre_tool_call` only)
 
-When `AGENTGUARD_HOLDS_ENABLED` is `true` (the default), `pre_tool_call`:
+When `AGENTGUARD_HOLDS_ENABLED=true`, `pre_tool_call`:
 
 1. POSTs the event to AgentGuard's `/api/holds` endpoint **synchronously** via `urllib.request.urlopen(timeout=600)`. The endpoint ingests the event itself, so the plugin does NOT also call its async ingest path for this hook.
 2. AgentGuard's backend ingests the event, then waits up to ~500 ms for any rule's materialized view to detect a match (also checks for any pre-existing open threats from earlier in the session).
@@ -48,6 +48,7 @@ Set environment variables before starting Hermes:
 | Variable | Default | Description |
 |---|---|---|
 | `AGENTGUARD_TIMEPLUS_URL` | `http://localhost:3218` | Timeplus Enterprise HTTP endpoint |
+| `AGENTGUARD_DATABASE` | `"ag"` | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
 | `AGENTGUARD_USERNAME` | `proton` | Timeplus username |
 | `AGENTGUARD_PASSWORD` | _(empty)_ | Timeplus password |
 | `AGENTGUARD_STREAM` | `agentguard_hook_events` | Target Timeplus stream |
@@ -66,7 +67,7 @@ Set environment variables before starting Hermes:
 |---|---|---|
 | `AGENTGUARD_URL` | `http://localhost:8080` | AgentGuard server base URL — where `pre_tool_call` POSTs its hold request |
 | `AGENTGUARD_HOLDS_FAIL_POLICY` | `deny` | What to return when `/api/holds` is unreachable: `deny` blocks the tool call, `allow` lets it proceed |
-| `AGENTGUARD_HOLDS_ENABLED` | `true` | When `false`, `pre_tool_call` reverts to async observation-only mode (no blocking, event still ingested) |
+| `AGENTGUARD_HOLDS_ENABLED` | `false` | When `false`, `pre_tool_call` reverts to async observation-only mode (no blocking, event still ingested) |
 
 ### Server-side prerequisite — Timeplus service credentials
 
@@ -86,6 +87,7 @@ For the standard `docker-compose.yaml` setup these are pre-set to `proton` / `ti
 ```bash
 # Async ingest
 export AGENTGUARD_TIMEPLUS_URL=http://timeplus.example.com:3218
+export AGENTGUARD_DATABASE=ag
 export AGENTGUARD_USERNAME=proton
 export AGENTGUARD_PASSWORD=secret
 
@@ -96,7 +98,7 @@ export AGENTGUARD_DEPLOYMENT_NAME="Production Hermes"
 # Sync tool blocking
 export AGENTGUARD_URL=http://agentguard.example.com:8080
 export AGENTGUARD_HOLDS_FAIL_POLICY=deny
-# AGENTGUARD_HOLDS_ENABLED defaults to true
+export AGENTGUARD_HOLDS_ENABLED=true
 
 hermes
 ```
@@ -141,12 +143,6 @@ To exercise blocking end-to-end:
 
 If the plugin reports `AgentGuard unreachable — backend returned 503`, the AgentGuard server is missing service credentials — see [Server-side prerequisite](#server-side-prerequisite--timeplus-service-credentials).
 
-To temporarily disable hold blocking without changing rules or uninstalling:
-
-```bash
-export AGENTGUARD_HOLDS_ENABLED=false
-hermes  # restart so the env var takes effect
-```
 
 ## Custom install path
 

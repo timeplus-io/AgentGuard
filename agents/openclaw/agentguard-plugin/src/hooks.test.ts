@@ -3,6 +3,7 @@ import { baseEvent } from "./hooks.js";
 
 const TEST_CONFIG = {
   timeplusUrl: "http://localhost:3218",
+  database: "ag",
   stream: "agentguard_hook_events",
   flushMs: 2000,
   batchSize: 50,
@@ -10,6 +11,7 @@ const TEST_CONFIG = {
   password: "",
   deploymentId: "test-deployment",
   deploymentName: "Test Deployment",
+  holdsEnabled: false,
 };
 
 describe("baseEvent", () => {

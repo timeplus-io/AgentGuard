@@ -68,7 +68,7 @@ async function postBatch(
 }
 
 export function createTimeplusClient(config: AgentGuardConfig): TimeplusClient {
-  const url = `${config.timeplusUrl}/proton/v1/ingest/streams/${config.stream}`;
+  const url = `${config.timeplusUrl}/timeplusd/v2/ingest/${config.database}/streams/${config.stream}`;
   const authHeader = `Basic ${btoa(`${config.username}:${config.password}`)}`;
   const queue: HookEvent[] = [];
   let timer: ReturnType<typeof setInterval> | null = null;

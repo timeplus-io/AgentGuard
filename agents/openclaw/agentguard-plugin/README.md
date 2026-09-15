@@ -20,7 +20,7 @@ On `gateway_stop` the client drains any remaining events and cancels the timer c
 
 ### Synchronous hold-and-wait path (`before_tool_call` only)
 
-When `holdsEnabled` is `true` (the default), the `before_tool_call` hook follows a different path:
+When `holdsEnabled` is `true`, the `before_tool_call` hook follows a different path:
 
 1. Plugin POSTs the event to the AgentGuard server's `/api/holds` endpoint **synchronously** (does NOT enqueue — `/api/holds` ingests the event itself).
 2. AgentGuard's backend ingests the event, then waits up to 500 ms for any rule's materialized view to detect a match against this exact tool call. It also checks for any pre-existing open threats from earlier in the session.
@@ -134,13 +134,14 @@ These settings control how the plugin talks to Timeplus (for async event ingest)
 |---------------------|-------------------------------|----------------------------|-----------------------------------------------------------------------------|
 | `timeplusUrl`       | `AGENTGUARD_TIMEPLUS_URL`     | `http://localhost:3218`    | Timeplus Proton HTTP API base URL (async event ingest)                      |
 | `stream`            | `AGENTGUARD_STREAM`           | `agentguard_hook_events`   | Target stream name for async event ingest                                   |
+| `database`          | `AGENTGUARD_DATABASE`         | `"ag"`                     | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
 | `flushMs`           | `AGENTGUARD_FLUSH_MS`         | `2000`                     | Periodic flush interval (milliseconds)                                      |
 | `batchSize`         | `AGENTGUARD_BATCH_SIZE`       | `50`                       | Flush when queue reaches this size                                          |
 | `username`          | `AGENTGUARD_USERNAME`         | `proton`                   | Timeplus username (for async ingest)                                        |
 | `password`          | `AGENTGUARD_PASSWORD`         | `""`                       | Timeplus password (for async ingest)                                        |
 | `agentguardUrl`     | `AGENTGUARD_URL`              | `http://localhost:8080`    | AgentGuard server base URL (for `/api/holds` synchronous decisions)         |
 | `holdFailPolicy`    | `AGENTGUARD_HOLDS_FAIL_POLICY`| `deny`                     | What to return when `/api/holds` is unreachable: `deny` blocks, `allow` lets call through |
-| `holdsEnabled`      | `AGENTGUARD_HOLDS_ENABLED`    | `true`                     | When `false`, `before_tool_call` reverts to async observation-only mode     |
+| `holdsEnabled`      | `AGENTGUARD_HOLDS_ENABLED`    | `false`                     | When `false`, `before_tool_call` reverts to async observation-only mode     |
 | `deploymentId`      | *(config-only)*               | `default`                  | Deployment group identifier                                                 |
 | `deploymentName`    | *(config-only)*               | `Default`                  | Human-readable deployment name                                              |
 
@@ -215,6 +216,7 @@ Then add **two** sections to your `openclaw.json` — `plugins.load.paths` (so O
           "timeplusUrl": "http://localhost:3218",
           "username": "proton",
           "password": "timeplus@t+",
+          "database": "ag",
           "deploymentId": "my-team",
           "deploymentName": "My Team",
           "stream": "agentguard_hook_events",
@@ -222,7 +224,7 @@ Then add **two** sections to your `openclaw.json` — `plugins.load.paths` (so O
           "batchSize": 50,
           "agentguardUrl": "http://localhost:8080",
           "holdFailPolicy": "deny",
-          "holdsEnabled": true
+          "holdsEnabled": false
         }
       }
     }
@@ -278,16 +280,6 @@ To exercise the blocking path end-to-end:
 If you don't see the toast, check `docker logs agentguard 2>&1 | grep holds` — every error path on the server logs with prefix `holds:`.
 
 If the plugin reports `AgentGuard unreachable — backend returned 503`, the AgentGuard server is missing service credentials — see [Server-side prerequisite](#server-side-prerequisite--timeplus-service-credentials).
-
-To temporarily disable hold blocking without changing rules or uninstalling:
-
-```bash
-# In openclaw.json:
-"holdsEnabled": false
-
-# Or as env var when starting OpenClaw:
-AGENTGUARD_HOLDS_ENABLED=false
-```
 
 ## Development
 

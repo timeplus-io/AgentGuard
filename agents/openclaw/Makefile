@@ -18,8 +18,9 @@ ENV_FILE_FLAG := $(if $(wildcard $(ENV_FILE)),--env-file $(ENV_FILE),)
 # AgentGuard on the host via host.docker.internal. Override via env var when
 # running outside Docker.
 AGENTGUARD_URL ?= http://host.docker.internal:8080
-AGENTGUARD_HOLDS_ENABLED ?= true
+AGENTGUARD_HOLDS_ENABLED ?= false
 AGENTGUARD_HOLDS_FAIL_POLICY ?= deny
+AGENTGUARD_DATABASE ?= ag
 
 .PHONY: workspace init run start configure add-agents url devices approve clean install-plugin build-plugin deploy-plugin test
 
@@ -94,6 +95,7 @@ data["plugins"]["entries"]["agentguard"] = {
     "enabled": True,
     "config": {
         "timeplusUrl": "http://host.docker.internal:3218",
+        "database": "$(AGENTGUARD_DATABASE)",
         "stream": "agentguard_hook_events",
         "flushMs": 2000,
         "batchSize": 50,
@@ -103,7 +105,7 @@ data["plugins"]["entries"]["agentguard"] = {
         "deploymentName": "Local Dev",
         "agentguardUrl": "$(AGENTGUARD_URL)",
         "holdFailPolicy": "$(AGENTGUARD_HOLDS_FAIL_POLICY)",
-        "holdsEnabled": "$(AGENTGUARD_HOLDS_ENABLED)".lower() != "false",
+        "holdsEnabled": "$(AGENTGUARD_HOLDS_ENABLED)".lower() == "true",
     }
 }
 

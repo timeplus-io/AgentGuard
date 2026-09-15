@@ -34,9 +34,10 @@ Run ID: session_id (all events in a session share the same run_id).
 Install: drop plugin.yaml + __init__.py into ~/.hermes/plugins/agentguard/
 
 Config via environment variables:
-  AGENTGUARD_TIMEPLUS_URL       AGENTGUARD_STREAM       AGENTGUARD_USERNAME
-  AGENTGUARD_PASSWORD           AGENTGUARD_AGENT_ID     AGENTGUARD_DEPLOYMENT_ID
-  AGENTGUARD_DEPLOYMENT_NAME    AGENTGUARD_URL          AGENTGUARD_HOLDS_FAIL_POLICY
+  AGENTGUARD_TIMEPLUS_URL       AGENTGUARD_DATABASE     AGENTGUARD_STREAM
+  AGENTGUARD_USERNAME           AGENTGUARD_PASSWORD
+  AGENTGUARD_AGENT_ID           AGENTGUARD_DEPLOYMENT_ID      AGENTGUARD_DEPLOYMENT_NAME
+  AGENTGUARD_URL                AGENTGUARD_HOLDS_FAIL_POLICY
   AGENTGUARD_HOLDS_ENABLED
 
 Server-side prerequisite: TIMEPLUS_USER and TIMEPLUS_PASSWORD must be set
@@ -54,6 +55,7 @@ from datetime import datetime, timezone
 
 _TIMEPLUS_URL    = os.environ.get("AGENTGUARD_TIMEPLUS_URL", "http://localhost:3218")
 _STREAM          = os.environ.get("AGENTGUARD_STREAM", "agentguard_hook_events")
+_DATABASE        = os.environ.get("AGENTGUARD_DATABASE", "ag")
 _USERNAME        = os.environ.get("AGENTGUARD_USERNAME", "proton")
 _PASSWORD        = os.environ.get("AGENTGUARD_PASSWORD", "")
 _AGENT_ID        = os.environ.get("AGENTGUARD_AGENT_ID") or socket.gethostname()
@@ -63,7 +65,7 @@ _DEPLOYMENT_NAME = os.environ.get("AGENTGUARD_DEPLOYMENT_NAME", "Local Dev")
 # Synchronous hold-and-wait config — same shape as the openclaw and claudecode plugins.
 _AGENTGUARD_URL    = os.environ.get("AGENTGUARD_URL", "http://localhost:8080")
 _HOLD_FAIL_POLICY  = "allow" if os.environ.get("AGENTGUARD_HOLDS_FAIL_POLICY", "deny").lower() == "allow" else "deny"
-_HOLDS_ENABLED     = os.environ.get("AGENTGUARD_HOLDS_ENABLED", "true").lower() != "false"
+_HOLDS_ENABLED     = os.environ.get("AGENTGUARD_HOLDS_ENABLED", "false").lower() != "false"
 
 # Self-imposed timeout for the /api/holds request. Hermes provides no hook
 # timeout or abort signal, so we must cap the long-poll ourselves. 540s leaves
@@ -113,7 +115,7 @@ def _clear_session_task_ids(session_id: str):
 
 
 def _ingest(rows: list) -> None:
-    url = f"{_TIMEPLUS_URL.rstrip('/')}/proton/v1/ingest/streams/{_STREAM}"
+    url = f"{_TIMEPLUS_URL.rstrip('/')}/timeplusd/v2/ingest/{_DATABASE}/streams/{_STREAM}"
     payload = json.dumps({"columns": _COLUMNS, "data": rows}).encode()
     req = urllib.request.Request(url, data=payload, method="POST")
     req.add_header("Content-Type", "application/json")
@@ -124,7 +126,7 @@ def _ingest(rows: list) -> None:
         with urllib.request.urlopen(req, timeout=5) as resp:
             resp.read()
     except urllib.error.URLError as e:
-        print(f"[agentguard] ingest error: {e}", flush=True)
+        print(f"[agentguard] ingest error: url={url} error={e}", flush=True)
 
 
 def _make_row(hook_name: str, kwargs: dict, *, session_id: str | None = None) -> list:
@@ -187,6 +189,9 @@ def _on_session_finalize(**kwargs):
 
 def _abandon_session_holds(session_id: str) -> None:
     """Best-effort POST /api/holds/_abandon-session/<sid> — never raises."""
+    if not _HOLDS_ENABLED:
+        return
+
     url = f"{_AGENTGUARD_URL.rstrip('/')}/api/holds/_abandon-session/{session_id}"
     req = urllib.request.Request(url, data=b"", method="POST")
     try:

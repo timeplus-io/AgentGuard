@@ -18,7 +18,7 @@ For every hook except `PreToolUse`, the plugin:
 
 ### Synchronous hold-and-wait path (`PreToolUse` only)
 
-When `AGENTGUARD_HOLDS_ENABLED` is `true` (the default) AND `PreToolUse` fires, the plugin follows a different path:
+When `AGENTGUARD_HOLDS_ENABLED` is `true` AND `PreToolUse` fires, the plugin follows a different path:
 
 1. Plugin POSTs the event to AgentGuard's `/api/holds` endpoint **synchronously** (does NOT post to Timeplus separately — `/api/holds` ingests the event itself)
 2. Backend ingests, then waits up to ~500 ms for any rule's materialized view to detect a match (also checks pre-existing open threats from earlier in the session)
@@ -88,12 +88,13 @@ Set these environment variables in your shell profile (e.g. `~/.zshrc` or `~/.ba
 | `AGENTGUARD_DEPLOYMENT_ID`            | `"default"`                 | Deployment group identifier                                                 |
 | `AGENTGUARD_DEPLOYMENT_NAME`          | `"Default"`                 | Human-readable deployment name                                              |
 | `AGENTGUARD_TIMEPLUS_URL`             | `http://localhost:3218`     | Timeplus Proton HTTP API base URL (async event ingest)                      |
+| `AGENTGUARD_DATABASE`                 | `"ag"`                      | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
 | `AGENTGUARD_STREAM`                   | `agentguard_hook_events`    | Target stream name                                                          |
 | `AGENTGUARD_USERNAME`                 | `proton`                    | Timeplus username                                                           |
 | `AGENTGUARD_PASSWORD`                 | `""`                        | Timeplus password                                                           |
 | `AGENTGUARD_URL`                      | `http://localhost:8080`     | AgentGuard server base URL (for `/api/holds` synchronous decisions)         |
 | `AGENTGUARD_HOLDS_FAIL_POLICY`        | `deny`                      | What to return when `/api/holds` is unreachable: `deny` blocks, `allow` lets call through |
-| `AGENTGUARD_HOLDS_ENABLED`            | `true`                      | When `false`, `PreToolUse` skips `/api/holds` and reverts to async observation-only mode |
+| `AGENTGUARD_HOLDS_ENABLED`            | `false`                     | When `true`, `PreToolUse` calls `/api/holds` synchronously and may block. **Opt-in only** — the AgentGuard app's data pipeline is observability-first. |
 | `AGENTGUARD_TRANSCRIPT_MESSAGES`      | `50`                        | Max messages included in context events                                     |
 | `AGENTGUARD_TRANSCRIPT_CONTENT_CHARS` | `10000`                     | Max chars per content block in transcript                                   |
 
@@ -104,8 +105,9 @@ export AGENTGUARD_AGENT_ID="gangtao-macbook"
 export AGENTGUARD_DEPLOYMENT_ID="local-dev"
 export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
 # AGENTGUARD_TIMEPLUS_URL defaults to http://localhost:3218
+# AGENTGUARD_DATABASE defaults to "ag"
 # AGENTGUARD_URL defaults to http://localhost:8080
-# Set AGENTGUARD_HOLDS_ENABLED=false to disable synchronous tool blocking
+# AGENTGUARD_HOLDS_ENABLED defaults to false and disable synchrounous tool blocking
 ```
 
 ### Server-side prerequisite — Timeplus service credentials
@@ -204,19 +206,11 @@ If you don't see the toast, check `docker logs agentguard 2>&1 | grep holds` —
 
 If the plugin reports `AgentGuard unreachable — backend returned 503`, the AgentGuard server is missing service credentials — see [Server-side prerequisite](#server-side-prerequisite--timeplus-service-credentials).
 
-To temporarily disable hold blocking without changing rules or unsetting hooks:
-
-```bash
-export AGENTGUARD_HOLDS_ENABLED=false
-# Restart Claude Code so it re-reads the env block in ~/.claude/settings.json
-```
-
-(Or set `AGENTGUARD_HOLDS_ENABLED=false` when running `make install` to bake it into `~/.claude/settings.json`.)
 
 ## Development
 
 ```bash
-npm test          # Run unit tests (48 tests across 3 suites)
+npm test          # Run unit tests
 npm run build     # Compile TypeScript → dist/
 npm run dev       # Watch mode
 ```

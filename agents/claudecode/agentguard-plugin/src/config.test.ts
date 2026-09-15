@@ -21,6 +21,7 @@ describe("resolveConfig", () => {
   it("returns defaults when no env vars are set", () => {
     const cfg = resolveConfig();
     expect(cfg.timeplusUrl).toBe("http://localhost:3218");
+    expect(cfg.database).toBe("ag");
     expect(cfg.stream).toBe("agentguard_hook_events");
     expect(cfg.username).toBe("proton");
     expect(cfg.password).toBe("");
@@ -64,6 +65,16 @@ describe("resolveConfig", () => {
     expect(resolveConfig().stream).toBe("custom_stream");
   });
 
+  it("reads AGENTGUARD_DATABASE from env", () => {
+    process.env.AGENTGUARD_DATABASE = "custom_db";
+    expect(resolveConfig().database).toBe("custom_db");
+  });
+
+  it("AGENTGUARD_DATABASE='' falls back to default 'ag'", () => {
+    process.env.AGENTGUARD_DATABASE = "";
+    expect(resolveConfig().database).toBe("ag");
+  });
+
   it("agentguardUrl defaults to http://localhost:8080", () => {
     delete process.env.AGENTGUARD_URL;
     const cfg = resolveConfig();
@@ -91,9 +102,9 @@ describe("resolveConfig", () => {
     expect(resolveConfig().holdFailPolicy).toBe("deny");
   });
 
-  it("holdsEnabled defaults to true when AGENTGUARD_HOLDS_ENABLED is unset", () => {
+  it("holdsEnabled defaults to false when AGENTGUARD_HOLDS_ENABLED is unset", () => {
     delete process.env.AGENTGUARD_HOLDS_ENABLED;
-    expect(resolveConfig().holdsEnabled).toBe(true);
+    expect(resolveConfig().holdsEnabled).toBe(false);
   });
 
   it("holdsEnabled is false when AGENTGUARD_HOLDS_ENABLED=\"false\" (case-insensitive)", () => {
@@ -107,8 +118,8 @@ describe("resolveConfig", () => {
     process.env.AGENTGUARD_HOLDS_ENABLED = "true";
     expect(resolveConfig().holdsEnabled).toBe(true);
     process.env.AGENTGUARD_HOLDS_ENABLED = "1";
-    expect(resolveConfig().holdsEnabled).toBe(true);
+    expect(resolveConfig().holdsEnabled).toBe(false);
     process.env.AGENTGUARD_HOLDS_ENABLED = "anything";
-    expect(resolveConfig().holdsEnabled).toBe(true);
+    expect(resolveConfig().holdsEnabled).toBe(false);
   });
 });

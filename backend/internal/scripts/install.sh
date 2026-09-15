@@ -103,26 +103,27 @@ echo "Configuration (press Enter to accept defaults):"
 echo ""
 AGENT_ID=$(prompt      "Agent ID (this machine's identifier)" "$AGENT_TYPE.$(hostname)")
 DEPLOYMENT_ID=$(prompt "Deployment ID"                        "local")
-DEPLOYMENT_NAME=$(prompt "Deployment Name"                   "Local Dev")
+DEPLOYMENT_NAME=$(prompt "Deployment Name"                    "Local Dev")
 TIMEPLUS_URL=$(prompt  "Timeplus URL"                         "http://localhost:3218")
 TIMEPLUS_USERNAME=$(prompt "Timeplus Username"                "proton")
 TIMEPLUS_PASSWORD=$(prompt_secret "Timeplus Password")
+TIMEPLUS_DATABASE=$(prompt "AgentGuard database"              "ag")
 echo ""
 AGENTGUARD_URL=$(prompt "AgentGuard URL"                     "http://localhost:8080")
 
 echo ""
 read -rp "  Enable holds (synchronous tool-call blocking)? [Y/n]: " holds_yn
 if [[ "$holds_yn" =~ ^[Nn]$ ]]; then
-  HOLDS_ENABLED="false"
+    HOLDS_ENABLED="false"
 else
-  HOLDS_ENABLED="true"
+    HOLDS_ENABLED="true"
 fi
 
 if [[ "$HOLDS_ENABLED" == "true" ]]; then
-  read -rp "  Hold fail policy (deny/allow) [deny]: " hold_policy
-  HOLD_FAIL_POLICY="${hold_policy:-deny}"
+    read -rp "  Hold fail policy (deny/allow) [deny]: " hold_policy
+    HOLD_FAIL_POLICY="${hold_policy:-deny}"
 else
-  HOLD_FAIL_POLICY="deny"
+    HOLD_FAIL_POLICY="deny"
 fi
 
 # ── Derive OTel endpoint from Timeplus URL ─────────────────────────────────
@@ -166,6 +167,7 @@ if [[ "$AGENT_TYPE" == "claude-code" ]]; then
   AGENTGUARD_TIMEPLUS_URL="$TIMEPLUS_URL" \
   AGENTGUARD_USERNAME="$TIMEPLUS_USERNAME" \
   AGENTGUARD_PASSWORD="$TIMEPLUS_PASSWORD" \
+  AGENTGUARD_DATABASE="$TIMEPLUS_DATABASE" \
   AGENTGUARD_URL="$AGENTGUARD_URL" \
   AGENTGUARD_HOLDS_FAIL_POLICY="$HOLD_FAIL_POLICY" \
   AGENTGUARD_HOLDS_ENABLED="$HOLDS_ENABLED" \
@@ -220,6 +222,7 @@ data.setdefault("env", {}).update({
     "AGENTGUARD_DEPLOYMENT_ID":             _e["AGENTGUARD_DEPLOYMENT_ID"],
     "AGENTGUARD_DEPLOYMENT_NAME":           _e["AGENTGUARD_DEPLOYMENT_NAME"],
     "AGENTGUARD_TIMEPLUS_URL":              _e["AGENTGUARD_TIMEPLUS_URL"],
+    "AGENTGUARD_DATABASE":                  _e["AGENTGUARD_DATABASE"],
     "AGENTGUARD_STREAM":                    "agentguard_hook_events",
     "AGENTGUARD_USERNAME":                  _e["AGENTGUARD_USERNAME"],
     "AGENTGUARD_PASSWORD":                  _e["AGENTGUARD_PASSWORD"],
@@ -299,6 +302,7 @@ if [[ "$AGENT_TYPE" == "openclaw" ]]; then
   AGENTGUARD_TIMEPLUS_URL="$TIMEPLUS_URL" \
   AGENTGUARD_USERNAME="$TIMEPLUS_USERNAME" \
   AGENTGUARD_PASSWORD="$TIMEPLUS_PASSWORD" \
+  AGENTGUARD_DATABASE="$TIMEPLUS_DATABASE" \
   AGENTGUARD_DEPLOYMENT_ID="$DEPLOYMENT_ID" \
   AGENTGUARD_DEPLOYMENT_NAME="$DEPLOYMENT_NAME" \
   AGENTGUARD_URL="$AGENTGUARD_URL" \
@@ -335,6 +339,7 @@ entries["agentguard"] = {
     "config": {
         "timeplusUrl":     _e["AGENTGUARD_TIMEPLUS_URL"],
         "stream":          "agentguard_hook_events",
+        "database":        _e["AGENTGUARD_DATABASE"],
         "flushMs":         2000,
         "batchSize":       50,
         "username":        _e["AGENTGUARD_USERNAME"],
@@ -398,9 +403,10 @@ if [[ "$AGENT_TYPE" == "hermes" ]]; then
   fi
 
   EXPORT_BLOCK="$(printf '# AgentGuard\n'
-printf 'export AGENTGUARD_TIMEPLUS_URL=%q\n'    "$TIMEPLUS_URL"
+printf 'export AGENTGUARD_TIMEPLUS_URL=%q\n'     "$TIMEPLUS_URL"
 printf 'export AGENTGUARD_USERNAME=%q\n'         "$TIMEPLUS_USERNAME"
 printf 'export AGENTGUARD_PASSWORD=%q\n'         "$TIMEPLUS_PASSWORD"
+printf 'export AGENTGUARD_DATABASE=%q\n'         "$TIMEPLUS_DATABASE"
 printf 'export AGENTGUARD_AGENT_ID=%q\n'         "$AGENT_ID"
 printf 'export AGENTGUARD_DEPLOYMENT_ID=%q\n'    "$DEPLOYMENT_ID"
 printf 'export AGENTGUARD_DEPLOYMENT_NAME=%q\n'  "$DEPLOYMENT_NAME"

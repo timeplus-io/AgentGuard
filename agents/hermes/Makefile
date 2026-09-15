@@ -19,6 +19,9 @@ export AGENTGUARD_DEPLOYMENT_ID   ?= local-hermes
 export AGENTGUARD_DEPLOYMENT_NAME ?= Local Hermes
 # host.docker.internal resolves to the host from inside Docker containers
 export AGENTGUARD_TIMEPLUS_URL    ?= http://host.docker.internal:3218
+# Timeplus database owning the AgentGuard streams. Defaults to the
+# AgentGuard Timeplus app's db_name: 'ag'. 
+export AGENTGUARD_DATABASE        ?= ag
 export AGENTGUARD_STREAM          ?= agentguard_hook_events
 export AGENTGUARD_USERNAME        ?= proton
 export AGENTGUARD_PASSWORD        ?= timeplus@t+
@@ -103,6 +106,7 @@ cli: configure
 	  -e AGENTGUARD_DEPLOYMENT_ID=$(AGENTGUARD_DEPLOYMENT_ID) \
 	  -e "AGENTGUARD_DEPLOYMENT_NAME=$(AGENTGUARD_DEPLOYMENT_NAME)" \
 	  -e AGENTGUARD_TIMEPLUS_URL=$(AGENTGUARD_TIMEPLUS_URL) \
+	  -e AGENTGUARD_DATABASE=$(AGENTGUARD_DATABASE) \
 	  -e AGENTGUARD_STREAM=$(AGENTGUARD_STREAM) \
 	  -e AGENTGUARD_USERNAME=$(AGENTGUARD_USERNAME) \
 	  -e AGENTGUARD_PASSWORD=$(AGENTGUARD_PASSWORD) \

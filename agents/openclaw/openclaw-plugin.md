@@ -233,7 +233,7 @@ docker logs openclaw 2>&1 | grep agentguard
 Expected:
 
 ```
-[agentguard] active — streaming to http://host.docker.internal:3218/proton/v1/ingest/streams/agentguard_hook_events (flush every 2000ms, batch size 50)
+[agentguard] active — streaming to http://host.docker.internal:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events (flush every 2000ms, batch size 50)
 ```
 
 ### Query events in Timeplus
@@ -242,7 +242,7 @@ After sending a message in OpenClaw, wait ~2s for the batch to flush, then query
 
 ```sql
 SELECT hook_name, event_time, session_id, agent_id, tool_name
-FROM table(agentguard_hook_events)
+FROM table(ag.agentguard_hook_events)
 ORDER BY event_time DESC
 LIMIT 20
 ```
