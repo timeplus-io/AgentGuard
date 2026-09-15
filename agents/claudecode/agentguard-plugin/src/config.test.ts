@@ -114,8 +114,10 @@ describe("resolveConfig", () => {
     expect(resolveConfig().holdsEnabled).toBe(false);
   });
 
-  it("holdsEnabled is true for \"true\" or other non-false values", () => {
+  it("holdsEnabled is true only when env var is exactly 'true' (case-insensitive)", () => {
     process.env.AGENTGUARD_HOLDS_ENABLED = "true";
+    expect(resolveConfig().holdsEnabled).toBe(true);
+    process.env.AGENTGUARD_HOLDS_ENABLED = "TRUE";
     expect(resolveConfig().holdsEnabled).toBe(true);
     process.env.AGENTGUARD_HOLDS_ENABLED = "1";
     expect(resolveConfig().holdsEnabled).toBe(false);
