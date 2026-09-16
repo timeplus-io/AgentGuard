@@ -116,18 +116,17 @@ echo ""
 # echo ""
 # read -rp "  Enable holds (synchronous tool-call blocking)? [y/N]: " holds_yn
 # if [[ "$holds_yn" =~ ^[Yy]$ ]]; then
-#     HOLDS_ENABLED="true"
+#   HOLDS_ENABLED="true"
 # else
-#     HOLDS_ENABLED="false"
+#   HOLDS_ENABLED="false"
 # fi
-AGENTGUARD_URL=""
 HOLDS_ENABLED="false"
 
 if [[ "$HOLDS_ENABLED" == "true" ]]; then
-    read -rp "  Hold fail policy (deny/allow) [deny]: " hold_policy
-    HOLD_FAIL_POLICY="${hold_policy:-deny}"
+  read -rp "  Hold fail policy (deny/allow) [deny]: " hold_policy
+  HOLD_FAIL_POLICY="${hold_policy:-deny}"
 else
-    HOLD_FAIL_POLICY="deny"
+  HOLD_FAIL_POLICY="deny"
 fi
 
 # ── Derive OTel endpoint from Timeplus URL ─────────────────────────────────
@@ -352,7 +351,7 @@ entries["agentguard"] = {
         "deploymentName":  _e["AGENTGUARD_DEPLOYMENT_NAME"],
         "agentguardUrl":   _e["AGENTGUARD_URL"],
         "holdFailPolicy":  _e["AGENTGUARD_HOLDS_FAIL_POLICY"],
-        "holdsEnabled":    _e["AGENTGUARD_HOLDS_ENABLED"].lower() != "false",
+        "holdsEnabled":    _e["AGENTGUARD_HOLDS_ENABLED"].lower() == "true",
     },
 }
 

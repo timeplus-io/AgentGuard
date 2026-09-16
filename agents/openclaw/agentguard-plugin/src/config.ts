@@ -101,7 +101,7 @@ export function resolveConfig(
   const pluginHolds = pluginConfig?.holdsEnabled;
   const holdsEnabled =
     envHolds !== undefined
-      ? envHolds.toLowerCase() !== "false"
+      ? envHolds.toLowerCase() === "true"
       : typeof pluginHolds === "boolean"
         ? pluginHolds
         : DEFAULTS.holdsEnabled;

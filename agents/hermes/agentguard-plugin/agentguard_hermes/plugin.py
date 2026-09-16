@@ -65,7 +65,7 @@ _DEPLOYMENT_NAME = os.environ.get("AGENTGUARD_DEPLOYMENT_NAME", "Local Dev")
 # Synchronous hold-and-wait config — same shape as the openclaw and claudecode plugins.
 _AGENTGUARD_URL    = os.environ.get("AGENTGUARD_URL", "http://localhost:8080")
 _HOLD_FAIL_POLICY  = "allow" if os.environ.get("AGENTGUARD_HOLDS_FAIL_POLICY", "deny").lower() == "allow" else "deny"
-_HOLDS_ENABLED     = os.environ.get("AGENTGUARD_HOLDS_ENABLED", "false").lower() != "false"
+_HOLDS_ENABLED     = os.environ.get("AGENTGUARD_HOLDS_ENABLED", "false").lower() == "true"
 
 # Self-imposed timeout for the /api/holds request. Hermes provides no hook
 # timeout or abort signal, so we must cap the long-poll ourselves. 540s leaves
