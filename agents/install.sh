@@ -112,11 +112,11 @@ echo ""
 AGENTGUARD_URL=$(prompt "AgentGuard URL"                      "http://localhost:8080")
 
 echo ""
-read -rp "  Enable holds (synchronous tool-call blocking)? [Y/n]: " holds_yn
-if [[ "$holds_yn" =~ ^[Nn]$ ]]; then
-    HOLDS_ENABLED="false"
-else
+read -rp "  Enable holds (synchronous tool-call blocking)? [y/N]: " holds_yn
+if [[ "$holds_yn" =~ ^[Yy]$ ]]; then
     HOLDS_ENABLED="true"
+else
+    HOLDS_ENABLED="false"
 fi
 
 if [[ "$HOLDS_ENABLED" == "true" ]]; then

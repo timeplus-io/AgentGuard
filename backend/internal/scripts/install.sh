@@ -107,16 +107,16 @@ DEPLOYMENT_NAME=$(prompt "Deployment Name"                    "Local Dev")
 TIMEPLUS_URL=$(prompt  "Timeplus URL"                         "http://localhost:3218")
 TIMEPLUS_USERNAME=$(prompt "Timeplus Username"                "proton")
 TIMEPLUS_PASSWORD=$(prompt_secret "Timeplus Password")
-TIMEPLUS_DATABASE=$(prompt "AgentGuard database"              "ag")
+TIMEPLUS_DATABASE=$(prompt "AgentGuard Database"              "ag")
 echo ""
-AGENTGUARD_URL=$(prompt "AgentGuard URL"                     "http://localhost:8080")
+AGENTGUARD_URL=$(prompt "AgentGuard URL"                      "http://localhost:8080")
 
 echo ""
-read -rp "  Enable holds (synchronous tool-call blocking)? [Y/n]: " holds_yn
-if [[ "$holds_yn" =~ ^[Nn]$ ]]; then
-    HOLDS_ENABLED="false"
-else
+read -rp "  Enable holds (synchronous tool-call blocking)? [y/N]: " holds_yn
+if [[ "$holds_yn" =~ ^[Yy]$ ]]; then
     HOLDS_ENABLED="true"
+else
+    HOLDS_ENABLED="false"
 fi
 
 if [[ "$HOLDS_ENABLED" == "true" ]]; then
@@ -338,8 +338,8 @@ entries["agentguard"] = {
     "enabled": True,
     "config": {
         "timeplusUrl":     _e["AGENTGUARD_TIMEPLUS_URL"],
-        "stream":          "agentguard_hook_events",
         "database":        _e["AGENTGUARD_DATABASE"],
+        "stream":          "agentguard_hook_events",
         "flushMs":         2000,
         "batchSize":       50,
         "username":        _e["AGENTGUARD_USERNAME"],
