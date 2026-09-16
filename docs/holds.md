@@ -5,7 +5,7 @@ AgentGuard ingests agent telemetry asynchronously by default — events are fire
 The **Holds** feature adds a synchronous gate on the `PreToolUse` hook: the agent's tool invocation is paused while AgentGuard ingests the event, waits for streaming SQL rules to evaluate it, and returns one of three decisions — `allow`, `block`, or `hold` (a human-decided pending state). Only when the decision arrives does the agent proceed with — or skip — the tool call.
 
 The mechanism is designed to be:
-- **Opt-in per plugin** — the Claude Code plugin defaults `holdsEnabled` to `false`; enabling adds round-trip latency to every tool call.
+- **Opt-in per plugin** — all plugins default `holdsEnabled` to `false`; enabling adds round-trip latency to every tool call.
 - **Fail-safe** — when the AgentGuard server is unreachable, a per-plugin `holdFailPolicy` decides whether to deny or allow.
 - **Crash-tolerant** — pending holds are persisted in Timeplus; backend restarts mark stale entries as `abandoned` instead of leaving them stuck forever.
 
@@ -271,7 +271,7 @@ The full timeline (for `GET /api/holds/:id`) queries the raw `agentguard_holds` 
 | Env var | Purpose |
 |---|---|
 | `AGENTGUARD_URL` | Where to POST the `/api/holds` request (e.g. `http://localhost:8080`) |
-| `AGENTGUARD_HOLDS_ENABLED` | Per-plugin opt-in. Claude Code's `make install` writes `false`; OpenClaw / Hermes default to `true` |
+| `AGENTGUARD_HOLDS_ENABLED` | Per-plugin opt-in. All plugins now default to `false` (the app's data pipeline is observability-first). Set to `true` to opt in. |
 | `AGENTGUARD_HOLDS_FAIL_POLICY` | What the plugin returns to the agent if the `/api/holds` call itself fails (network error, 5xx) — `deny` or `allow` |
 
 When `AGENTGUARD_HOLDS_ENABLED=false`, the Claude Code plugin still fires `PreToolUse` synchronously (the hook entry has no `async:true`), but short-circuits inside the plugin: it writes a permissive `permissionDecision` to stdout and falls through to the regular async `send()` so the event still lands in `agentguard_hook_events` for observation. **No `/api/holds` call is made.** This keeps observability intact while removing all blocking latency.
@@ -336,7 +336,7 @@ Worst case (full mv_wait_ms)               ~500 ms + I/O
 hold (human-decided)                        seconds to minutes
 ```
 
-Most observability deployments are not willing to pay this on every tool call. That is why `AGENTGUARD_HOLDS_ENABLED` defaults to `false` for Claude Code (the highest-throughput plugin) and is opt-in. OpenClaw and Hermes default it to `true` because their tool-call frequency is lower and their threat surface (general-purpose agents, browser-use agents) is higher.
+Most observability deployments are not willing to pay this on every tool call. That is why `AGENTGUARD_HOLDS_ENABLED` defaults to `false` across all plugins — the AgentGuard app's data pipeline is observability-first. Set the env var (or plugin config flag) to `true` to opt in to synchronous tool-call blocking.
 
 ### Tuning `mv_wait_ms`
 

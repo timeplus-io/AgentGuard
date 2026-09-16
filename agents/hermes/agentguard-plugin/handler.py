@@ -33,6 +33,7 @@ Context keys per event (from official docs):
 Config via environment variables:
   AGENTGUARD_TIMEPLUS_URL    — Timeplus HTTP endpoint (default: http://localhost:3218)
   AGENTGUARD_STREAM          — target stream name (default: agentguard_hook_events)
+  AGENTGUARD_DATABASE        — Timeplus database (default: ag)
   AGENTGUARD_USERNAME        — Timeplus username (default: proton)
   AGENTGUARD_PASSWORD        — Timeplus password (default: empty)
   AGENTGUARD_AGENT_ID        — agent identifier (default: hostname)
@@ -53,6 +54,7 @@ from datetime import datetime, timezone
 # ---------------------------------------------------------------------------
 _TIMEPLUS_URL    = os.environ.get("AGENTGUARD_TIMEPLUS_URL", "http://localhost:3218")
 _STREAM          = os.environ.get("AGENTGUARD_STREAM", "agentguard_hook_events")
+_DATABASE        = os.environ.get("AGENTGUARD_DATABASE", "ag")
 _USERNAME        = os.environ.get("AGENTGUARD_USERNAME", "proton")
 _PASSWORD        = os.environ.get("AGENTGUARD_PASSWORD", "")
 _AGENT_ID        = os.environ.get("AGENTGUARD_AGENT_ID") or socket.gethostname()
@@ -82,7 +84,7 @@ _EVENT_MAP = {
 # Ingest
 # ---------------------------------------------------------------------------
 def _ingest(rows: list) -> None:
-    url = f"{_TIMEPLUS_URL.rstrip('/')}/proton/v1/ingest/streams/{_STREAM}"
+    url = f"{_TIMEPLUS_URL.rstrip('/')}/timeplusd/v2/ingest/{_DATABASE}/streams/{_STREAM}"
     payload = json.dumps({"columns": _COLUMNS, "data": rows}).encode()
     req = urllib.request.Request(url, data=payload, method="POST")
     req.add_header("Content-Type", "application/json")
@@ -93,7 +95,7 @@ def _ingest(rows: list) -> None:
         with urllib.request.urlopen(req, timeout=5) as resp:
             resp.read()
     except urllib.error.URLError as e:
-        print(f"[agentguard] ingest error: {e}", flush=True)
+        print(f"[agentguard] ingest error: url={url} error={e}", flush=True)
 
 
 def _row(hook_name: str, ctx: dict, tool_name: str = "", model: str = "") -> list:

@@ -68,7 +68,7 @@ async function main(): Promise<void> {
   // SessionEnd: fire-and-forget abandon-session to clean up zombie holds.
   if (hookEventName === "SessionEnd") {
     const sessionId = typeof input["session_id"] === "string" ? input["session_id"] : "";
-    if (sessionId) {
+    if (sessionId && config.holdsEnabled) {
       fetch(`${config.agentguardUrl}/api/holds/_abandon-session/${encodeURIComponent(sessionId)}`, {
         method: "POST",
       }).catch(() => { /* best-effort */ });

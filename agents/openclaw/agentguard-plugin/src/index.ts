@@ -14,7 +14,7 @@ export default definePluginEntry({
     const client = createTimeplusClient(config);
     registerAllHooks(api, client, config);
     api.logger.info(
-      `[agentguard] active — streaming to ${config.timeplusUrl}/proton/v1/ingest/streams/${config.stream} ` +
+      `[agentguard] active — streaming to ${config.timeplusUrl}/timeplusd/v2/ingest/${config.database}/streams/${config.stream} ` +
         `(flush every ${config.flushMs}ms, batch size ${config.batchSize}) ` +
         `deployment=${config.deploymentId}`,
     );

@@ -4,6 +4,7 @@ import type { HookEvent } from "./timeplus-client.js";
 
 const BASE_CONFIG = {
   timeplusUrl: "http://localhost:3218",
+  database: "ag",
   stream: "agentguard_hook_events",
   flushMs: 60000, // long interval so timer doesn't auto-flush during tests
   batchSize: 50,
@@ -57,7 +58,7 @@ describe("TimeplusClient", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
-      "http://localhost:3218/proton/v1/ingest/streams/agentguard_hook_events",
+      "http://localhost:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events",
     );
     expect(opts.method).toBe("POST");
 

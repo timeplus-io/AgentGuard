@@ -8,6 +8,9 @@
       "timeplusUrl": {
         "type": "string"
       },
+      "database": {
+        "type": "string"
+      },
       "stream": {
         "type": "string"
       },
@@ -40,7 +43,7 @@
       },
       "holdsEnabled": {
         "type": "boolean",
-        "description": "When true (default), before_tool_call synchronously calls /api/holds and may block. When false, hook reverts to async observation-only mode (events still ingested, no blocking)."
+        "description": "When true, before_tool_call synchronously calls /api/holds and may block. When false, hook reverts to async observation-only mode (events still ingested, no blocking)."
       }
     }
   }

@@ -1,5 +1,6 @@
 export type AgentGuardConfig = {
   timeplusUrl: string;
+  database: string;
   stream: string;
   flushMs: number;
   batchSize: number;
@@ -14,6 +15,7 @@ export type AgentGuardConfig = {
 
 const DEFAULTS: AgentGuardConfig = {
   timeplusUrl: "http://localhost:3218",
+  database: "ag",
   stream: "agentguard_hook_events",
   flushMs: 2000,
   batchSize: 50,
@@ -26,7 +28,7 @@ const DEFAULTS: AgentGuardConfig = {
   // Docker-appropriate URL (host.docker.internal) into openclaw.json explicitly.
   agentguardUrl: "http://localhost:8080",
   holdFailPolicy: "deny",
-  holdsEnabled: true,
+  holdsEnabled: false,
 };
 
 export function resolveConfig(
@@ -36,6 +38,11 @@ export function resolveConfig(
     (process.env.AGENTGUARD_TIMEPLUS_URL || undefined) ??
     (pluginConfig?.timeplusUrl as string | undefined) ??
     DEFAULTS.timeplusUrl;
+
+  const database =
+    (process.env.AGENTGUARD_DATABASE || undefined) ??
+    (pluginConfig?.database as string | undefined) ??
+    DEFAULTS.database;
 
   const stream =
     (process.env.AGENTGUARD_STREAM || undefined) ??
@@ -94,13 +101,14 @@ export function resolveConfig(
   const pluginHolds = pluginConfig?.holdsEnabled;
   const holdsEnabled =
     envHolds !== undefined
-      ? envHolds.toLowerCase() !== "false"
+      ? envHolds.toLowerCase() === "true"
       : typeof pluginHolds === "boolean"
         ? pluginHolds
         : DEFAULTS.holdsEnabled;
 
   return {
     timeplusUrl,
+    database,
     stream,
     flushMs,
     batchSize,

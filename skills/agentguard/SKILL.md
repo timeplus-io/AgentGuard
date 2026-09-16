@@ -37,8 +37,9 @@ Every agent needs these values. Ask user to provide ALL of them before running t
 | `TIMEPLUS_URL` | http://localhost:3218 | Timeplus HTTP endpoint |
 | `TIMEPLUS_USER` | | Timeplus username |
 | `TIMEPLUS_PASSWORD` | | Timeplus password |
+| `AGENTGUARD_DATABASE` | ag | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
 | `AGENTGUARD_URL` | http://localhost:8080 | AgentGuard backend (for hold callbacks) |
-| `HOLDS_ENABLED` | true | Enable synchronous tool-call blocking |
+| `HOLDS_ENABLED` | false | Opt-in to synchronous tool-call blocking. Set to `true` to enable. |
 | `HOLD_FAIL_POLICY` | deny | deny (block on error) or allow (fail open) |
 
 
@@ -65,6 +66,7 @@ Note that user may already configured "env" and "hooks" keys. Do not replace the
         "AGENTGUARD_DEPLOYMENT_ID": <DEPLOYMENT_ID>,
         "AGENTGUARD_DEPLOYMENT_NAME": <DEPLOYMENT_NAME>,
         "AGENTGUARD_TIMEPLUS_URL": <TIMEPLUS_URL>,
+        "AGENTGUARD_DATABASE": <AGENTGUARD_DATABASE>,
         "AGENTGUARD_STREAM": "agentguard_hook_events",
         "AGENTGUARD_USERNAME": <TIMEPLUS_USER>,
         "AGENTGUARD_PASSWORD": <TIMEPLUS_PASSWORD>,
@@ -166,6 +168,7 @@ Add / update below content in openclaw.json. The parameters surrounded by '<>' a
                     "batchSize": 50,
                     "username": <TIMEPLUS_USER>,
                     "password": <TIMEPLUS_PASSWORD>,
+                    "database": <AGENTGUARD_DATABASE>,
                     "deploymentId": <DEPLOYMENT_ID>,
                     "deploymentName": <DEPLOYMENT_NAME>,
                     "agentguardUrl": <AGENTGUARD_URL>,
@@ -205,5 +208,6 @@ Modify the shell configuration file to set the environment variables by the user
 - AGENTGUARD_DEPLOYMENT_ID
 - AGENTGUARD_DEPLOYMENT_NAME
 - AGENTGUARD_URL
+- AGENTGUARD_DATABASE
 - AGENTGUARD_HOLDS_ENABLED
 - AGENTGUARD_HOLDS_FAIL_POLICY

@@ -25,7 +25,7 @@ const COLUMNS: (keyof HookEvent)[] = [
 ];
 
 export async function send(event: HookEvent, config: AgentGuardConfig): Promise<void> {
-  const url = `${config.timeplusUrl}/proton/v1/ingest/streams/${config.stream}`;
+  const url = `${config.timeplusUrl}/timeplusd/v2/ingest/${config.database}/streams/${config.stream}`;
   const authHeader = `Basic ${btoa(`${config.username}:${config.password}`)}`;
   const body = JSON.stringify({
     columns: COLUMNS,

@@ -60,7 +60,8 @@ After installation, quit and reopen Claude Code for the hooks to take effect.
   "env": {
     "AGENTGUARD_AGENT_ID": "<your-hostname>",
     "AGENTGUARD_TIMEPLUS_URL": "http://localhost:3218",
-    "AGENTGUARD_HOLDS_ENABLED": "true",
+    "AGENTGUARD_DATABASE": "ag",
+    "AGENTGUARD_HOLDS_ENABLED": "false",
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
     "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
     "..."
@@ -124,6 +125,7 @@ All variables written by the installer:
 | `AGENTGUARD_DEPLOYMENT_ID` | CC, OC, Hermes | Logical deployment group |
 | `AGENTGUARD_DEPLOYMENT_NAME` | CC, OC, Hermes | Human-readable deployment label |
 | `AGENTGUARD_TIMEPLUS_URL` | CC, OC, Hermes | Timeplus HTTP endpoint |
+| `AGENTGUARD_DATABASE` | CC, OC, Hermes | Timeplus database owning the AgentGuard streams (default `ag`, the app's `db_name`) |
 | `AGENTGUARD_USERNAME` | CC, OC, Hermes | Timeplus username |
 | `AGENTGUARD_PASSWORD` | CC, OC, Hermes | Timeplus password |
 | `AGENTGUARD_STREAM` | CC, OC | Target Timeplus stream (`agentguard_hook_events`) |

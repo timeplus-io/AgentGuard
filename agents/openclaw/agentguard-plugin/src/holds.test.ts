@@ -5,6 +5,7 @@ import type { AgentGuardConfig } from "./config.js";
 
 const BASE_CONFIG: AgentGuardConfig = {
   timeplusUrl:    "http://localhost:3218",
+  database:       "ag",
   stream:         "agentguard_hook_events",
   flushMs:        2000,
   batchSize:      50,
@@ -14,6 +15,7 @@ const BASE_CONFIG: AgentGuardConfig = {
   deploymentName: "D",
   agentguardUrl:  "http://localhost:8080",
   holdFailPolicy: "deny",
+  holdsEnabled:   true,
 };
 
 const BASE_EVENT: HookEvent = {
