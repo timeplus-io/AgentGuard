@@ -107,7 +107,7 @@ export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
 # AGENTGUARD_TIMEPLUS_URL defaults to http://localhost:3218
 # AGENTGUARD_DATABASE defaults to "ag"
 # AGENTGUARD_URL defaults to http://localhost:8080
-# AGENTGUARD_HOLDS_ENABLED defaults to false and disable synchrounous tool blocking
+# AGENTGUARD_HOLDS_ENABLED defaults to false and disables synchrounous tool blocking
 ```
 
 ### Server-side prerequisite — Timeplus service credentials

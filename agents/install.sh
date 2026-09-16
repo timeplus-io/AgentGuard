@@ -109,10 +109,10 @@ TIMEPLUS_USERNAME=$(prompt "Timeplus Username"                "proton")
 TIMEPLUS_PASSWORD=$(prompt_secret "Timeplus Password")
 TIMEPLUS_DATABASE=$(prompt "AgentGuard Database"              "ag")
 echo ""
+AGENTGUARD_URL=$(prompt "AgentGuard URL"                      "http://localhost:8080")
 
-# Do NOT ask AGENTGUARD_URL and HOLDS_ENABLED since AgentGuard is changed as app.
+# Do NOT ask HOLDS_ENABLED since AgentGuard is changed as app.
 # HOLDS_ENABLED is always false 
-# AGENTGUARD_URL=$(prompt "AgentGuard URL"                      "http://localhost:8080")
 # echo ""
 # read -rp "  Enable holds (synchronous tool-call blocking)? [y/N]: " holds_yn
 # if [[ "$holds_yn" =~ ^[Yy]$ ]]; then
