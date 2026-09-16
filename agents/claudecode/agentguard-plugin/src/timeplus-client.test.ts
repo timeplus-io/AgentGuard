@@ -60,7 +60,7 @@ describe("send (timeplus-client)", () => {
     );
   });
 
-  it("omits the database query when database='default'", async () => {
+  it("uses the configured database verbatim in the ingest URL", async () => {
     await send(SAMPLE_EVENT, { ...BASE_CONFIG, database: "default" });
     const url = (fetchMock.mock.calls[0] as [string])[0];
     expect(url).toBe(
