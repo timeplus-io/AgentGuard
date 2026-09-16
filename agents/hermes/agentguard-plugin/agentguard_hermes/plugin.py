@@ -9,8 +9,7 @@ unboundedly. The system prompt is not exposed by any Hermes plugin hook.
 Also synchronously blocks risky tool calls based on rule decisions from the
 AgentGuard server: pre_tool_call POSTs to /api/holds and returns
 {"action": "block", "message": "..."} when the backend denies. The hold path
-is enabled by default and can be disabled via AGENTGUARD_HOLDS_ENABLED=false
-to revert to async observation-only mode.
+is opt-in — set AGENTGUARD_HOLDS_ENABLED=true to enable synchronous tool-call blocking.
 
 Plugin hooks (CLI + gateway):
   on_session_start      session_id, model, platform
