@@ -161,7 +161,7 @@ def _ingest(rows: list) -> None:
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             resp.read()
-    except urllib.error.URLError as e:
+    except Exception as e:
         print(f"[agentguard] ingest error: url={url} error={e}", flush=True)
 
 
