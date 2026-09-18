@@ -125,3 +125,55 @@ describe("resolveConfig", () => {
     expect(resolveConfig().holdsEnabled).toBe(false);
   });
 });
+
+describe("resolveConfig ingest API selection (#299)", () => {
+  const ORIGINAL_ENV = { ...process.env };
+
+  beforeEach(() => {
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith("AGENTGUARD_")) delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith("AGENTGUARD_")) delete process.env[key];
+    }
+    Object.assign(process.env, ORIGINAL_ENV);
+  });
+
+  it("defaults to the timeplusd ingest API with default workspace and no API key", () => {
+    const cfg = resolveConfig();
+    expect(cfg.ingestApi).toBe("timeplusd");
+    expect(cfg.workspace).toBe("default");
+    expect(cfg.apiKey).toBe("");
+  });
+
+  it("reads AGENTGUARD_INGEST_API=rest from env", () => {
+    process.env.AGENTGUARD_INGEST_API = "rest";
+    expect(resolveConfig().ingestApi).toBe("rest");
+  });
+
+  it("falls back to timeplusd for an unknown AGENTGUARD_INGEST_API value", () => {
+    process.env.AGENTGUARD_INGEST_API = "bogus";
+    expect(resolveConfig().ingestApi).toBe("timeplusd");
+  });
+
+  it("implies rest mode when only AGENTGUARD_API_KEY is set", () => {
+    process.env.AGENTGUARD_API_KEY = "k-123";
+    const cfg = resolveConfig();
+    expect(cfg.ingestApi).toBe("rest");
+    expect(cfg.apiKey).toBe("k-123");
+  });
+
+  it("explicit AGENTGUARD_INGEST_API=timeplusd wins over a set API key", () => {
+    process.env.AGENTGUARD_API_KEY = "k-123";
+    process.env.AGENTGUARD_INGEST_API = "timeplusd";
+    expect(resolveConfig().ingestApi).toBe("timeplusd");
+  });
+
+  it("reads AGENTGUARD_WORKSPACE from env", () => {
+    process.env.AGENTGUARD_WORKSPACE = "ws-42";
+    expect(resolveConfig().workspace).toBe("ws-42");
+  });
+});

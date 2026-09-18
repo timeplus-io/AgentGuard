@@ -24,9 +24,30 @@ const COLUMNS: (keyof HookEvent)[] = [
   "provider", "model", "hook_decision", "block_reason", "event_data", "agent_type",
 ];
 
+/**
+ * Ingest endpoint for the configured API surface.
+ *  timeplusd: {url}/timeplusd/v2/ingest/{db}/streams/{stream}
+ *  rest:      {url}/{workspace}/api/v1beta2/streams/{stream}/ingest?db={db}
+ * Both accept the same compact `{columns, data}` body.
+ */
+export function buildIngestUrl(config: AgentGuardConfig): string {
+  const base = config.timeplusUrl.replace(/\/+$/, "");
+  if (config.ingestApi === "rest") {
+    return `${base}/${config.workspace}/api/v1beta2/streams/${config.stream}/ingest?db=${config.database}`;
+  }
+  return `${base}/timeplusd/v2/ingest/${config.database}/streams/${config.stream}`;
+}
+
+/** API key (REST API only) when configured, otherwise Basic auth. */
+export function authHeaders(config: AgentGuardConfig): Record<string, string> {
+  if (config.ingestApi === "rest" && config.apiKey) {
+    return { "X-Api-Key": config.apiKey };
+  }
+  return { Authorization: `Basic ${btoa(`${config.username}:${config.password}`)}` };
+}
+
 export async function send(event: HookEvent, config: AgentGuardConfig): Promise<void> {
-  const url = `${config.timeplusUrl}/timeplusd/v2/ingest/${config.database}/streams/${config.stream}`;
-  const authHeader = `Basic ${btoa(`${config.username}:${config.password}`)}`;
+  const url = buildIngestUrl(config);
   const body = JSON.stringify({
     columns: COLUMNS,
     data: [COLUMNS.map((col) => event[col])],
@@ -36,7 +57,7 @@ export async function send(event: HookEvent, config: AgentGuardConfig): Promise<
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": authHeader,
+        ...authHeaders(config),
       },
       body,
     });

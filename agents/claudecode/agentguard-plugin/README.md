@@ -87,7 +87,10 @@ Set these environment variables in your shell profile (e.g. `~/.zshrc` or `~/.ba
 | `AGENTGUARD_AGENT_ID`                 | `""` (required)             | Identifies this Claude Code instance                                        |
 | `AGENTGUARD_DEPLOYMENT_ID`            | `"default"`                 | Deployment group identifier                                                 |
 | `AGENTGUARD_DEPLOYMENT_NAME`          | `"Default"`                 | Human-readable deployment name                                              |
-| `AGENTGUARD_TIMEPLUS_URL`             | `http://localhost:3218`     | Timeplus Proton HTTP API base URL (async event ingest)                      |
+| `AGENTGUARD_TIMEPLUS_URL`             | `http://localhost:3218`     | Timeplus base URL for event ingest. timeplusd HTTP port (3218) in `timeplusd` mode; REST API base (port 8000, or the Timeplus Cloud HTTPS URL) in `rest` mode |
+| `AGENTGUARD_INGEST_API`               | `timeplusd`                 | `timeplusd` = POST straight to timeplusd (`/timeplusd/v2/ingest/…`); `rest` = the Timeplus REST API (`/{workspace}/api/v1beta2/streams/{stream}/ingest`), the only surface exposed by Timeplus Cloud / gateway deployments |
+| `AGENTGUARD_API_KEY`                  | `""`                        | Timeplus API key (`X-Api-Key`). Setting it implies `rest` mode and replaces Basic auth |
+| `AGENTGUARD_WORKSPACE`                | `"default"`                 | REST API workspace id in the URL path. Rarely needed — only if your Timeplus Cloud workspace id is not `default` |
 | `AGENTGUARD_DATABASE`                 | `"ag"`                      | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
 | `AGENTGUARD_STREAM`                   | `agentguard_hook_events`    | Target stream name                                                          |
 | `AGENTGUARD_USERNAME`                 | `proton`                    | Timeplus username                                                           |
@@ -108,6 +111,15 @@ export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
 # AGENTGUARD_DATABASE defaults to "ag"
 # AGENTGUARD_URL defaults to http://localhost:8080
 # AGENTGUARD_HOLDS_ENABLED defaults to false and disables synchrounous tool blocking
+```
+
+Timeplus Cloud (or any deployment where only the Timeplus REST API is exposed):
+
+```bash
+export AGENTGUARD_INGEST_API=rest
+export AGENTGUARD_TIMEPLUS_URL=https://us-west-2.timeplus.cloud   # or http://timeplus-host:8000 self-hosted
+export AGENTGUARD_API_KEY=<api key from the Timeplus web console>
+# AGENTGUARD_WORKSPACE defaults to "default"; the payload is identical in both modes
 ```
 
 ### Server-side prerequisite — Timeplus service credentials

@@ -40,6 +40,9 @@ Config is resolved by merging two sources, with **environment variables taking p
 | Field | Default |
 |---|---|
 | `timeplusUrl` | `http://localhost:3218` |
+| `ingestApi` | `timeplusd` (`rest` = Timeplus REST API, port 8000 / Timeplus Cloud) |
+| `apiKey` | `` (empty) — Timeplus API key; implies `rest`, replaces Basic auth |
+| `workspace` | `default` — REST API workspace id |
 | `stream` | `agentguard_hook_events` |
 | `flushMs` | `2000` |
 | `batchSize` | `50` |
@@ -74,6 +77,9 @@ All fields are optional. The plugin works out of the box with zero configuration
 | Env var | Field |
 |---|---|
 | `AGENTGUARD_TIMEPLUS_URL` | `timeplusUrl` |
+| `AGENTGUARD_INGEST_API` | `ingestApi` |
+| `AGENTGUARD_API_KEY` | `apiKey` |
+| `AGENTGUARD_WORKSPACE` | `workspace` |
 | `AGENTGUARD_STREAM` | `stream` |
 | `AGENTGUARD_FLUSH_MS` | `flushMs` |
 | `AGENTGUARD_BATCH_SIZE` | `batchSize` |
@@ -233,7 +239,7 @@ docker logs openclaw 2>&1 | grep agentguard
 Expected:
 
 ```
-[agentguard] active — streaming to http://host.docker.internal:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events (flush every 2000ms, batch size 50)
+[agentguard] active — streaming to http://host.docker.internal:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events (timeplusd) (flush every 2000ms, batch size 50)
 ```
 
 ### Query events in Timeplus

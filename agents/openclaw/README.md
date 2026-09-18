@@ -110,6 +110,14 @@ export AGENTGUARD_USERNAME=proton
 export AGENTGUARD_PASSWORD=your-password
 ```
 
+For Timeplus Cloud, or any deployment where only the Timeplus REST API (port 8000) is exposed, switch the ingest API and use an API key instead of a password:
+
+```bash
+export AGENTGUARD_INGEST_API=rest
+export AGENTGUARD_TIMEPLUS_URL=https://us-west-2.timeplus.cloud   # or http://timeplus-host:8000
+export AGENTGUARD_API_KEY=<api key from the Timeplus web console>
+```
+
 Or set the equivalent fields under `plugins.entries.agentguard.config` in `openclaw.json` (see [Plugin configuration](#plugin-configuration-in-openclaw.json) below).
 
 ### Installation (Docker volume mount — this repo)
@@ -155,6 +163,9 @@ All config fields except `deploymentId` and `deploymentName` can be overridden w
 | Env var | Config field | Default |
 |---|---|---|
 | `AGENTGUARD_TIMEPLUS_URL` | `timeplusUrl` | `http://localhost:3218` |
+| `AGENTGUARD_INGEST_API` | `ingestApi` | `timeplusd` (`rest` = Timeplus REST API, port 8000 / Timeplus Cloud) |
+| `AGENTGUARD_API_KEY` | `apiKey` | _(empty)_ — Timeplus API key; implies `rest`, replaces Basic auth |
+| `AGENTGUARD_WORKSPACE` | `workspace` | `default` — REST API workspace id, rarely needed |
 | `AGENTGUARD_STREAM` | `stream` | `agentguard_hook_events` |
 | `AGENTGUARD_FLUSH_MS` | `flushMs` | `2000` |
 | `AGENTGUARD_BATCH_SIZE` | `batchSize` | `50` |
@@ -170,7 +181,7 @@ docker logs openclaw 2>&1 | grep agentguard
 Expected output:
 
 ```
-[agentguard] active — streaming to http://host.docker.internal:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events (flush every 2000ms, batch size 50) deployment=my-team
+[agentguard] active — streaming to http://host.docker.internal:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events (timeplusd) (flush every 2000ms, batch size 50) deployment=my-team
 ```
 
 ### Query hook events in Timeplus

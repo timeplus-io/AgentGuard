@@ -32,6 +32,9 @@ Context keys per event (from official docs):
 
 Config via environment variables:
   AGENTGUARD_TIMEPLUS_URL    — Timeplus HTTP endpoint (default: http://localhost:3218)
+  AGENTGUARD_INGEST_API      — timeplusd (default, port 3218) or rest (Timeplus REST API, port 8000 / cloud)
+  AGENTGUARD_API_KEY         — Timeplus API key; when set, implies rest and replaces Basic auth
+  AGENTGUARD_WORKSPACE       — REST API workspace id (default: default)
   AGENTGUARD_STREAM          — target stream name (default: agentguard_hook_events)
   AGENTGUARD_DATABASE        — Timeplus database (default: ag)
   AGENTGUARD_USERNAME        — Timeplus username (default: proton)
@@ -57,6 +60,20 @@ _STREAM          = os.environ.get("AGENTGUARD_STREAM", "agentguard_hook_events")
 _DATABASE        = os.environ.get("AGENTGUARD_DATABASE", "ag")
 _USERNAME        = os.environ.get("AGENTGUARD_USERNAME", "proton")
 _PASSWORD        = os.environ.get("AGENTGUARD_PASSWORD", "")
+
+# Which Timeplus HTTP surface receives hook events (#299):
+#   "timeplusd" — timeplusd's own HTTP interface (port 3218), the default.
+#   "rest"      — the Timeplus REST API served by the web/API server (port 8000,
+#                 or Timeplus Cloud over HTTPS); the only surface exposed when
+#                 timeplusd is not directly reachable.
+# An explicit value wins; otherwise a configured API key implies "rest".
+_API_KEY         = os.environ.get("AGENTGUARD_API_KEY", "")
+_WORKSPACE       = os.environ.get("AGENTGUARD_WORKSPACE", "default")
+_INGEST_API_RAW  = os.environ.get("AGENTGUARD_INGEST_API", "").strip().lower()
+_INGEST_API      = (
+    _INGEST_API_RAW if _INGEST_API_RAW in ("timeplusd", "rest")
+    else ("rest" if _API_KEY else "timeplusd")
+)
 _AGENT_ID        = os.environ.get("AGENTGUARD_AGENT_ID") or socket.gethostname()
 _DEPLOYMENT_ID   = os.environ.get("AGENTGUARD_DEPLOYMENT_ID", "local")
 _DEPLOYMENT_NAME = os.environ.get("AGENTGUARD_DEPLOYMENT_NAME", "Local Dev")
@@ -83,14 +100,36 @@ _EVENT_MAP = {
 # ---------------------------------------------------------------------------
 # Ingest
 # ---------------------------------------------------------------------------
+def _ingest_url() -> str:
+    """Ingest endpoint for the configured API surface.
+
+    timeplusd: {url}/timeplusd/v2/ingest/{db}/streams/{stream}
+    rest:      {url}/{workspace}/api/v1beta2/streams/{stream}/ingest?db={db}
+    Both accept the same compact {"columns", "data"} body.
+    """
+    base = _TIMEPLUS_URL.rstrip("/")
+    if _INGEST_API == "rest":
+        return f"{base}/{_WORKSPACE}/api/v1beta2/streams/{_STREAM}/ingest?db={_DATABASE}"
+    return f"{base}/timeplusd/v2/ingest/{_DATABASE}/streams/{_STREAM}"
+
+
+def _auth_headers() -> dict:
+    """API key (REST API only) when configured, otherwise Basic auth."""
+    if _INGEST_API == "rest" and _API_KEY:
+        return {"X-Api-Key": _API_KEY}
+    if _USERNAME:
+        token = b64encode(f"{_USERNAME}:{_PASSWORD}".encode()).decode()
+        return {"Authorization": f"Basic {token}"}
+    return {}
+
+
 def _ingest(rows: list) -> None:
-    url = f"{_TIMEPLUS_URL.rstrip('/')}/timeplusd/v2/ingest/{_DATABASE}/streams/{_STREAM}"
+    url = _ingest_url()
     payload = json.dumps({"columns": _COLUMNS, "data": rows}).encode()
     req = urllib.request.Request(url, data=payload, method="POST")
     req.add_header("Content-Type", "application/json")
-    if _USERNAME:
-        token = b64encode(f"{_USERNAME}:{_PASSWORD}".encode()).decode()
-        req.add_header("Authorization", f"Basic {token}")
+    for k, v in _auth_headers().items():
+        req.add_header(k, v)
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             resp.read()
