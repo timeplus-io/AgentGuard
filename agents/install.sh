@@ -388,11 +388,11 @@ if [[ "$AGENT_TYPE" == "hermes" ]]; then
     # ── Offline: install from local wheel ──────────────────────────────────
     PLUGIN_WHL=$(find_package "Hermes" "${PACKAGE_DIR}/*agentguard*hermes*.whl")
     echo "Installing agentguard-hermes-plugin from ${PLUGIN_WHL}..."
-    "$PIP_CMD" install --no-deps "$PLUGIN_WHL"
+    "$PIP_CMD" install --upgrade --no-deps "$PLUGIN_WHL"
   else
     # ── Online: install from PyPI ───────────────────────────────────────────
     echo "Installing agentguard-hermes-plugin..."
-    "$PIP_CMD" install agentguard-hermes-plugin
+    "$PIP_CMD" install --upgrade agentguard-hermes-plugin
   fi
 
   agentguard-hermes install
