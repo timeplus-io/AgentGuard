@@ -47,7 +47,9 @@ Set environment variables before starting Hermes:
 
 | Variable | Default | Description |
 |---|---|---|
-| `AGENTGUARD_TIMEPLUS_URL` | `http://localhost:3218` | Timeplus Enterprise HTTP endpoint |
+| `AGENTGUARD_TIMEPLUS_URL` | `http://localhost:3218` | Timeplus base URL. timeplusd HTTP port (3218) in `timeplusd` mode; the web console / REST API base (port 8000, or its HTTPS URL behind an ingress) in `rest` mode |
+| `AGENTGUARD_INGEST_API` | `timeplusd` | `timeplusd` = POST straight to timeplusd; `rest` = the Timeplus REST API (`/{workspace}/api/v1beta2/streams/{stream}/ingest`) for deployments where port 3218 is not exposed. Same username/password (Basic auth) in both modes |
+| `AGENTGUARD_WORKSPACE` | `default` | REST API workspace id in the URL path. Rarely needed |
 | `AGENTGUARD_DATABASE` | `"ag"` | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
 | `AGENTGUARD_USERNAME` | `proton` | Timeplus username |
 | `AGENTGUARD_PASSWORD` | _(empty)_ | Timeplus password |
@@ -85,11 +87,14 @@ For the standard `docker-compose.yaml` setup these are pre-set to `proton` / `ti
 ### Example
 
 ```bash
-# Async ingest
+# Async ingest — self-hosted, timeplusd reachable
 export AGENTGUARD_TIMEPLUS_URL=http://timeplus.example.com:3218
 export AGENTGUARD_DATABASE=ag
 export AGENTGUARD_USERNAME=proton
 export AGENTGUARD_PASSWORD=secret
+# …or via the Timeplus REST API when port 3218 is not exposed (same credentials)
+# export AGENTGUARD_INGEST_API=rest
+# export AGENTGUARD_TIMEPLUS_URL=http://timeplus.example.com:8000
 
 # Identity
 export AGENTGUARD_DEPLOYMENT_ID=production

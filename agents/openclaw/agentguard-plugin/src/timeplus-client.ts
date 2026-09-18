@@ -45,9 +45,31 @@ function capEventData(s: string): string {
   return `${head}...[truncated ${s.length}→${EVENT_DATA_MAX_BYTES} bytes]`;
 }
 
+/**
+ * Ingest endpoint for the configured API surface.
+ *  timeplusd: {url}/timeplusd/v2/ingest/{db}/streams/{stream}
+ *  rest:      {url}/{workspace}/api/v1beta2/streams/{stream}/ingest?db={db}
+ * Both accept the same compact `{columns, data}` body.
+ */
+export function buildIngestUrl(config: AgentGuardConfig): string {
+  const base = config.timeplusUrl.replace(/\/+$/, "");
+  if (config.ingestApi === "rest") {
+    return `${base}/${config.workspace}/api/v1beta2/streams/${config.stream}/ingest?db=${config.database}`;
+  }
+  return `${base}/timeplusd/v2/ingest/${config.database}/streams/${config.stream}`;
+}
+
+/**
+ * Basic auth with the Timeplus username/password in both modes — the REST API
+ * validates the credentials against timeplusd, so no separate key is needed.
+ */
+export function authHeaders(config: AgentGuardConfig): Record<string, string> {
+  return { Authorization: `Basic ${btoa(`${config.username}:${config.password}`)}` };
+}
+
 async function postBatch(
   url: string,
-  authHeader: string,
+  headers: Record<string, string>,
   batch: HookEvent[],
 ): Promise<void> {
   const body = JSON.stringify({
@@ -58,7 +80,7 @@ async function postBatch(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": authHeader,
+      ...headers,
     },
     body,
   });
@@ -68,8 +90,8 @@ async function postBatch(
 }
 
 export function createTimeplusClient(config: AgentGuardConfig): TimeplusClient {
-  const url = `${config.timeplusUrl}/timeplusd/v2/ingest/${config.database}/streams/${config.stream}`;
-  const authHeader = `Basic ${btoa(`${config.username}:${config.password}`)}`;
+  const url = buildIngestUrl(config);
+  const headers = authHeaders(config);
   const queue: HookEvent[] = [];
   let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -80,11 +102,11 @@ export function createTimeplusClient(config: AgentGuardConfig): TimeplusClient {
     // preventing the same events from being sent twice.
     const batch = queue.splice(0, queue.length);
     try {
-      await postBatch(url, authHeader, batch);
+      await postBatch(url, headers, batch);
     } catch {
       // retry once immediately, then drop the batch
       try {
-        await postBatch(url, authHeader, batch);
+        await postBatch(url, headers, batch);
       } catch (err) {
         console.error("[agentguard] Failed to flush batch, dropping:", err);
       }

@@ -1,5 +1,23 @@
+/**
+ * Which Timeplus HTTP surface receives hook events.
+ *  - "timeplusd": timeplusd's own HTTP interface (port 3218) — the default.
+ *  - "rest":      the Timeplus REST API served by the web console / API
+ *                 server (port 8000, or its HTTPS ingress) — for deployments
+ *                 where timeplusd is not directly reachable. Same Basic-auth
+ *                 username/password as timeplusd.
+ */
+export type IngestApi = "timeplusd" | "rest";
+
+/** Unknown / unset values fall back to the default (timeplusd). */
+export function resolveIngestApi(raw: string | undefined): IngestApi {
+  const v = raw?.trim().toLowerCase();
+  return v === "rest" ? "rest" : "timeplusd";
+}
+
 export type AgentGuardConfig = {
   timeplusUrl: string;
+  ingestApi: IngestApi;
+  workspace: string;
   database: string;
   stream: string;
   flushMs: number;
@@ -15,6 +33,8 @@ export type AgentGuardConfig = {
 
 const DEFAULTS: AgentGuardConfig = {
   timeplusUrl: "http://localhost:3218",
+  ingestApi: "timeplusd",
+  workspace: "default",
   database: "ag",
   stream: "agentguard_hook_events",
   flushMs: 2000,
@@ -38,6 +58,16 @@ export function resolveConfig(
     (process.env.AGENTGUARD_TIMEPLUS_URL || undefined) ??
     (pluginConfig?.timeplusUrl as string | undefined) ??
     DEFAULTS.timeplusUrl;
+
+  const ingestApi = resolveIngestApi(
+    (process.env.AGENTGUARD_INGEST_API || undefined) ??
+      (pluginConfig?.ingestApi as string | undefined),
+  );
+
+  const workspace =
+    (process.env.AGENTGUARD_WORKSPACE || undefined) ??
+    (pluginConfig?.workspace as string | undefined) ??
+    DEFAULTS.workspace;
 
   const database =
     (process.env.AGENTGUARD_DATABASE || undefined) ??
@@ -108,6 +138,8 @@ export function resolveConfig(
 
   return {
     timeplusUrl,
+    ingestApi,
+    workspace,
     database,
     stream,
     flushMs,

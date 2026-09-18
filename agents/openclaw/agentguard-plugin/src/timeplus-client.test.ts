@@ -164,3 +164,74 @@ describe("TimeplusClient", () => {
     await client.close();
   });
 });
+
+describe("TimeplusClient via the Timeplus REST API (#299)", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  const REST_CONFIG = {
+    ...BASE_CONFIG,
+    ingestApi: "rest",
+    timeplusUrl: "https://us-west-2.timeplus.cloud",
+    workspace: "default",
+    username: "u",
+    password: "p",
+  };
+
+  beforeEach(() => {
+    fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("builds the workspace-prefixed v1beta2 ingest URL with db query param", async () => {
+    const client = createTimeplusClient(REST_CONFIG as never);
+    client.enqueue(makeEvent("session_start"));
+    await client.flush();
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toBe(
+      "https://us-west-2.timeplus.cloud/default/api/v1beta2/streams/agentguard_hook_events/ingest?db=ag",
+    );
+    await client.close();
+  });
+
+  it("uses the configured workspace and tolerates a trailing slash on the base URL", async () => {
+    const client = createTimeplusClient({
+      ...REST_CONFIG,
+      timeplusUrl: "http://localhost:8000/",
+      workspace: "ws-42",
+    } as never);
+    client.enqueue(makeEvent("session_start"));
+    await client.flush();
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toBe(
+      "http://localhost:8000/ws-42/api/v1beta2/streams/agentguard_hook_events/ingest?db=ag",
+    );
+    await client.close();
+  });
+
+  it("authenticates with Basic auth using the Timeplus username/password in rest mode", async () => {
+    const client = createTimeplusClient(REST_CONFIG as never);
+    client.enqueue(makeEvent("session_start"));
+    await client.flush();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe(`Basic ${btoa("u:p")}`);
+    await client.close();
+  });
+
+  it("default (timeplusd) config still hits the legacy path with Basic auth", async () => {
+    const client = createTimeplusClient({ ...BASE_CONFIG, username: "proton", password: "" } as never);
+    client.enqueue(makeEvent("session_start"));
+    await client.flush();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "http://localhost:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events",
+    );
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe(`Basic ${btoa("proton:")}`);
+    await client.close();
+  });
+});

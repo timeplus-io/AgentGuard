@@ -5,6 +5,8 @@ import type { HookEvent } from "./timeplus-client.js";
 
 const BASE_CONFIG: AgentGuardConfig = {
   timeplusUrl: "http://localhost:3218",
+  ingestApi: "timeplusd",
+  workspace: "default",
   database: "ag",
   stream: "agentguard_hook_events",
   username: "proton",
@@ -95,5 +97,82 @@ describe("send (timeplus-client)", () => {
     fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
     await expect(send(SAMPLE_EVENT, BASE_CONFIG)).resolves.toBeUndefined();
     expect(stderrWrite).toHaveBeenCalled();
+  });
+});
+
+describe("send via the Timeplus REST API (#299)", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let stderrWrite: { mockRestore: () => void };
+
+  const REST_CONFIG: AgentGuardConfig = {
+    ...BASE_CONFIG,
+    ingestApi: "rest",
+    timeplusUrl: "https://us-west-2.timeplus.cloud",
+    workspace: "default",
+    username: "u",
+    password: "p",
+  };
+
+  beforeEach(() => {
+    fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+    stderrWrite = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    stderrWrite.mockRestore();
+  });
+
+  it("builds the workspace-prefixed v1beta2 ingest URL with db query param", async () => {
+    await send(SAMPLE_EVENT, REST_CONFIG);
+    const url = (fetchMock.mock.calls[0] as [string])[0];
+    expect(url).toBe(
+      "https://us-west-2.timeplus.cloud/default/api/v1beta2/streams/agentguard_hook_events/ingest?db=ag",
+    );
+  });
+
+  it("uses the configured workspace in the URL path", async () => {
+    await send(SAMPLE_EVENT, { ...REST_CONFIG, workspace: "ws-42" });
+    const url = (fetchMock.mock.calls[0] as [string])[0];
+    expect(url).toBe(
+      "https://us-west-2.timeplus.cloud/ws-42/api/v1beta2/streams/agentguard_hook_events/ingest?db=ag",
+    );
+  });
+
+  it("tolerates a trailing slash on the base URL", async () => {
+    await send(SAMPLE_EVENT, { ...REST_CONFIG, timeplusUrl: "http://localhost:8000/" });
+    const url = (fetchMock.mock.calls[0] as [string])[0];
+    expect(url).toBe(
+      "http://localhost:8000/default/api/v1beta2/streams/agentguard_hook_events/ingest?db=ag",
+    );
+  });
+
+  it("authenticates with Basic auth using the Timeplus username/password in rest mode", async () => {
+    await send(SAMPLE_EVENT, REST_CONFIG);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe(`Basic ${btoa("u:p")}`);
+    expect(headers["Content-Type"]).toBe("application/json");
+  });
+
+  it("keeps the same {columns,data} body shape in rest mode", async () => {
+    await send(SAMPLE_EVENT, REST_CONFIG);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as { columns: string[]; data: unknown[][] };
+    expect(body.columns[0]).toBe("hook_name");
+    expect(body.data).toHaveLength(1);
+  });
+
+  it("default (timeplusd) config still hits the legacy path with Basic auth", async () => {
+    await send(SAMPLE_EVENT, { ...BASE_CONFIG, ingestApi: "timeplusd" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "http://localhost:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events",
+    );
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe(`Basic ${btoa("proton:")}`);
   });
 });

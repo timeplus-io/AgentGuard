@@ -134,3 +134,39 @@ describe("resolveConfig", () => {
     expect(resolveConfig({ holdsEnabled: true }).holdsEnabled).toBe(true);
   });
 });
+
+describe("resolveConfig ingest API selection (#299)", () => {
+  const KEYS = ["AGENTGUARD_INGEST_API", "AGENTGUARD_WORKSPACE"];
+
+  beforeEach(() => {
+    KEYS.forEach((k) => delete process.env[k]);
+  });
+
+  afterEach(() => {
+    KEYS.forEach((k) => delete process.env[k]);
+  });
+
+  it("defaults to the timeplusd ingest API with the default workspace", () => {
+    const cfg = resolveConfig();
+    expect(cfg.ingestApi).toBe("timeplusd");
+    expect(cfg.workspace).toBe("default");
+  });
+
+  it("reads ingestApi/workspace from pluginConfig", () => {
+    const cfg = resolveConfig({ ingestApi: "rest", workspace: "ws-1" });
+    expect(cfg.ingestApi).toBe("rest");
+    expect(cfg.workspace).toBe("ws-1");
+  });
+
+  it("env vars override pluginConfig for ingestApi/workspace", () => {
+    process.env.AGENTGUARD_INGEST_API = "timeplusd";
+    process.env.AGENTGUARD_WORKSPACE = "ws-env";
+    const cfg = resolveConfig({ ingestApi: "rest", workspace: "ws-1" });
+    expect(cfg.ingestApi).toBe("timeplusd");
+    expect(cfg.workspace).toBe("ws-env");
+  });
+
+  it("falls back to timeplusd for an unknown ingestApi value", () => {
+    expect(resolveConfig({ ingestApi: "bogus" }).ingestApi).toBe("timeplusd");
+  });
+});

@@ -110,6 +110,15 @@ export AGENTGUARD_USERNAME=proton
 export AGENTGUARD_PASSWORD=your-password
 ```
 
+When only the Timeplus web console (port 8000) is exposed and timeplusd's port 3218 is not reachable, switch the ingest API — the username/password stay the same:
+
+```bash
+export AGENTGUARD_INGEST_API=rest
+export AGENTGUARD_TIMEPLUS_URL=http://timeplus-host:8000   # or the console's HTTPS URL
+export AGENTGUARD_USERNAME=proton
+export AGENTGUARD_PASSWORD=<timeplus password>
+```
+
 Or set the equivalent fields under `plugins.entries.agentguard.config` in `openclaw.json` (see [Plugin configuration](#plugin-configuration-in-openclaw.json) below).
 
 ### Installation (Docker volume mount — this repo)
@@ -155,6 +164,8 @@ All config fields except `deploymentId` and `deploymentName` can be overridden w
 | Env var | Config field | Default |
 |---|---|---|
 | `AGENTGUARD_TIMEPLUS_URL` | `timeplusUrl` | `http://localhost:3218` |
+| `AGENTGUARD_INGEST_API` | `ingestApi` | `timeplusd` (`rest` = Timeplus REST API on port 8000, same username/password) |
+| `AGENTGUARD_WORKSPACE` | `workspace` | `default` — REST API workspace id, rarely needed |
 | `AGENTGUARD_STREAM` | `stream` | `agentguard_hook_events` |
 | `AGENTGUARD_FLUSH_MS` | `flushMs` | `2000` |
 | `AGENTGUARD_BATCH_SIZE` | `batchSize` | `50` |
@@ -170,7 +181,7 @@ docker logs openclaw 2>&1 | grep agentguard
 Expected output:
 
 ```
-[agentguard] active — streaming to http://host.docker.internal:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events (flush every 2000ms, batch size 50) deployment=my-team
+[agentguard] active — streaming to http://host.docker.internal:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events (timeplusd) (flush every 2000ms, batch size 50) deployment=my-team
 ```
 
 ### Query hook events in Timeplus

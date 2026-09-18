@@ -5,6 +5,8 @@ import type { AgentGuardConfig } from "./config.js";
 
 const BASE_CONFIG: AgentGuardConfig = {
   timeplusUrl:    "http://localhost:3218",
+  ingestApi:      "timeplusd",
+  workspace:      "default",
   database:       "ag",
   stream:         "agentguard_hook_events",
   username:       "proton",

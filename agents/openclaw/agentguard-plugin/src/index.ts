@@ -1,6 +1,6 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { resolveConfig } from "./config.js";
-import { createTimeplusClient } from "./timeplus-client.js";
+import { buildIngestUrl, createTimeplusClient } from "./timeplus-client.js";
 import { registerAllHooks } from "./hooks.js";
 
 export default definePluginEntry({
@@ -14,7 +14,7 @@ export default definePluginEntry({
     const client = createTimeplusClient(config);
     registerAllHooks(api, client, config);
     api.logger.info(
-      `[agentguard] active — streaming to ${config.timeplusUrl}/timeplusd/v2/ingest/${config.database}/streams/${config.stream} ` +
+      `[agentguard] active — streaming to ${buildIngestUrl(config)} (${config.ingestApi}) ` +
         `(flush every ${config.flushMs}ms, batch size ${config.batchSize}) ` +
         `deployment=${config.deploymentId}`,
     );
