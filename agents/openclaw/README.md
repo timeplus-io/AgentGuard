@@ -165,7 +165,6 @@ All config fields except `deploymentId` and `deploymentName` can be overridden w
 |---|---|---|
 | `AGENTGUARD_TIMEPLUS_URL` | `timeplusUrl` | `http://localhost:3218` |
 | `AGENTGUARD_INGEST_API` | `ingestApi` | `timeplusd` (`rest` = Timeplus REST API on port 8000, same username/password) |
-| `AGENTGUARD_API_KEY` | `apiKey` | _(empty)_ — optional API key alternative to Basic auth in `rest` mode; implies `rest` |
 | `AGENTGUARD_WORKSPACE` | `workspace` | `default` — REST API workspace id, rarely needed |
 | `AGENTGUARD_STREAM` | `stream` | `agentguard_hook_events` |
 | `AGENTGUARD_FLUSH_MS` | `flushMs` | `2000` |

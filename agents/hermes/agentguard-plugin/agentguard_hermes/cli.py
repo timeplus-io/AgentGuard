@@ -45,7 +45,6 @@ def _install(hermes_dir: str) -> None:
     print("  Async event ingest (Hermes → Timeplus):")
     print("    AGENTGUARD_TIMEPLUS_URL     (default: http://localhost:3218)")
     print("    AGENTGUARD_INGEST_API       (default: timeplusd — set 'rest' for the Timeplus REST API on port 8000 when 3218 is not exposed)")
-    print("    AGENTGUARD_API_KEY          (optional API key alternative to Basic auth in rest mode)")
     print("    AGENTGUARD_WORKSPACE        (default: default — REST API workspace id, rarely needed)")
     print("    AGENTGUARD_DATABASE         (default: ag)")
     print("    AGENTGUARD_USERNAME         (default: proton)")

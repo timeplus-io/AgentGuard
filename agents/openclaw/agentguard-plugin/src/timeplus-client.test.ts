@@ -173,9 +173,8 @@ describe("TimeplusClient via the Timeplus REST API (#299)", () => {
     ingestApi: "rest",
     timeplusUrl: "https://us-west-2.timeplus.cloud",
     workspace: "default",
-    apiKey: "k-123",
-    username: "proton",
-    password: "",
+    username: "u",
+    password: "p",
   };
 
   beforeEach(() => {
@@ -213,30 +212,18 @@ describe("TimeplusClient via the Timeplus REST API (#299)", () => {
     await client.close();
   });
 
-  it("sends X-Api-Key instead of Basic auth when an API key is set", async () => {
+  it("authenticates with Basic auth using the Timeplus username/password in rest mode", async () => {
     const client = createTimeplusClient(REST_CONFIG as never);
     client.enqueue(makeEvent("session_start"));
     await client.flush();
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
-    expect(headers["X-Api-Key"]).toBe("k-123");
-    expect(headers["Authorization"]).toBeUndefined();
-    await client.close();
-  });
-
-  it("falls back to Basic auth in rest mode when no API key is set", async () => {
-    const client = createTimeplusClient({ ...REST_CONFIG, apiKey: "", username: "u", password: "p" } as never);
-    client.enqueue(makeEvent("session_start"));
-    await client.flush();
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe(`Basic ${btoa("u:p")}`);
-    expect(headers["X-Api-Key"]).toBeUndefined();
     await client.close();
   });
 
-  it("default (timeplusd) config still hits the legacy path even when an API key is set", async () => {
-    const client = createTimeplusClient({ ...BASE_CONFIG, apiKey: "k-ignored", username: "proton", password: "" } as never);
+  it("default (timeplusd) config still hits the legacy path with Basic auth", async () => {
+    const client = createTimeplusClient({ ...BASE_CONFIG, username: "proton", password: "" } as never);
     client.enqueue(makeEvent("session_start"));
     await client.flush();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -245,7 +232,6 @@ describe("TimeplusClient via the Timeplus REST API (#299)", () => {
     );
     const headers = init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe(`Basic ${btoa("proton:")}`);
-    expect(headers["X-Api-Key"]).toBeUndefined();
     await client.close();
   });
 });

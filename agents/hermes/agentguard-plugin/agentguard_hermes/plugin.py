@@ -35,7 +35,7 @@ Install: drop plugin.yaml + __init__.py into ~/.hermes/plugins/agentguard/
 Config via environment variables:
   AGENTGUARD_TIMEPLUS_URL       AGENTGUARD_DATABASE     AGENTGUARD_STREAM
   AGENTGUARD_USERNAME           AGENTGUARD_PASSWORD
-  AGENTGUARD_INGEST_API         AGENTGUARD_API_KEY      AGENTGUARD_WORKSPACE
+  AGENTGUARD_INGEST_API         AGENTGUARD_WORKSPACE
   AGENTGUARD_AGENT_ID           AGENTGUARD_DEPLOYMENT_ID      AGENTGUARD_DEPLOYMENT_NAME
   AGENTGUARD_URL                AGENTGUARD_HOLDS_FAIL_POLICY
   AGENTGUARD_HOLDS_ENABLED
@@ -64,13 +64,11 @@ _PASSWORD        = os.environ.get("AGENTGUARD_PASSWORD", "")
 #   "rest"      — the Timeplus REST API served by the web console / API server
 #                 (port 8000, or its HTTPS ingress); for deployments where timeplusd
 #                 is not directly reachable. Same Basic-auth username/password.
-# An explicit value wins; otherwise a configured API key implies "rest".
-_API_KEY         = os.environ.get("AGENTGUARD_API_KEY", "")
+# Unknown / unset values fall back to "timeplusd".
 _WORKSPACE       = os.environ.get("AGENTGUARD_WORKSPACE", "default")
-_INGEST_API_RAW  = os.environ.get("AGENTGUARD_INGEST_API", "").strip().lower()
 _INGEST_API      = (
-    _INGEST_API_RAW if _INGEST_API_RAW in ("timeplusd", "rest")
-    else ("rest" if _API_KEY else "timeplusd")
+    "rest" if os.environ.get("AGENTGUARD_INGEST_API", "").strip().lower() == "rest"
+    else "timeplusd"
 )
 _AGENT_ID        = os.environ.get("AGENTGUARD_AGENT_ID") or socket.gethostname()
 _DEPLOYMENT_ID   = os.environ.get("AGENTGUARD_DEPLOYMENT_ID", "local")
@@ -142,9 +140,8 @@ def _ingest_url() -> str:
 
 
 def _auth_headers() -> dict:
-    """API key (REST API only) when configured, otherwise Basic auth."""
-    if _INGEST_API == "rest" and _API_KEY:
-        return {"X-Api-Key": _API_KEY}
+    """Basic auth with the Timeplus username/password in both modes — the REST
+    API validates the credentials against timeplusd, so no separate key is needed."""
     if _USERNAME:
         token = b64encode(f"{_USERNAME}:{_PASSWORD}".encode()).decode()
         return {"Authorization": f"Basic {token}"}

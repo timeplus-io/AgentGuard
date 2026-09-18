@@ -38,11 +38,11 @@ export function buildIngestUrl(config: AgentGuardConfig): string {
   return `${base}/timeplusd/v2/ingest/${config.database}/streams/${config.stream}`;
 }
 
-/** API key (REST API only) when configured, otherwise Basic auth. */
+/**
+ * Basic auth with the Timeplus username/password in both modes — the REST API
+ * validates the credentials against timeplusd, so no separate key is needed.
+ */
 export function authHeaders(config: AgentGuardConfig): Record<string, string> {
-  if (config.ingestApi === "rest" && config.apiKey) {
-    return { "X-Api-Key": config.apiKey };
-  }
   return { Authorization: `Basic ${btoa(`${config.username}:${config.password}`)}` };
 }
 

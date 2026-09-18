@@ -7,7 +7,6 @@ const BASE_CONFIG: AgentGuardConfig = {
   timeplusUrl: "http://localhost:3218",
   ingestApi: "timeplusd",
   workspace: "default",
-  apiKey: "",
   database: "ag",
   stream: "agentguard_hook_events",
   username: "proton",
@@ -110,7 +109,8 @@ describe("send via the Timeplus REST API (#299)", () => {
     ingestApi: "rest",
     timeplusUrl: "https://us-west-2.timeplus.cloud",
     workspace: "default",
-    apiKey: "k-123",
+    username: "u",
+    password: "p",
   };
 
   beforeEach(() => {
@@ -150,21 +150,12 @@ describe("send via the Timeplus REST API (#299)", () => {
     );
   });
 
-  it("sends X-Api-Key instead of Basic auth when an API key is set", async () => {
+  it("authenticates with Basic auth using the Timeplus username/password in rest mode", async () => {
     await send(SAMPLE_EVENT, REST_CONFIG);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
-    expect(headers["X-Api-Key"]).toBe("k-123");
-    expect(headers["Authorization"]).toBeUndefined();
-    expect(headers["Content-Type"]).toBe("application/json");
-  });
-
-  it("falls back to Basic auth in rest mode when no API key is set", async () => {
-    await send(SAMPLE_EVENT, { ...REST_CONFIG, apiKey: "", username: "u", password: "p" });
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe(`Basic ${btoa("u:p")}`);
-    expect(headers["X-Api-Key"]).toBeUndefined();
+    expect(headers["Content-Type"]).toBe("application/json");
   });
 
   it("keeps the same {columns,data} body shape in rest mode", async () => {
@@ -176,13 +167,12 @@ describe("send via the Timeplus REST API (#299)", () => {
   });
 
   it("default (timeplusd) config still hits the legacy path with Basic auth", async () => {
-    await send(SAMPLE_EVENT, { ...BASE_CONFIG, ingestApi: "timeplusd", apiKey: "k-ignored" });
+    await send(SAMPLE_EVENT, { ...BASE_CONFIG, ingestApi: "timeplusd" });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
       "http://localhost:3218/timeplusd/v2/ingest/ag/streams/agentguard_hook_events",
     );
     const headers = init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe(`Basic ${btoa("proton:")}`);
-    expect(headers["X-Api-Key"]).toBeUndefined();
   });
 });

@@ -8,18 +8,16 @@
  */
 export type IngestApi = "timeplusd" | "rest";
 
-/** Explicit value wins; otherwise a configured API key implies the REST API. */
-export function resolveIngestApi(raw: string | undefined, apiKey: string): IngestApi {
+/** Unknown / unset values fall back to the default (timeplusd). */
+export function resolveIngestApi(raw: string | undefined): IngestApi {
   const v = raw?.trim().toLowerCase();
-  if (v === "rest" || v === "timeplusd") return v;
-  return apiKey ? "rest" : "timeplusd";
+  return v === "rest" ? "rest" : "timeplusd";
 }
 
 export type AgentGuardConfig = {
   timeplusUrl: string;
   ingestApi: IngestApi;
   workspace: string;
-  apiKey: string;
   database: string;
   stream: string;
   flushMs: number;
@@ -37,7 +35,6 @@ const DEFAULTS: AgentGuardConfig = {
   timeplusUrl: "http://localhost:3218",
   ingestApi: "timeplusd",
   workspace: "default",
-  apiKey: "",
   database: "ag",
   stream: "agentguard_hook_events",
   flushMs: 2000,
@@ -62,15 +59,9 @@ export function resolveConfig(
     (pluginConfig?.timeplusUrl as string | undefined) ??
     DEFAULTS.timeplusUrl;
 
-  const apiKey =
-    (process.env.AGENTGUARD_API_KEY || undefined) ??
-    (pluginConfig?.apiKey as string | undefined) ??
-    DEFAULTS.apiKey;
-
   const ingestApi = resolveIngestApi(
     (process.env.AGENTGUARD_INGEST_API || undefined) ??
       (pluginConfig?.ingestApi as string | undefined),
-    apiKey,
   );
 
   const workspace =
@@ -149,7 +140,6 @@ export function resolveConfig(
     timeplusUrl,
     ingestApi,
     workspace,
-    apiKey,
     database,
     stream,
     flushMs,

@@ -142,11 +142,10 @@ describe("resolveConfig ingest API selection (#299)", () => {
     Object.assign(process.env, ORIGINAL_ENV);
   });
 
-  it("defaults to the timeplusd ingest API with default workspace and no API key", () => {
+  it("defaults to the timeplusd ingest API with the default workspace", () => {
     const cfg = resolveConfig();
     expect(cfg.ingestApi).toBe("timeplusd");
     expect(cfg.workspace).toBe("default");
-    expect(cfg.apiKey).toBe("");
   });
 
   it("reads AGENTGUARD_INGEST_API=rest from env", () => {
@@ -159,17 +158,9 @@ describe("resolveConfig ingest API selection (#299)", () => {
     expect(resolveConfig().ingestApi).toBe("timeplusd");
   });
 
-  it("implies rest mode when only AGENTGUARD_API_KEY is set", () => {
-    process.env.AGENTGUARD_API_KEY = "k-123";
-    const cfg = resolveConfig();
-    expect(cfg.ingestApi).toBe("rest");
-    expect(cfg.apiKey).toBe("k-123");
-  });
-
-  it("explicit AGENTGUARD_INGEST_API=timeplusd wins over a set API key", () => {
-    process.env.AGENTGUARD_API_KEY = "k-123";
-    process.env.AGENTGUARD_INGEST_API = "timeplusd";
-    expect(resolveConfig().ingestApi).toBe("timeplusd");
+  it("ignores case and whitespace in AGENTGUARD_INGEST_API", () => {
+    process.env.AGENTGUARD_INGEST_API = " REST ";
+    expect(resolveConfig().ingestApi).toBe("rest");
   });
 
   it("reads AGENTGUARD_WORKSPACE from env", () => {

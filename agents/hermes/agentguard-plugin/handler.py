@@ -33,7 +33,6 @@ Context keys per event (from official docs):
 Config via environment variables:
   AGENTGUARD_TIMEPLUS_URL    — Timeplus HTTP endpoint (default: http://localhost:3218)
   AGENTGUARD_INGEST_API      — timeplusd (default, port 3218) or rest (Timeplus REST API, port 8000; same user/password)
-  AGENTGUARD_API_KEY         — optional API key alternative to Basic auth in rest mode; implies rest
   AGENTGUARD_WORKSPACE       — REST API workspace id (default: default)
   AGENTGUARD_STREAM          — target stream name (default: agentguard_hook_events)
   AGENTGUARD_DATABASE        — Timeplus database (default: ag)
@@ -66,13 +65,11 @@ _PASSWORD        = os.environ.get("AGENTGUARD_PASSWORD", "")
 #   "rest"      — the Timeplus REST API served by the web console / API server
 #                 (port 8000, or its HTTPS ingress); for deployments where timeplusd
 #                 is not directly reachable. Same Basic-auth username/password.
-# An explicit value wins; otherwise a configured API key implies "rest".
-_API_KEY         = os.environ.get("AGENTGUARD_API_KEY", "")
+# Unknown / unset values fall back to "timeplusd".
 _WORKSPACE       = os.environ.get("AGENTGUARD_WORKSPACE", "default")
-_INGEST_API_RAW  = os.environ.get("AGENTGUARD_INGEST_API", "").strip().lower()
 _INGEST_API      = (
-    _INGEST_API_RAW if _INGEST_API_RAW in ("timeplusd", "rest")
-    else ("rest" if _API_KEY else "timeplusd")
+    "rest" if os.environ.get("AGENTGUARD_INGEST_API", "").strip().lower() == "rest"
+    else "timeplusd"
 )
 _AGENT_ID        = os.environ.get("AGENTGUARD_AGENT_ID") or socket.gethostname()
 _DEPLOYMENT_ID   = os.environ.get("AGENTGUARD_DEPLOYMENT_ID", "local")
@@ -114,9 +111,8 @@ def _ingest_url() -> str:
 
 
 def _auth_headers() -> dict:
-    """API key (REST API only) when configured, otherwise Basic auth."""
-    if _INGEST_API == "rest" and _API_KEY:
-        return {"X-Api-Key": _API_KEY}
+    """Basic auth with the Timeplus username/password in both modes — the REST
+    API validates the credentials against timeplusd, so no separate key is needed."""
     if _USERNAME:
         token = b64encode(f"{_USERNAME}:{_PASSWORD}".encode()).decode()
         return {"Authorization": f"Basic {token}"}

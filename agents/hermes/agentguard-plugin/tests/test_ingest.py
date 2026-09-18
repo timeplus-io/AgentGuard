@@ -20,7 +20,7 @@ MODULES = ["agentguard_hermes.plugin", "handler"]
 ENV_KEYS = [
     "AGENTGUARD_TIMEPLUS_URL", "AGENTGUARD_DATABASE", "AGENTGUARD_STREAM",
     "AGENTGUARD_USERNAME", "AGENTGUARD_PASSWORD",
-    "AGENTGUARD_INGEST_API", "AGENTGUARD_API_KEY", "AGENTGUARD_WORKSPACE",
+    "AGENTGUARD_INGEST_API", "AGENTGUARD_WORKSPACE",
 ]
 
 
@@ -54,12 +54,11 @@ class IngestUrlTests(unittest.TestCase):
             with self.subTest(module=name):
                 m = _load(name, {
                     "AGENTGUARD_INGEST_API": "rest",
-                    "AGENTGUARD_TIMEPLUS_URL": "https://us-west-2.timeplus.cloud/",
-                    "AGENTGUARD_API_KEY": "k-123",
+                    "AGENTGUARD_TIMEPLUS_URL": "http://timeplus.example.com:8000/",
                 })
                 self.assertEqual(
                     m._ingest_url(),
-                    "https://us-west-2.timeplus.cloud/default/api/v1beta2/streams/agentguard_hook_events/ingest?db=ag",
+                    "http://timeplus.example.com:8000/default/api/v1beta2/streams/agentguard_hook_events/ingest?db=ag",
                 )
 
     def test_rest_mode_uses_configured_workspace_and_database(self):
@@ -76,18 +75,7 @@ class IngestUrlTests(unittest.TestCase):
                     "http://localhost:8000/ws-42/api/v1beta2/streams/agentguard_hook_events/ingest?db=other",
                 )
 
-    def test_rest_mode_sends_x_api_key_instead_of_basic(self):
-        for name in MODULES:
-            with self.subTest(module=name):
-                m = _load(name, {
-                    "AGENTGUARD_INGEST_API": "rest",
-                    "AGENTGUARD_API_KEY": "k-123",
-                    "AGENTGUARD_USERNAME": "proton",
-                    "AGENTGUARD_PASSWORD": "pw",
-                })
-                self.assertEqual(m._auth_headers(), {"X-Api-Key": "k-123"})
-
-    def test_rest_mode_falls_back_to_basic_without_api_key(self):
+    def test_rest_mode_uses_basic_auth_with_username_password(self):
         for name in MODULES:
             with self.subTest(module=name):
                 m = _load(name, {
@@ -98,18 +86,11 @@ class IngestUrlTests(unittest.TestCase):
                 token = b64encode(b"u:p").decode()
                 self.assertEqual(m._auth_headers(), {"Authorization": f"Basic {token}"})
 
-    def test_api_key_alone_implies_rest_mode(self):
+    def test_ingest_api_is_case_and_whitespace_insensitive(self):
         for name in MODULES:
             with self.subTest(module=name):
-                m = _load(name, {"AGENTGUARD_API_KEY": "k-123"})
+                m = _load(name, {"AGENTGUARD_INGEST_API": " REST "})
                 self.assertEqual(m._INGEST_API, "rest")
-
-    def test_explicit_timeplusd_wins_over_api_key(self):
-        for name in MODULES:
-            with self.subTest(module=name):
-                m = _load(name, {"AGENTGUARD_INGEST_API": "timeplusd", "AGENTGUARD_API_KEY": "k-123"})
-                self.assertEqual(m._INGEST_API, "timeplusd")
-                self.assertNotIn("X-Api-Key", m._auth_headers())
 
     def test_unknown_ingest_api_falls_back_to_timeplusd(self):
         for name in MODULES:

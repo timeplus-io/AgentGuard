@@ -41,7 +41,6 @@ Config is resolved by merging two sources, with **environment variables taking p
 |---|---|
 | `timeplusUrl` | `http://localhost:3218` |
 | `ingestApi` | `timeplusd` (`rest` = Timeplus REST API on port 8000, same username/password) |
-| `apiKey` | `` (empty) — optional API key alternative to Basic auth in `rest` mode; implies `rest` |
 | `workspace` | `default` — REST API workspace id |
 | `stream` | `agentguard_hook_events` |
 | `flushMs` | `2000` |
@@ -78,7 +77,6 @@ All fields are optional. The plugin works out of the box with zero configuration
 |---|---|
 | `AGENTGUARD_TIMEPLUS_URL` | `timeplusUrl` |
 | `AGENTGUARD_INGEST_API` | `ingestApi` |
-| `AGENTGUARD_API_KEY` | `apiKey` |
 | `AGENTGUARD_WORKSPACE` | `workspace` |
 | `AGENTGUARD_STREAM` | `stream` |
 | `AGENTGUARD_FLUSH_MS` | `flushMs` |

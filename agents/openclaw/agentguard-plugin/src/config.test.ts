@@ -136,7 +136,7 @@ describe("resolveConfig", () => {
 });
 
 describe("resolveConfig ingest API selection (#299)", () => {
-  const KEYS = ["AGENTGUARD_INGEST_API", "AGENTGUARD_API_KEY", "AGENTGUARD_WORKSPACE"];
+  const KEYS = ["AGENTGUARD_INGEST_API", "AGENTGUARD_WORKSPACE"];
 
   beforeEach(() => {
     KEYS.forEach((k) => delete process.env[k]);
@@ -146,37 +146,27 @@ describe("resolveConfig ingest API selection (#299)", () => {
     KEYS.forEach((k) => delete process.env[k]);
   });
 
-  it("defaults to the timeplusd ingest API with default workspace and no API key", () => {
+  it("defaults to the timeplusd ingest API with the default workspace", () => {
     const cfg = resolveConfig();
     expect(cfg.ingestApi).toBe("timeplusd");
     expect(cfg.workspace).toBe("default");
-    expect(cfg.apiKey).toBe("");
   });
 
-  it("reads ingestApi/apiKey/workspace from pluginConfig", () => {
-    const cfg = resolveConfig({ ingestApi: "rest", apiKey: "k-1", workspace: "ws-1" });
+  it("reads ingestApi/workspace from pluginConfig", () => {
+    const cfg = resolveConfig({ ingestApi: "rest", workspace: "ws-1" });
     expect(cfg.ingestApi).toBe("rest");
-    expect(cfg.apiKey).toBe("k-1");
     expect(cfg.workspace).toBe("ws-1");
   });
 
-  it("env vars override pluginConfig for ingestApi/apiKey/workspace", () => {
+  it("env vars override pluginConfig for ingestApi/workspace", () => {
     process.env.AGENTGUARD_INGEST_API = "timeplusd";
-    process.env.AGENTGUARD_API_KEY = "k-env";
     process.env.AGENTGUARD_WORKSPACE = "ws-env";
-    const cfg = resolveConfig({ ingestApi: "rest", apiKey: "k-1", workspace: "ws-1" });
+    const cfg = resolveConfig({ ingestApi: "rest", workspace: "ws-1" });
     expect(cfg.ingestApi).toBe("timeplusd");
-    expect(cfg.apiKey).toBe("k-env");
     expect(cfg.workspace).toBe("ws-env");
   });
 
   it("falls back to timeplusd for an unknown ingestApi value", () => {
     expect(resolveConfig({ ingestApi: "bogus" }).ingestApi).toBe("timeplusd");
-  });
-
-  it("implies rest mode when only an API key is set", () => {
-    expect(resolveConfig({ apiKey: "k-1" }).ingestApi).toBe("rest");
-    process.env.AGENTGUARD_API_KEY = "k-env";
-    expect(resolveConfig().ingestApi).toBe("rest");
   });
 });

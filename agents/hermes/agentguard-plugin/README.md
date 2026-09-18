@@ -49,7 +49,6 @@ Set environment variables before starting Hermes:
 |---|---|---|
 | `AGENTGUARD_TIMEPLUS_URL` | `http://localhost:3218` | Timeplus base URL. timeplusd HTTP port (3218) in `timeplusd` mode; the web console / REST API base (port 8000, or its HTTPS URL behind an ingress) in `rest` mode |
 | `AGENTGUARD_INGEST_API` | `timeplusd` | `timeplusd` = POST straight to timeplusd; `rest` = the Timeplus REST API (`/{workspace}/api/v1beta2/streams/{stream}/ingest`) for deployments where port 3218 is not exposed. Same username/password (Basic auth) in both modes |
-| `AGENTGUARD_API_KEY` | _(empty)_ | Optional. A Timeplus API key (`X-Api-Key`) as an alternative to Basic auth in `rest` mode; setting it implies `rest` |
 | `AGENTGUARD_WORKSPACE` | `default` | REST API workspace id in the URL path. Rarely needed |
 | `AGENTGUARD_DATABASE` | `"ag"` | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
 | `AGENTGUARD_USERNAME` | `proton` | Timeplus username |

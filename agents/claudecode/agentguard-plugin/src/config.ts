@@ -10,18 +10,16 @@ import { hostname } from "os";
  */
 export type IngestApi = "timeplusd" | "rest";
 
-/** Explicit value wins; otherwise a configured API key implies the REST API. */
-export function resolveIngestApi(raw: string | undefined, apiKey: string): IngestApi {
+/** Unknown / unset values fall back to the default (timeplusd). */
+export function resolveIngestApi(raw: string | undefined): IngestApi {
   const v = raw?.trim().toLowerCase();
-  if (v === "rest" || v === "timeplusd") return v;
-  return apiKey ? "rest" : "timeplusd";
+  return v === "rest" ? "rest" : "timeplusd";
 }
 
 export type AgentGuardConfig = {
   timeplusUrl: string;
   ingestApi: IngestApi;
   workspace: string;
-  apiKey: string;
   database: string;
   stream: string;
   username: string;
@@ -38,7 +36,6 @@ const DEFAULTS: AgentGuardConfig = {
   timeplusUrl: "http://localhost:3218",
   ingestApi: "timeplusd",
   workspace: "default",
-  apiKey: "",
   database: "ag",
   stream: "agentguard_hook_events",
   username: "proton",
@@ -52,12 +49,10 @@ const DEFAULTS: AgentGuardConfig = {
 };
 
 export function resolveConfig(): AgentGuardConfig {
-  const apiKey = process.env.AGENTGUARD_API_KEY ?? DEFAULTS.apiKey;
   return {
     timeplusUrl: process.env.AGENTGUARD_TIMEPLUS_URL || DEFAULTS.timeplusUrl,
-    ingestApi: resolveIngestApi(process.env.AGENTGUARD_INGEST_API, apiKey),
+    ingestApi: resolveIngestApi(process.env.AGENTGUARD_INGEST_API),
     workspace: process.env.AGENTGUARD_WORKSPACE || DEFAULTS.workspace,
-    apiKey,
     database: process.env.AGENTGUARD_DATABASE || DEFAULTS.database,
     stream: process.env.AGENTGUARD_STREAM || DEFAULTS.stream,
     username: process.env.AGENTGUARD_USERNAME || DEFAULTS.username,

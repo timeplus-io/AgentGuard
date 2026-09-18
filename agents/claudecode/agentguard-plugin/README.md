@@ -89,7 +89,6 @@ Set these environment variables in your shell profile (e.g. `~/.zshrc` or `~/.ba
 | `AGENTGUARD_DEPLOYMENT_NAME`          | `"Default"`                 | Human-readable deployment name                                              |
 | `AGENTGUARD_TIMEPLUS_URL`             | `http://localhost:3218`     | Timeplus base URL for event ingest. timeplusd HTTP port (3218) in `timeplusd` mode; the web console / REST API base (port 8000, or its HTTPS URL behind an ingress) in `rest` mode |
 | `AGENTGUARD_INGEST_API`               | `timeplusd`                 | `timeplusd` = POST straight to timeplusd (`/timeplusd/v2/ingest/…`); `rest` = the Timeplus REST API (`/{workspace}/api/v1beta2/streams/{stream}/ingest`) for deployments where port 3218 is not exposed. Same username/password (Basic auth) in both modes |
-| `AGENTGUARD_API_KEY`                  | `""`                        | Optional. A Timeplus API key (`X-Api-Key`) as an alternative to Basic auth in `rest` mode; setting it implies `rest` |
 | `AGENTGUARD_WORKSPACE`                | `"default"`                 | REST API workspace id in the URL path. Rarely needed — `default` is correct for self-hosted deployments |
 | `AGENTGUARD_DATABASE`                 | `"ag"`                      | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
 | `AGENTGUARD_STREAM`                   | `agentguard_hook_events`    | Target stream name                                                          |
