@@ -1,6 +1,6 @@
 {
   "name": "@timeplus/agentguard-openclaw-plugin",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "AgentGuard security monitoring plugin for OpenClaw",
   "type": "module",
   "main": "./dist/index.js",
@@ -27,7 +27,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
     "openclaw": ">=2026.4.0"
