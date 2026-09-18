@@ -40,8 +40,8 @@ Config is resolved by merging two sources, with **environment variables taking p
 | Field | Default |
 |---|---|
 | `timeplusUrl` | `http://localhost:3218` |
-| `ingestApi` | `timeplusd` (`rest` = Timeplus REST API, port 8000 / Timeplus Cloud) |
-| `apiKey` | `` (empty) — Timeplus API key; implies `rest`, replaces Basic auth |
+| `ingestApi` | `timeplusd` (`rest` = Timeplus REST API on port 8000, same username/password) |
+| `apiKey` | `` (empty) — optional API key alternative to Basic auth in `rest` mode; implies `rest` |
 | `workspace` | `default` — REST API workspace id |
 | `stream` | `agentguard_hook_events` |
 | `flushMs` | `2000` |

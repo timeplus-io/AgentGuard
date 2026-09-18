@@ -34,11 +34,10 @@ Every agent needs these values. Ask user to provide ALL of them before running t
 | `AGENT_ID` | | Unique identifier for this machine |
 | `DEPLOYMENT_ID` | local | Grouping key for multi-machine deploys |
 | `DEPLOYMENT_NAME` | Local Dev | Human-readable label |
-| `TIMEPLUS_URL` | http://localhost:3218 | Timeplus base URL. With `INGEST_API=timeplusd` this is timeplusd's HTTP port (`http://host:3218`). With `INGEST_API=rest` it is the Timeplus REST API base — `http://host:8000` self-hosted, or the Timeplus Cloud HTTPS URL (e.g. `https://us-west-2.timeplus.cloud`). |
-| `INGEST_API` | timeplusd | `timeplusd` (direct to port 3218) or `rest` (Timeplus REST API on port 8000 / Timeplus Cloud). See [Choosing the ingest API](#choosing-the-ingest-api). |
-| `API_KEY` | | Timeplus API key. Only asked when `INGEST_API=rest`; sent as `X-Api-Key` and replaces the username/password. When set, `TIMEPLUS_USER`/`TIMEPLUS_PASSWORD` may be left empty. |
-| `TIMEPLUS_USER` | | Timeplus username |
-| `TIMEPLUS_PASSWORD` | | Timeplus password |
+| `TIMEPLUS_URL` | http://localhost:3218 | Timeplus base URL. With `INGEST_API=timeplusd` this is timeplusd's HTTP port (`http://host:3218`). With `INGEST_API=rest` it is the Timeplus web console / REST API base (`http://host:8000`, or its HTTPS URL when it sits behind an ingress or gateway). |
+| `INGEST_API` | timeplusd | `timeplusd` (direct to port 3218) or `rest` (Timeplus REST API on port 8000, the web console / API server). See [Choosing the ingest API](#choosing-the-ingest-api). |
+| `TIMEPLUS_USER` | | Timeplus username — used for Basic auth in both modes |
+| `TIMEPLUS_PASSWORD` | | Timeplus password — used for Basic auth in both modes |
 | `AGENTGUARD_DATABASE` | ag | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
 | `AGENTGUARD_URL` | http://localhost:8080 | AgentGuard backend (for hold callbacks) |
 | `HOLDS_ENABLED` | false | Opt-in to synchronous tool-call blocking. Set to `true` to enable. |
@@ -46,12 +45,12 @@ Every agent needs these values. Ask user to provide ALL of them before running t
 
 ### Choosing the ingest API
 
-Ask where Timeplus runs before asking for credentials:
+Ask where Timeplus runs before filling in the URL:
 
-- **Self-hosted / Docker with port 3218 reachable** → `INGEST_API=timeplusd` (default). Ask for `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD`.
-- **Timeplus Cloud, or an Enterprise cluster behind a gateway** (the URL is HTTPS, or only port 8000 is exposed, or 3218 is not reachable) → `INGEST_API=rest`. Ask for an `API_KEY` (created in the Timeplus web console) instead of a password. Do NOT ask for `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD` in this case unless the user has no API key (self-hosted Enterprise also accepts Basic auth on the REST API).
+- **timeplusd's port 3218 is reachable from the agent host** (typical single-host / Docker setup) → `INGEST_API=timeplusd` (default), `TIMEPLUS_URL=http://host:3218`.
+- **Only the Timeplus web console is exposed** (Kubernetes / on-prem behind an ingress or gateway; port 8000 or its HTTPS URL is reachable but 3218 is not) → `INGEST_API=rest`, `TIMEPLUS_URL=http://host:8000` (or the console's HTTPS URL).
 
-Both modes send the same event payload; only the URL and auth header differ. The REST API workspace id (`AGENTGUARD_WORKSPACE`) defaults to `default`, which is correct for self-hosted and most Cloud setups — do not ask for it; only set it if the user says their Cloud workspace id is different.
+Both modes use the **same** `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD` (Basic auth) — the REST API validates them against timeplusd, so no separate credential is needed. Both send the same event payload; only the URL and the path differ. The REST API workspace id (`AGENTGUARD_WORKSPACE`) defaults to `default`, which is correct for self-hosted deployments — do not ask for it.
 
 
 ## Claude Code
@@ -78,7 +77,6 @@ Note that user may already configured "env" and "hooks" keys. Do not replace the
         "AGENTGUARD_DEPLOYMENT_NAME": <DEPLOYMENT_NAME>,
         "AGENTGUARD_TIMEPLUS_URL": <TIMEPLUS_URL>,
         "AGENTGUARD_INGEST_API": <INGEST_API>,
-        "AGENTGUARD_API_KEY": <API_KEY>,
         "AGENTGUARD_DATABASE": <AGENTGUARD_DATABASE>,
         "AGENTGUARD_STREAM": "agentguard_hook_events",
         "AGENTGUARD_USERNAME": <TIMEPLUS_USER>,
@@ -177,7 +175,6 @@ Add / update below content in openclaw.json. The parameters surrounded by '<>' a
                 "config": {
                     "timeplusUrl": <TIMEPLUS_URL>,
                     "ingestApi": <INGEST_API>,
-                    "apiKey": <API_KEY>,
                     "stream": "agentguard_hook_events",
                     "flushMs": 2000,
                     "batchSize": 50,
@@ -218,7 +215,6 @@ Modify the shell configuration file to set the environment variables by the user
 
 - AGENTGUARD_TIMEPLUS_URL
 - AGENTGUARD_INGEST_API
-- AGENTGUARD_API_KEY
 - AGENTGUARD_USERNAME
 - AGENTGUARD_PASSWORD
 - AGENTGUARD_AGENT_ID

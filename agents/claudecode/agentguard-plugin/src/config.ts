@@ -3,9 +3,10 @@ import { hostname } from "os";
 /**
  * Which Timeplus HTTP surface receives hook events.
  *  - "timeplusd": timeplusd's own HTTP interface (port 3218) — the default.
- *  - "rest":      the Timeplus REST API served by the web/API server
- *                 (port 8000, or Timeplus Cloud over HTTPS) — the only
- *                 surface exposed when timeplusd is not directly reachable.
+ *  - "rest":      the Timeplus REST API served by the web console / API
+ *                 server (port 8000, or its HTTPS ingress) — for deployments
+ *                 where timeplusd is not directly reachable. Same Basic-auth
+ *                 username/password as timeplusd.
  */
 export type IngestApi = "timeplusd" | "rest";
 

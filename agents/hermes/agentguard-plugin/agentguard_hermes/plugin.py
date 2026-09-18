@@ -61,9 +61,9 @@ _PASSWORD        = os.environ.get("AGENTGUARD_PASSWORD", "")
 
 # Which Timeplus HTTP surface receives hook events (#299):
 #   "timeplusd" — timeplusd's own HTTP interface (port 3218), the default.
-#   "rest"      — the Timeplus REST API served by the web/API server (port 8000,
-#                 or Timeplus Cloud over HTTPS); the only surface exposed when
-#                 timeplusd is not directly reachable.
+#   "rest"      — the Timeplus REST API served by the web console / API server
+#                 (port 8000, or its HTTPS ingress); for deployments where timeplusd
+#                 is not directly reachable. Same Basic-auth username/password.
 # An explicit value wins; otherwise a configured API key implies "rest".
 _API_KEY         = os.environ.get("AGENTGUARD_API_KEY", "")
 _WORKSPACE       = os.environ.get("AGENTGUARD_WORKSPACE", "default")
