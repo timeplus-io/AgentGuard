@@ -55,7 +55,7 @@ Both modes use the same Timeplus username/password (Basic auth) and send the sam
    }
    ```
 
-   Register the same async entry for `SessionEnd`, `UserPromptSubmit`, `PostToolUseFailure`, `SubagentStart`, `SubagentStop`, `Stop`, and `PermissionDenied`. The full snippet is in [`hooks.json`](../agents/claudecode/agentguard-plugin/hooks.json) and the [skill](../skills/agentguard/SKILL.md).
+   Register the same async entry for `SessionEnd`, `UserPromptSubmit`, `PostToolUseFailure`, `SubagentStart`, `SubagentStop`, `Stop`, `PermissionDenied`, `InstructionsLoaded`, `PreCompact`, `PostCompact`, `PermissionRequest`, `Notification`, `StopFailure`, `TaskCreated`, `TaskCompleted`, `PostModelSwitch`, and `ConfigChange`. The full snippet is in [`hooks.json`](../agents/claudecode/agentguard-plugin/hooks.json) and the [skill](../skills/agentguard/SKILL.md).
 
 3. Optional — OTel metrics (tokens, cost, latency). Add to the same `env` block, pointing at the app's OTLP input:
 

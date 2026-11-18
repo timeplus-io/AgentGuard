@@ -40,6 +40,16 @@ async_hook_events = [
     "SubagentStop",
     "Stop",
     "PermissionDenied",
+    "InstructionsLoaded",
+    "PreCompact",
+    "PostCompact",
+    "PermissionRequest",
+    "Notification",
+    "StopFailure",
+    "TaskCreated",
+    "TaskCompleted",
+    "PostModelSwitch",
+    "ConfigChange",
 ]
 
 sync_hook_entry = {
@@ -131,7 +141,8 @@ plugin_env_keys = [
 hook_events = [
     "SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse",
     "PostToolUse", "PostToolUseFailure", "SubagentStart", "SubagentStop",
-    "Stop", "PermissionDenied",
+    "Stop", "PermissionDenied", "InstructionsLoaded", "PreCompact", "PostCompact",
+    "PermissionRequest", "Notification", "StopFailure", "TaskCreated", "TaskCompleted", "PostModelSwitch", "ConfigChange",
 ]
 
 if not os.path.exists(settings_path):

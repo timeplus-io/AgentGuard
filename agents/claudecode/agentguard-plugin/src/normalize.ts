@@ -30,6 +30,16 @@ const HOOK_NAME_MAP: Record<string, string> = {
   SubagentStop:        "subagent_ended",
   Stop:                "llm_output",
   PermissionDenied:    "permission_denied",
+  InstructionsLoaded:  "instructions_loaded",
+  PreCompact:          "pre_compact",
+  PostCompact:         "post_compact",
+  PermissionRequest:   "permission_request",
+  Notification:        "notification",
+  StopFailure:         "stop_failure",
+  TaskCreated:         "task_created",
+  TaskCompleted:       "task_completed",
+  PostModelSwitch:     "model_switched",
+  ConfigChange:        "config_change",
 };
 
 type ClaudeCodeInput = {

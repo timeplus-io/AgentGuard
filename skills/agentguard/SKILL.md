@@ -142,6 +142,66 @@ Note that user may already configured "env" and "hooks" keys. Do not replace the
                 "matcher": "*",
                 "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
             }
+        ],
+        "InstructionsLoaded": [
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
+            }
+        ],
+        "PreCompact": [
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
+            }
+        ],
+        "PostCompact": [
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
+            }
+        ],
+        "PermissionRequest": [
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
+            }
+        ],
+        "Notification": [
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
+            }
+        ],
+        "StopFailure": [
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
+            }
+        ],
+        "TaskCreated": [
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
+            }
+        ],
+        "TaskCompleted": [
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
+            }
+        ],
+        "PostModelSwitch": [
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
+            }
+        ],
+        "ConfigChange": [
+            {
+                "matcher": "*",
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
+            }
         ]
     }
 }
