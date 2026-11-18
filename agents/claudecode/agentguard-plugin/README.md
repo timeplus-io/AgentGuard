@@ -52,6 +52,16 @@ If `AGENTGUARD_HOLDS_ENABLED` is `false`, `PreToolUse` writes a permissive `perm
 | `SubagentStop`        | `subagent_ended`       | Subagent tracking              |
 | `Stop`                | `llm_output`           | End of turn                    |
 | `PermissionDenied`    | `permission_denied`    | Security / blocked action      |
+| `InstructionsLoaded`  | `instructions_loaded`  | `CLAUDE.md` / rules file loaded into context (memory without a tool call) |
+| `PreCompact`          | `pre_compact`          | Context compaction is starting |
+| `PostCompact`         | `post_compact`         | Context compaction finished    |
+| `PermissionRequest`   | `permission_request`   | A tool call is waiting for a permission decision |
+| `Notification`        | `notification`         | Claude Code is waiting on the user (`permission_prompt`, `idle_prompt`, ...) |
+| `StopFailure`         | `stop_failure`         | Turn ended by an API error (no `Stop` fires) |
+| `TaskCreated`         | `task_created`         | Task list tracking |
+| `TaskCompleted`       | `task_completed`       | Task list tracking |
+| `PostModelSwitch`     | `model_switched`       | Session model changed |
+| `ConfigChange`        | `config_change`        | A settings or skills file changed mid-session |
 
 ### Synthetic context events (virtual — not fired by Claude Code itself)
 

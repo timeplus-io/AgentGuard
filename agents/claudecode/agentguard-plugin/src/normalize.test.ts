@@ -118,6 +118,43 @@ describe("normalize", () => {
     expect(e.hook_name).toBe("permission_denied");
   });
 
+  it("maps InstructionsLoaded → 'instructions_loaded' and keeps the file details in event_data", () => {
+    const e = normalize({
+      hook_event_name: "InstructionsLoaded", session_id: "s1",
+      file_path: "/repo/CLAUDE.md", memory_type: "Project", load_reason: "session_start",
+    }, BASE_CONFIG);
+    expect(e.hook_name).toBe("instructions_loaded");
+    expect(e.tool_name).toBe("");
+    expect(JSON.parse(e.event_data)).toMatchObject({ file_path: "/repo/CLAUDE.md", memory_type: "Project", load_reason: "session_start" });
+  });
+
+  it("maps PreCompact → 'pre_compact' and PostCompact → 'post_compact'", () => {
+    expect(normalize({ hook_event_name: "PreCompact", session_id: "s1", trigger: "auto" }, BASE_CONFIG).hook_name).toBe("pre_compact");
+    const post = normalize({ hook_event_name: "PostCompact", session_id: "s1", trigger: "manual" }, BASE_CONFIG);
+    expect(post.hook_name).toBe("post_compact");
+    expect(JSON.parse(post.event_data).trigger).toBe("manual");
+  });
+
+  it.each([
+    ["PermissionRequest", "permission_request"],
+    ["Notification", "notification"],
+    ["StopFailure", "stop_failure"],
+    ["TaskCreated", "task_created"],
+    ["TaskCompleted", "task_completed"],
+    ["PostModelSwitch", "model_switched"],
+    ["ConfigChange", "config_change"],
+  ])("maps %s → '%s'", (event, hookName) => {
+    const e = normalize({ hook_event_name: event, session_id: "s1" }, BASE_CONFIG);
+    expect(e.hook_name).toBe(hookName);
+    expect(e.hook_decision).toBe("observe");
+  });
+
+  it("keeps tool_name only for tool-call hooks, not for PermissionRequest", () => {
+    const e = normalize({ hook_event_name: "PermissionRequest", session_id: "s1", tool_name: "Bash" }, BASE_CONFIG);
+    expect(e.tool_name).toBe("");
+    expect(JSON.parse(e.event_data).tool_name).toBe("Bash");
+  });
+
   it("falls back to lowercased hook_event_name for unknown events", () => {
     const e = normalize({ hook_event_name: "SomeNewEvent", session_id: "s1" }, BASE_CONFIG);
     expect(e.hook_name).toBe("somenewevent");
