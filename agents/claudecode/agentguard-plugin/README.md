@@ -1,6 +1,8 @@
 # AgentGuard Plugin for Claude Code
 
-Streams Claude Code hook events to the AgentGuard [Timeplus Proton](https://www.timeplus.com/) backend for real-time security monitoring, and **synchronously blocks risky tool calls** based on rule-driven decisions from the AgentGuard server. Works alongside the OpenClaw plugin — both write to the same `agentguard_hook_events` stream, tagged with `agent_type = "claudecode"` or `"openclaw"` respectively.
+Streams Claude Code hook events into [Timeplus](https://www.timeplus.com/), where the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) turns them into normalized events, metrics, and security detections. Works alongside the OpenClaw plugin — both write to the same `agentguard_hook_events` stream, tagged with `agent_type = "claudecode"` or `"openclaw"` respectively.
+
+> **Holds are legacy.** The synchronous hold-and-wait path described below called the standalone AgentGuard server's `/api/holds` endpoint. That server has been retired in favour of the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard), which has no hold capability. Leave `AGENTGUARD_HOLDS_ENABLED` at its default (`false`): the plugin then runs in observe-only mode and only needs Timeplus.
 
 ## How it works
 
@@ -66,11 +68,11 @@ If `AGENTGUARD_HOLDS_ENABLED` is `false`, `PreToolUse` writes a permissive `perm
 
 - Node.js ≥ 18
 - Claude Code CLI
-- AgentGuard backend running with Timeplus Proton accessible
+- Timeplus Enterprise with the [AgentGuard app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) installed (creates `ag.agentguard_hook_events`)
 
 ## Build
 
-The compiled `dist/` is committed to the repository, so a build step is only needed after modifying source files.
+`dist/` is not committed; build before using the plugin from source (`npm publish` rebuilds it via `prepublishOnly`).
 
 ```bash
 cd agents/claudecode/agentguard-plugin
@@ -94,7 +96,7 @@ Set these environment variables in your shell profile (e.g. `~/.zshrc` or `~/.ba
 | `AGENTGUARD_STREAM`                   | `agentguard_hook_events`    | Target stream name                                                          |
 | `AGENTGUARD_USERNAME`                 | `proton`                    | Timeplus username                                                           |
 | `AGENTGUARD_PASSWORD`                 | `""`                        | Timeplus password                                                           |
-| `AGENTGUARD_URL`                      | `http://localhost:8080`     | AgentGuard server base URL (for `/api/holds` synchronous decisions)         |
+| `AGENTGUARD_URL`                      | `http://localhost:8080`     | Legacy: standalone AgentGuard server base URL (for `/api/holds`). Unused while holds are off |
 | `AGENTGUARD_HOLDS_FAIL_POLICY`        | `deny`                      | What to return when `/api/holds` is unreachable: `deny` blocks, `allow` lets call through |
 | `AGENTGUARD_HOLDS_ENABLED`            | `false`                     | When `true`, `PreToolUse` calls `/api/holds` synchronously and may block. **Opt-in only** — the AgentGuard app's data pipeline is observability-first. |
 | `AGENTGUARD_TRANSCRIPT_MESSAGES`      | `50`                        | Max messages included in context events                                     |
@@ -121,19 +123,6 @@ export AGENTGUARD_USERNAME=proton
 export AGENTGUARD_PASSWORD=<timeplus password>
 # AGENTGUARD_WORKSPACE defaults to "default"; the payload is identical in both modes
 ```
-
-### Server-side prerequisite — Timeplus service credentials
-
-The plugin's synchronous `/api/holds` call hits the AgentGuard server with no user session cookie (server-to-server). The AgentGuard server in turn needs Timeplus credentials to ingest the event and query rules. **You must set `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process** — these are the canonical service credentials for plugin endpoints.
-
-Without these, `/api/holds` returns:
-
-```
-HTTP 503
-{"error":"service credentials not configured: set TIMEPLUS_USER and TIMEPLUS_PASSWORD env vars on the AgentGuard server"}
-```
-
-For the standard `docker-compose.yaml` setup these are pre-set to `proton` / `timeplus@t+`. Edit them if your wizard credentials differ, then `docker compose up -d --build agentguard`.
 
 ## Installation
 
@@ -181,8 +170,8 @@ After installing and starting a Claude Code session, check that events are arriv
 
 ```bash
 curl -s -X POST http://localhost:3218/proton/v1/query \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"SELECT hook_name, agent_id, tool_name, event_time FROM table(agentguard_hook_events) WHERE agent_type='"'"'claudecode'"'"' ORDER BY event_time DESC LIMIT 10"}'
+  -u proton:'<password>' -H 'Content-Type: application/json' \
+  -d '{"query":"SELECT hook_name, agent_id, tool_name, event_time FROM table(ag.agentguard_hook_events) WHERE agent_type='"'"'claudecode'"'"' ORDER BY event_time DESC LIMIT 10"}'
 ```
 
 You should see rows for `session_start`, `user_prompt_submit`, `prompt_context`, `before_tool_call`, `after_tool_call`, `llm_output`, `llm_context`, etc.
@@ -191,33 +180,9 @@ To verify context events carry the full transcript:
 
 ```bash
 curl -s -X POST http://localhost:3218/proton/v1/query \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"SELECT hook_name, json_value(event_data, '"'"'$.message_count'"'"') AS msg_count, event_time FROM table(agentguard_hook_events) WHERE agent_type='"'"'claudecode'"'"' AND hook_name IN ('"'"'prompt_context'"'"', '"'"'llm_context'"'"') ORDER BY event_time DESC LIMIT 5"}'
+  -u proton:'<password>' -H 'Content-Type: application/json' \
+  -d '{"query":"SELECT hook_name, json_value(event_data, '"'"'$.message_count'"'"') AS msg_count, event_time FROM table(ag.agentguard_hook_events) WHERE agent_type='"'"'claudecode'"'"' AND hook_name IN ('"'"'prompt_context'"'"', '"'"'llm_context'"'"') ORDER BY event_time DESC LIMIT 5"}'
 ```
-
-### Verifying the synchronous hold flow
-
-To exercise the blocking path end-to-end:
-
-1. **Open the AgentGuard UI** at `http://localhost:8080`, log in, and install a rule that matches Claude Code tool calls (e.g. Privilege Guard for Bash).
-2. **Set its `block_policy` to `hold`** on the rule detail page (`/rules/:id` → Block Policy panel).
-3. **In a Claude Code session**, ask the agent to run a matching tool call.
-4. **In the AgentGuard UI** you should see within ~1 s:
-   - A toast notification bottom-right: "Hold pending: `<tool>` on `<agent>`"
-   - A pending-holds badge on the Threats sidebar entry
-   - The threat detail page shows an Approve / Deny banner with the rule message and a truncated `args_summary`
-5. **Click Approve or Deny** → Claude Code resumes (or rejects) the tool call within ~1 s.
-6. **Audit trail:** every hold lifecycle row is in the `agentguard_holds` stream:
-   ```bash
-   curl -s -X POST http://localhost:3218/proton/v1/query \
-     -u proton:'timeplus@t+' -H 'Content-Type: application/json' \
-     -d '{"query":"SELECT hold_id, tool_name, status, decided_by, decided_at FROM table(mv_holds_current) ORDER BY created_at DESC LIMIT 10"}'
-   ```
-
-If you don't see the toast, check `docker logs agentguard 2>&1 | grep holds` — every error path on the server logs with prefix `holds:`.
-
-If the plugin reports `AgentGuard unreachable — backend returned 503`, the AgentGuard server is missing service credentials — see [Server-side prerequisite](#server-side-prerequisite--timeplus-service-credentials).
-
 
 ## Development
 

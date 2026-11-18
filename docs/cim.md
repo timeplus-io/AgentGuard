@@ -1,5 +1,7 @@
 # AgentGuard — Common Information Model (CIM)
 
+> **Where this lives now:** the streams and materialized views described here are installed by the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) (database `ag`), which owns the DDL. This document is kept as the reference for how plugin events are interpreted. Mentions of server startup, `Init()`, UI tabs, or `/api/...` endpoints refer to the retired standalone AgentGuard server (last release `v0.9.3`).
+
 AgentGuard ingests telemetry from heterogeneous AI coding agents — currently OpenClaw, Claude Code, and Hermes Agent — each with its own hook vocabulary, event payloads, and observability integrations. The **Common Information Model (CIM)** is the normalization layer that abstracts these differences away so that security rules, metrics, and dashboards can be written once and work across all agent types without modification.
 
 The CIM consists of two layers:
@@ -135,7 +137,7 @@ agentguard_hook_events
                     (mv_rule_rp001 …)    (mv_cim_metrics_*)
 ```
 
-`mv_cim_claudecode`, `mv_cim_openclaw`, and `mv_cim_hermes` are created on startup via `execIfNotExists` — they are **only created if they do not already exist**. To apply DDL changes (field extraction fixes, new hook mappings), drop the affected view in Timeplus and restart the server so it is recreated with the updated DDL.
+`mv_cim_claudecode`, `mv_cim_openclaw`, and `mv_cim_hermes` are created when the AgentGuard app is installed (`CREATE … IF NOT EXISTS`). DDL changes (field extraction fixes, new hook mappings) are made in the app package and applied by upgrading the app.
 
 ### 2.4 Field Mapping by Agent
 
@@ -680,7 +682,5 @@ risk classification) and written to `agentguard_dlp_enriched`. Because the
 mapping reads CIM columns (`user_message` / `assistant_message` / `tool_input`)
 rather than agent-specific hook payloads, no per-agent DLP code is needed.
 
-See `docs/superpowers/specs/2026-06-11-semantic-dlp-design.md` for the full
-design, `backend/internal/timeplus/dlp.go` for the stream/UDF/MV DDL, and the
-**Semantic DLP** section of `CLAUDE.md` for the API surface and verification
-scripts (`backend/scripts/dlp_*`).
+Semantic DLP was part of the standalone AgentGuard server and is not included in
+the Timeplus app; the design is kept in `docs/research/semantic-dlp-design.md`.

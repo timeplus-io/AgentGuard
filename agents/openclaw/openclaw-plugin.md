@@ -6,7 +6,7 @@ Real-time security event collection for OpenClaw AI agents via the OpenClaw plug
 
 ## Overview
 
-The AgentGuard OpenClaw plugin is a TypeScript npm package (`@agentguard/openclaw-plugin`) that intercepts all 29 OpenClaw lifecycle hook points and streams each event to a Timeplus stream (`agentguard_hook_events`) via the Proton Ingest REST API. This gives the AgentGuard backend a real-time feed of every security-relevant action taken by any AI agent running through the OpenClaw gateway.
+The AgentGuard OpenClaw plugin is a TypeScript npm package (`@timeplus/agentguard-openclaw-plugin`) that intercepts all 29 OpenClaw lifecycle hook points and streams each event to a Timeplus stream (`agentguard_hook_events`) via the Proton Ingest REST API. This gives the AgentGuard backend a real-time feed of every security-relevant action taken by any AI agent running through the OpenClaw gateway.
 
 **Phase 1 (current):** observe-only — every hook captures and forwards data; no blocking or mutation.
 
@@ -24,7 +24,7 @@ agents/openclaw/agentguard-plugin/
 ├── src/
 │   ├── index.ts           # OpenClawPluginDefinition default export
 │   ├── config.ts          # resolveConfig() — merges openclaw.json config + env vars
-│   ├── timeplus-client.ts # TimeplusClient — batch buffer + Proton Ingest POST
+│   ├── timeplus-client.ts # TimeplusClient — batch buffer + Timeplus ingest POST
 │   └── hooks.ts           # registerAllHooks(api, client) for all 29 hooks
 └── dist/                  # compiled output (tsc), committed for Docker volume mount
 ```
@@ -213,7 +213,7 @@ All capture `event_data` as a JSON blob. Subagent hooks additionally capture `ch
 
 - OpenClaw running via `agents/openclaw/Makefile`
 - AgentGuard backend running (creates the Timeplus stream on startup)
-- Timeplus Proton accessible at `http://host.docker.internal:3218`
+- Timeplus accessible at `http://host.docker.internal:3218`
 
 ### Start OpenClaw with the plugin
 
@@ -295,12 +295,10 @@ npm run build   # outputs to dist/
 
 ---
 
-## Backend Integration
+## Stream Contract
 
-`backend/internal/timeplus/init.go` — `Init()` calls `createAgentGuardStreams()` after the OTel streams are created. The DDL uses `IF NOT EXISTS` semantics via the `execIfNotExists` helper, so restarts are idempotent.
+The `agentguard_hook_events` stream is created by the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) (`ddl/009_agentguard_hook_events.sql`, database `ag`), not by this repo. The stream name appears in two places here — keep them in sync with the app if it is ever renamed:
 
-The stream name (`agentguard_hook_events`) is the same string in three places — keep them in sync if renaming:
+1. Plugin default config `DEFAULTS.stream` in `config.ts`
+2. `openclaw.json` plugin config `stream` field
 
-1. Backend DDL constant `ddlAgentGuardHookEvents` in `init.go`
-2. Plugin default config `DEFAULTS.stream` in `config.ts`
-3. `openclaw.json` plugin config `stream` field

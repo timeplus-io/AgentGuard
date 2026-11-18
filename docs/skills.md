@@ -1,5 +1,7 @@
 # AgentGuard — Skills Monitoring
 
+> **Where this lives now:** the streams and materialized views described here are installed by the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) (database `ag`), which owns the DDL. This document is kept as the reference for how plugin events are interpreted. Mentions of server startup, `Init()`, UI tabs, or `/api/...` endpoints refer to the retired standalone AgentGuard server (last release `v0.9.3`).
+
 AgentGuard tracks which **skills** are available to an AI agent during a session and which are actively invoked. Each event is enriched with metadata about the skill's namespace, provenance, description, and invocation arguments — giving future threat-detection rules structured signals.
 
 ---

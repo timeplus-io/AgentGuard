@@ -12,7 +12,7 @@ Runs OpenClaw as a local AI agent gateway with two plugins active:
 - Docker
 - Python 3 (for `make configure`)
 - Timeplus running and accessible (default: `http://localhost:3218`)
-- AgentGuard backend running (creates the `agentguard_hook_events` stream on startup)
+- Timeplus Enterprise with the [AgentGuard app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) installed (creates `ag.agentguard_hook_events`)
 
 ---
 
@@ -105,7 +105,7 @@ Configure by setting environment variables before starting OpenClaw:
 export AGENTGUARD_TIMEPLUS_URL=http://localhost:3218
 export AGENTGUARD_DEPLOYMENT_ID=my-team
 export AGENTGUARD_DEPLOYMENT_NAME="My Team"
-# optional — only needed if Proton has auth enabled
+# optional — only needed if Timeplus has auth enabled
 export AGENTGUARD_USERNAME=proton
 export AGENTGUARD_PASSWORD=your-password
 ```

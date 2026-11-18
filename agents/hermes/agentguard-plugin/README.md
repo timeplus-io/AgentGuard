@@ -2,7 +2,9 @@
 
 AgentGuard security monitoring plugin for [Hermes Agent](https://github.com/nousresearch/hermes-agent).
 
-Forwards Hermes session, LLM, and tool-call events to an [AgentGuard](https://github.com/timeplus/agentguard) Timeplus stream for real-time observability, and **synchronously blocks risky tool calls** based on rule decisions from the AgentGuard server.
+Forwards Hermes session, LLM, and tool-call events into [Timeplus](https://www.timeplus.com/), where the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) turns them into normalized events, metrics, and security detections.
+
+> **Holds are legacy.** The synchronous hold-and-wait path described below called the standalone AgentGuard server's `/api/holds` endpoint. That server has been retired in favour of the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard), which has no hold capability. Leave `AGENTGUARD_HOLDS_ENABLED` at its default (`false`): the plugin then runs in observe-only mode and only needs Timeplus.
 
 ## How it works
 
@@ -63,26 +65,13 @@ Set environment variables before starting Hermes:
 | `AGENTGUARD_DEPLOYMENT_ID` | `local` | Deployment environment tag |
 | `AGENTGUARD_DEPLOYMENT_NAME` | `Local Dev` | Human-readable deployment name |
 
-### Synchronous tool blocking (`pre_tool_call` → AgentGuard `/api/holds`)
+### Synchronous tool blocking (legacy — `pre_tool_call` → AgentGuard `/api/holds`)
 
 | Variable | Default | Description |
 |---|---|---|
-| `AGENTGUARD_URL` | `http://localhost:8080` | AgentGuard server base URL — where `pre_tool_call` POSTs its hold request |
+| `AGENTGUARD_URL` | `http://localhost:8080` | Legacy: standalone AgentGuard server base URL — where `pre_tool_call` POSTs its hold request. Unused while holds are off |
 | `AGENTGUARD_HOLDS_FAIL_POLICY` | `deny` | What to return when `/api/holds` is unreachable: `deny` blocks the tool call, `allow` lets it proceed |
 | `AGENTGUARD_HOLDS_ENABLED` | `false` | When `false`, `pre_tool_call` reverts to async observation-only mode (no blocking, event still ingested) |
-
-### Server-side prerequisite — Timeplus service credentials
-
-The plugin's synchronous `/api/holds` call hits the AgentGuard server with no user session cookie (server-to-server). The AgentGuard server in turn needs Timeplus credentials to ingest the event and query rules. **You must set `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process** — these are the canonical service credentials for plugin endpoints.
-
-Without these, `/api/holds` returns:
-
-```
-HTTP 503
-{"error":"service credentials not configured: set TIMEPLUS_USER and TIMEPLUS_PASSWORD env vars on the AgentGuard server"}
-```
-
-For the standard `docker-compose.yaml` setup these are pre-set to `proton` / `timeplus@t+`. Edit them if your wizard credentials differ, then `docker compose up -d --build agentguard`.
 
 ### Example
 
@@ -99,11 +88,6 @@ export AGENTGUARD_PASSWORD=secret
 # Identity
 export AGENTGUARD_DEPLOYMENT_ID=production
 export AGENTGUARD_DEPLOYMENT_NAME="Production Hermes"
-
-# Sync tool blocking
-export AGENTGUARD_URL=http://agentguard.example.com:8080
-export AGENTGUARD_HOLDS_FAIL_POLICY=deny
-export AGENTGUARD_HOLDS_ENABLED=true
 
 hermes
 ```
@@ -126,28 +110,6 @@ Every Hermes hook event is forwarded to the `agentguard_hook_events` stream:
 | `post_tool_call` | `post_tool_call` | After each tool execution |
 
 `conversation_history` is stripped from all events before ingestion — it is unbounded and contains no information not already available from the individual turn events.
-
-## Verifying the synchronous hold flow
-
-To exercise blocking end-to-end:
-
-1. **Open the AgentGuard UI** at `http://localhost:8080`, log in, and install a rule that matches Hermes tool calls (e.g. Privilege Guard for shell-like tools).
-2. **Set its `block_policy` to `hold`** on the rule detail page (`/rules/:id` → Block Policy panel).
-3. **In Hermes**, ask the agent to run a matching tool call.
-4. **In the AgentGuard UI** you should see within ~1 s:
-   - A toast notification bottom-right: "Hold pending: `<tool>` on `<agent>`"
-   - A pending-holds badge on the Threats sidebar entry
-   - The threat detail page shows an Approve / Deny banner with the rule message and a truncated `args_summary`
-5. **Click Approve or Deny** → Hermes resumes (or rejects) the tool call within ~1 s. On deny, Hermes feeds the deny message back to the LLM as a tool error.
-6. **Audit trail:** every hold lifecycle row is in the `agentguard_holds` stream:
-   ```bash
-   curl -s -X POST http://localhost:3218/proton/v1/query \
-     -u proton:'timeplus@t+' -H 'Content-Type: application/json' \
-     -d '{"query":"SELECT hold_id, tool_name, status, decided_by, decided_at FROM table(mv_holds_current) ORDER BY created_at DESC LIMIT 10"}'
-   ```
-
-If the plugin reports `AgentGuard unreachable — backend returned 503`, the AgentGuard server is missing service credentials — see [Server-side prerequisite](#server-side-prerequisite--timeplus-service-credentials).
-
 
 ## Custom install path
 
