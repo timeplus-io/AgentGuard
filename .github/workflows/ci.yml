@@ -6,56 +6,6 @@ on:
     branches: [main]
 
 jobs:
-  backend-checks:
-    name: Backend — lint & test
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.24'
-          cache-dependency-path: backend/go.sum
-
-      - name: Download modules
-        run: go mod download
-
-      - name: Lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          working-directory: backend
-          version: v2.11.4  # pin; update intentionally via https://github.com/golangci/golangci-lint/releases
-
-      - name: Test
-        run: go test ./...
-
-  frontend-checks:
-    name: Frontend — lint & test
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm run test
-
   plugin-checks:
     name: Plugin — ${{ matrix.plugin }} test & build
     runs-on: ubuntu-latest
@@ -92,89 +42,18 @@ jobs:
       - name: Build
         run: npm run build
 
-  integration-tests:
-    name: Backend — integration (timeplusd)
+  hermes-plugin-checks:
+    name: Plugin — hermes test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/hermes/agentguard-plugin
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-python@v6
         with:
-          go-version: '1.24'
-          cache-dependency-path: backend/go.sum
+          python-version: '3.12'
 
-      - name: Start timeplusd
-        run: |
-          docker run -d --name timeplusd \
-            -p 3218:3218 -p 8463:8463 \
-            --entrypoint /bin/bash \
-            timeplus/timeplusd:3.2.11 \
-            -c "sed -i 's/preallocate: true/preallocate: false/g' /etc/timeplusd-server/config.yaml && /entrypoint.sh"
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8123/proton/ping > /dev/null 2>&1; then
-              echo "timeplusd ready"
-              break
-            fi
-            sleep 2
-          done
-
-      - name: Build AgentGuard server
-        working-directory: backend
-        run: CGO_ENABLED=0 go build -o ../agentguard-server cmd/server/main.go
-
-      - name: Start AgentGuard server
-        run: |
-          ./agentguard-server --timeplus-host localhost --timeplus-port 3218 --timeplus-native-port 8463 &
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/api/auth/status > /dev/null 2>&1; then
-              echo "AgentGuard server ready"
-              break
-            fi
-            sleep 1
-          done
-
-      - name: Run integration tests
-        working-directory: backend
-        env:
-          AGENTGUARD_URL: http://localhost:8080
-          TIMEPLUS_HOST: localhost
-          TIMEPLUS_PORT: '3218'
-          TIMEPLUS_NATIVE_PORT: '8463'
-          TIMEPLUS_USER: default
-          TIMEPLUS_PASSWORD: ''
-        run: CGO_ENABLED=0 go test -tags integration -v -timeout 120s ./internal/handlers/...
-
-  build:
-    name: Full embed build
-    runs-on: ubuntu-latest
-    needs: [backend-checks, frontend-checks, plugin-checks]
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.24'
-          cache-dependency-path: backend/go.sum
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run build
-
-      - name: Sync frontend into backend embed dir
-        run: |
-          mkdir -p backend/internal/web/dist
-          cp -r frontend/dist/. backend/internal/web/dist/
-
-      - name: Build backend (embedded)
-        working-directory: backend
-        run: CGO_ENABLED=0 go build -tags embed ./...
+      - name: Test
+        run: python -m unittest discover -s tests -v

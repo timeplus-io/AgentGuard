@@ -1,5 +1,7 @@
 # AgentGuard — Memory Monitoring
 
+> **Where this lives now:** the streams and materialized views described here are installed by the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) (database `ag`), which owns the DDL. This document is kept as the reference for how plugin events are interpreted. Mentions of server startup, `Init()`, UI tabs, or `/api/...` endpoints refer to the retired standalone AgentGuard server (last release `v0.9.3`).
+
 AgentGuard tracks what AI agents read from and write to persistent memory — across all memory mechanisms in use. This document explains how that data is collected, processed, and surfaced.
 
 ---

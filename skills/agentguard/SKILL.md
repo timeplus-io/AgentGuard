@@ -8,9 +8,9 @@ description: >
 
 ## Overview
 
-AgentGuard monitors AI coding agents by installing a lightweight hook plugin that streams lifecycle events (session start/end, LLM calls, tool invocations) to Timeplus.
+AgentGuard monitors AI coding agents by installing a lightweight hook plugin that streams lifecycle events (session start/end, LLM calls, tool invocations) to Timeplus, where the AgentGuard Timeplus app (database `ag`) turns them into normalized events, metrics, and security detections.
 
-The plugin also enables real-time security holds so AgentGuard can block dangerous tool calls before they execute.
+The AgentGuard app must already be installed on the target Timeplus — it creates the `ag.agentguard_hook_events` stream the plugins write to. If the user has not installed it, point them to https://github.com/timeplus-io/apps/tree/main/apps/agentguard first.
 
 Three agent types are supported:
 
@@ -39,9 +39,8 @@ Every agent needs these values. Ask user to provide ALL of them before running t
 | `TIMEPLUS_USER` | | Timeplus username — used for Basic auth in both modes |
 | `TIMEPLUS_PASSWORD` | | Timeplus password — used for Basic auth in both modes |
 | `AGENTGUARD_DATABASE` | ag | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
-| `AGENTGUARD_URL` | http://localhost:8080 | AgentGuard backend (for hold callbacks) |
-| `HOLDS_ENABLED` | false | Opt-in to synchronous tool-call blocking. Set to `true` to enable. |
-| `HOLD_FAIL_POLICY` | deny | deny (block on error) or allow (fail open) |
+
+The plugins also carry legacy hold settings (`AGENTGUARD_URL`, `HOLDS_ENABLED`, `HOLD_FAIL_POLICY`) for the retired standalone AgentGuard server. The Timeplus app has no hold capability: do not ask the user for these, always write `HOLDS_ENABLED=false`, and omit the other two.
 
 ### Choosing the ingest API
 
@@ -65,7 +64,7 @@ This provides the `agentguard-hook` command that Claude Code invokes on each hoo
 
 ### 2. Register hooks in `~/.claude/settings.json`
 
-Add / update below content in openclaw.json. The parameters surrounded by '<>' are replaced by [shared configuration values](#shared-configuration-values)
+Add / update below content in `~/.claude/settings.json`. The parameters surrounded by '<>' are replaced by [shared configuration values](#shared-configuration-values)
 
 Note that user may already configured "env" and "hooks" keys. Do not replace the existing value but merge and update with the new keys / values.
 
@@ -81,9 +80,7 @@ Note that user may already configured "env" and "hooks" keys. Do not replace the
         "AGENTGUARD_STREAM": "agentguard_hook_events",
         "AGENTGUARD_USERNAME": <TIMEPLUS_USER>,
         "AGENTGUARD_PASSWORD": <TIMEPLUS_PASSWORD>,
-        "AGENTGUARD_URL": <AGENTGUARD_URL>,
-        "AGENTGUARD_HOLDS_FAIL_POLICY": <HOLDS_FAIL_POLICY>,
-        "AGENTGUARD_HOLDS_ENABLED": <HOLDS_ENABLED>
+        "AGENTGUARD_HOLDS_ENABLED": "false"
     },
     "hooks": {
         "PreToolUse": [
@@ -95,55 +92,55 @@ Note that user may already configured "env" and "hooks" keys. Do not replace the
         "SessionStart": [
             {
                 "matcher": "*",
-                "hooks": [{"type": "command", "command": "agentguard-hook", "async": True}]
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
             }
         ],
         "SessionEnd": [
             {
                 "matcher": "*",
-                "hooks": [{"type": "command", "command": "agentguard-hook", "async": True}]
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
             }
         ],
         "UserPromptSubmit": [
             {
                 "matcher": "*",
-                "hooks": [{"type": "command", "command": "agentguard-hook", "async": True}]
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
             }
         ],
         "PostToolUse": [
             {
                 "matcher": "*",
-                "hooks": [{"type": "command", "command": "agentguard-hook", "async": True}]
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
             }
         ],
         "PostToolUseFailure": [
             {
                 "matcher": "*",
-                "hooks": [{"type": "command", "command": "agentguard-hook", "async": True}]
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
             }
         ],
         "SubagentStart": [
             {
                 "matcher": "*",
-                "hooks": [{"type": "command", "command": "agentguard-hook", "async": True}]
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
             }
         ],
         "SubagentStop": [
             {
                 "matcher": "*",
-                "hooks": [{"type": "command", "command": "agentguard-hook", "async": True}]
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
             }
         ],
         "Stop": [
             {
                 "matcher": "*",
-                "hooks": [{"type": "command", "command": "agentguard-hook", "async": True}]
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
             }
         ],
         "PermissionDenied": [
             {
                 "matcher": "*",
-                "hooks": [{"type": "command", "command": "agentguard-hook", "async": True}]
+                "hooks": [{"type": "command", "command": "agentguard-hook", "async": true}]
             }
         ]
     }
@@ -183,9 +180,7 @@ Add / update below content in openclaw.json. The parameters surrounded by '<>' a
                     "database": <AGENTGUARD_DATABASE>,
                     "deploymentId": <DEPLOYMENT_ID>,
                     "deploymentName": <DEPLOYMENT_NAME>,
-                    "agentguardUrl": <AGENTGUARD_URL>,
-                    "holdFailPolicy": <HOLD_FAIL_POLICY>,
-                    "holdsEnabled": <HOLDS_ENABLED>
+                    "holdsEnabled": false
                 }
             }
         }
@@ -220,7 +215,5 @@ Modify the shell configuration file to set the environment variables by the user
 - AGENTGUARD_AGENT_ID
 - AGENTGUARD_DEPLOYMENT_ID
 - AGENTGUARD_DEPLOYMENT_NAME
-- AGENTGUARD_URL
 - AGENTGUARD_DATABASE
-- AGENTGUARD_HOLDS_ENABLED
-- AGENTGUARD_HOLDS_FAIL_POLICY
+- AGENTGUARD_HOLDS_ENABLED (always `false`)

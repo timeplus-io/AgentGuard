@@ -1,6 +1,8 @@
 # AgentGuard Plugin for OpenClaw
 
-Streams all OpenClaw lifecycle events to the AgentGuard [Timeplus Proton](https://www.timeplus.com/) backend for real-time security monitoring, and **synchronously blocks risky tool calls** based on rule-driven decisions from the AgentGuard server. Works alongside the Claude Code plugin — both write to the same `agentguard_hook_events` stream, tagged with `agent_type = "openclaw"` or `"claudecode"` respectively.
+Streams all OpenClaw lifecycle events into [Timeplus](https://www.timeplus.com/), where the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) turns them into normalized events, metrics, and security detections. Works alongside the Claude Code plugin — both write to the same `agentguard_hook_events` stream, tagged with `agent_type = "openclaw"` or `"claudecode"` respectively.
+
+> **Holds are legacy.** The synchronous hold-and-wait path described below called the standalone AgentGuard server's `/api/holds` endpoint. That server has been retired in favour of the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard), which has no hold capability. Leave `holdsEnabled` / `AGENTGUARD_HOLDS_ENABLED` at its default (`false`): the plugin then runs in observe-only mode and only needs Timeplus.
 
 ## How it works
 
@@ -106,11 +108,11 @@ Subagent context fields (`childSessionKey`, `requesterSessionKey`) are merged in
 
 - Node.js ≥ 18
 - OpenClaw ≥ 2026.4.0
-- AgentGuard backend running with Timeplus Proton accessible
+- Timeplus Enterprise with the [AgentGuard app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) installed (creates `ag.agentguard_hook_events`)
 
 ## Build
 
-The compiled `dist/` is committed to the repository, so a build step is only needed after modifying source files.
+`dist/` is not committed; build before using the plugin from source (`npm publish` rebuilds it via `prepublishOnly`).
 
 ```bash
 cd agents/openclaw/agentguard-plugin
@@ -128,18 +130,18 @@ make build-plugin
 
 ### Plugin config (OpenClaw → Timeplus / AgentGuard)
 
-These settings control how the plugin talks to Timeplus (for async event ingest) and to the AgentGuard server (for synchronous hold decisions). They are read from two sources in priority order: **environment variables** override **`openclaw.json` plugin config**.
+These settings control how the plugin talks to Timeplus (event ingest); the `agentguardUrl` / `hold*` keys belong to the legacy hold path. They are read from two sources in priority order: **environment variables** override **`openclaw.json` plugin config**.
 
 | `openclaw.json` key | Environment variable          | Default                    | Description                                                                 |
 |---------------------|-------------------------------|----------------------------|-----------------------------------------------------------------------------|
-| `timeplusUrl`       | `AGENTGUARD_TIMEPLUS_URL`     | `http://localhost:3218`    | Timeplus Proton HTTP API base URL (async event ingest)                      |
+| `timeplusUrl`       | `AGENTGUARD_TIMEPLUS_URL`     | `http://localhost:3218`    | Timeplus HTTP API base URL (async event ingest)                      |
 | `stream`            | `AGENTGUARD_STREAM`           | `agentguard_hook_events`   | Target stream name for async event ingest                                   |
 | `database`          | `AGENTGUARD_DATABASE`         | `"ag"`                     | Timeplus database owning the AgentGuard streams. Matches the AgentGuard Timeplus app's `db_name: ag`. |
 | `flushMs`           | `AGENTGUARD_FLUSH_MS`         | `2000`                     | Periodic flush interval (milliseconds)                                      |
 | `batchSize`         | `AGENTGUARD_BATCH_SIZE`       | `50`                       | Flush when queue reaches this size                                          |
 | `username`          | `AGENTGUARD_USERNAME`         | `proton`                   | Timeplus username (for async ingest)                                        |
 | `password`          | `AGENTGUARD_PASSWORD`         | `""`                       | Timeplus password (for async ingest)                                        |
-| `agentguardUrl`     | `AGENTGUARD_URL`              | `http://localhost:8080`    | AgentGuard server base URL (for `/api/holds` synchronous decisions)         |
+| `agentguardUrl`     | `AGENTGUARD_URL`              | `http://localhost:8080`    | Legacy: standalone AgentGuard server base URL (for `/api/holds`). Unused while holds are off |
 | `holdFailPolicy`    | `AGENTGUARD_HOLDS_FAIL_POLICY`| `deny`                     | What to return when `/api/holds` is unreachable: `deny` blocks, `allow` lets call through |
 | `holdsEnabled`      | `AGENTGUARD_HOLDS_ENABLED`    | `false`                     | When `false`, `before_tool_call` reverts to async observation-only mode     |
 | `deploymentId`      | *(config-only)*               | `default`                  | Deployment group identifier                                                 |
@@ -147,24 +149,6 @@ These settings control how the plugin talks to Timeplus (for async event ingest)
 
 `deploymentId` and `deploymentName` are set at installation time in `openclaw.json` and cannot be overridden by env var — they identify which OpenClaw deployment the events come from.
 
-> **Docker note:** The `make configure` script in `agents/openclaw/Makefile` writes `agentguardUrl: http://host.docker.internal:8080` into `openclaw.json`, since OpenClaw runs in a container and reaches the host AgentGuard via that alias. Standalone (non-Docker) plugin installs use the `localhost:8080` default.
-
-### Server-side prerequisite — Timeplus service credentials
-
-The plugin's synchronous `/api/holds` call hits the AgentGuard server with no user session cookie (it's a server-to-server call). The AgentGuard server in turn needs Timeplus credentials to ingest the event and query rules. **You must set `TIMEPLUS_USER` and `TIMEPLUS_PASSWORD` env vars on the AgentGuard process** — these are the canonical service credentials for plugin endpoints.
-
-Without these, `/api/holds` returns:
-
-```
-HTTP 503
-{"error":"service credentials not configured: set TIMEPLUS_USER and TIMEPLUS_PASSWORD env vars on the AgentGuard server"}
-```
-
-For the standard `docker-compose.yaml` setup these are pre-set to `proton` / `timeplus@t+`. Edit them if your wizard credentials differ, then `docker compose up -d --build agentguard`.
-
-### Alert delivery (Timeplus → AgentGuard)
-
-Security rule alerts no longer flow through a Timeplus callback. A backend watcher (`internal/notify`, #258) tails the `agentguard_notify_events` stream directly via a streaming SQL query and fans matches out over AgentGuard's own SSE pipeline — there is nothing to configure on the plugin or Timeplus side for this.
 
 ## Installation
 
@@ -245,7 +229,7 @@ After starting OpenClaw with the plugin active, check that events are arriving i
 ```bash
 curl -s -X POST http://localhost:3218/proton/v1/query \
   -H 'Content-Type: application/json' \
-  -d '{"query":"SELECT hook_name, agent_id, tool_name, event_time FROM table(agentguard_hook_events) WHERE agent_type='"'"'openclaw'"'"' ORDER BY event_time DESC LIMIT 10"}'
+  -d '{"query":"SELECT hook_name, agent_id, tool_name, event_time FROM table(ag.agentguard_hook_events) WHERE agent_type='"'"'openclaw'"'"' ORDER BY event_time DESC LIMIT 10"}'
 ```
 
 You should see rows for `session_start`, `llm_input`, `before_tool_call`, `after_tool_call`, `llm_output`, etc.
@@ -255,31 +239,8 @@ To confirm LLM metadata is being captured:
 ```bash
 curl -s -X POST http://localhost:3218/proton/v1/query \
   -H 'Content-Type: application/json' \
-  -d '{"query":"SELECT hook_name, provider, model, run_id, event_time FROM table(agentguard_hook_events) WHERE agent_type='"'"'openclaw'"'"' AND hook_name IN ('"'"'llm_input'"'"', '"'"'llm_output'"'"') ORDER BY event_time DESC LIMIT 5"}'
+  -d '{"query":"SELECT hook_name, provider, model, run_id, event_time FROM table(ag.agentguard_hook_events) WHERE agent_type='"'"'openclaw'"'"' AND hook_name IN ('"'"'llm_input'"'"', '"'"'llm_output'"'"') ORDER BY event_time DESC LIMIT 5"}'
 ```
-
-### Verifying the synchronous hold flow
-
-To exercise the blocking path end-to-end:
-
-1. **Open the AgentGuard UI** at `http://localhost:8080`, log in, and install a rule that matches OpenClaw tool calls (e.g. Privilege Guard).
-2. **Set its `block_policy` to `hold`** on the rule detail page (`/rules/:id` → Block Policy panel).
-3. **Trigger a matching tool call** from OpenClaw — anything that fires `before_tool_call` and matches the rule.
-4. **In the AgentGuard UI** you should see within ~1 s:
-   - A toast notification bottom-right: "Hold pending: `<tool>` on `<agent>`"
-   - A pending-holds badge on the Threats sidebar entry
-   - The threat detail page shows an Approve / Deny banner with the rule message and a truncated `args_summary`
-5. **Click Approve or Deny** → OpenClaw resumes (or rejects) the tool call within ~1 s.
-6. **Audit trail:** every hold lifecycle row is in the `agentguard_holds` stream:
-   ```bash
-   curl -s -X POST http://localhost:3218/proton/v1/query \
-     -u proton:'timeplus@t+' -H 'Content-Type: application/json' \
-     -d '{"query":"SELECT hold_id, tool_name, status, decided_by, decided_at FROM table(mv_holds_current) ORDER BY created_at DESC LIMIT 10"}'
-   ```
-
-If you don't see the toast, check `docker logs agentguard 2>&1 | grep holds` — every error path on the server logs with prefix `holds:`.
-
-If the plugin reports `AgentGuard unreachable — backend returned 503`, the AgentGuard server is missing service credentials — see [Server-side prerequisite](#server-side-prerequisite--timeplus-service-credentials).
 
 ## Development
 

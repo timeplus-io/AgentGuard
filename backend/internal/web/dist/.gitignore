@@ -1,5 +1,0 @@
-# Frontend build output — populated by `make web-sync` or the Dockerfile.
-# Do not commit built assets.
-*
-!.gitignore
-!.gitkeep

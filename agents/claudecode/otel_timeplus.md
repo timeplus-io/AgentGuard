@@ -20,7 +20,7 @@ Claude Code shares the same Timeplus OTEL input on port **4318** used by OpenCla
 ## Prerequisites
 
 - Timeplus running and accessible (default: `localhost:3218` for SQL, `localhost:8463` for native)
-- Ports `4317` and `4318` exposed on the Timeplus container (already configured in `docker-compose.yaml`)
+- The AgentGuard Timeplus app installed — it creates the OTLP/HTTP input (default port `4318`, `otel_port` in the app config); that port must be reachable from the Claude Code host
 
 ---
 
