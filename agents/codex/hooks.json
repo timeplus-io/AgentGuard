@@ -1,0 +1,20 @@
+{
+  "description": "Sample Codex hooks for AgentGuard. See README.md.",
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex" } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex" } ] }
+    ],
+    "PreToolUse": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex" } ] }
+    ],
+    "PostToolUse": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex" } ] }
+    ]
+  }
+}

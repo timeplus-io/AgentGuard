@@ -1,21 +1,23 @@
 .PHONY: all build test clean package-plugins \
         claudecode-build claudecode-test \
         openclaw-build openclaw-test \
-        hermes-build hermes-test help
+        hermes-build hermes-test \
+        codex-build codex-test help
 
 CLAUDECODE := agents/claudecode/agentguard-plugin
 OPENCLAW   := agents/openclaw/agentguard-plugin
 HERMES     := agents/hermes/agentguard-plugin
-# The Hermes plugin needs Python >= 3.10.
+CODEX      := agents/codex/agentguard-plugin
+# The Hermes and Codex plugins need Python >= 3.10.
 PYTHON     ?= python3.12
 
 all: build
 
 ## build: build all agent plugins
-build: claudecode-build openclaw-build hermes-build
+build: claudecode-build openclaw-build hermes-build codex-build
 
 ## test: run all plugin unit tests
-test: claudecode-test openclaw-test hermes-test
+test: claudecode-test openclaw-test hermes-test codex-test
 
 # ── Claude Code plugin ───────────────────────────────────────────────────────
 
@@ -47,24 +49,36 @@ hermes-build:
 hermes-test:
 	cd $(HERMES) && $(PYTHON) -m unittest discover -s tests -v
 
+# ── Codex plugin ─────────────────────────────────────────────────────────────
+
+## codex-build: build the Codex plugin wheel into its dist/
+codex-build:
+	cd $(CODEX) && $(PYTHON) -m pip install build hatchling --quiet && $(PYTHON) -m build --wheel
+
+## codex-test: run the Codex plugin unit tests
+codex-test:
+	cd $(CODEX) && $(PYTHON) -m unittest discover -s tests -v
+
 # ── Packaging ────────────────────────────────────────────────────────────────
 
 ## package-plugins: build all agent plugins and pack them into packages/ for offline distribution
 ## Output: packages/timeplus-agentguard-claudecode-plugin-*.tgz
 ##         packages/timeplus-agentguard-openclaw-plugin-*.tgz
 ##         packages/agentguard_hermes_plugin-*.whl
+##         packages/agentguard_codex_plugin-*.whl
 package-plugins:
 	@mkdir -p packages
 	cd $(CLAUDECODE) && npm install && npm run build && npm pack --pack-destination ../../../packages
 	cd $(OPENCLAW) && npm install && npm run build && npm pack --pack-destination ../../../packages
 	cd $(HERMES) && $(PYTHON) -m pip install build hatchling --quiet && $(PYTHON) -m build --wheel --outdir ../../../packages
+	cd $(CODEX) && $(PYTHON) -m pip install build hatchling --quiet && $(PYTHON) -m build --wheel --outdir ../../../packages
 	@echo ""
 	@echo "  ✓ Plugin packages written to packages/"
 	@ls -1 packages/
 
 ## clean: remove build outputs
 clean:
-	rm -rf packages $(CLAUDECODE)/dist $(OPENCLAW)/dist $(HERMES)/dist
+	rm -rf packages $(CLAUDECODE)/dist $(OPENCLAW)/dist $(HERMES)/dist $(CODEX)/dist
 
 ## help: list targets
 help:
