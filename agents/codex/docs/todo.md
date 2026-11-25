@@ -39,7 +39,8 @@ Consequences of this choice:
 - `agents/codex/agentguard-plugin` Python package, `agentguard-codex` CLI.
 - 5 hooks handled: `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`,
   `PostToolUse`, translated to the SDK's `session` / `llm` / `tool` spans.
-- 7 dispatch unit tests; CI and Makefile targets exist.
+- Dispatch and CLI entry-point unit tests; CI (`.github/workflows/ci.yml`) and
+  the root `Makefile` targets exist.
 - Everything below is still open.
 
 ---

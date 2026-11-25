@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import socket
 import sys
 
-from agentguard.hook import AgentGuardHooks
-from agentguard_codexntguard_codex.events import dispatch
+from agentguard_codex.events import dispatch
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,23 +50,42 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def resolve_agent_id(agent_id: str | None) -> str:
+    """Resolve the agent id the SDK also uses to key its on-disk store.
+
+    The SDK's ``AgentGuardHooks`` falls back to the literal folder name
+    ``hostname`` when ``agent_id`` is ``None``, so resolve the env-var fallback
+    here and pass the result through; otherwise agents that omit ``--agent-id``
+    would all share one Pre/Post-tool timing store.
+    """
+    return agent_id or os.environ.get("AGENTGUARD_AGENT_ID") or socket.gethostname()
+
+
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-
-    hooks = AgentGuardHooks(
-        agent_id=args.agent_id,
-        deployment_id=args.deployment_id,
-        deployment_name=args.deployment_name,
-        endpoint=args.endpoint,
-    )
-
     try:
+        args = build_parser().parse_args(argv)
+
+        # Imported lazily so ``import agentguard_codex.cli`` (and ``--help``)
+        # works without the AgentGuard SDK, and a missing SDK is handled by
+        # the same fail-safe path as any other plugin error.
+        from agentguard.hook import AgentGuardHooks
+
+        hooks = AgentGuardHooks(
+            agent_id=resolve_agent_id(args.agent_id),
+            deployment_id=args.deployment_id,
+            deployment_name=args.deployment_name,
+            endpoint=args.endpoint,
+        )
+
         event = json.loads(sys.stdin.read())
         dispatch(event, hooks)
+    except SystemExit:
+        # argparse raises SystemExit for --help (0) and bad flags (2). A bad
+        # flag must not change the Codex turn, so report success either way.
+        return 0
     except Exception as exc:
         # Never let a plugin failure take down (or change) the Codex turn.
         print(f"agentguard-codex: {exc}", file=sys.stderr)
-        return 1
 
     return 0
 

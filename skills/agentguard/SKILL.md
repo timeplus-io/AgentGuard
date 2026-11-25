@@ -1,7 +1,7 @@
 ---
 name: agentguard
 description: >
-  Install AgentGuard monitoring plugins onto AI coding agents (Claude Code, OpenClaw, Hermes).
+  Install AgentGuard monitoring plugins onto AI coding agents (Claude Code, OpenClaw, Hermes, Codex).
 ---
 
 # AgentGuard Agent Installation
@@ -12,22 +12,23 @@ AgentGuard monitors AI coding agents by installing a lightweight hook plugin tha
 
 The AgentGuard app must already be installed on the target Timeplus — it creates the `ag.agentguard_hook_events` stream the plugins write to. If the user has not installed it, point them to https://github.com/timeplus-io/apps/tree/main/apps/agentguard first.
 
-Three agent types are supported:
+Three agent types are supported, plus an initial Codex scaffold:
 
 | Agent | Plugin package | Install method |
 |-------|---------------|----------------|
 | Claude Code | `@timeplus/agentguard-claudecode-plugin` (npm) | npm global install + `~/.claude/settings.json` hooks |
 | OpenClaw | `@timeplus/agentguard-openclaw-plugin` (npm) | `openclaw plugins install` + `openclaw.json` config |
 | Hermes | `agentguard-hermes-plugin` (pip) | pip install + `hermes plugins enable` + env vars |
+| Codex | `agentguard-codex-plugin` (pip, from a repo checkout) | pip install + `~/.codex/hooks.json` + env vars (OTel spans, initial scaffold) |
 
 ## Prerequisites
 
-- **Node.js ≥ 18** (Claude Code, OpenClaw) or **Python 3** (Hermes)
-- **npm** (Claude Code, OpenClaw) or **pip/pip3** (Hermes)
+- **Node.js ≥ 18** (Claude Code, OpenClaw) or **Python ≥ 3.10** (Hermes, Codex)
+- **npm** (Claude Code, OpenClaw) or **pip/pip3** (Hermes, Codex)
 
 ## Shared configuration values
 
-Every agent needs these values. Ask user to provide ALL of them before running the commands. Use default value as a hint but ask user to explicitly confirm or give a different value.
+Every hook-event agent (Claude Code, OpenClaw, Hermes) needs these values. Codex only uses `AGENT_ID`, `DEPLOYMENT_ID`, `DEPLOYMENT_NAME`, and an OTLP endpoint — skip the Timeplus URL, ingest mode, and credentials for it. Ask the user to provide all applicable values before running the commands. Use the default value as a hint but ask the user to explicitly confirm or give a different value.
 
 | Value | Default | Description |
 |-------|---------|-------------|
@@ -277,3 +278,35 @@ Modify the shell configuration file to set the environment variables by the user
 - AGENTGUARD_DEPLOYMENT_NAME
 - AGENTGUARD_DATABASE
 - AGENTGUARD_HOLDS_ENABLED (always `false`)
+
+## Codex
+
+> **Initial scaffold.** Codex support exports OTel spans (not `agentguard_hook_events`), covers only the five lifecycle hooks, and needs the AgentGuard Python SDK from a checkout of this repo. Point users at the [plugin README](../../agents/codex/agentguard-plugin/README.md) and [implementation TODO](../../agents/codex/docs/todo.md) for the open items.
+
+### 1. Install the SDK and plugin
+
+From a checkout of this repository:
+
+```bash
+pip install -e sdk/python
+pip install -e agents/codex/agentguard-plugin
+```
+
+### 2. Register hooks in `~/.codex/hooks.json`
+
+Merge [`agents/codex/agentguard-plugin/hooks.json`](../../agents/codex/agentguard-plugin/hooks.json) into `~/.codex/hooks.json` (or the equivalent `[hooks]` table in `~/.codex/config.toml`), keeping existing entries.
+
+### 3. Set environment variables
+
+Codex uses the OTLP endpoint rather than `TIMEPLUS_URL` / `INGEST_API` / `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD`:
+
+```bash
+export AGENTGUARD_AGENT_ID=<AGENT_ID>
+export AGENTGUARD_DEPLOYMENT_ID=<DEPLOYMENT_ID>
+export AGENTGUARD_DEPLOYMENT_NAME="<DEPLOYMENT_NAME>"
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://<timeplus-host>:4318
+```
+
+### 4. Trust the hooks
+
+Start Codex and run `/hooks` once to review and trust the AgentGuard entries.

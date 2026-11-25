@@ -72,7 +72,10 @@ configure the plugin.
 | `--deployment-name` | `AGENTGUARD_DEPLOYMENT_NAME` | `Local Dev` |
 | `--endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` |
 
-Flags take precedence over environment variables. For example:
+Flags take precedence over environment variables. The plugin resolves the
+agent id (flag, then `AGENTGUARD_AGENT_ID`, then hostname) before constructing
+the SDK hooks, so every hook process keys its on-disk Pre/Post-tool timing
+store by the same id the spans carry. For example:
 
 ```bash
 export AGENTGUARD_DEPLOYMENT_ID=production
@@ -91,8 +94,10 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://timeplus.example.com:4318
 | `PostToolUse` | `on_post_tool` | `tool` |
 
 `PreToolUse` and `PostToolUse` are paired through the SDK's on-disk store,
-keyed by session. Other hook events are ignored for now, so a newer Codex can
-emit hooks this plugin does not know about without breaking.
+keyed by session, turn (`turn_id`), and tool call (`tool_use_id`), so
+overlapping tool calls in one session do not overwrite each other's start
+time. Other hook events are ignored for now, so a newer Codex can emit hooks
+this plugin does not know about without breaking.
 
 ## Development
 
@@ -101,12 +106,10 @@ make test    # unit tests (stdlib only — no SDK or collector needed)
 make build   # sdist + wheel into dist/
 ```
 
-The plugin never writes to stdout, so hook output cannot alter a Codex turn.
+The plugin writes nothing to stdout and returns 0 even when it fails — any
+error goes to stderr — so hook output cannot alter a Codex turn.
 
 ### Local end-to-end test
-
-Run the plugin from this checkout against a local OTLP span dumper, without
-Timeplus:
 
 ```bash
 cd /path/to/AgentGuard
@@ -116,24 +119,22 @@ uv venv ~/venvs/agentguard-codex --python 3.12
 uv pip install --python ~/venvs/agentguard-codex/bin/python \
   -e sdk/python -e agents/codex/agentguard-plugin
 
-# 2. terminal A: print every span the plugin exports
-~/venvs/agentguard-codex/bin/python agents/codex/dev/otlp_dump.py
+# 2. merge this package's hooks.json into ~/.codex/hooks.json, replacing
+#    "command" with the venv's absolute path plus the plugin's env vars:
+#      "command": "env AGENTGUARD_AGENT_ID=codex-local \
+#         OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+#         /Users/you/venvs/agentguard-codex/bin/agentguard-codex"
 
-# 3. terminal B: merge hooks into ~/.codex/hooks.json (keeps existing entries)
-~/venvs/agentguard-codex/bin/python agents/codex/dev/merge_hooks.py \
-  --command "AGENTGUARD_AGENT_ID=codex-local \
-    OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-    $HOME/venvs/agentguard-codex/bin/agentguard-codex"
-
-# 4. start Codex, run /hooks, review and trust the AgentGuard entries, quit
+# 3. start Codex, run /hooks, review and trust the AgentGuard entries, quit
 codex
 
-# 5. run a turn (terminal B)
+# 4. run a turn
 codex exec --skip-git-repo-check -s workspace-write \
   "Run pwd, then create done.txt containing ok."
 
-# 6. remove the AgentGuard hooks again
-~/venvs/agentguard-codex/bin/python agents/codex/dev/merge_hooks.py --remove
+# 5. inspect the exported spans at the configured OTLP endpoint (the app's
+#    otel_traces, or any local OTLP collector), then remove the AgentGuard
+#    entries from ~/.codex/hooks.json
 ```
 
 Expected with the current scaffold: an `llm` span for `UserPromptSubmit`, one

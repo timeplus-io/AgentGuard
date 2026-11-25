@@ -29,9 +29,9 @@ The standalone AgentGuard (Go/Gin backend, React UI, Docker image, setup wizard,
 ## Development Commands
 
 ```bash
-make build            # build all three plugins
+make build            # build all four plugins
 make test             # run all plugin unit tests
-make package-plugins  # pack into packages/ (npm tarballs + Hermes wheel)
+make package-plugins  # pack into packages/ (npm tarballs + Hermes and Codex wheels)
 ```
 
 Per plugin:

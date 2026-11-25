@@ -2,7 +2,7 @@
 
 AgentGuard plugins stream agent lifecycle events into Timeplus. They need nothing but a reachable Timeplus Enterprise with the [AgentGuard app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) installed — the app creates database `ag`, the `agentguard_hook_events` stream the plugins write to, and an OTLP/HTTP input (default port `4318`).
 
-There is no installer script and no AgentGuard server to point at: each plugin is installed with its package manager and configured with environment variables (Claude Code, Hermes) or plugin config (OpenClaw).
+There is no installer script and no AgentGuard server to point at: each plugin is installed with its package manager and configured with environment variables (Claude Code, Hermes, Codex) or plugin config (OpenClaw).
 
 > **Agent-guided install:** the [`skills/agentguard`](../skills/agentguard/SKILL.md) skill walks an agent through everything below — it collects the values, installs the package, and patches the config files.
 
@@ -13,6 +13,7 @@ There is no installer script and no AgentGuard server to point at: each plugin i
 | Claude Code | `node` >= 18, `npm` |
 | OpenClaw | `node` >= 18, OpenClaw >= 2026.4.0 with an initialised `openclaw.json` (`openclaw onboard`) |
 | Hermes | Python >= 3.10, `pip` |
+| Codex | Python >= 3.10, `pip` |
 
 ## Choosing the ingest API
 
@@ -134,6 +135,36 @@ export AGENTGUARD_DEPLOYMENT_ID=local
 export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
 ```
 
+## Codex
+
+> **Status: initial scaffold.** The Codex plugin exports OTel spans instead of
+> writing `agentguard_hook_events`, covers only five lifecycle hooks, and needs
+> the Python SDK, which is not on PyPI yet. See the
+> [plugin README](../agents/codex/agentguard-plugin/README.md) and the
+> [implementation TODO](../agents/codex/docs/todo.md).
+
+1. Install the SDK and plugin from a checkout of this repo:
+
+   ```bash
+   pip install -e sdk/python
+   pip install -e agents/codex/agentguard-plugin
+   ```
+
+2. Merge [`agents/codex/agentguard-plugin/hooks.json`](../agents/codex/agentguard-plugin/hooks.json) into `~/.codex/hooks.json` (or the equivalent `[hooks]` table in `~/.codex/config.toml`), keeping any existing entries.
+
+3. Export the configuration. Hooks run in a fresh process, so environment variables are the usual way to configure the plugin; the `--agent-id`, `--deployment-id`, `--deployment-name` and `--endpoint` flags override them per hook.
+
+   ```bash
+   export AGENTGUARD_AGENT_ID=$(hostname)
+   export AGENTGUARD_DEPLOYMENT_ID=local
+   export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
+   export OTEL_EXPORTER_OTLP_ENDPOINT=http://<timeplus-host>:4318
+   ```
+
+4. Start Codex and run `/hooks` once to review and trust the AgentGuard entries.
+
+Codex spans go to the app's OTLP/HTTP input (port `4318`), not to `agentguard_hook_events`, so the Verify query below does not apply to Codex yet.
+
 ## Verify
 
 ```sql
@@ -156,9 +187,10 @@ Rows should appear within a few seconds of agent activity. If nothing arrives, c
 | `AGENTGUARD_STREAM` | `stream` | `agentguard_hook_events` | Target stream |
 | `AGENTGUARD_USERNAME` | `username` | `proton` | Timeplus username |
 | `AGENTGUARD_PASSWORD` | `password` | _(empty)_ | Timeplus password |
-| `AGENTGUARD_AGENT_ID` | — | hostname | Identifies this agent instance (Claude Code, Hermes) |
+| `AGENTGUARD_AGENT_ID` | — | hostname | Identifies this agent instance (Claude Code, Hermes, Codex) |
 | `AGENTGUARD_DEPLOYMENT_ID` | `deploymentId` | `default` / `local` | Logical deployment group |
 | `AGENTGUARD_DEPLOYMENT_NAME` | `deploymentName` | | Human-readable deployment label |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | `http://localhost:4318` | Codex: OTLP/HTTP endpoint for span export |
 | `AGENTGUARD_FLUSH_MS` / `AGENTGUARD_BATCH_SIZE` | `flushMs` / `batchSize` | `2000` / `50` | OpenClaw batching |
 | `AGENTGUARD_TRANSCRIPT_MESSAGES` / `AGENTGUARD_TRANSCRIPT_CONTENT_CHARS` | — | `50` / `10000` | Claude Code context-event truncation |
 

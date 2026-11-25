@@ -74,26 +74,48 @@ class DispatchTests(unittest.TestCase):
             ],
         )
 
+    def test_user_prompt_submit_without_optional_fields(self) -> None:
+        handled = dispatch(
+            {"hook_event_name": "UserPromptSubmit", "session_id": "s1"}, self.hooks
+        )
+
+        self.assertTrue(handled)
+        self.assertEqual(
+            self.hooks.calls,
+            [
+                (
+                    "on_llm_end",
+                    (),
+                    {"session_id": "s1", "task_id": None, "model_name": None, "user_message": None},
+                )
+            ],
+        )
+
     def test_pre_tool_use(self) -> None:
         handled = dispatch(
             {
                 "hook_event_name": "PreToolUse",
                 "session_id": "s1",
                 "turn_id": "t1",
+                "tool_use_id": "call_1",
                 "tool_name": "Bash",
             },
             self.hooks,
         )
 
         self.assertTrue(handled)
-        self.assertEqual(self.hooks.calls, [("on_pre_tool", (), {"session_id": "s1"})])
+        self.assertEqual(
+            self.hooks.calls,
+            [("on_pre_tool", (), {"session_id": "s1", "run_id": "t1", "task_id": "call_1"})],
+        )
 
-    def test_post_tool_use_stringifies_inputs(self) -> None:
+    def test_post_tool_use_json_encodes_inputs(self) -> None:
         handled = dispatch(
             {
                 "hook_event_name": "PostToolUse",
                 "session_id": "s1",
                 "turn_id": "t1",
+                "tool_use_id": "call_1",
                 "tool_name": "Bash",
                 "tool_input": {"command": "ls"},
                 "tool_response": {"stdout": "README.md"},
@@ -110,9 +132,42 @@ class DispatchTests(unittest.TestCase):
                     (),
                     {
                         "session_id": "s1",
+                        "run_id": "t1",
+                        "task_id": "call_1",
                         "tool_name": "Bash",
-                        "tool_input": "{'command': 'ls'}",
-                        "tool_result": "{'stdout': 'README.md'}",
+                        "tool_input": '{"command": "ls"}',
+                        "tool_result": '{"stdout": "README.md"}',
+                    },
+                )
+            ],
+        )
+
+    def test_post_tool_use_passes_strings_through(self) -> None:
+        handled = dispatch(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s1",
+                "tool_name": "Bash",
+                "tool_input": "ls -la",
+                "tool_response": "total 0",
+            },
+            self.hooks,
+        )
+
+        self.assertTrue(handled)
+        self.assertEqual(
+            self.hooks.calls,
+            [
+                (
+                    "on_post_tool",
+                    (),
+                    {
+                        "session_id": "s1",
+                        "run_id": None,
+                        "task_id": None,
+                        "tool_name": "Bash",
+                        "tool_input": "ls -la",
+                        "tool_result": "total 0",
                     },
                 )
             ],
