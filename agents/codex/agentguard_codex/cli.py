@@ -13,7 +13,6 @@ import json
 import sys
 
 from agentguard.hook import AgentGuardHooks
-
 from agentguard_codexntguard_codex.events import dispatch
 
 
