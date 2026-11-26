@@ -5,16 +5,43 @@
       { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
     ],
     "SessionEnd": [
-      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
+      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 3 } ] }
     ],
     "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
+    ],
+    "PreModelRequest": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
+    ],
+    "PostModelRequest": [
       { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
     ],
     "PreToolUse": [
       { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
     ],
+    "PermissionRequest": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
+    ],
     "PostToolUse": [
       { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
+    ],
+    "PreCompact": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
+    ],
+    "PostCompact": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
+    ],
+    "SubagentStart": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
+    ],
+    "SubagentStop": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 10 } ] }
+    ],
+    "Interrupt": [
+      { "hooks": [ { "type": "command", "command": "agentguard-codex", "timeout": 3 } ] }
     ]
   }
 }

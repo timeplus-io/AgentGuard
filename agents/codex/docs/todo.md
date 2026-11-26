@@ -37,11 +37,21 @@ Consequences of this choice:
 ## Current state on this branch
 
 - `agents/codex/agentguard-plugin` Python package, `agentguard-codex` CLI.
-- 5 hooks handled: `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`,
-  `PostToolUse`, translated to the SDK's `session` / `llm` / `tool` spans.
-- Dispatch and CLI entry-point unit tests; CI (`.github/workflows/ci.yml`) and
-  the root `Makefile` targets exist.
-- Everything below is still open.
+- All 14 hooks handled (issue #317). `SessionStart`, `SessionEnd`,
+  `UserPromptSubmit`, `PreToolUse`, `PostToolUse` are translated to the SDK's
+  `session` / `llm` / `tool` spans; the other nine each emit a span named after
+  the hook (`pre_model_request`, `post_model_request`, `stop`, `interrupt`,
+  `subagent_start`, `subagent_stop`, `permission_request`, `pre_compact`,
+  `post_compact`). The span and attribute reference is in the plugin README.
+- The nine newer handlers were written from the hooks reference and the
+  generated schemas in `openai/codex` (`codex-rs/hooks/schema/generated`), not
+  from captured payloads, so Phase 0 item 0.1 is still open.
+- The span naming is mixed for now (SDK names for five hooks, per-hook names
+  for nine); Phase 1 still has to settle one contract with the converter.
+- Dispatch, sink and CLI unit tests, including an end-to-end run against an
+  in-process OTLP receiver; CI (`.github/workflows/ci.yml`) and the root
+  `Makefile` targets exist.
+- Unchecked items below are still open.
 
 ---
 
@@ -128,17 +138,17 @@ Tasks:
 
 ## Phase 2 — Event normalization and hook coverage
 
-- [ ] Normalize all 14 hook names above (one mapping table in code, not scattered `if`s).
+- [x] Handle all 14 hook names above (one mapping table in code, not scattered `if`s).
 - [ ] `run_id` = `turn_id` when present, else `session_id`.
 - [ ] `provider`: transcript `session_meta.model_provider`, fallback to model prefix (`gpt-*` → `openai`).
 - [ ] `SessionEnd` has no `model`; do not fail when absent.
 - [ ] `PostToolUse`: derive success from `tool_response` (exit code / error field — see 0.2).
-- [ ] `PostModelRequest`: carry `token_usage` and `status`/`error`.
-- [ ] `SubagentStart/Stop`: carry `agent_id`, `agent_type`, `agent_transcript_path`, `last_assistant_message`.
-- [ ] `PermissionRequest`: carry `tool_name`, `tool_input`.
-- [ ] `PreCompact`/`PostCompact`: carry `trigger`.
-- [ ] Unknown/new hooks: ignore silently (forward compatibility).
-- [ ] Keep `PreToolUse` observe-only — no stdout, no blocking, holds stay off.
+- [x] `PostModelRequest`: carry `token_usage` and `status`/`error`.
+- [x] `SubagentStart/Stop`: carry `agent_id`, `agent_type`, `agent_transcript_path`, `last_assistant_message`.
+- [x] `PermissionRequest`: carry `tool_name`, `tool_input`.
+- [x] `PreCompact`/`PostCompact`: carry `trigger`.
+- [x] Unknown/new hooks: ignore silently (forward compatibility).
+- [x] Keep every hook observe-only — no stdout, no blocking, holds stay off.
 
 ## Phase 3 — Span emission and process behavior
 
@@ -181,7 +191,7 @@ Tasks:
 - [ ] In-memory-span-exporter tests (no network) for the emission layer.
 - [ ] Subprocess tests: valid event exits 0 with empty stdout; malformed JSON with
   the agreed exit code; unreachable endpoint does not hang.
-- [ ] Fake OTLP/HTTP receiver test: decode the protobuf and assert the span contract.
+- [x] Fake OTLP/HTTP receiver test: decode the protobuf and assert the spans (`tests/test_cli.py`).
 - [ ] SessionEnd timeout test (slow endpoint) within the Codex budget.
 - [ ] Optional e2e: run `codex exec` with the plugin, then query `otel_traces` and
   the CIM views (requires a Timeplus instance).

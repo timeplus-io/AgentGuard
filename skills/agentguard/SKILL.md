@@ -12,14 +12,14 @@ AgentGuard monitors AI coding agents by installing a lightweight hook plugin tha
 
 The AgentGuard app must already be installed on the target Timeplus — it creates the `ag.agentguard_hook_events` stream the plugins write to. If the user has not installed it, point them to https://github.com/timeplus-io/apps/tree/main/apps/agentguard first.
 
-Three agent types are supported, plus an initial Codex scaffold:
+Three hook-event agent types are supported, plus Codex through OTel spans:
 
 | Agent | Plugin package | Install method |
 |-------|---------------|----------------|
 | Claude Code | `@timeplus/agentguard-claudecode-plugin` (npm) | npm global install + `~/.claude/settings.json` hooks |
 | OpenClaw | `@timeplus/agentguard-openclaw-plugin` (npm) | `openclaw plugins install` + `openclaw.json` config |
 | Hermes | `agentguard-hermes-plugin` (pip) | pip install + `hermes plugins enable` + env vars |
-| Codex | `timeplus-agentguard-codex-plugin` (pip, from a repo checkout) | pip install + `~/.codex/hooks.json` + env vars (OTel spans, initial scaffold) |
+| Codex | `timeplus-agentguard-codex-plugin` (pip) | pip install + `~/.codex/hooks.json` + env vars (OTel spans) |
 
 ## Prerequisites
 
@@ -281,19 +281,19 @@ Modify the shell configuration file to set the environment variables by the user
 
 ## Codex
 
-> **Initial scaffold.** Codex support exports OTel spans (not `agentguard_hook_events`), covers only the five lifecycle hooks, and is installed from a checkout of this repo (the plugin is not on PyPI yet; its SDK dependency `timeplus-agentguard` is). Point users at the [plugin README](../../agents/codex/agentguard-plugin/README.md) and [implementation TODO](../../agents/codex/docs/todo.md) for the open items.
+> **Early support.** Codex support exports OTel spans (not `agentguard_hook_events`) and covers all 14 Codex lifecycle hooks (from 0.2.0; earlier versions covered five). Point users at the [plugin README](../../agents/codex/agentguard-plugin/README.md) and [implementation TODO](../../agents/codex/docs/todo.md) for the open items.
 
 ### 1. Install the plugin
 
-From a checkout of this repository:
-
 ```bash
-pip install -e agents/codex/agentguard-plugin
+pip install timeplus-agentguard-codex-plugin
 ```
+
+To upgrade an existing install, run `pip install -U timeplus-agentguard-codex-plugin`, then add the events it is missing in step 2.
 
 ### 2. Register hooks in `~/.codex/hooks.json`
 
-Merge [`agents/codex/agentguard-plugin/hooks.json`](../../agents/codex/agentguard-plugin/hooks.json) into `~/.codex/hooks.json` (or the equivalent `[hooks]` table in `~/.codex/config.toml`), keeping existing entries.
+Merge [`agents/codex/agentguard-plugin/hooks.json`](../../agents/codex/agentguard-plugin/hooks.json) into `~/.codex/hooks.json` (or the equivalent `[hooks]` table in `~/.codex/config.toml`), keeping existing entries. The sample registers all 14 events; on an upgrade from a five-hook configuration, add the nine missing ones (`PreModelRequest`, `PostModelRequest`, `Stop`, `Interrupt`, `SubagentStart`, `SubagentStop`, `PermissionRequest`, `PreCompact`, `PostCompact`) with the same `command` as the existing entries.
 
 ### 3. Set environment variables
 
@@ -308,4 +308,4 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://<timeplus-host>:4318
 
 ### 4. Trust the hooks
 
-Start Codex and run `/hooks` once to review and trust the AgentGuard entries.
+Start Codex and run `/hooks` once to review and trust the AgentGuard entries. Codex skips new or changed hooks until the user does this, so it is needed again after adding events.
