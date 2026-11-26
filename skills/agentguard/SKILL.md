@@ -19,7 +19,7 @@ Three agent types are supported, plus an initial Codex scaffold:
 | Claude Code | `@timeplus/agentguard-claudecode-plugin` (npm) | npm global install + `~/.claude/settings.json` hooks |
 | OpenClaw | `@timeplus/agentguard-openclaw-plugin` (npm) | `openclaw plugins install` + `openclaw.json` config |
 | Hermes | `agentguard-hermes-plugin` (pip) | pip install + `hermes plugins enable` + env vars |
-| Codex | `agentguard-codex-plugin` (pip, from a repo checkout) | pip install + `~/.codex/hooks.json` + env vars (OTel spans, initial scaffold) |
+| Codex | `timeplus-agentguard-codex-plugin` (pip, from a repo checkout) | pip install + `~/.codex/hooks.json` + env vars (OTel spans, initial scaffold) |
 
 ## Prerequisites
 

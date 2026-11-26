@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentguard-codex-plugin"
+name = "timeplus-agentguard-codex-plugin"
 version = "0.1.1"
 description = "AgentGuard monitoring plugin for OpenAI Codex"
 readme = "README.md"

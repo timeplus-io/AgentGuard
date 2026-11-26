@@ -93,7 +93,7 @@ publish-sdk-js:
 ## Output: packages/timeplus-agentguard-claudecode-plugin-*.tgz
 ##         packages/timeplus-agentguard-openclaw-plugin-*.tgz
 ##         packages/agentguard_hermes_plugin-*.whl
-##         packages/agentguard_codex_plugin-*.whl
+##         packages/timeplus_agentguard_codex_plugin-*.whl
 package-plugins:
 	@mkdir -p packages
 	cd $(CLAUDECODE) && npm install && npm run build && npm pack --pack-destination ../../../packages

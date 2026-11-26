@@ -130,4 +130,4 @@ Releases are published to PyPI by CI:
 1. Bump `version` in `pyproject.toml` and `__version__` in `agentguard_codex/__init__.py`, and merge.
 2. Publish a GitHub Release tagged `codex-plugin-v<version>` (for example `codex-plugin-v0.1.1`).
 
-The `Publish Codex plugin` workflow tests, builds and uploads `agentguard-codex-plugin`. It fails if the tag does not match the package version. Running it manually builds and validates without uploading; `make check` does the same locally (needs `hatch` and `twine`).
+The `Publish Codex plugin` workflow tests, builds and uploads `timeplus-agentguard-codex-plugin`. It fails if the tag does not match the package version. Running it manually builds and validates without uploading; `make check` does the same locally (needs `hatch` and `twine`).
