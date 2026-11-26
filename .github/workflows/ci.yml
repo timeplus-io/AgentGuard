@@ -57,3 +57,28 @@ jobs:
 
       - name: Test
         run: python -m unittest discover -s tests -v
+
+  codex-plugin-checks:
+    name: Plugin — codex test & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/codex/agentguard-plugin
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Test against the in-repo Python SDK rather than the PyPI release.
+      - name: Install AgentGuard SDK
+        run: python -m pip install -e ../../../sdk/python
+
+      - name: Test
+        run: python -m unittest discover -s tests -v
+
+      - name: Build
+        run: |
+          python -m pip install build hatchling
+          python -m build --wheel

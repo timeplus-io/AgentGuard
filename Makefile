@@ -2,24 +2,26 @@
         claudecode-build claudecode-test \
         openclaw-build openclaw-test \
         hermes-build hermes-test \
+        codex-build codex-test \
         sdk-python-build sdk-python-test sdk-js-build \
         publish-sdk-python publish-sdk-js help
 
 CLAUDECODE := agents/claudecode/agentguard-plugin
 OPENCLAW   := agents/openclaw/agentguard-plugin
 HERMES     := agents/hermes/agentguard-plugin
+CODEX      := agents/codex/agentguard-plugin
 SDK_PYTHON := sdk/python
 SDK_JS     := sdk/javascript
-# The Hermes plugin needs Python >= 3.10.
+# The Hermes and Codex plugins need Python >= 3.10.
 PYTHON     ?= python3.12
 
 all: build
 
 ## build: build all agent plugins
-build: claudecode-build openclaw-build hermes-build
+build: claudecode-build openclaw-build hermes-build codex-build
 
 ## test: run all plugin unit tests
-test: claudecode-test openclaw-test hermes-test
+test: claudecode-test openclaw-test hermes-test codex-test
 
 # ── Claude Code plugin ───────────────────────────────────────────────────────
 
@@ -51,6 +53,16 @@ hermes-build:
 hermes-test:
 	cd $(HERMES) && $(PYTHON) -m unittest discover -s tests -v
 
+# ── Codex plugin ─────────────────────────────────────────────────────────────
+
+## codex-build: build the Codex plugin wheel into its dist/
+codex-build:
+	cd $(CODEX) && $(PYTHON) -m pip install build hatchling --quiet && $(PYTHON) -m build --wheel
+
+## codex-test: run the Codex plugin unit tests
+codex-test:
+	cd $(CODEX) && $(PYTHON) -m unittest discover -s tests -v
+
 # ── SDKs ─────────────────────────────────────────────────────────────────────
 # The SDKs are published independently of the plugins and are not part of
 # `make build` / `make test`.
@@ -81,18 +93,20 @@ publish-sdk-js:
 ## Output: packages/timeplus-agentguard-claudecode-plugin-*.tgz
 ##         packages/timeplus-agentguard-openclaw-plugin-*.tgz
 ##         packages/agentguard_hermes_plugin-*.whl
+##         packages/agentguard_codex_plugin-*.whl
 package-plugins:
 	@mkdir -p packages
 	cd $(CLAUDECODE) && npm install && npm run build && npm pack --pack-destination ../../../packages
 	cd $(OPENCLAW) && npm install && npm run build && npm pack --pack-destination ../../../packages
 	cd $(HERMES) && $(PYTHON) -m pip install build hatchling --quiet && $(PYTHON) -m build --wheel --outdir ../../../packages
+	cd $(CODEX) && $(PYTHON) -m pip install build hatchling --quiet && $(PYTHON) -m build --wheel --outdir ../../../packages
 	@echo ""
 	@echo "  ✓ Plugin packages written to packages/"
 	@ls -1 packages/
 
 ## clean: remove build outputs
 clean:
-	rm -rf packages $(CLAUDECODE)/dist $(OPENCLAW)/dist $(HERMES)/dist
+	rm -rf packages $(CLAUDECODE)/dist $(OPENCLAW)/dist $(HERMES)/dist $(CODEX)/dist
 
 ## help: list targets
 help:

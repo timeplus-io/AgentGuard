@@ -19,6 +19,7 @@ The standalone AgentGuard (Go/Gin backend, React UI, Docker image, setup wizard,
 | `agents/openclaw/agentguard-plugin/` | OpenClaw plugin — TypeScript, built with `tsc`, npm `@timeplus/agentguard-openclaw-plugin` |
 | `agents/openclaw/` | Docker dev harness for OpenClaw (`Makefile`), plugin design doc, OTel guide, scenario tests in `tests/` |
 | `agents/hermes/agentguard-plugin/` | Hermes Agent plugin — Python (>= 3.10), PyPI `agentguard-hermes-plugin`; `plugin.py` (CLI + gateway) and `handler.py` (gateway hook) |
+| `agents/codex/agentguard-plugin/` | OpenAI Codex plugin — Python (>= 3.10), `agentguard-codex` hook command built on the Python SDK (initial scaffold, see issue #308) |
 | `agents/hermes/` | Docker dev harness for Hermes |
 | `agents/litellm/`, `agents/paperclip/`, `agents/xearxng/` | Supporting dev/demo environments (LLM proxy, Paperclip showcase, search) — not shipped |
 | `sdk/python/`, `sdk/javascript/` | OpenTelemetry-based SDKs for instrumenting custom agents |
@@ -28,9 +29,9 @@ The standalone AgentGuard (Go/Gin backend, React UI, Docker image, setup wizard,
 ## Development Commands
 
 ```bash
-make build            # build all three plugins
+make build            # build all four plugins
 make test             # run all plugin unit tests
-make package-plugins  # pack into packages/ (npm tarballs + Hermes wheel)
+make package-plugins  # pack into packages/ (npm tarballs + Hermes and Codex wheels)
 ```
 
 Per plugin:
@@ -47,7 +48,7 @@ cd agents/openclaw/agentguard-plugin && npm install && npm test && npm run build
 cd agents/hermes/agentguard-plugin && python3.12 -m unittest discover -s tests -v
 ```
 
-CI (`.github/workflows/ci.yml`) runs test + build for the two npm plugins and the Hermes unit tests. The only release workflows are the two SDK publish workflows (see Releasing SDKs); plugins are not published by CI.
+CI (`.github/workflows/ci.yml`) runs test + build for the two npm plugins and the Codex plugin, and the Hermes unit tests. The only release workflows are the two SDK publish workflows (see Releasing SDKs); plugins are not published by CI.
 
 ## How Collection Works
 
@@ -68,6 +69,7 @@ Selected by `AGENTGUARD_INGEST_API` (OpenClaw: `ingestApi`); same Basic-auth use
 - **Claude Code** (`src/index.ts`): a short-lived process per hook. Reads the event from stdin → `normalize.ts` → `timeplus-client.ts` `send()`. On `UserPromptSubmit` / `Stop` it also parses `transcript_path` (`transcript.ts`) and emits synthetic `prompt_context` / `llm_context` events. Must never block or fail the agent: errors are swallowed, exit 0. `run_id` always equals `session_id`.
 - **OpenClaw** (`src/hooks.ts`, `src/index.ts`): long-lived in the gateway; registers all lifecycle hooks and batches events (`flushMs`, `batchSize`) through `TimeplusClient`. Config comes from `plugins.entries.agentguard.config` in `openclaw.json` with env-var fallbacks (`src/config.ts`, schema in `openclaw.plugin.json`).
 - **Hermes** (`agentguard_hermes/plugin.py`, `handler.py`): stdlib-only (`urllib`), configured purely by env vars. `conversation_history` is stripped before ingest. `plugin.py` and `handler.py` duplicate the ingest logic on purpose (two Hermes load paths) — change both.
+- **Codex** (`agentguard_codex/`): short-lived process per hook, mirroring Claude Code's shape but written in Python on top of the SDK. Currently exports OTel spans only (initial scaffold); the move to `agentguard_hook_events` and the remaining Codex hooks are issue #308 follow-ups.
 
 ### Holds (legacy)
 
@@ -76,7 +78,7 @@ All three plugins still carry the synchronous hold-and-wait path (`holds.ts`, `A
 ## Conventions
 
 - **Config is env vars / plugin config only.** Any config change must be reflected in all of: the plugin's `README.md`, `docs/plugin-install.md`, `skills/agentguard/SKILL.md`, and (Claude Code) `agents/claudecode/Makefile` / (OpenClaw) `openclaw.plugin.json`.
-- **Keep the three plugins aligned**: a new config key or event-shape change usually applies to all three. The `HookEvent` column set must match the app's `agentguard_hook_events` DDL (in the apps repo) — a schema change needs a coordinated app change.
+- **Keep the three hook-event plugins aligned** (Claude Code, OpenClaw, Hermes): a new config key or event-shape change usually applies to all three. The Codex plugin is separate: it exports OTel spans through the Python SDK and does not write `HookEvent` rows. The `HookEvent` column set must match the app's `agentguard_hook_events` DDL (in the apps repo) — a schema change needs a coordinated app change.
 - **Defaults**: database `ag`, stream `agentguard_hook_events`, holds off.
 - **Naming**: say "Timeplus" / "Timeplus Enterprise" (never "Proton") and "Timeplus REST API" for the port-8000 server (never its internal name). No Timeplus Cloud, no API keys — Basic auth only.
 
