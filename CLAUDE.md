@@ -19,7 +19,7 @@ The standalone AgentGuard (Go/Gin backend, React UI, Docker image, setup wizard,
 | `agents/openclaw/agentguard-plugin/` | OpenClaw plugin — TypeScript, built with `tsc`, npm `@timeplus/agentguard-openclaw-plugin` |
 | `agents/openclaw/` | Docker dev harness for OpenClaw (`Makefile`), plugin design doc, OTel guide, scenario tests in `tests/` |
 | `agents/hermes/agentguard-plugin/` | Hermes Agent plugin — Python (>= 3.10), PyPI `agentguard-hermes-plugin`; `plugin.py` (CLI + gateway) and `handler.py` (gateway hook) |
-| `agents/codex/agentguard-plugin/` | OpenAI Codex plugin — Python (>= 3.10), `agentguard-codex` hook command built on the Python SDK (initial scaffold, see issue #308) |
+| `agents/codex/agentguard-plugin/` | OpenAI Codex plugin — Python (>= 3.10), `agentguard-codex` hook command built on the Python SDK; handles all 14 Codex hooks |
 | `agents/hermes/` | Docker dev harness for Hermes |
 | `agents/litellm/`, `agents/paperclip/`, `agents/xearxng/` | Supporting dev/demo environments (LLM proxy, Paperclip showcase, search) — not shipped |
 | `sdk/python/`, `sdk/javascript/` | OpenTelemetry-based SDKs for instrumenting custom agents |
@@ -69,7 +69,7 @@ Selected by `AGENTGUARD_INGEST_API` (OpenClaw: `ingestApi`); same Basic-auth use
 - **Claude Code** (`src/index.ts`): a short-lived process per hook. Reads the event from stdin → `normalize.ts` → `timeplus-client.ts` `send()`. On `UserPromptSubmit` / `Stop` it also parses `transcript_path` (`transcript.ts`) and emits synthetic `prompt_context` / `llm_context` events. Must never block or fail the agent: errors are swallowed, exit 0. `run_id` always equals `session_id`.
 - **OpenClaw** (`src/hooks.ts`, `src/index.ts`): long-lived in the gateway; registers all lifecycle hooks and batches events (`flushMs`, `batchSize`) through `TimeplusClient`. Config comes from `plugins.entries.agentguard.config` in `openclaw.json` with env-var fallbacks (`src/config.ts`, schema in `openclaw.plugin.json`).
 - **Hermes** (`agentguard_hermes/plugin.py`, `handler.py`): stdlib-only (`urllib`), configured purely by env vars. `conversation_history` is stripped before ingest. `plugin.py` and `handler.py` duplicate the ingest logic on purpose (two Hermes load paths) — change both.
-- **Codex** (`agentguard_codex/`): short-lived process per hook, mirroring Claude Code's shape but written in Python on top of the SDK. Currently exports OTel spans only (initial scaffold); the move to `agentguard_hook_events` and the remaining Codex hooks are issue #308 follow-ups.
+- **Codex** (`agentguard_codex/`): short-lived process per hook, mirroring Claude Code's shape but written in Python on top of the SDK. Exports OTel spans only: five hooks go through the SDK's `AgentGuardHooks` (`session` / `llm` / `tool` spans), the other nine each emit a span named after the hook via `sink.py`. `events.py` `HANDLERS` and the sample `hooks.json` must list the same events (a test checks). The plugin never writes stdout. The move to `agentguard_hook_events` is an issue #308 follow-up.
 
 ### Holds (legacy)
 

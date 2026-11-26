@@ -137,16 +137,17 @@ export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
 
 ## Codex
 
-> **Status: initial scaffold.** The Codex plugin exports OTel spans instead of
-> writing `agentguard_hook_events`, covers only five lifecycle hooks, and needs
-> the Python SDK (`timeplus-agentguard` on PyPI). The plugin itself is not on PyPI yet. See the
-> [plugin README](../agents/codex/agentguard-plugin/README.md) and the
-> [implementation TODO](../agents/codex/docs/todo.md).
+> **Status: early.** The Codex plugin exports OTel spans instead of writing
+> `agentguard_hook_events`. It covers all 14 Codex lifecycle hooks (from 0.2.0;
+> earlier versions covered five). See the
+> [plugin README](../agents/codex/agentguard-plugin/README.md) for the span
+> reference and for upgrading a five-hook configuration, and the
+> [implementation TODO](../agents/codex/docs/todo.md) for the open items.
 
-1. Install the plugin from a checkout of this repo (the SDK is pulled from PyPI as a dependency):
+1. Install the plugin (the Python SDK, `timeplus-agentguard`, comes with it as a dependency):
 
    ```bash
-   pip install -e agents/codex/agentguard-plugin
+   pip install timeplus-agentguard-codex-plugin
    ```
 
 2. Merge [`agents/codex/agentguard-plugin/hooks.json`](../agents/codex/agentguard-plugin/hooks.json) into `~/.codex/hooks.json` (or the equivalent `[hooks]` table in `~/.codex/config.toml`), keeping any existing entries.
@@ -160,7 +161,7 @@ export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
    export OTEL_EXPORTER_OTLP_ENDPOINT=http://<timeplus-host>:4318
    ```
 
-4. Start Codex and run `/hooks` once to review and trust the AgentGuard entries.
+4. Start Codex and run `/hooks` once to review and trust the AgentGuard entries. Codex skips new or changed hooks until you do, so repeat this after adding events on an upgrade.
 
 Codex spans go to the app's OTLP/HTTP input (port `4318`), not to `agentguard_hook_events`, so the Verify query below does not apply to Codex yet.
 

@@ -92,6 +92,11 @@ def resolve_endpoint(endpoint: str | None) -> str:
     )
 
 
+def start_store_folder(agent_id: str) -> str:
+    """Where Pre*/Post* start times live, next to the SDK's own store."""
+    return os.path.join(os.path.expanduser("~"), ".agentguard", agent_id, "codex-starts")
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
@@ -99,17 +104,27 @@ def main(argv: list[str] | None = None) -> int:
         # Imported lazily so ``import agentguard_codex.cli`` (and ``--help``)
         # works without the AgentGuard SDK, and a missing SDK is handled by
         # the same fail-safe path as any other plugin error.
+        from agentguard import AgentGuard
         from agentguard.hook import AgentGuardHooks
 
+        from agentguard_codex.sink import SdkSink, StartStore
+
+        agent_id = resolve_agent_id(args.agent_id)
         hooks = AgentGuardHooks(
-            agent_id=resolve_agent_id(args.agent_id),
+            agent_id=agent_id,
             deployment_id=resolve_deployment_id(args.deployment_id),
             deployment_name=resolve_deployment_name(args.deployment_name),
             endpoint=resolve_endpoint(args.endpoint),
         )
+        # AgentGuard is a process-wide singleton, so this is the client the
+        # hooks above just configured (same resource, same exporter).
+        sink = SdkSink(hooks, AgentGuard(), StartStore(start_store_folder(agent_id)))
 
         event = json.loads(sys.stdin.read())
-        dispatch(event, hooks)
+        try:
+            dispatch(event, sink)
+        finally:
+            sink.flush()
     except SystemExit:
         # argparse raises SystemExit for --help (0) and bad flags (2). A bad
         # flag must not change the Codex turn, so report success either way.
