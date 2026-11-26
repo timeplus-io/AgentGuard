@@ -7,7 +7,7 @@
     "start": "tsx main.ts"
   },
   "dependencies": {
-    "agentguard": "../../",
+    "@timeplus/agentguard": "../../",
     "openai": "^4.0.0",
     "@arizeai/openinference-instrumentation-openai": "^2.0.0",
     "@opentelemetry/api": "^1.9.0",
