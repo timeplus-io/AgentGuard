@@ -4,8 +4,11 @@
 [![npm: Claude Code plugin](https://img.shields.io/npm/v/%40timeplus%2Fagentguard-claudecode-plugin?label=claudecode-plugin&logo=npm)](https://www.npmjs.com/package/@timeplus/agentguard-claudecode-plugin)
 [![npm: OpenClaw plugin](https://img.shields.io/npm/v/%40timeplus%2Fagentguard-openclaw-plugin?label=openclaw-plugin&logo=npm)](https://www.npmjs.com/package/@timeplus/agentguard-openclaw-plugin)
 [![PyPI: Hermes plugin](https://img.shields.io/pypi/v/agentguard-hermes-plugin?label=hermes-plugin&logo=pypi)](https://pypi.org/project/agentguard-hermes-plugin/)
+[![PyPI: Codex plugin](https://img.shields.io/pypi/v/timeplus-agentguard-codex-plugin?label=codex-plugin&logo=pypi)](https://pypi.org/project/timeplus-agentguard-codex-plugin/)
+[![PyPI: Python SDK](https://img.shields.io/pypi/v/timeplus-agentguard?label=python-sdk&logo=pypi)](https://pypi.org/project/timeplus-agentguard/)
+[![npm: JavaScript SDK](https://img.shields.io/npm/v/%40timeplus%2Fagentguard?label=js-sdk&logo=npm)](https://www.npmjs.com/package/@timeplus/agentguard)
 
-Data collection for AgentGuard: the plugins and SDKs that stream AI-agent telemetry (sessions, prompts, LLM calls, tool calls) from **Claude Code**, **OpenClaw**, and **Hermes Agent** into [Timeplus](https://timeplus.com).
+Data collection for AgentGuard: the plugins and SDKs that stream AI-agent telemetry (sessions, prompts, LLM calls, tool calls) from **Claude Code**, **OpenAI Codex**, **OpenClaw**, and **Hermes Agent** into [Timeplus](https://timeplus.com).
 
 AgentGuard itself — the streaming pipeline, detection rules, and dashboard — is a **Timeplus app** and lives in [timeplus-io/apps](https://github.com/timeplus-io/apps/tree/main/apps/agentguard) (`io.timeplus.agentguard`, database `ag`). This repository only contains the collection side.
 
@@ -29,8 +32,9 @@ AgentGuard itself — the streaming pipeline, detection rules, and dashboard —
    | Claude Code | `npm install -g @timeplus/agentguard-claudecode-plugin` | [README](agents/claudecode/agentguard-plugin/README.md) |
    | OpenClaw | `openclaw plugins install @timeplus/agentguard-openclaw-plugin` | [README](agents/openclaw/agentguard-plugin/README.md) |
    | Hermes Agent | `pip install agentguard-hermes-plugin` | [README](agents/hermes/agentguard-plugin/README.md) |
+   | OpenAI Codex | `pip install timeplus-agentguard-codex-plugin` | [README](agents/codex/agentguard-plugin/README.md) |
 
-   [`docs/plugin-install.md`](docs/plugin-install.md) covers configuration for all three. An agent can also do the install for you with the [`skills/agentguard`](skills/agentguard/SKILL.md) skill.
+   [`docs/plugin-install.md`](docs/plugin-install.md) covers configuration for all of them. The Codex plugin is an initial scaffold: it exports OTel spans to the app's OTLP input instead of writing `agentguard_hook_events`. An agent can also do the install for you with the [`skills/agentguard`](skills/agentguard/SKILL.md) skill.
 3. **Verify** events are arriving:
 
    ```sql
@@ -38,6 +42,17 @@ AgentGuard itself — the streaming pipeline, detection rules, and dashboard —
    FROM table(ag.agentguard_hook_events)
    ORDER BY event_time DESC LIMIT 10;
    ```
+
+## Packages
+
+| Package | Registry | Version | Source | Released by |
+|---|---|---|---|---|
+| [`@timeplus/agentguard-claudecode-plugin`](https://www.npmjs.com/package/@timeplus/agentguard-claudecode-plugin) | npm | ![version](https://img.shields.io/npm/v/%40timeplus%2Fagentguard-claudecode-plugin?label=) | `agents/claudecode/agentguard-plugin` | CI, tag `claudecode-plugin-v<version>` |
+| [`timeplus-agentguard-codex-plugin`](https://pypi.org/project/timeplus-agentguard-codex-plugin/) | PyPI | ![version](https://img.shields.io/pypi/v/timeplus-agentguard-codex-plugin?label=) | `agents/codex/agentguard-plugin` | CI, tag `codex-plugin-v<version>` |
+| [`timeplus-agentguard`](https://pypi.org/project/timeplus-agentguard/) (Python SDK, import `agentguard`) | PyPI | ![version](https://img.shields.io/pypi/v/timeplus-agentguard?label=) | `sdk/python` | CI, tag `sdk-python-v<version>` |
+| [`@timeplus/agentguard`](https://www.npmjs.com/package/@timeplus/agentguard) (JavaScript SDK) | npm | ![version](https://img.shields.io/npm/v/%40timeplus%2Fagentguard?label=) | `sdk/javascript` | CI, tag `sdk-js-v<version>` |
+| [`@timeplus/agentguard-openclaw-plugin`](https://www.npmjs.com/package/@timeplus/agentguard-openclaw-plugin) | npm | ![version](https://img.shields.io/npm/v/%40timeplus%2Fagentguard-openclaw-plugin?label=) | `agents/openclaw/agentguard-plugin` | manual |
+| [`agentguard-hermes-plugin`](https://pypi.org/project/agentguard-hermes-plugin/) | PyPI | ![version](https://img.shields.io/pypi/v/agentguard-hermes-plugin?label=) | `agents/hermes/agentguard-plugin` | manual |
 
 ## Configuration at a glance
 
@@ -62,6 +77,7 @@ Full reference: [`docs/plugin-install.md`](docs/plugin-install.md).
 | `agents/claudecode/` | Claude Code hook plugin (TypeScript, npm) + local install Makefile + OTel guide |
 | `agents/openclaw/` | OpenClaw plugin (TypeScript, npm) + Docker dev harness + scenario tests |
 | `agents/hermes/` | Hermes Agent plugin (Python, PyPI) + Docker dev harness |
+| `agents/codex/` | OpenAI Codex plugin (Python, PyPI), built on the Python SDK |
 | `agents/litellm/`, `agents/paperclip/`, `agents/xearxng/` | Supporting dev/demo environments (LLM proxy, Paperclip showcase, search) |
 | `sdk/python/`, `sdk/javascript/` | OpenTelemetry-based SDKs for instrumenting custom agents |
 | `skills/agentguard/` | Agent skill that installs and configures the plugins |
@@ -70,9 +86,9 @@ Full reference: [`docs/plugin-install.md`](docs/plugin-install.md).
 ## Development
 
 ```bash
-make build            # build all three plugins
+make build            # build all four plugins
 make test             # run all plugin unit tests
-make package-plugins  # pack plugins into packages/ (npm tarballs + Hermes wheel)
+make package-plugins  # pack plugins into packages/ (npm tarballs + Hermes and Codex wheels)
 ```
 
 Per plugin:
@@ -81,18 +97,31 @@ Per plugin:
 cd agents/claudecode/agentguard-plugin && npm install && npm test && npm run typecheck && npm run build
 cd agents/openclaw/agentguard-plugin  && npm install && npm test && npm run build
 cd agents/hermes/agentguard-plugin    && python3.12 -m unittest discover -s tests   # needs Python >= 3.10
+cd agents/codex/agentguard-plugin     && python3.12 -m unittest discover -s tests   # needs Python >= 3.10
 ```
 
-## Releasing plugins
+## Releasing
 
-Plugins are versioned and published on their own; nothing in CI publishes them. Bump the version in `agents/claudecode/agentguard-plugin/package.json`, `agents/openclaw/agentguard-plugin/package.json`, and `agents/hermes/agentguard-plugin/pyproject.toml`, merge, then:
+Every package is versioned and released on its own; there is no product-wide release tag.
+
+**Claude Code plugin, Codex plugin and both SDKs** are published by CI from a GitHub Release:
+
+1. Bump the package's version and merge:
+   - Claude Code plugin: `agents/claudecode/agentguard-plugin/package.json` (+ lockfile)
+   - Codex plugin: `agents/codex/agentguard-plugin/pyproject.toml` and `agentguard_codex/__init__.py`
+   - Python SDK: `sdk/python/pyproject.toml`
+   - JavaScript SDK: `sdk/javascript/package.json` (+ lockfile)
+2. Publish a GitHub Release from `main` with the tag shown in the [Packages](#packages) table, for example `claudecode-plugin-v0.5.1`.
+
+The matching workflow in `.github/workflows/publish-*.yml` tests, builds and publishes. It fails if the tag does not match the package version and ignores other tags; running it manually builds without uploading.
+
+**OpenClaw and Hermes plugins** are still published manually:
 
 ```bash
-cd agents/claudecode/agentguard-plugin && npm publish   # prepublishOnly rebuilds dist/
-cd agents/openclaw/agentguard-plugin  && npm publish
+cd agents/openclaw/agentguard-plugin  && npm publish   # prepublishOnly rebuilds dist/
 cd agents/hermes/agentguard-plugin    && make publish   # hatch build + twine upload
 ```
 
 ## A note on tool-call holds
 
-The plugins still contain the synchronous hold-and-wait path (`AGENTGUARD_HOLDS_ENABLED`, `AGENTGUARD_URL`), which called the standalone server's `/api/holds` endpoint. The Timeplus app has no hold capability, so leave `AGENTGUARD_HOLDS_ENABLED=false` (the default); the plugins then run in observe-only mode.
+The Claude Code, OpenClaw and Hermes plugins still contain the synchronous hold-and-wait path (`AGENTGUARD_HOLDS_ENABLED`, `AGENTGUARD_URL`), which called the standalone server's `/api/holds` endpoint. The Timeplus app has no hold capability, so leave `AGENTGUARD_HOLDS_ENABLED=false` (the default); the plugins then run in observe-only mode.
