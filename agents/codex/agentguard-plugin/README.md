@@ -4,15 +4,9 @@ AgentGuard monitoring plugin for [OpenAI Codex](https://github.com/openai/codex)
 
 Codex runs a command hook for each lifecycle event and writes one JSON object
 to stdin. This plugin reads that event, translates it with the
-[AgentGuard Python SDK](../../../sdk/python), and exports OpenTelemetry spans to
+[AgentGuard Python SDK](AgentGuard/sdk/python), and exports OpenTelemetry spans to
 the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard)'s
 OTLP/HTTP input (default `http://localhost:4318`).
-
-> **Status: initial scaffold.** This package currently covers the hook events
-> from the original SDK example. The implementation plan — full hook coverage,
-> transcript context, the span contract the Timeplus app converts to CIM, and
-> the open verification items — is in [`../docs/todo.md`](../docs/todo.md) and
-> [issue #308](https://github.com/timeplus-io/AgentGuard/issues/308).
 
 ## Requirements
 
@@ -136,11 +130,6 @@ codex exec --skip-git-repo-check -s workspace-write \
 #    otel_traces, or any local OTLP collector), then remove the AgentGuard
 #    entries from ~/.codex/hooks.json
 ```
-
-Expected with the current scaffold: an `llm` span for `UserPromptSubmit`, one
-`tool` span per `PostToolUse`, and a `session` span for `SessionEnd` if Codex
-fires it. `SessionStart` and `PreToolUse` only record timestamps today, so they
-emit no span. See [`../docs/todo.md`](../docs/todo.md) for the remaining work.
 
 ## Publishing
 

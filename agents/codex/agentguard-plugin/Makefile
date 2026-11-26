@@ -1,10 +1,6 @@
 PYTHON ?= python3.12
 
-.PHONY: install test build clean
-
-## install: install the plugin and the local AgentGuard SDK in editable mode
-install:
-	$(PYTHON) -m pip install -e ../../../sdk/python -e . --break-system-packages --quiet
+.PHONY: test build clean
 
 ## test: run the plugin unit tests (stdlib only, no SDK needed)
 test:
