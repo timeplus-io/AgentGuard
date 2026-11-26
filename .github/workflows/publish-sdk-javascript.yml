@@ -8,7 +8,8 @@ name: Publish JavaScript SDK
 # workflow manually builds and does an `npm publish --dry-run` without uploading.
 #
 # Auth is the `NPM_TOKEN` repository secret (an npm automation / granular token
-# with publish rights on the `@timeplus` scope). The package is published with provenance.
+# with publish rights on the `@timeplus` scope). npm provenance is not used:
+# it requires a public source repository, and this repository is private.
 
 on:
   release:
@@ -23,9 +24,6 @@ jobs:
     name: Build & publish to npm
     if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'sdk-js-v')
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write   # npm provenance
     defaults:
       run:
         working-directory: sdk/javascript
@@ -62,6 +60,6 @@ jobs:
 
       - name: Publish
         if: github.event_name == 'release'
-        run: npm publish --provenance --access public
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
