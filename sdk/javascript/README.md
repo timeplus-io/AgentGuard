@@ -5,7 +5,7 @@ JavaScript/TypeScript SDK for [AgentGuard](https://github.com/timeplus-io/AgentG
 ## Installation
 
 ```bash
-npm install agentguard
+npm install @timeplus/agentguard
 ```
 
 Requires Node.js 18 or later.
@@ -13,7 +13,7 @@ Requires Node.js 18 or later.
 ## Usage
 
 ```ts
-import { AgentGuard } from "agentguard";
+import { AgentGuard } from "@timeplus/agentguard";
 
 const ag = AgentGuard.getInstance({
   agentId: "my-agent",

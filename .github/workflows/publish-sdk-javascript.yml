@@ -1,6 +1,6 @@
 name: Publish JavaScript SDK
 
-# Publishes sdk/javascript to npm as `agentguard`.
+# Publishes sdk/javascript to npm as `@timeplus/agentguard`.
 #
 # Release flow: bump `version` in sdk/javascript/package.json (+ lockfile),
 # merge, then publish a GitHub Release whose tag is `sdk-js-v<version>`
@@ -8,7 +8,7 @@ name: Publish JavaScript SDK
 # workflow manually builds and does an `npm publish --dry-run` without uploading.
 #
 # Auth is the `NPM_TOKEN` repository secret (an npm automation / granular token
-# with publish rights on `agentguard`). The package is published with provenance.
+# with publish rights on the `@timeplus` scope). The package is published with provenance.
 
 on:
   release:

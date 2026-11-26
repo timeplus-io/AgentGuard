@@ -7,7 +7,7 @@
 
 import { randomUUID } from "crypto";
 import OpenAI from "openai";
-import { AgentGuard } from "agentguard";
+import { AgentGuard } from "@timeplus/agentguard";
 import { OpenAIInstrumentation } from "@arizeai/openinference-instrumentation-openai";
 
 const baseURL = "https://openrouter.ai/api/v1";

@@ -1,5 +1,5 @@
 {
-  "name": "agentguard",
+  "name": "@timeplus/agentguard",
   "version": "0.2.0",
   "description": "AgentGuard SDK — OpenTelemetry instrumentation for AI coding agents",
   "type": "module",
@@ -16,6 +16,9 @@
     "dist",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18.0.0"
   },

@@ -90,10 +90,10 @@ Plugins are versioned and published independently; there is no product release t
 
 ## Releasing SDKs
 
-The SDKs are versioned independently of the plugins and of each other, and are published by CI from a GitHub Release. Both publish under the name `agentguard` (PyPI and npm).
+The SDKs are versioned independently of the plugins and of each other, and are published by CI from a GitHub Release. The Python SDK publishes to PyPI as `agentguard`; the JavaScript SDK publishes to npm as `@timeplus/agentguard`.
 
 1. Bump `version` in `sdk/python/pyproject.toml` and/or `sdk/javascript/package.json` (+ lockfile), and merge.
 2. Publish a GitHub Release with a tag of `sdk-python-v<version>` or `sdk-js-v<version>`. `.github/workflows/publish-sdk-python.yml` (PyPI Trusted Publishing, environment `pypi`) or `publish-sdk-javascript.yml` (`NPM_TOKEN` secret) picks it up; each fails if the tag does not match the package version and ignores other tags. These prefixed tags are SDK-only — plugins still have no tags.
 3. Running either workflow manually (`workflow_dispatch`) builds and validates without uploading.
 4. Local fallback: `make publish-sdk-python` (needs `hatch`, `twine`, and `sdk/python/.pypirc`) / `make publish-sdk-js` (needs `npm login`).
-5. Verify with `pip index versions agentguard` / `npm view agentguard version`.
+5. Verify with `pip index versions agentguard` / `npm view @timeplus/agentguard version`.
