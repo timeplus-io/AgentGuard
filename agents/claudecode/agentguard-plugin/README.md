@@ -213,3 +213,12 @@ Source files:
 | `src/holds.ts`           | `requestHold` synchronous client to AgentGuard `/api/holds` (abort-timeout + fail-policy) |
 | `src/index.ts`           | Entry point: stdin → branch on hook → either sync `/api/holds` (`PreToolUse`) or async `send()` (everything else) |
 | `hooks.json`             | Claude Code settings config snippet (with `timeout: 600000` on `PreToolUse` for the sync hold path) |
+
+## Releasing
+
+Releases are published to npm by CI:
+
+1. Bump `version` in `package.json` (and `package-lock.json`), and merge.
+2. Publish a GitHub Release tagged `claudecode-plugin-v<version>` (for example `claudecode-plugin-v0.5.1`).
+
+The `Publish Claude Code plugin` workflow runs the tests, typecheck and build, then publishes with provenance. It fails if the tag does not match the package version or the version is already on npm. Running it manually tests, builds and lists the package contents without uploading.
