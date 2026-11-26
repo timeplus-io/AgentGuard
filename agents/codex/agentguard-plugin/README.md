@@ -4,7 +4,7 @@ AgentGuard monitoring plugin for [OpenAI Codex](https://github.com/openai/codex)
 
 Codex runs a command hook for each lifecycle event and writes one JSON object
 to stdin. This plugin reads that event, translates it with the
-[AgentGuard Python SDK](AgentGuard/sdk/python), and exports OpenTelemetry spans to
+[AgentGuard Python SDK](../../../sdk/python), and exports OpenTelemetry spans to
 the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard)'s
 OTLP/HTTP input (default `http://localhost:4318`).
 
