@@ -13,6 +13,14 @@
     "hooks.json",
     "README.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/timeplus-io/AgentGuard.git",
+    "directory": "agents/claudecode/agentguard-plugin"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18.0.0"
   },

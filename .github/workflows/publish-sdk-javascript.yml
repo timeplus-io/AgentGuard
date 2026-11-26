@@ -5,7 +5,8 @@ name: Publish JavaScript SDK
 # Release flow: bump `version` in sdk/javascript/package.json (+ lockfile),
 # merge, then publish a GitHub Release whose tag is `sdk-js-v<version>`
 # (e.g. sdk-js-v0.2.1). Releases with any other tag are ignored. Running the
-# workflow manually builds and does an `npm publish --dry-run` without uploading.
+# workflow manually builds and lists the package contents (`npm pack --dry-run`)
+# without uploading.
 #
 # Auth is the `NPM_TOKEN` repository secret (an npm automation / granular token
 # with publish rights on the `@timeplus` scope). npm provenance is not used:
@@ -54,9 +55,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Publish (dry run)
+      # `npm publish --dry-run` fails when the version is already on npm, which
+      # is the normal state of main between releases, so only pack here.
+      - name: Pack (dry run)
         if: github.event_name == 'workflow_dispatch'
-        run: npm publish --dry-run
+        run: npm pack --dry-run
 
       - name: Publish
         if: github.event_name == 'release'
