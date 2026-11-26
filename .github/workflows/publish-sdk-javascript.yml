@@ -1,0 +1,67 @@
+name: Publish JavaScript SDK
+
+# Publishes sdk/javascript to npm as `agentguard`.
+#
+# Release flow: bump `version` in sdk/javascript/package.json (+ lockfile),
+# merge, then publish a GitHub Release whose tag is `sdk-js-v<version>`
+# (e.g. sdk-js-v0.2.1). Releases with any other tag are ignored. Running the
+# workflow manually builds and does an `npm publish --dry-run` without uploading.
+#
+# Auth is the `NPM_TOKEN` repository secret (an npm automation / granular token
+# with publish rights on `agentguard`). The package is published with provenance.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build & publish to npm
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'sdk-js-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # npm provenance
+    defaults:
+      run:
+        working-directory: sdk/javascript
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: sdk/javascript/package-lock.json
+
+      - name: Check release tag matches package version
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "sdk-js-v$version" ]; then
+            echo "::error::Tag $TAG does not match package.json version $version (expected sdk-js-v$version)"
+            exit 1
+          fi
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish (dry run)
+        if: github.event_name == 'workflow_dispatch'
+        run: npm publish --dry-run
+
+      - name: Publish
+        if: github.event_name == 'release'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

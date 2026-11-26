@@ -40,6 +40,11 @@ openai = [
     "openai>=1.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/timeplus-io/AgentGuard/tree/main/sdk/python"
+Repository = "https://github.com/timeplus-io/AgentGuard"
+Issues = "https://github.com/timeplus-io/AgentGuard/issues"
+
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentguard"]
