@@ -48,7 +48,7 @@ cd agents/openclaw/agentguard-plugin && npm install && npm test && npm run build
 cd agents/hermes/agentguard-plugin && python3.12 -m unittest discover -s tests -v
 ```
 
-CI (`.github/workflows/ci.yml`) runs test + build for the two npm plugins and the Codex plugin, and the Hermes unit tests. The only release workflows are the two SDK publish workflows (see Releasing SDKs); plugins are not published by CI.
+CI (`.github/workflows/ci.yml`) runs test + build for the two npm plugins and the Codex plugin, and the Hermes unit tests. The release workflows are the two SDK publish workflows and the Codex plugin publish workflow (see Releasing Plugins / Releasing SDKs); the other plugins are not published by CI.
 
 ## How Collection Works
 
@@ -84,18 +84,20 @@ All three plugins still carry the synchronous hold-and-wait path (`holds.ts`, `A
 
 ## Releasing Plugins
 
-Plugins are versioned and published independently; there is no product release tag and CI publishes nothing.
+Plugins are versioned and published independently; there is no product release tag. The Claude Code, OpenClaw and Hermes plugins are published manually; the Codex plugin is published by CI (see below).
 
 1. Bump `version` in `agents/claudecode/agentguard-plugin/package.json`, `agents/openclaw/agentguard-plugin/package.json` (+ their lockfiles), and `agents/hermes/agentguard-plugin/pyproject.toml`.
 2. Merge, then publish manually: `npm publish` in each npm plugin dir (`prepublishOnly` rebuilds `dist/`, which is gitignored), and `make publish` in `agents/hermes/agentguard-plugin` (hatch build + twine upload).
 3. Verify what is live with `npm view <pkg> version` / `npm pack <pkg>@<ver>` before announcing.
+
+**Codex plugin:** bump `version` in `agents/codex/agentguard-plugin/pyproject.toml` and `__version__` in `agentguard_codex/__init__.py`, merge, then publish a GitHub Release tagged `codex-plugin-v<version>`. `.github/workflows/publish-codex-plugin.yml` publishes `agentguard-codex-plugin` to PyPI (Trusted Publishing, environment `pypi`); it fails on a tag/version mismatch, and a manual run builds without uploading.
 
 ## Releasing SDKs
 
 The SDKs are versioned independently of the plugins and of each other, and are published by CI from a GitHub Release. The Python SDK publishes to PyPI as `timeplus-agentguard` (the import name stays `agentguard`; PyPI rejects the bare name as too similar to an existing project); the JavaScript SDK publishes to npm as `@timeplus/agentguard`.
 
 1. Bump `version` in `sdk/python/pyproject.toml` and/or `sdk/javascript/package.json` (+ lockfile), and merge.
-2. Publish a GitHub Release with a tag of `sdk-python-v<version>` or `sdk-js-v<version>`. `.github/workflows/publish-sdk-python.yml` (PyPI Trusted Publishing, environment `pypi`) or `publish-sdk-javascript.yml` (`NPM_TOKEN` secret) picks it up; each fails if the tag does not match the package version and ignores other tags. These prefixed tags are SDK-only — plugins still have no tags.
+2. Publish a GitHub Release with a tag of `sdk-python-v<version>` or `sdk-js-v<version>`. `.github/workflows/publish-sdk-python.yml` (PyPI Trusted Publishing, environment `pypi`) or `publish-sdk-javascript.yml` (`NPM_TOKEN` secret) picks it up; each fails if the tag does not match the package version and ignores other tags. The other plugins have no tags.
 3. Running either workflow manually (`workflow_dispatch`) builds and validates without uploading.
 4. Local fallback: `make publish-sdk-python` (needs `hatch`, `twine`, and `sdk/python/.pypirc`) / `make publish-sdk-js` (needs `npm login`).
 5. Verify with `pip index versions timeplus-agentguard` / `npm view @timeplus/agentguard version`.

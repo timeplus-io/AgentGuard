@@ -1,0 +1,91 @@
+name: Publish Codex plugin
+
+# Publishes agents/codex/agentguard-plugin to PyPI as `agentguard-codex-plugin`.
+#
+# Release flow: bump `version` in agents/codex/agentguard-plugin/pyproject.toml
+# and agentguard_codex/__init__.py, merge, then publish a GitHub Release whose
+# tag is `codex-plugin-v<version>` (e.g. codex-plugin-v0.1.1). Releases with any
+# other tag are ignored. Running the workflow manually builds and validates the
+# package without uploading.
+#
+# Auth is PyPI Trusted Publishing (OIDC) — no token secret. On PyPI, add a
+# trusted publisher for project `agentguard-codex-plugin`: this repository,
+# workflow `publish-codex-plugin.yml`, environment `pypi`. The `pypi`
+# environment must also allow `codex-plugin-v*` tags.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & test
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'codex-plugin-v')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/codex/agentguard-plugin
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Test against the in-repo Python SDK rather than the PyPI release.
+      - name: Install tooling and SDK
+        run: python -m pip install hatch twine -e ../../../sdk/python
+
+      - name: Check release tag matches package version
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="$(python -m hatch version)"
+          if [ "$TAG" != "codex-plugin-v$version" ]; then
+            echo "::error::Tag $TAG does not match pyproject.toml version $version (expected codex-plugin-v$version)"
+            exit 1
+          fi
+
+      - name: Check __version__ matches package version
+        run: |
+          version="$(python -m hatch version)"
+          module="$(python -c 'import agentguard_codex; print(agentguard_codex.__version__)')"
+          if [ "$module" != "$version" ]; then
+            echo "::error::agentguard_codex.__version__ ($module) does not match pyproject.toml version ($version)"
+            exit 1
+          fi
+
+      - name: Test
+        run: make test PYTHON=python
+
+      - name: Build and validate
+        run: make check PYTHON=python
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: codex-plugin-dist
+          path: agents/codex/agentguard-plugin/dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/agentguard-codex-plugin/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: codex-plugin-dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
