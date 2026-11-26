@@ -23,14 +23,6 @@ pip install -e sdk/python
 pip install -e agents/codex/agentguard-plugin
 ```
 
-Or, from `agents/codex/agentguard-plugin`:
-
-```bash
-make install
-```
-
-Either installs the `agentguard-codex` console script.
-
 ## Configure Codex hooks
 
 Merge [`hooks.json`](hooks.json) into your Codex hook configuration —
