@@ -48,7 +48,7 @@ cd agents/openclaw/agentguard-plugin && npm install && npm test && npm run build
 cd agents/hermes/agentguard-plugin && python3.12 -m unittest discover -s tests -v
 ```
 
-CI (`.github/workflows/ci.yml`) runs test + build for the two npm plugins and the Hermes unit tests. The only release workflows are the two SDK publish workflows (see Releasing SDKs); plugins are not published by CI.
+CI (`.github/workflows/ci.yml`) runs test + build for the two npm plugins and the Codex plugin, and the Hermes unit tests. The only release workflows are the two SDK publish workflows (see Releasing SDKs); plugins are not published by CI.
 
 ## How Collection Works
 
@@ -78,7 +78,7 @@ All three plugins still carry the synchronous hold-and-wait path (`holds.ts`, `A
 ## Conventions
 
 - **Config is env vars / plugin config only.** Any config change must be reflected in all of: the plugin's `README.md`, `docs/plugin-install.md`, `skills/agentguard/SKILL.md`, and (Claude Code) `agents/claudecode/Makefile` / (OpenClaw) `openclaw.plugin.json`.
-- **Keep the three plugins aligned**: a new config key or event-shape change usually applies to all three. The `HookEvent` column set must match the app's `agentguard_hook_events` DDL (in the apps repo) — a schema change needs a coordinated app change.
+- **Keep the three hook-event plugins aligned** (Claude Code, OpenClaw, Hermes): a new config key or event-shape change usually applies to all three. The Codex plugin is separate: it exports OTel spans through the Python SDK and does not write `HookEvent` rows. The `HookEvent` column set must match the app's `agentguard_hook_events` DDL (in the apps repo) — a schema change needs a coordinated app change.
 - **Defaults**: database `ag`, stream `agentguard_hook_events`, holds off.
 - **Naming**: say "Timeplus" / "Timeplus Enterprise" (never "Proton") and "Timeplus REST API" for the port-8000 server (never its internal name). No Timeplus Cloud, no API keys — Basic auth only.
 
