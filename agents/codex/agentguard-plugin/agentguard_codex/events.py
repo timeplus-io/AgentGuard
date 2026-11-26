@@ -1,20 +1,21 @@
-"""Translate Codex hook events into AgentGuard SDK calls.
+"""Translate Codex hook events into AgentGuard spans.
 
 Codex invokes one short-lived command per hook event and writes a single
 JSON object to stdin. Every object carries ``hook_event_name`` and
 ``session_id``; turn-scoped events also carry ``turn_id``. This module only
-does the translation — the SDK owns session bookkeeping and span export.
+does the translation — the sink owns span export and start-time bookkeeping.
 
-Two generations of handlers live here:
+Each event becomes at most one span. Three of them carry the kind attributes
+the AgentGuard app's OpenInference views key on:
 
-* ``SessionStart``, ``SessionEnd``, ``UserPromptSubmit``, ``PreToolUse`` and
-  ``PostToolUse`` drive the SDK's lifecycle hooks, which emit the ``session``,
-  ``llm`` and ``tool`` spans.
-* The other nine events each emit one span named after the hook (see
-  :data:`HOOK_SPAN_NAMES`) through :meth:`HookSink.emit_span`. They never set
-  ``openinference.span.kind``, so a consumer counting LLM calls by that
-  attribute still sees one ``llm`` span per prompt, however many model request
-  attempts the turn needed.
+* ``post_model_request`` is the LLM call (``openinference.span.kind=LLM``):
+  one per model request attempt, with the model, token usage and real latency.
+* ``tool`` is the tool call (``openinference.span.kind=TOOL``).
+* ``session`` is the whole session (``agentguard.span.kind=SESSION``).
+
+The prompt (``user_prompt_submit``) and the final reply (``stop``) are their
+own spans and are deliberately *not* LLM-kind, so a consumer counting LLM
+calls or summing usage sees model requests only.
 
 Codex hooks reference: https://learn.chatgpt.com/docs/hooks
 """
@@ -25,41 +26,12 @@ import json
 from collections.abc import Callable
 from typing import Any, Protocol
 
+#: Reported as the provider when the session transcript does not name one.
+DEFAULT_PROVIDER = "openai"
+
 
 class HookSink(Protocol):
-    """The subset of ``agentguard.hook.AgentGuardHooks`` this plugin uses."""
-
-    def on_session_start(self, session_id: str) -> None: ...
-
-    def on_session_end(self, session_id: str) -> None: ...
-
-    def on_llm_end(
-        self,
-        session_id: str,
-        *,
-        task_id: str | None = None,
-        model_name: str | None = None,
-        user_message: str | None = None,
-    ) -> None: ...
-
-    def on_pre_tool(
-        self,
-        session_id: str,
-        *,
-        run_id: str | None = None,
-        task_id: str | None = None,
-    ) -> None: ...
-
-    def on_post_tool(
-        self,
-        *,
-        session_id: str,
-        run_id: str | None = None,
-        task_id: str | None = None,
-        tool_name: str | None = None,
-        tool_input: str | None = None,
-        tool_result: str | None = None,
-    ) -> None: ...
+    """What :func:`dispatch` needs: emit a span, and pair Pre/Post events."""
 
     def emit_span(
         self,
@@ -78,8 +50,12 @@ class HookSink(Protocol):
     def take_start(self, key: str) -> int | None: ...
 
 
-#: Codex hook name -> span name, for the events emitted as their own span.
+#: Codex hook name -> span name. ``PreToolUse`` only records a start time.
 HOOK_SPAN_NAMES = {
+    "SessionStart": "session_start",
+    "SessionEnd": "session",
+    "UserPromptSubmit": "user_prompt_submit",
+    "PostToolUse": "tool",
     "PreModelRequest": "pre_model_request",
     "PostModelRequest": "post_model_request",
     "Stop": "stop",
@@ -89,6 +65,14 @@ HOOK_SPAN_NAMES = {
     "PermissionRequest": "permission_request",
     "PreCompact": "pre_compact",
     "PostCompact": "post_compact",
+}
+
+#: Codex hook name -> ``agentguard.hook_name``.
+HOOK_NAMES = {
+    **HOOK_SPAN_NAMES,
+    "SessionEnd": "session_end",
+    "PreToolUse": "pre_tool_use",
+    "PostToolUse": "post_tool_use",
 }
 
 #: ``PostModelRequest.token_usage`` field -> span attribute (OpenInference names).
@@ -117,15 +101,42 @@ def _as_string(value: Any) -> str | None:
     return json.dumps(value, ensure_ascii=False)
 
 
+def session_provider(transcript_path: Any) -> str | None:
+    """Read the model provider from the first record of a Codex transcript.
+
+    Codex starts each rollout file with a ``session_meta`` record whose
+    payload names the ``model_provider``. The transcript format is not a
+    stable interface, so anything unexpected yields ``None``.
+    """
+    if not isinstance(transcript_path, str) or not transcript_path:
+        return None
+    try:
+        with open(transcript_path, encoding="utf-8") as f:
+            record = json.loads(f.readline())
+        provider = record["payload"]["model_provider"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return provider if isinstance(provider, str) and provider else None
+
+
 def _common_attributes(event: dict[str, Any]) -> dict[str, Any]:
-    """Attributes shared by every span this module emits itself.
+    """Attributes set on every span.
 
     ``None`` values are dropped by :func:`_emit`, so absent optional fields
     simply leave the attribute off the span.
     """
+    model = event.get("model")
     return {
-        "agentguard.hook_name": HOOK_SPAN_NAMES[event["hook_event_name"]],
-        "llm.model_name": event.get("model"),
+        "agentguard.hook_name": HOOK_NAMES[event["hook_event_name"]],
+        "llm.model_name": model,
+        # Without llm.provider the app derives the provider from the model
+        # name, which for a Codex slug such as "gpt-5-codex" is the slug.
+        "llm.provider": (
+            (session_provider(event.get("transcript_path")) or DEFAULT_PROVIDER)
+            if model
+            else None
+        ),
+        "cwd": event.get("cwd"),
         "codex.permission_mode": event.get("permission_mode"),
         # Subagent hooks carry the *parent* session id; these two identify
         # the child. Codex also sets them on other hooks fired inside a
@@ -157,44 +168,72 @@ def _emit(
 
 
 def _pair_key(kind: str, event: dict[str, Any], *parts: Any) -> str:
-    """Key that pairs a ``Pre*`` event with its ``Post*`` event."""
+    """Key that pairs an opening event with its closing event."""
     fields = (kind, event["session_id"], event.get("turn_id"), event.get("agent_id"), *parts)
     return "|".join("" if f is None else str(f) for f in fields)
 
 
+def _session_key(event: dict[str, Any]) -> str:
+    # SessionEnd carries no turn id, so the key is the session alone.
+    return "session|" + str(event["session_id"])
+
+
 def _session_start(event: dict[str, Any], hooks: HookSink) -> None:
-    hooks.on_session_start(event["session_id"])
+    # Emitted right away so a running session is visible downstream; the
+    # `session` span that covers the whole session only exists once it ends.
+    hooks.mark_start(_session_key(event))
+    _emit(event, hooks, {"source": event.get("source")})
 
 
 def _session_end(event: dict[str, Any], hooks: HookSink) -> None:
-    hooks.on_session_end(event["session_id"])
+    _emit(
+        event,
+        hooks,
+        {"agentguard.span.kind": "SESSION", "codex.session.end_reason": event.get("reason")},
+        start_time_ns=hooks.take_start(_session_key(event)),
+    )
 
 
 def _user_prompt_submit(event: dict[str, Any], hooks: HookSink) -> None:
-    hooks.on_llm_end(
-        session_id=event["session_id"],
-        task_id=event.get("turn_id"),
-        model_name=event.get("model"),
-        user_message=event.get("prompt"),
+    prompt = event.get("prompt")
+    _emit(
+        event,
+        hooks,
+        {
+            # The shape the app reads a prompt from: JSON, with a user role.
+            "input.value": (
+                None
+                if prompt is None
+                else json.dumps(
+                    {"messages": [{"role": "user", "content": _as_string(prompt)}]},
+                    ensure_ascii=False,
+                )
+            ),
+        },
     )
+
+
+def _tool_key(event: dict[str, Any]) -> str:
+    return _pair_key("tool", event, event.get("tool_use_id"))
 
 
 def _pre_tool_use(event: dict[str, Any], hooks: HookSink) -> None:
-    hooks.on_pre_tool(
-        session_id=event["session_id"],
-        run_id=event.get("turn_id"),
-        task_id=event.get("tool_use_id"),
-    )
+    hooks.mark_start(_tool_key(event))
 
 
 def _post_tool_use(event: dict[str, Any], hooks: HookSink) -> None:
-    hooks.on_post_tool(
-        session_id=event["session_id"],
-        run_id=event.get("turn_id"),
+    _emit(
+        event,
+        hooks,
+        {
+            "openinference.span.kind": "TOOL",
+            "tool.name": event.get("tool_name"),
+            "tool.parameters": _as_string(event.get("tool_input")),
+            "output.value": _as_string(event.get("tool_response")),
+            "tool_use_id": event.get("tool_use_id"),
+        },
         task_id=event.get("tool_use_id"),
-        tool_name=event.get("tool_name"),
-        tool_input=_as_string(event.get("tool_input")),
-        tool_result=_as_string(event.get("tool_response")),
+        start_time_ns=hooks.take_start(_tool_key(event)),
     )
 
 
@@ -220,6 +259,9 @@ def _pre_model_request(event: dict[str, Any], hooks: HookSink) -> None:
 
 def _post_model_request(event: dict[str, Any], hooks: HookSink) -> None:
     extra = _model_request_attributes(event)
+    # The one LLM-kind span: the app turns it into llm_request / llm_response
+    # rows and the llm.* metrics, one llm.call per attempt.
+    extra["openinference.span.kind"] = "LLM"
     status = event.get("status")
     error = event.get("error")
     extra["codex.request.status"] = status

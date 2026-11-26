@@ -1,9 +1,7 @@
 """The sink :func:`agentguard_codex.events.dispatch` writes to.
 
-:class:`SdkSink` wraps the AgentGuard Python SDK. The five original hooks go
-straight to the SDK's ``AgentGuardHooks`` lifecycle methods; the other events
-are emitted as their own span through the SDK client, with ``Pre*``/``Post*``
-pairs timed by :class:`StartStore`.
+:class:`SdkSink` emits every span through the AgentGuard Python SDK client,
+with opening/closing event pairs timed by :class:`StartStore`.
 """
 
 from __future__ import annotations
@@ -64,15 +62,9 @@ class StartStore:
 class SdkSink:
     """Adapts the AgentGuard SDK to :class:`agentguard_codex.events.HookSink`."""
 
-    def __init__(self, hooks: Any, client: Any, starts: StartStore) -> None:
-        self._hooks = hooks
+    def __init__(self, client: Any, starts: StartStore) -> None:
         self._client = client
         self._starts = starts
-
-    def __getattr__(self, name: str) -> Any:
-        # on_session_start / on_session_end / on_llm_end / on_pre_tool /
-        # on_post_tool are the SDK's own lifecycle hooks.
-        return getattr(self._hooks, name)
 
     def emit_span(
         self,
@@ -91,7 +83,7 @@ class SdkSink:
 
         # start_span, not start_as_current_span: the latter tags the first
         # span of every process agentguard.span.kind=SESSION, and each hook
-        # is its own process.
+        # is its own process. Only the `session` span should carry it.
         span = self._client.start_span(
             name, session_id=session_id, run_id=run_id, task_id=task_id, **kwargs
         )
@@ -111,5 +103,6 @@ class SdkSink:
     def take_start(self, key: str) -> int | None:
         return self._starts.take(key)
 
-    def flush(self) -> None:
-        self._client.flush()
+    def close(self) -> None:
+        """Export what was emitted; a hook process ends right after this."""
+        self._client.shutdown()

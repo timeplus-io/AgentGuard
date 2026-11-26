@@ -1,8 +1,8 @@
 """``agentguard-codex`` — Codex hook entry point for AgentGuard.
 
 Codex runs this command once per hook event. It reads the event JSON from
-stdin and hands it to :func:`agentguard_codex.events.dispatch`, which drives
-the AgentGuard Python SDK. See ``hooks.json`` for a sample Codex hook
+stdin and hands it to :func:`agentguard_codex.events.dispatch`, which emits
+spans through the AgentGuard Python SDK. See ``hooks.json`` for a sample Codex hook
 configuration.
 """
 
@@ -16,6 +16,7 @@ import sys
 
 from agentguard_codex.events import dispatch
 
+AGENT_TYPE = "codex"
 DEFAULT_DEPLOYMENT_ID = "local"
 DEFAULT_DEPLOYMENT_NAME = "Local Dev"
 DEFAULT_ENDPOINT = "http://localhost:4318"
@@ -55,12 +56,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def resolve_agent_id(agent_id: str | None) -> str:
-    """Resolve the agent id the SDK also uses to key its on-disk store.
+    """Resolve the agent id: flag, then env, then the hostname.
 
-    The SDK's ``AgentGuardHooks`` falls back to the literal folder name
-    ``hostname`` when ``agent_id`` is ``None``, so resolve the env-var fallback
-    here and pass the result through; otherwise agents that omit ``--agent-id``
-    would all share one Pre/Post-tool timing store.
+    Resolved here, not left to the SDK, because the same value names the
+    folder of the on-disk start-time store.
     """
     return agent_id or os.environ.get("AGENTGUARD_AGENT_ID") or socket.gethostname()
 
@@ -93,7 +92,7 @@ def resolve_endpoint(endpoint: str | None) -> str:
 
 
 def start_store_folder(agent_id: str) -> str:
-    """Where Pre*/Post* start times live, next to the SDK's own store."""
+    """Where the start times of open sessions, tools and requests live."""
     return os.path.join(os.path.expanduser("~"), ".agentguard", agent_id, "codex-starts")
 
 
@@ -105,26 +104,24 @@ def main(argv: list[str] | None = None) -> int:
         # works without the AgentGuard SDK, and a missing SDK is handled by
         # the same fail-safe path as any other plugin error.
         from agentguard import AgentGuard
-        from agentguard.hook import AgentGuardHooks
 
         from agentguard_codex.sink import SdkSink, StartStore
 
         agent_id = resolve_agent_id(args.agent_id)
-        hooks = AgentGuardHooks(
+        client = AgentGuard(
+            # The app reports the OTel service name as the agent type.
+            service_name=AGENT_TYPE,
             agent_id=agent_id,
             deployment_id=resolve_deployment_id(args.deployment_id),
             deployment_name=resolve_deployment_name(args.deployment_name),
-            endpoint=resolve_endpoint(args.endpoint),
+            otlp_endpoint=resolve_endpoint(args.endpoint),
         )
-        # AgentGuard is a process-wide singleton, so this is the client the
-        # hooks above just configured (same resource, same exporter).
-        sink = SdkSink(hooks, AgentGuard(), StartStore(start_store_folder(agent_id)))
+        sink = SdkSink(client, StartStore(start_store_folder(agent_id)))
 
-        event = json.loads(sys.stdin.read())
         try:
-            dispatch(event, sink)
+            dispatch(json.loads(sys.stdin.read()), sink)
         finally:
-            sink.flush()
+            sink.close()
     except SystemExit:
         # argparse raises SystemExit for --help (0) and bad flags (2). A bad
         # flag must not change the Codex turn, so report success either way.

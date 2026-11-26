@@ -93,7 +93,7 @@ class TelemetryTests(unittest.TestCase):
     COMMON = {
         "session_id": "s1",
         "transcript_path": None,
-        "cwd": "/repo",
+        "cwd": "/work/demo-repo",
         "model": "gpt-5-codex",
     }
     TURN = {**COMMON, "turn_id": "t1"}
@@ -200,16 +200,19 @@ class TelemetryTests(unittest.TestCase):
                 )
 
         cls.spans = []
+        cls.resources = []
         for path, body in server.bodies:
             assert path == "/v1/traces", path
             request = ExportTraceServiceRequest()
             request.ParseFromString(body)
             for resource_spans in request.resource_spans:
+                cls.resources.append(cls.attributes(resource_spans.resource))
                 for scope_spans in resource_spans.scope_spans:
                     cls.spans.extend(scope_spans.spans)
 
     @staticmethod
     def attributes(span) -> dict:
+        """Attributes of a span or a resource as a plain dict."""
         out = {}
         for item in span.attributes:
             out[item.key] = getattr(item.value, item.value.WhichOneof("value"))
@@ -235,9 +238,10 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(
             counts,
             {
+                "session_start": 1,
                 "session": 1,
-                "llm": 1,  # the prompt only: retries do not add llm spans
-                "tool": 1,
+                "user_prompt_submit": 1,
+                "tool": 1,  # PreToolUse only records the start time
                 "pre_model_request": 2,
                 "post_model_request": 2,
                 "permission_request": 1,
@@ -250,13 +254,57 @@ class TelemetryTests(unittest.TestCase):
             },
         )
 
-    def test_spans_keep_session_and_turn(self) -> None:
+    def test_agent_type_is_codex(self) -> None:
+        # The app reports the OTel service name as agent_type.
+        self.assertTrue(self.resources)
+        for resource in self.resources:
+            self.assertEqual(resource["service.name"], "codex")
+            self.assertEqual(resource["agent.id"], "test-agent")
+
+    def test_every_span_carries_session_cwd_and_model(self) -> None:
         for span in self.spans:
             attributes = self.attributes(span)
             with self.subTest(span=span.name):
                 self.assertEqual(attributes["session.id"], "s1")
-                if span.name != "session":
-                    self.assertIn("t1", (attributes.get("run.id"), attributes.get("task.id")))
+                self.assertEqual(attributes["cwd"], "/work/demo-repo")
+                self.assertEqual(attributes["llm.model_name"], "gpt-5-codex")
+                self.assertEqual(attributes["llm.provider"], "openai")
+                if span.name not in ("session", "session_start"):
+                    self.assertEqual(attributes["run.id"], "t1")
+
+    def test_session_start_is_exported_before_the_session_ends(self) -> None:
+        (start,) = self.named("session_start")
+        (session,) = self.named("session")
+
+        self.assertEqual(self.attributes(start)["source"], "startup")
+        self.assertNotIn("agentguard.span.kind", self.attributes(start))
+        self.assertEqual(self.attributes(session)["agentguard.span.kind"], "SESSION")
+        # The session span runs from SessionStart to SessionEnd.
+        self.assertLessEqual(session.start_time_unix_nano, start.start_time_unix_nano)
+        for span in self.spans:
+            self.assertGreaterEqual(session.end_time_unix_nano, span.end_time_unix_nano)
+
+    def test_prompt_and_reply_text(self) -> None:
+        (prompt,) = self.named("user_prompt_submit")
+        self.assertEqual(
+            json.loads(self.attributes(prompt)["input.value"]),
+            {"messages": [{"role": "user", "content": "fix the test"}]},
+        )
+        # A prompt is not an LLM call: it takes no time and has no usage.
+        self.assertNotIn("openinference.span.kind", self.attributes(prompt))
+
+        (stop,) = self.named("stop")
+        self.assertEqual(self.attributes(stop)["output.value"], "Fixed.")
+
+    def test_tool_span(self) -> None:
+        (tool,) = self.named("tool")
+        attributes = self.attributes(tool)
+
+        self.assertEqual(attributes["openinference.span.kind"], "TOOL")
+        self.assertEqual(attributes["tool.name"], "Bash")
+        self.assertEqual(json.loads(attributes["tool.parameters"]), {"command": "make test"})
+        self.assertEqual(attributes["tool_use_id"], "c1")
+        self.assertGreater(tool.end_time_unix_nano - tool.start_time_unix_nano, 1_000_000)
 
     def test_model_attempts_carry_status_and_usage(self) -> None:
         failed, completed = sorted(
@@ -277,19 +325,20 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(completed_attributes["llm.token_count.total"], 1500)
         self.assertNotEqual(completed.status.code, 2)
 
-    def test_usage_and_responses_are_not_double_counted(self) -> None:
-        usage = [s.name for s in self.spans if "llm.token_count.total" in self.attributes(s)]
-        self.assertEqual(usage, ["post_model_request"])
-
-        responses = [s.name for s in self.spans if "output.value" in self.attributes(s)]
-        self.assertEqual(sorted(responses), ["stop", "subagent_stop", "tool"])
-
+    def test_llm_calls_are_model_requests_only(self) -> None:
         llm_kind = [
             s.name
             for s in self.spans
             if self.attributes(s).get("openinference.span.kind") == "LLM"
         ]
-        self.assertEqual(llm_kind, ["llm"])
+        # One per attempt, none for the prompt or the final reply.
+        self.assertEqual(llm_kind, ["post_model_request", "post_model_request"])
+
+        usage = [s.name for s in self.spans if "llm.token_count.total" in self.attributes(s)]
+        self.assertEqual(usage, ["post_model_request"])
+
+        responses = [s.name for s in self.spans if "output.value" in self.attributes(s)]
+        self.assertEqual(sorted(responses), ["stop", "subagent_stop", "tool"])
 
     def test_post_spans_start_at_their_pre_event(self) -> None:
         pairs = [
@@ -323,12 +372,9 @@ class TelemetryTests(unittest.TestCase):
             self.assertEqual(attributes["agentguard.subagent.id"], "agent_7")
             self.assertEqual(attributes["agentguard.subagent.type"], "explorer")
 
-    def test_new_spans_are_not_marked_as_sessions(self) -> None:
-        for span in self.spans:
-            if span.name in ("session", "llm", "tool"):
-                continue  # emitted by the SDK's own lifecycle hooks
-            with self.subTest(span=span.name):
-                self.assertNotIn("agentguard.span.kind", self.attributes(span))
+    def test_only_the_session_span_is_marked_as_a_session(self) -> None:
+        marked = [s.name for s in self.spans if "agentguard.span.kind" in self.attributes(s)]
+        self.assertEqual(marked, ["session"])
 
 
 class ResolveTests(unittest.TestCase):

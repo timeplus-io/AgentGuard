@@ -3,8 +3,8 @@
 AgentGuard monitoring plugin for [OpenAI Codex](https://github.com/openai/codex).
 
 Codex runs a command hook for each lifecycle event and writes one JSON object
-to stdin. This plugin reads that event, translates it with the
-[AgentGuard Python SDK](../../../sdk/python), and exports OpenTelemetry spans to
+to stdin. This plugin reads that event, turns it into an OpenTelemetry span
+with the [AgentGuard Python SDK](../../../sdk/python), and exports it to
 the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard)'s
 OTLP/HTTP input (default `http://localhost:4318`).
 
@@ -74,8 +74,12 @@ Versions before 0.2.0 handled five events: `SessionStart`, `SessionEnd`,
 4. Start Codex, run `/hooks`, and approve the new and changed entries. Codex
    skips them until you do; the five existing hooks keep running meanwhile.
 
-Nothing changes for the five existing events: they emit the same `session`,
-`llm` and `tool` spans as before.
+The spans of the five existing events change in 0.2.0 too (see
+[What gets captured](#what-gets-captured)): the agent type is now `codex`
+instead of `agentguard-sdk`, the prompt is a `user_prompt_submit` span instead
+of an `llm` span, and a `session_start` span is sent when the session starts.
+Queries that filter on `service_name = 'agentguard-sdk'` or `span_name = 'llm'`
+need updating.
 
 ## Configuration
 
@@ -104,18 +108,19 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://timeplus.example.com:4318
 ## What gets captured
 
 The plugin handles all 14 events in the
-[Codex hooks reference](https://developers.openai.com/codex/hooks). Every span
-carries `session.id`, and `run.id` (the Codex `turn_id`) when Codex supplies one.
+[Codex hooks reference](https://developers.openai.com/codex/hooks). Each event
+becomes one span, exported with the OTel service name `codex`, which the
+AgentGuard app reports as the agent type.
 
 | Codex hook | Emitted span | What it carries |
 |---|---|---|
-| `SessionStart` | none (start time recorded) | |
-| `SessionEnd` | `session` | Session duration |
-| `UserPromptSubmit` | `llm` | The prompt (`input.value`), model |
+| `SessionStart` | `session_start` | Start source (`startup`, `resume`, ...); sent immediately, so a running session is visible |
+| `SessionEnd` | `session` | The whole session, from `SessionStart` to `SessionEnd` |
+| `UserPromptSubmit` | `user_prompt_submit` | The prompt (`input.value`) |
 | `PreToolUse` | none (start time recorded) | |
 | `PostToolUse` | `tool` | `tool.name`, `tool.parameters`, `output.value`, tool duration |
 | `PreModelRequest` | `pre_model_request` | Request id, attempt number, kind |
-| `PostModelRequest` | `post_model_request` | Request id, attempt number, status, error, token usage, attempt duration |
+| `PostModelRequest` | `post_model_request` | The LLM call: status, error, token usage, attempt duration |
 | `Stop` | `stop` | The final assistant message (`output.value`) |
 | `Interrupt` | `interrupt` | The interrupted turn |
 | `SubagentStart` | `subagent_start` | Subagent id and type |
@@ -124,20 +129,38 @@ carries `session.id`, and `run.id` (the Codex `turn_id`) when Codex supplies one
 | `PreCompact` | `pre_compact` | Trigger (`manual` or `auto`) |
 | `PostCompact` | `post_compact` | Trigger, compaction duration |
 
-The first five events go through the SDK's lifecycle hooks (`on_session_start`,
-`on_session_end`, `on_llm_end`, `on_pre_tool`, `on_post_tool`). The other nine
-each emit one span named after the hook, with `agentguard.hook_name` set to the
-same name.
+### Span attributes
 
-### Span attributes for the nine newer events
+On every span, when Codex sends the field:
+
+| Attribute | Source |
+|---|---|
+| `session.id` | `session_id` |
+| `run.id` | `turn_id` (turn-scoped hooks) |
+| `agentguard.hook_name` | the hook, in snake case (`session_start`, `post_tool_use`, ...) |
+| `llm.model_name` | `model` |
+| `llm.provider` | `model_provider` from the first record of the session transcript; `openai` when the transcript cannot be read |
+| `cwd` | `cwd`, the session's working directory |
+| `codex.permission_mode` | `permission_mode` |
+| `agentguard.subagent.id`, `agentguard.subagent.type` | `agent_id`, `agent_type` (subagent spans, and any other hook fired inside a subagent) |
+
+Three spans carry the kind attribute the app's OpenInference views key on:
+
+| Span | Kind attribute | The app derives |
+|---|---|---|
+| `post_model_request` | `openinference.span.kind=LLM` | `llm_request` / `llm_response` events, and the `llm.*` metrics |
+| `tool` | `openinference.span.kind=TOOL` | `tool_invoke` / `tool_complete` events |
+| `session` | `agentguard.span.kind=SESSION` | `session_start` / `session_end` events |
+
+Per span:
 
 | Attribute | Set on | Source |
 |---|---|---|
-| `agentguard.hook_name` | all nine | the span name |
-| `llm.model_name` | all nine | `model` |
-| `codex.permission_mode` | when Codex sends it | `permission_mode` |
-| `agentguard.subagent.id`, `agentguard.subagent.type` | subagent spans, and any other hook fired inside a subagent | `agent_id`, `agent_type` |
-| `task.id` | model request spans: the request id; subagent spans: the subagent id | `request_id`, `agent_id` |
+| `source` | `session_start` | `source` |
+| `codex.session.end_reason` | `session` | `reason` |
+| `input.value` | `user_prompt_submit` | `prompt`, as JSON: `{"messages": [{"role": "user", "content": "..."}]}` |
+| `tool.name`, `tool.parameters`, `output.value`, `tool_use_id` | `tool` | `tool_name`, `tool_input`, `tool_response`, `tool_use_id` |
+| `task.id` | `tool`: the tool call id; model request spans: the request id; subagent spans: the subagent id | `tool_use_id`, `request_id`, `agent_id` |
 | `codex.request.id`, `codex.request.attempt`, `codex.request.kind`, `codex.thread_id` | model request spans | `request_id`, `attempt_number`, `kind`, `thread_id` |
 | `codex.request.status`, `codex.request.error` | `post_model_request` | `status` (`completed`, `failed`, `cancelled`), `error` |
 | `llm.token_count.prompt`, `.completion`, `.total`, `.prompt_details.cache_read`, `.prompt_details.cache_write`, `.completion_details.reasoning` | `post_model_request`, when Codex reports usage | `token_usage` |
@@ -153,33 +176,47 @@ An attribute is left off the span when Codex does not send the field. A
 `input_tokens` already includes the cached tokens is not yet confirmed (see
 [`docs/todo.md`](../docs/todo.md), item 0.4).
 
-### Prompts, model attempts and final responses
+### Prompts, model requests and final responses
 
 These are three separate records, so counting one does not count another:
 
-- **Prompt** — one `llm` span per `UserPromptSubmit`. It is the only span with
-  `openinference.span.kind=LLM`, and it carries no token usage.
-- **Model attempt** — one `pre_model_request` / `post_model_request` pair per
-  attempt. A retry is a new pair with the same `codex.request.id` and the next
-  `codex.request.attempt`. Token usage appears only here, so sum usage over
-  `post_model_request` spans.
+- **Prompt** — one `user_prompt_submit` span per prompt. It is not an LLM
+  call: it has no duration and no token usage.
+- **Model request** — one `pre_model_request` / `post_model_request` pair per
+  attempt. Only `post_model_request` is an LLM-kind span, so there is one LLM
+  call per attempt, with its real latency and token usage. A retry is a new
+  pair with the same `codex.request.id` and the next `codex.request.attempt`.
 - **Final response** — one `stop` span per completed turn, with the assistant's
-  last message and no usage. `Stop` ends a turn, not the session: the `session`
-  span is still emitted only on `SessionEnd`. An interrupted turn produces an
-  `interrupt` span instead.
+  last message and no usage. `Stop` ends a turn, not the session. An
+  interrupted turn produces an `interrupt` span instead.
 
 Subagent hooks carry the parent's `session.id`; `agentguard.subagent.id`
 identifies the child.
 
+### What the AgentGuard app shows
+
+With the app's current OpenInference views (app 0.4.0), a Codex session gives:
+
+- `agentguard_cim_event`: `session_start` / `session_end`, `llm_request` /
+  `llm_response` per model request, and `tool_invoke` / `tool_complete`, each
+  with agent type `codex`, the model, the provider, and `cwd` in
+  `raw_event_data`.
+- `agentguard_cim_metrics`: `llm.call`, `llm.latency_ms` and the token metrics,
+  one set per model request.
+
+The prompt text, the reply text and the live `session_start` are in
+`otel_traces` (the `user_prompt_submit`, `stop` and `session_start` spans) but
+the app does not turn them into CIM events yet; that is
+[timeplus-io/apps#69](https://github.com/timeplus-io/apps/issues/69).
+
 ### Pairing and timing
 
-`PreToolUse` and `PostToolUse` are paired through the SDK's on-disk store,
-keyed by session, turn (`turn_id`), and tool call (`tool_use_id`), so
-overlapping tool calls in one session do not overwrite each other's start
-time. The plugin pairs model requests (by request id and attempt number),
-subagents (by subagent id) and compactions (by turn) the same way, in
-`~/.agentguard/<agent-id>/codex-starts/`, so each `post_*` and `subagent_stop`
-span starts when its opening event fired. Without a matching opening event the
+Each hook is its own process, so opening events record their start time on
+disk, in `~/.agentguard/<agent-id>/codex-starts/`, and the closing event's
+span starts there. Tool calls are paired by session, turn and `tool_use_id`
+(so overlapping tool calls do not overwrite each other's start time), model
+requests by request id and attempt number, subagents by subagent id,
+compactions by turn, and the session by session id. Without a matching opening event the
 span is still emitted, with no duration. Entries nobody collected are removed
 after 24 hours.
 
