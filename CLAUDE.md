@@ -90,7 +90,7 @@ Plugins are versioned and published independently; there is no product release t
 2. Merge, then publish manually: `npm publish` in each npm plugin dir (`prepublishOnly` rebuilds `dist/`, which is gitignored), and `make publish` in `agents/hermes/agentguard-plugin` (hatch build + twine upload).
 3. Verify what is live with `npm view <pkg> version` / `npm pack <pkg>@<ver>` before announcing.
 
-**Codex plugin:** bump `version` in `agents/codex/agentguard-plugin/pyproject.toml` and `__version__` in `agentguard_codex/__init__.py`, merge, then publish a GitHub Release tagged `codex-plugin-v<version>`. `.github/workflows/publish-codex-plugin.yml` publishes `agentguard-codex-plugin` to PyPI (Trusted Publishing, environment `pypi`); it fails on a tag/version mismatch, and a manual run builds without uploading.
+**Codex plugin:** bump `version` in `agents/codex/agentguard-plugin/pyproject.toml` and `__version__` in `agentguard_codex/__init__.py`, merge, then publish a GitHub Release tagged `codex-plugin-v<version>`. `.github/workflows/publish-codex-plugin.yml` publishes `timeplus-agentguard-codex-plugin` to PyPI (Trusted Publishing, environment `pypi`); it fails on a tag/version mismatch, and a manual run builds without uploading.
 
 ## Releasing SDKs
 

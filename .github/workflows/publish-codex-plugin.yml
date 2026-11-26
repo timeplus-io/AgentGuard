@@ -1,6 +1,6 @@
 name: Publish Codex plugin
 
-# Publishes agents/codex/agentguard-plugin to PyPI as `agentguard-codex-plugin`.
+# Publishes agents/codex/agentguard-plugin to PyPI as `timeplus-agentguard-codex-plugin`.
 #
 # Release flow: bump `version` in agents/codex/agentguard-plugin/pyproject.toml
 # and agentguard_codex/__init__.py, merge, then publish a GitHub Release whose
@@ -9,7 +9,7 @@ name: Publish Codex plugin
 # package without uploading.
 #
 # Auth is PyPI Trusted Publishing (OIDC) — no token secret. On PyPI, add a
-# trusted publisher for project `agentguard-codex-plugin`: this repository,
+# trusted publisher for project `timeplus-agentguard-codex-plugin`: this repository,
 # workflow `publish-codex-plugin.yml`, environment `pypi`. The `pypi`
 # environment must also allow `codex-plugin-v*` tags.
 
@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/agentguard-codex-plugin/
+      url: https://pypi.org/project/timeplus-agentguard-codex-plugin/
     permissions:
       id-token: write
     steps:
