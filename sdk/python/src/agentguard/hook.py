@@ -173,9 +173,19 @@ class AgentGuardHooks:
             if provider is not None:
                 span.set_attribute("llm.provider", provider)
             if model_name is not None:
-                span.set_attribute("llm.module_name", model_name)
+                # OpenInference name; "llm.module_name" (sent up to 0.3.0)
+                # was a typo that left the model empty downstream.
+                span.set_attribute("llm.model_name", model_name)
             if user_message is not None:
-                span.set_attribute("input.value", str({"messages": [{"content": user_message}]}))
+                # JSON with a role, not a Python repr: consumers parse this
+                # and pick the last message whose role is "user".
+                span.set_attribute(
+                    "input.value",
+                    json.dumps(
+                        {"messages": [{"role": "user", "content": str(user_message)}]},
+                        ensure_ascii=False,
+                    ),
+                )
             if assistant_message is not None:
                 span.set_attribute("llm.output_messages.0.message.content", str(assistant_message))
 

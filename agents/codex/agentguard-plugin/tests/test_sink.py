@@ -35,23 +35,15 @@ class FakeSpan:
 class FakeClient:
     def __init__(self) -> None:
         self.spans: list[tuple[str, dict, FakeSpan]] = []
-        self.flushed = 0
+        self.shut_down = 0
 
     def start_span(self, name, **kwargs):
         span = FakeSpan()
         self.spans.append((name, kwargs, span))
         return span
 
-    def flush(self) -> None:
-        self.flushed += 1
-
-
-class FakeHooks:
-    def __init__(self) -> None:
-        self.calls: list[tuple] = []
-
-    def on_session_start(self, session_id) -> None:
-        self.calls.append(("on_session_start", session_id))
+    def shutdown(self) -> None:
+        self.shut_down += 1
 
 
 class StartStoreTests(unittest.TestCase):
@@ -121,14 +113,8 @@ class SdkSinkTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.hooks = FakeHooks()
         self.client = FakeClient()
-        self.sink = SdkSink(self.hooks, self.client, StartStore(self.tmp.name))
-
-    def test_lifecycle_hooks_are_delegated_to_the_sdk(self) -> None:
-        self.sink.on_session_start("s1")
-
-        self.assertEqual(self.hooks.calls, [("on_session_start", "s1")])
+        self.sink = SdkSink(self.client, StartStore(self.tmp.name))
 
     def test_emit_span_sets_identifiers_and_attributes(self) -> None:
         self.sink.emit_span(
@@ -160,10 +146,10 @@ class SdkSinkTests(unittest.TestCase):
         self.assertIsNotNone(self.sink.take_start("k"))
         self.assertIsNone(self.sink.take_start("k"))
 
-    def test_flush(self) -> None:
-        self.sink.flush()
+    def test_close_shuts_the_client_down(self) -> None:
+        self.sink.close()
 
-        self.assertEqual(self.client.flushed, 1)
+        self.assertEqual(self.client.shut_down, 1)
 
 
 if __name__ == "__main__":

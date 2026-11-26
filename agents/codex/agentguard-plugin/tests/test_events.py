@@ -9,6 +9,7 @@ Run:  python3.12 -m unittest discover -s tests -v
 import json
 import os
 import sys
+import tempfile
 import unittest
 
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,6 +19,7 @@ from agentguard_codex.events import (  # noqa: E402
     HOOK_SPAN_NAMES,
     SUPPORTED_EVENTS,
     dispatch,
+    session_provider,
 )
 
 
@@ -53,74 +55,124 @@ COMMON = {
 }
 
 
-class DispatchTests(unittest.TestCase):
+# What every span of a COMMON event carries. The transcript path does not
+# exist, so the provider falls back to the default.
+COMMON_ATTRIBUTES = {
+    "llm.model_name": "gpt-5-codex",
+    "llm.provider": "openai",
+    "cwd": "/repo",
+}
+
+
+class SpanTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.hooks = RecordingHooks()
 
-    def test_session_start(self) -> None:
-        handled = dispatch({"hook_event_name": "SessionStart", "session_id": "s1"}, self.hooks)
+    def emit(self, event: dict, hooks: RecordingHooks | None = None) -> dict:
+        """Dispatch *event* and return the single ``emit_span`` call's kwargs."""
+        hooks = hooks or self.hooks
+        self.assertTrue(dispatch(event, hooks))
+        self.assertEqual([name for name, _, _ in hooks.calls], ["emit_span"])
+        _, args, kwargs = hooks.calls[0]
+        return {"name": args[0], **kwargs}
 
-        self.assertTrue(handled)
-        self.assertEqual(self.hooks.calls, [("on_session_start", ("s1",), {})])
 
-    def test_session_end(self) -> None:
-        handled = dispatch({"hook_event_name": "SessionEnd", "session_id": "s1"}, self.hooks)
+class CoreEventTests(SpanTestCase):
+    """Session, prompt and tool events."""
 
-        self.assertTrue(handled)
-        self.assertEqual(self.hooks.calls, [("on_session_end", ("s1",), {})])
-
-    def test_user_prompt_submit(self) -> None:
-        handled = dispatch(
+    def test_session_start_is_emitted_immediately(self) -> None:
+        span = self.emit(
             {
-                "hook_event_name": "UserPromptSubmit",
+                "hook_event_name": "SessionStart",
                 "session_id": "s1",
-                "turn_id": "t1",
+                "transcript_path": None,
+                "cwd": "/repo",
                 "model": "gpt-5-codex",
-                "prompt": "fix the failing test",
-            },
-            self.hooks,
+                "permission_mode": "default",
+                "source": "startup",
+            }
         )
 
-        self.assertTrue(handled)
+        self.assertEqual(span["name"], "session_start")
+        self.assertEqual(span["session_id"], "s1")
+        self.assertIsNone(span["run_id"])
         self.assertEqual(
-            self.hooks.calls,
-            [
-                (
-                    "on_llm_end",
-                    (),
-                    {
-                        "session_id": "s1",
-                        "task_id": "t1",
-                        "model_name": "gpt-5-codex",
-                        "user_message": "fix the failing test",
-                    },
-                )
-            ],
+            span["attributes"],
+            {
+                **COMMON_ATTRIBUTES,
+                "agentguard.hook_name": "session_start",
+                "codex.permission_mode": "default",
+                "source": "startup",
+            },
         )
+        # Not the SESSION-kind span: the app would read that as start *and* end.
+        self.assertNotIn("agentguard.span.kind", span["attributes"])
+        self.assertEqual(len(self.hooks.marked), 1)
+
+    def test_session_end_covers_the_session(self) -> None:
+        dispatch({"hook_event_name": "SessionStart", "session_id": "s1"}, self.hooks)
+        self.hooks.calls.clear()
+
+        span = self.emit(
+            {
+                "hook_event_name": "SessionEnd",
+                "session_id": "s1",
+                "cwd": "/repo",
+                "reason": "other",
+            }
+        )
+
+        self.assertEqual(span["name"], "session")
+        self.assertEqual(span["start_time_ns"], 1_000)
+        self.assertEqual(
+            span["attributes"],
+            {
+                "agentguard.hook_name": "session_end",
+                "agentguard.span.kind": "SESSION",
+                "cwd": "/repo",
+                "codex.session.end_reason": "other",
+            },
+        )
+
+    def test_session_end_without_a_recorded_start(self) -> None:
+        span = self.emit({"hook_event_name": "SessionEnd", "session_id": "s1"})
+
+        self.assertIsNone(span["start_time_ns"])
+        self.assertEqual(span["attributes"]["agentguard.span.kind"], "SESSION")
+
+    def test_user_prompt_submit_is_a_prompt_not_an_llm_call(self) -> None:
+        span = self.emit(
+            {
+                **COMMON,
+                "hook_event_name": "UserPromptSubmit",
+                "permission_mode": "default",
+                "prompt": 'fix the "failing" test — it\'s urgent',
+            }
+        )
+
+        self.assertEqual(span["name"], "user_prompt_submit")
+        self.assertEqual(span["run_id"], "t1")
+        attributes = span["attributes"]
+        # JSON (not a Python repr) with a user role: what the app extracts from.
+        self.assertEqual(
+            json.loads(attributes["input.value"]),
+            {"messages": [{"role": "user", "content": 'fix the "failing" test — it\'s urgent'}]},
+        )
+        self.assertEqual(attributes["llm.model_name"], "gpt-5-codex")
+        self.assertEqual(attributes["cwd"], "/repo")
+        self.assertNotIn("openinference.span.kind", attributes)
+        self.assertEqual(self.hooks.marked, [])
 
     def test_user_prompt_submit_without_optional_fields(self) -> None:
-        handled = dispatch(
-            {"hook_event_name": "UserPromptSubmit", "session_id": "s1"}, self.hooks
-        )
+        span = self.emit({"hook_event_name": "UserPromptSubmit", "session_id": "s1"})
 
-        self.assertTrue(handled)
-        self.assertEqual(
-            self.hooks.calls,
-            [
-                (
-                    "on_llm_end",
-                    (),
-                    {"session_id": "s1", "task_id": None, "model_name": None, "user_message": None},
-                )
-            ],
-        )
+        self.assertEqual(span["attributes"], {"agentguard.hook_name": "user_prompt_submit"})
 
-    def test_pre_tool_use(self) -> None:
+    def test_pre_tool_use_only_records_the_start(self) -> None:
         handled = dispatch(
             {
+                **COMMON,
                 "hook_event_name": "PreToolUse",
-                "session_id": "s1",
-                "turn_id": "t1",
                 "tool_use_id": "call_1",
                 "tool_name": "Bash",
             },
@@ -128,74 +180,63 @@ class DispatchTests(unittest.TestCase):
         )
 
         self.assertTrue(handled)
-        self.assertEqual(
-            self.hooks.calls,
-            [("on_pre_tool", (), {"session_id": "s1", "run_id": "t1", "task_id": "call_1"})],
-        )
+        self.assertEqual(self.hooks.calls, [])
+        self.assertEqual(len(self.hooks.marked), 1)
 
-    def test_post_tool_use_json_encodes_inputs(self) -> None:
-        handled = dispatch(
+    def test_post_tool_use(self) -> None:
+        tool = {**COMMON, "tool_use_id": "call_1", "tool_name": "Bash"}
+        dispatch({**tool, "hook_event_name": "PreToolUse"}, self.hooks)
+
+        span = self.emit(
             {
+                **tool,
                 "hook_event_name": "PostToolUse",
-                "session_id": "s1",
-                "turn_id": "t1",
-                "tool_use_id": "call_1",
-                "tool_name": "Bash",
                 "tool_input": {"command": "ls"},
                 "tool_response": {"stdout": "README.md"},
-            },
-            self.hooks,
+            }
         )
 
-        self.assertTrue(handled)
+        self.assertEqual(span["name"], "tool")
+        self.assertEqual(span["run_id"], "t1")
+        self.assertEqual(span["task_id"], "call_1")
+        self.assertEqual(span["start_time_ns"], 1_000)
         self.assertEqual(
-            self.hooks.calls,
-            [
-                (
-                    "on_post_tool",
-                    (),
-                    {
-                        "session_id": "s1",
-                        "run_id": "t1",
-                        "task_id": "call_1",
-                        "tool_name": "Bash",
-                        "tool_input": '{"command": "ls"}',
-                        "tool_result": '{"stdout": "README.md"}',
-                    },
-                )
-            ],
+            span["attributes"],
+            {
+                **COMMON_ATTRIBUTES,
+                "agentguard.hook_name": "post_tool_use",
+                "openinference.span.kind": "TOOL",
+                "tool.name": "Bash",
+                # JSON, not a Python repr, so Timeplus can parse it.
+                "tool.parameters": '{"command": "ls"}',
+                "output.value": '{"stdout": "README.md"}',
+                "tool_use_id": "call_1",
+            },
         )
+        self.assertNotIn("agentguard.span.kind", span["attributes"])
 
     def test_post_tool_use_passes_strings_through(self) -> None:
-        handled = dispatch(
+        span = self.emit(
             {
                 "hook_event_name": "PostToolUse",
                 "session_id": "s1",
                 "tool_name": "Bash",
                 "tool_input": "ls -la",
                 "tool_response": "total 0",
-            },
-            self.hooks,
+            }
         )
 
-        self.assertTrue(handled)
-        self.assertEqual(
-            self.hooks.calls,
-            [
-                (
-                    "on_post_tool",
-                    (),
-                    {
-                        "session_id": "s1",
-                        "run_id": None,
-                        "task_id": None,
-                        "tool_name": "Bash",
-                        "tool_input": "ls -la",
-                        "tool_result": "total 0",
-                    },
-                )
-            ],
-        )
+        self.assertIsNone(span["start_time_ns"])
+        self.assertEqual(span["attributes"]["tool.parameters"], "ls -la")
+        self.assertEqual(span["attributes"]["output.value"], "total 0")
+
+    def test_overlapping_tool_calls_keep_their_own_start(self) -> None:
+        for call in ("call_1", "call_2"):
+            dispatch(
+                {**COMMON, "hook_event_name": "PreToolUse", "tool_use_id": call}, self.hooks
+            )
+        first, second = self.hooks.marked
+        self.assertNotEqual(first, second)
 
     def test_unknown_event_is_ignored(self) -> None:
         handled = dispatch({"hook_event_name": "SomeFutureHook", "session_id": "s1"}, self.hooks)
@@ -208,19 +249,68 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(self.hooks.calls, [])
 
 
-class SpanEventTests(unittest.TestCase):
-    """The nine events emitted as their own span, with representative payloads."""
+class ProviderTests(unittest.TestCase):
+    """The provider comes from the transcript's first record."""
 
-    def setUp(self) -> None:
-        self.hooks = RecordingHooks()
+    def write(self, text: str) -> str:
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False, encoding="utf-8")
+        self.addCleanup(os.remove, tmp.name)
+        with tmp:
+            tmp.write(text)
+        return tmp.name
 
-    def emit(self, event: dict, hooks: RecordingHooks | None = None) -> dict:
-        """Dispatch *event* and return the single ``emit_span`` call's kwargs."""
-        hooks = hooks or self.hooks
-        self.assertTrue(dispatch(event, hooks))
-        self.assertEqual([name for name, _, _ in hooks.calls], ["emit_span"])
-        _, args, kwargs = hooks.calls[0]
-        return {"name": args[0], **kwargs}
+    def test_reads_model_provider_from_session_meta(self) -> None:
+        path = self.write(
+            json.dumps({"type": "session_meta", "payload": {"model_provider": "azure"}})
+            + "\n"
+            + json.dumps({"type": "response_item"})
+            + "\n"
+        )
+
+        self.assertEqual(session_provider(path), "azure")
+
+    def test_unusable_transcripts_yield_none(self) -> None:
+        cases = {
+            "no path": None,
+            "missing file": "/nonexistent/rollout.jsonl",
+            "empty file": self.write(""),
+            "not json": self.write("not json\n"),
+            "no payload": self.write(json.dumps({"type": "session_meta"}) + "\n"),
+            "payload not an object": self.write(json.dumps({"payload": "x"}) + "\n"),
+            "provider not a string": self.write(
+                json.dumps({"payload": {"model_provider": 7}}) + "\n"
+            ),
+        }
+        for name, path in cases.items():
+            with self.subTest(case=name):
+                self.assertIsNone(session_provider(path))
+
+    def test_span_uses_the_transcript_provider(self) -> None:
+        path = self.write(json.dumps({"payload": {"model_provider": "azure"}}) + "\n")
+        hooks = RecordingHooks()
+
+        dispatch(
+            {
+                "hook_event_name": "Stop",
+                "session_id": "s1",
+                "model": "gpt-5-codex",
+                "transcript_path": path,
+            },
+            hooks,
+        )
+
+        self.assertEqual(hooks.calls[0][2]["attributes"]["llm.provider"], "azure")
+
+    def test_no_provider_without_a_model(self) -> None:
+        hooks = RecordingHooks()
+
+        dispatch({"hook_event_name": "Stop", "session_id": "s1"}, hooks)
+
+        self.assertNotIn("llm.provider", hooks.calls[0][2]["attributes"])
+
+
+class SpanEventTests(SpanTestCase):
+    """Model request, stop, subagent, permission and compaction events."""
 
     def test_pre_model_request(self) -> None:
         span = self.emit(
@@ -243,14 +333,16 @@ class SpanEventTests(unittest.TestCase):
         self.assertEqual(
             span["attributes"],
             {
+                **COMMON_ATTRIBUTES,
                 "agentguard.hook_name": "pre_model_request",
-                "llm.model_name": "gpt-5-codex",
                 "codex.request.id": "req_1",
                 "codex.request.attempt": 1,
                 "codex.request.kind": "sampling",
                 "codex.thread_id": "thr_1",
             },
         )
+        # Only the Post event is the LLM call; a Pre span must not add a second.
+        self.assertNotIn("openinference.span.kind", span["attributes"])
         self.assertEqual(len(self.hooks.marked), 1)
 
     def test_post_model_request_completed_with_usage(self) -> None:
@@ -292,8 +384,10 @@ class SpanEventTests(unittest.TestCase):
         self.assertEqual(attributes["llm.token_count.prompt_details.cache_read"], 800)
         self.assertEqual(attributes["llm.token_count.prompt_details.cache_write"], 50)
         self.assertEqual(attributes["llm.token_count.completion_details.reasoning"], 120)
-        # Usage lives on the attempt, never on a span a consumer counts as an LLM call.
-        self.assertNotIn("openinference.span.kind", attributes)
+        # The attempt is the LLM call: the app counts llm.call and usage here.
+        self.assertEqual(attributes["openinference.span.kind"], "LLM")
+        self.assertEqual(attributes["llm.model_name"], "gpt-5-codex")
+        self.assertEqual(attributes["llm.provider"], "openai")
 
     def test_post_model_request_failed_without_usage(self) -> None:
         span = self.emit(
@@ -313,6 +407,7 @@ class SpanEventTests(unittest.TestCase):
         self.assertEqual(span["attributes"]["codex.request.status"], "failed")
         self.assertEqual(span["attributes"]["codex.request.error"], "stream disconnected")
         self.assertEqual(span["attributes"]["codex.request.attempt"], 2)
+        self.assertEqual(span["attributes"]["openinference.span.kind"], "LLM")
         self.assertFalse([k for k in span["attributes"] if k.startswith("llm.token_count")])
 
     def test_post_model_request_cancelled_is_not_an_error(self) -> None:
@@ -357,8 +452,8 @@ class SpanEventTests(unittest.TestCase):
         self.assertEqual(
             span["attributes"],
             {
+                **COMMON_ATTRIBUTES,
                 "agentguard.hook_name": "stop",
-                "llm.model_name": "gpt-5-codex",
                 "codex.permission_mode": "default",
                 "output.value": "Done. All tests pass.",
                 "codex.stop_hook_active": False,
@@ -387,8 +482,8 @@ class SpanEventTests(unittest.TestCase):
         self.assertEqual(
             span["attributes"],
             {
+                **COMMON_ATTRIBUTES,
                 "agentguard.hook_name": "interrupt",
-                "llm.model_name": "gpt-5-codex",
                 "codex.permission_mode": "acceptEdits",
             },
         )
@@ -507,20 +602,41 @@ class SpanEventTests(unittest.TestCase):
                 self.assertEqual(post["start_time_ns"], 1_000)
 
     def test_minimal_payload_for_every_span_event(self) -> None:
-        # Only the two universal fields: every optional attribute is left off.
+        # Only the two universal fields: every optional attribute is left off,
+        # leaving the hook name and the kind marker of the three typed spans.
+        kinds = {
+            "SessionEnd": {"agentguard.span.kind": "SESSION"},
+            "PostToolUse": {"openinference.span.kind": "TOOL"},
+            "PostModelRequest": {"openinference.span.kind": "LLM"},
+        }
+        hook_names = {"SessionEnd": "session_end", "PostToolUse": "post_tool_use"}
         for event_name, span_name in HOOK_SPAN_NAMES.items():
             with self.subTest(event=event_name):
                 hooks = RecordingHooks()
                 span = self.emit({"hook_event_name": event_name, "session_id": "s1"}, hooks)
                 self.assertEqual(span["name"], span_name)
                 self.assertIsNone(span["run_id"])
-                self.assertEqual(span["attributes"], {"agentguard.hook_name": span_name})
+                self.assertEqual(
+                    span["attributes"],
+                    {
+                        "agentguard.hook_name": hook_names.get(event_name, span_name),
+                        **kinds.get(event_name, {}),
+                    },
+                )
 
     def test_span_names_are_distinct(self) -> None:
         names = list(HOOK_SPAN_NAMES.values())
         self.assertEqual(len(names), len(set(names)))
-        # ...and none collides with the SDK's own session / llm / tool spans.
-        self.assertFalse(set(names) & {"session", "llm", "tool"})
+
+    def test_only_model_requests_are_llm_calls(self) -> None:
+        llm = []
+        for event_name in SUPPORTED_EVENTS:
+            hooks = RecordingHooks()
+            dispatch({"hook_event_name": event_name, "session_id": "s1"}, hooks)
+            for _, _, kwargs in hooks.calls:
+                if kwargs["attributes"].get("openinference.span.kind") == "LLM":
+                    llm.append(event_name)
+        self.assertEqual(llm, ["PostModelRequest"])
 
 
 class CoverageTests(unittest.TestCase):
@@ -559,7 +675,7 @@ class CoverageTests(unittest.TestCase):
                 hooks = RecordingHooks()
                 handled = dispatch({"hook_event_name": event_name, "session_id": "s1"}, hooks)
                 self.assertTrue(handled)
-                self.assertTrue(hooks.calls)
+                self.assertTrue(hooks.calls or hooks.marked)
 
     def test_sample_entries_run_the_plugin_command(self) -> None:
         for event_name, groups in self.sample.items():

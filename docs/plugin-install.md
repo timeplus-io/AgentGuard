@@ -163,7 +163,15 @@ export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
 
 4. Start Codex and run `/hooks` once to review and trust the AgentGuard entries. Codex skips new or changed hooks until you do, so repeat this after adding events on an upgrade.
 
-Codex spans go to the app's OTLP/HTTP input (port `4318`), not to `agentguard_hook_events`, so the Verify query below does not apply to Codex yet.
+Codex spans go to the app's OTLP/HTTP input (port `4318`), not to `agentguard_hook_events`, so the Verify query below does not apply to Codex. Check Codex with:
+
+```sql
+SELECT _tp_time, span_name, span_attributes['session.id'] AS session_id
+FROM table(ag.otel_traces)
+WHERE service_name = 'codex'
+ORDER BY _tp_time DESC
+LIMIT 10;
+```
 
 ## Verify
 

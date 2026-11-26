@@ -37,17 +37,21 @@ Consequences of this choice:
 ## Current state on this branch
 
 - `agents/codex/agentguard-plugin` Python package, `agentguard-codex` CLI.
-- All 14 hooks handled (issue #317). `SessionStart`, `SessionEnd`,
-  `UserPromptSubmit`, `PreToolUse`, `PostToolUse` are translated to the SDK's
-  `session` / `llm` / `tool` spans; the other nine each emit a span named after
-  the hook (`pre_model_request`, `post_model_request`, `stop`, `interrupt`,
-  `subagent_start`, `subagent_stop`, `permission_request`, `pre_compact`,
-  `post_compact`). The span and attribute reference is in the plugin README.
+- All 14 hooks handled (issues #317, #318), one span per event, emitted by the
+  plugin through the SDK client: `session_start`, `session`,
+  `user_prompt_submit`, `tool`, `pre_model_request`, `post_model_request`,
+  `stop`, `interrupt`, `subagent_start`, `subagent_stop`, `permission_request`,
+  `pre_compact`, `post_compact` (`PreToolUse` only records a start time). The
+  span and attribute reference is in the plugin README.
+- Decided in #318: Codex stays on the OTLP path and reuses the app's
+  OpenInference views. `service.name` is `codex` (the views report it as
+  `agent_type`); `post_model_request` is the LLM-kind span, `tool` the
+  TOOL-kind span, `session` the SESSION-kind span. Prompt, reply and the live
+  session start are separate non-kind spans that the app still has to map
+  (timeplus-io/apps#69).
 - The nine newer handlers were written from the hooks reference and the
   generated schemas in `openai/codex` (`codex-rs/hooks/schema/generated`), not
   from captured payloads, so Phase 0 item 0.1 is still open.
-- The span naming is mixed for now (SDK names for five hooks, per-hook names
-  for nine); Phase 1 still has to settle one contract with the converter.
 - Dispatch, sink and CLI unit tests, including an end-to-end run against an
   in-process OTLP receiver; CI (`.github/workflows/ci.yml`) and the root
   `Makefile` targets exist.
@@ -88,11 +92,11 @@ baseline (needs confirmation against Phase 0):
 
 | Attribute | Value |
 |---|---|
-| `service.name` | `agentguard-codex` (TBD; must distinguish Codex from `claude-code` / `openclaw`) |
+| `service.name` | `codex` (decided in #318; the app's views report it as `agent_type`) |
 | `agent.id` | `AGENTGUARD_AGENT_ID` or hostname |
 | `deployment.id` | `AGENTGUARD_DEPLOYMENT_ID` |
 | `deployment.name` | `AGENTGUARD_DEPLOYMENT_NAME` |
-| `agentguard.agent_type` | `codex` (proposed new attribute; alternative: rely on `service.name`) |
+| `agentguard.agent_type` | not sent; `service.name` carries the agent type |
 
 **Common span attributes**:
 
@@ -140,8 +144,8 @@ Tasks:
 
 - [x] Handle all 14 hook names above (one mapping table in code, not scattered `if`s).
 - [ ] `run_id` = `turn_id` when present, else `session_id`.
-- [ ] `provider`: transcript `session_meta.model_provider`, fallback to model prefix (`gpt-*` → `openai`).
-- [ ] `SessionEnd` has no `model`; do not fail when absent.
+- [x] `provider`: transcript `session_meta.model_provider`, fallback `openai`.
+- [x] `SessionEnd` has no `model`; do not fail when absent.
 - [ ] `PostToolUse`: derive success from `tool_response` (exit code / error field — see 0.2).
 - [x] `PostModelRequest`: carry `token_usage` and `status`/`error`.
 - [x] `SubagentStart/Stop`: carry `agent_id`, `agent_type`, `agent_transcript_path`, `last_assistant_message`.
@@ -153,12 +157,12 @@ Tasks:
 ## Phase 3 — Span emission and process behavior
 
 - [ ] Emit one span per observed hook event; set start/end timestamps to the event time where the payload allows.
-- [ ] `SessionStart` emits its own span (today `on_session_start` only stores a timestamp, so nothing is visible until `SessionEnd`).
+- [x] `SessionStart` emits its own span (`session_start`), so a running session is visible before `SessionEnd`.
 - [ ] Emit `SessionEnd` with the stored start time, but flush deterministically.
-- [ ] Replace `__del__` reliance with explicit `force_flush()` / `shutdown()` in a `finally` block.
+- [x] Replace `__del__` reliance with explicit `force_flush()` / `shutdown()` in a `finally` block.
 - [ ] Set the OTLP exporter timeout to fit `SessionEnd` (see 0.7); consider `SimpleSpanProcessor` for that hook.
-- [ ] Attach `tool_use_id` to Pre/Post spans so the converter can pair them.
-- [ ] Stop `agentguard.span.kind=SESSION` leaking onto `llm`/`tool` spans. **Observed in the local smoke test:** the SDK marks the first session-scoped span in each process as `SESSION`, and every hook is a new process, so the `llm` span carried both `agentguard.span.kind=SESSION` and `openinference.span.kind=LLM`. Either fix the SDK/plugin or make the converter key off `span_name` + `openinference.span.kind`.
+- [x] Attach `tool_use_id` to the tool span.
+- [x] Stop `agentguard.span.kind=SESSION` leaking onto `llm`/`tool` spans: the plugin emits with the client's `start_span`, and only the `session` span sets it.
 - [ ] Truncate `tool_input`, `tool_result` and transcript messages to a documented limit.
 - [ ] Swallow all errors, print only to stderr, **exit 0** (pending 0.6); never write stdout.
 - [ ] If the endpoint is unreachable, exit immediately rather than hanging the turn.
