@@ -89,7 +89,7 @@ this plugin does not know about without breaking.
 
 ```bash
 make test    # unit tests (stdlib only — no SDK or collector needed)
-make build   # sdist + wheel into dist/
+make build   # sdist + wheel into dist/ (needs hatch)
 ```
 
 The plugin writes nothing to stdout and returns 0 even when it fails — any
@@ -125,8 +125,9 @@ codex exec --skip-git-repo-check -s workspace-write \
 
 ## Publishing
 
-```bash
-pip install hatch
-hatch build     # dist/agentguard_codex_plugin-*.whl
-hatch publish
-```
+Releases are published to PyPI by CI:
+
+1. Bump `version` in `pyproject.toml` and `__version__` in `agentguard_codex/__init__.py`, and merge.
+2. Publish a GitHub Release tagged `codex-plugin-v<version>` (for example `codex-plugin-v0.1.1`).
+
+The `Publish Codex plugin` workflow tests, builds and uploads `agentguard-codex-plugin`. It fails if the tag does not match the package version. Running it manually builds and validates without uploading; `make check` does the same locally (needs `hatch` and `twine`).

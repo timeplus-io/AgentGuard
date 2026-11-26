@@ -209,7 +209,8 @@ Blocked on the Phase 1 contract. Tracked here so the plugin is not declared done
 - [ ] `docs/plugin-install.md`: Codex section.
 - [ ] `skills/agentguard/SKILL.md`: Codex install path.
 - [ ] `docs/cim.md`: Codex trace → CIM mapping (Phase 1 contract).
-- [ ] Version bump and PyPI publishing plan for this plugin. The SDK is on PyPI as
+- [x] PyPI publishing: `.github/workflows/publish-codex-plugin.yml` publishes on a
+  `codex-plugin-v<version>` GitHub Release. The SDK is on PyPI as
   `timeplus-agentguard` (import name `agentguard`), so the dependency
   `timeplus-agentguard>=0.3.0` resolves without a local editable install.
 
