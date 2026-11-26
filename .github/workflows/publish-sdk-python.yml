@@ -1,6 +1,6 @@
 name: Publish Python SDK
 
-# Publishes sdk/python to PyPI as `agentguard`.
+# Publishes sdk/python to PyPI as `timeplus-agentguard` (import name `agentguard`).
 #
 # Release flow: bump `version` in sdk/python/pyproject.toml, merge, then publish
 # a GitHub Release whose tag is `sdk-python-v<version>` (e.g. sdk-python-v0.3.1).
@@ -8,7 +8,7 @@ name: Publish Python SDK
 # and validates the package without uploading.
 #
 # Auth is PyPI Trusted Publishing (OIDC) — no token secret. On PyPI, add a
-# trusted publisher for project `agentguard`: this repository, workflow
+# trusted publisher for project `timeplus-agentguard`: this repository, workflow
 # `publish-sdk-python.yml`, environment `pypi`.
 
 on:
@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/agentguard/
+      url: https://pypi.org/project/timeplus-agentguard/
     permissions:
       id-token: write
     steps:

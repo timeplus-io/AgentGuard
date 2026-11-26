@@ -1,6 +1,6 @@
 # AgentGuard Python SDK
 
-[![PyPI version](https://img.shields.io/pypi/v/agentguard)](https://pypi.org/project/agentguard/)
+[![PyPI version](https://img.shields.io/pypi/v/timeplus-agentguard)](https://pypi.org/project/timeplus-agentguard/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 Python SDK for [AgentGuard](https://github.com/timeplus-io/agentguard) — a real-time security monitoring, governance, and synchronous tool-call blocking platform for AI coding agents.
@@ -15,8 +15,10 @@ Python SDK for [AgentGuard](https://github.com/timeplus-io/agentguard) — a rea
 ## Installation
 
 ```bash
-pip install agentguard
+pip install timeplus-agentguard
 ```
+
+The distribution is named `timeplus-agentguard`; the import name is `agentguard`.
 
 ## CLI Tools
 
