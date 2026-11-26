@@ -16,6 +16,10 @@ import sys
 
 from agentguard_codex.events import dispatch
 
+DEFAULT_DEPLOYMENT_ID = "local"
+DEFAULT_DEPLOYMENT_NAME = "Local Dev"
+DEFAULT_ENDPOINT = "http://localhost:4318"
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -61,6 +65,33 @@ def resolve_agent_id(agent_id: str | None) -> str:
     return agent_id or os.environ.get("AGENTGUARD_AGENT_ID") or socket.gethostname()
 
 
+def resolve_deployment_id(deployment_id: str | None) -> str:
+    """Resolve the deployment id: flag, then env, then ``local``."""
+    return (
+        deployment_id
+        or os.environ.get("AGENTGUARD_DEPLOYMENT_ID")
+        or DEFAULT_DEPLOYMENT_ID
+    )
+
+
+def resolve_deployment_name(deployment_name: str | None) -> str:
+    """Resolve the deployment name: flag, then env, then ``Local Dev``."""
+    return (
+        deployment_name
+        or os.environ.get("AGENTGUARD_DEPLOYMENT_NAME")
+        or DEFAULT_DEPLOYMENT_NAME
+    )
+
+
+def resolve_endpoint(endpoint: str | None) -> str:
+    """Resolve the OTLP/HTTP endpoint: flag, then env, then localhost:4318."""
+    return (
+        endpoint
+        or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        or DEFAULT_ENDPOINT
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
@@ -72,9 +103,9 @@ def main(argv: list[str] | None = None) -> int:
 
         hooks = AgentGuardHooks(
             agent_id=resolve_agent_id(args.agent_id),
-            deployment_id=args.deployment_id,
-            deployment_name=args.deployment_name,
-            endpoint=args.endpoint,
+            deployment_id=resolve_deployment_id(args.deployment_id),
+            deployment_name=resolve_deployment_name(args.deployment_name),
+            endpoint=resolve_endpoint(args.endpoint),
         )
 
         event = json.loads(sys.stdin.read())

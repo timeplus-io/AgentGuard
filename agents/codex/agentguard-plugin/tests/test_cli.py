@@ -7,6 +7,7 @@ collector — a missing SDK is one of the failures the hook must swallow.
 
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -52,6 +53,66 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("Traceback", result.stderr)
+
+
+class ResolveTests(unittest.TestCase):
+    """Flag beats env beats default, for every configurable value."""
+
+    ENV_VARS = (
+        "AGENTGUARD_AGENT_ID",
+        "AGENTGUARD_DEPLOYMENT_ID",
+        "AGENTGUARD_DEPLOYMENT_NAME",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+    )
+
+    def setUp(self) -> None:
+        from agentguard_codex import cli
+
+        self.cli = cli
+        self._saved = {name: os.environ.pop(name, None) for name in self.ENV_VARS}
+
+    def tearDown(self) -> None:
+        for name, value in self._saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+    def test_flag_wins_over_env(self) -> None:
+        os.environ["AGENTGUARD_AGENT_ID"] = "env-agent"
+        os.environ["AGENTGUARD_DEPLOYMENT_ID"] = "env-deployment"
+        os.environ["AGENTGUARD_DEPLOYMENT_NAME"] = "Env Deployment"
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://env:4318"
+
+        self.assertEqual(self.cli.resolve_agent_id("flag-agent"), "flag-agent")
+        self.assertEqual(self.cli.resolve_deployment_id("flag-deployment"), "flag-deployment")
+        self.assertEqual(self.cli.resolve_deployment_name("Flag Deployment"), "Flag Deployment")
+        self.assertEqual(self.cli.resolve_endpoint("http://flag:4318"), "http://flag:4318")
+
+    def test_env_wins_over_default(self) -> None:
+        os.environ["AGENTGUARD_AGENT_ID"] = "env-agent"
+        os.environ["AGENTGUARD_DEPLOYMENT_ID"] = "env-deployment"
+        os.environ["AGENTGUARD_DEPLOYMENT_NAME"] = "Env Deployment"
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://env:4318"
+
+        self.assertEqual(self.cli.resolve_agent_id(None), "env-agent")
+        self.assertEqual(self.cli.resolve_deployment_id(None), "env-deployment")
+        self.assertEqual(self.cli.resolve_deployment_name(None), "Env Deployment")
+        self.assertEqual(self.cli.resolve_endpoint(None), "http://env:4318")
+
+    def test_empty_env_falls_through_to_default(self) -> None:
+        for name in self.ENV_VARS:
+            os.environ[name] = ""
+
+        self.assertEqual(self.cli.resolve_agent_id(None), socket.gethostname())
+        self.assertEqual(self.cli.resolve_deployment_id(None), self.cli.DEFAULT_DEPLOYMENT_ID)
+        self.assertEqual(self.cli.resolve_deployment_name(None), self.cli.DEFAULT_DEPLOYMENT_NAME)
+        self.assertEqual(self.cli.resolve_endpoint(None), self.cli.DEFAULT_ENDPOINT)
+
+    def test_defaults(self) -> None:
+        self.assertEqual(self.cli.resolve_deployment_id(None), "local")
+        self.assertEqual(self.cli.resolve_deployment_name(None), "Local Dev")
+        self.assertEqual(self.cli.resolve_endpoint(None), "http://localhost:4318")
 
 
 if __name__ == "__main__":

@@ -66,10 +66,11 @@ configure the plugin.
 | `--deployment-name` | `AGENTGUARD_DEPLOYMENT_NAME` | `Local Dev` |
 | `--endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` |
 
-Flags take precedence over environment variables. The plugin resolves the
-agent id (flag, then `AGENTGUARD_AGENT_ID`, then hostname) before constructing
-the SDK hooks, so every hook process keys its on-disk Pre/Post-tool timing
-store by the same id the spans carry. For example:
+Flags take precedence over environment variables. The plugin resolves every
+setting (flag, then environment variable, then the default above) before
+constructing the SDK hooks, so each short-lived hook process sees the same
+values — including the agent id, which keys the on-disk Pre/Post-tool timing
+store to match the spans. For example:
 
 ```bash
 export AGENTGUARD_DEPLOYMENT_ID=production
