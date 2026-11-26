@@ -12,14 +12,13 @@ OTLP/HTTP input (default `http://localhost:4318`).
 
 - Python 3.10+
 - A Codex build with hooks enabled
-- The AgentGuard Python SDK (not published on PyPI yet — install it from this repo)
+- The AgentGuard Python SDK ([`timeplus-agentguard`](https://pypi.org/project/timeplus-agentguard/) on PyPI, installed automatically as a dependency)
 
 ## Installation
 
 From the repository root:
 
 ```bash
-pip install -e sdk/python
 pip install -e agents/codex/agentguard-plugin
 ```
 
@@ -101,7 +100,7 @@ error goes to stderr — so hook output cannot alter a Codex turn.
 ```bash
 cd /path/to/AgentGuard
 
-# 1. venv with the SDK + plugin (SDK is not on PyPI yet)
+# 1. venv with the plugin and the in-repo SDK (drop `-e sdk/python` to use the PyPI release)
 uv venv ~/venvs/agentguard-codex --python 3.12
 uv pip install --python ~/venvs/agentguard-codex/bin/python \
   -e sdk/python -e agents/codex/agentguard-plugin

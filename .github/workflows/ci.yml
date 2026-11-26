@@ -71,7 +71,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      # The plugin is built on the Python SDK, which is not on PyPI yet.
+      # Test against the in-repo Python SDK rather than the PyPI release.
       - name: Install AgentGuard SDK
         run: python -m pip install -e ../../../sdk/python
 

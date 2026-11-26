@@ -1,5 +1,5 @@
 {
-  "name": "agentguard",
+  "name": "@timeplus/agentguard",
   "version": "0.2.0",
   "description": "AgentGuard SDK — OpenTelemetry instrumentation for AI coding agents",
   "type": "module",
@@ -13,13 +13,21 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts",
     "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "lint": "eslint src tests"
+    "lint": "eslint src tests",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@arizeai/openinference-core": "^2.3.0",
@@ -52,5 +60,14 @@
     "observability",
     "tracing"
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/timeplus-io/AgentGuard.git",
+    "directory": "sdk/javascript"
+  },
+  "homepage": "https://github.com/timeplus-io/AgentGuard/tree/main/sdk/javascript#readme",
+  "bugs": {
+    "url": "https://github.com/timeplus-io/AgentGuard/issues"
+  }
 }

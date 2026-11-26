@@ -139,14 +139,13 @@ export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
 
 > **Status: initial scaffold.** The Codex plugin exports OTel spans instead of
 > writing `agentguard_hook_events`, covers only five lifecycle hooks, and needs
-> the Python SDK, which is not on PyPI yet. See the
+> the Python SDK (`timeplus-agentguard` on PyPI). The plugin itself is not on PyPI yet. See the
 > [plugin README](../agents/codex/agentguard-plugin/README.md) and the
 > [implementation TODO](../agents/codex/docs/todo.md).
 
-1. Install the SDK and plugin from a checkout of this repo:
+1. Install the plugin from a checkout of this repo (the SDK is pulled from PyPI as a dependency):
 
    ```bash
-   pip install -e sdk/python
    pip install -e agents/codex/agentguard-plugin
    ```
 

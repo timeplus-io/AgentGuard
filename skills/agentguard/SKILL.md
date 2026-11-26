@@ -281,14 +281,13 @@ Modify the shell configuration file to set the environment variables by the user
 
 ## Codex
 
-> **Initial scaffold.** Codex support exports OTel spans (not `agentguard_hook_events`), covers only the five lifecycle hooks, and needs the AgentGuard Python SDK from a checkout of this repo. Point users at the [plugin README](../../agents/codex/agentguard-plugin/README.md) and [implementation TODO](../../agents/codex/docs/todo.md) for the open items.
+> **Initial scaffold.** Codex support exports OTel spans (not `agentguard_hook_events`), covers only the five lifecycle hooks, and is installed from a checkout of this repo (the plugin is not on PyPI yet; its SDK dependency `timeplus-agentguard` is). Point users at the [plugin README](../../agents/codex/agentguard-plugin/README.md) and [implementation TODO](../../agents/codex/docs/todo.md) for the open items.
 
-### 1. Install the SDK and plugin
+### 1. Install the plugin
 
 From a checkout of this repository:
 
 ```bash
-pip install -e sdk/python
 pip install -e agents/codex/agentguard-plugin
 ```
 
