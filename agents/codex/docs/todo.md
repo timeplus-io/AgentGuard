@@ -210,7 +210,7 @@ Blocked on the Phase 1 contract. Tracked here so the plugin is not declared done
 - [ ] `skills/agentguard/SKILL.md`: Codex install path.
 - [ ] `docs/cim.md`: Codex trace → CIM mapping (Phase 1 contract).
 - [ ] Version bump and PyPI publishing plan — note the SDK is not on PyPI today,
-  so the dependency `agentguard>=0.3.0` currently requires a local editable install.
+  so the dependency `timeplus-agentguard>=0.3.0` (import name `agentguard`) currently requires a local editable install.
 
 ## Acceptance (adapted from issue #308)
 
