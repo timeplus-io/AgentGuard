@@ -89,7 +89,7 @@ CREATE STREAM agentguard_cim_event
 
 | Field | Notes |
 |-------|-------|
-| `run_id` | Claude Code has no "run" concept — `run_id` is always set to `session_id` for all Claude Code events |
+| `run_id` | For Claude Code, the id of the turn: the `prompt_id` of the hook payload. Hooks outside a turn (`session_start`, `model_switched`) and Claude Code versions without `prompt_id` have `run_id` equal to `session_id` |
 | `provider` | Empty string for Claude Code CIM events (provider is carried in OTel logs, not hook events) |
 | `tool_duration_ms` | Always 0 for Claude Code (the PostToolUse hook payload does not include duration) |
 | `raw_event_data` | For `prompt_context` / `llm_context` events, contains `messages[]` — the full conversation transcript used by prompt-injection rules |
@@ -157,7 +157,7 @@ Included hooks: `session_start`, `subagent_spawning`, `session_end`, `user_promp
 | `agent_type` | `'claudecode'` (passthrough) |
 | `agent_id` | `agent_id` column (configured hostname, e.g. `Gangs-MacBook-Pro.local`) |
 | `session_id` | `session_id` column |
-| `run_id` | `run_id` column (equals `session_id` for Claude Code) |
+| `run_id` | `run_id` column (the turn's `prompt_id`; `session_id` when the hook has none) |
 | `provider` | `''` (empty — not present in hook events) |
 | `model` | `if(model != '', model, json_value(event_data, '$.model'))` |
 | `tool_name` | `if(tool_name != '', tool_name, json_value(event_data, '$.tool_name'))` |

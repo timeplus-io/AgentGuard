@@ -51,6 +51,21 @@ type ClaudeCodeInput = {
   [key: string]: unknown;
 };
 
+function promptId(input: ClaudeCodeInput): string {
+  return typeof input.prompt_id === "string" ? input.prompt_id : "";
+}
+
+/**
+ * `run_id` is the id of the turn: Claude Code sends it as `prompt_id` on the
+ * hooks that fire inside a turn. Hooks outside a turn (SessionStart,
+ * PostModelSwitch) and older Claude Code versions have none, and fall back to
+ * the session id.
+ */
+function runId(input: ClaudeCodeInput): string {
+  if (promptId(input)) return promptId(input);
+  return typeof input.session_id === "string" ? input.session_id : "";
+}
+
 export function normalize(input: ClaudeCodeInput, config: AgentGuardConfig): HookEvent {
   const hookEventName = input.hook_event_name ?? "";
   const hookName = HOOK_NAME_MAP[hookEventName] ?? hookEventName.toLowerCase();
@@ -73,7 +88,7 @@ export function normalize(input: ClaudeCodeInput, config: AgentGuardConfig): Hoo
     hook_name:       hookName,
     event_time:      Date.now(),
     session_id:      typeof input.session_id === "string" ? input.session_id : "",
-    run_id:          typeof input.session_id === "string" ? input.session_id : "",
+    run_id:          runId(input),
     agent_id:        config.agentId,
     deployment_id:   config.deploymentId,
     deployment_name: config.deploymentName,
@@ -107,7 +122,7 @@ export function normalizeContextEvent(
     hook_name:       hookName,
     event_time:      Date.now(),
     session_id:      typeof input.session_id === "string" ? input.session_id : "",
-    run_id:          typeof input.session_id === "string" ? input.session_id : "",
+    run_id:          runId(input),
     agent_id:        config.agentId,
     deployment_id:   config.deploymentId,
     deployment_name: config.deploymentName,
@@ -117,7 +132,11 @@ export function normalizeContextEvent(
     model:           "",
     hook_decision:   "observe",
     block_reason:    "",
-    event_data:      JSON.stringify({ message_count: transcript.length, messages: transcript }),
+    event_data:      JSON.stringify({
+      ...(promptId(input) ? { prompt_id: promptId(input) } : {}),
+      message_count: transcript.length,
+      messages: transcript,
+    }),
     agent_type:      "claudecode",
   };
 }
@@ -145,7 +164,9 @@ export function normalizeLlmCallEvents(
       hook_name:       "llm_call",
       event_time:      Number.isFinite(eventTime) ? eventTime : Date.now(),
       session_id:      sessionId,
-      run_id:          sessionId,
+      // The turn the request was made in, which can differ from the turn of the
+      // hook: a Stop also reports requests of a turn that ended without one.
+      run_id:          call.prompt_id || runId(input),
       agent_id:        config.agentId,
       deployment_id:   config.deploymentId,
       deployment_name: config.deploymentName,
@@ -156,6 +177,7 @@ export function normalizeLlmCallEvents(
       hook_decision:   "observe",
       block_reason:    "",
       event_data:      JSON.stringify({
+        ...(call.prompt_id || promptId(input) ? { prompt_id: call.prompt_id || promptId(input) } : {}),
         message_id:  call.message_id,
         request_id:  call.request_id,
         model:       call.model,

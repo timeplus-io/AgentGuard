@@ -352,7 +352,8 @@ function block(id: string, opts: {
 }
 const apiRequest = (id: string, ts: string) => JSON.stringify({ type: "api-request", id, timestamp: ts });
 const stopMarker = (subtype = "stop_hook_summary") => JSON.stringify({ type: "system", subtype });
-const userPrompt = (text: string) => JSON.stringify({ type: "user", message: { role: "user", content: text } });
+const userPrompt = (text: string, promptId?: string) =>
+  JSON.stringify({ type: "user", promptId, message: { role: "user", content: text } });
 
 describe("readTranscriptCalls", () => {
   let tmpPath: string;
@@ -431,6 +432,20 @@ describe("readTranscriptCalls", () => {
     expect(calls[0]).toMatchObject({ started_at: "2026-01-01T00:00:00.500Z", duration_ms: 2500 });
     expect(calls[1]).toMatchObject({ started_at: "", duration_ms: null });
     expect(readTranscriptUsage(tmpPath).duration_ms).toBe(2500);
+  });
+
+  it("gives each request the prompt id of its turn", () => {
+    writeFileSync(tmpPath, [
+      block("msg_0", { ts: "2026-01-01T00:00:00.000Z" }),
+      userPrompt("first", "p1"),
+      block("msg_1", { ts: "2026-01-01T00:00:01.000Z" }),
+      JSON.stringify({ type: "user", promptId: "p1",
+        message: { role: "user", content: [{ type: "tool_result", content: "ok" }] } }),
+      block("msg_2", { ts: "2026-01-01T00:00:02.000Z" }),
+      userPrompt("second, the first turn ended without a Stop", "p2"),
+      block("msg_3", { ts: "2026-01-01T00:00:03.000Z" }),
+    ].join("\n"));
+    expect(readTranscriptCalls(tmpPath).map((c) => c.prompt_id)).toEqual(["", "p1", "p1", "p2"]);
   });
 
   it("leaves sidechain requests out of context_tokens", () => {

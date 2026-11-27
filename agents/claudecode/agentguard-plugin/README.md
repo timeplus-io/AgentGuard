@@ -86,6 +86,7 @@ Claude Code has no hook per model request, so the plugin reads token usage from 
 
 ```json
 {
+  "prompt_id": "5f422a24-…",
   "message_id": "msg_01…", "request_id": "req_01…",
   "model": "claude-sonnet-4-6", "stop_reason": "tool_use",
   "usage": { "input_tokens": 12, "output_tokens": 538, "cache_read_input_tokens": 91230,
@@ -104,7 +105,7 @@ Claude Code has no hook per model request, so the plugin reads token usage from 
 
 Limits: requests that Claude Code does not write to the transcript (for example compaction and its small background requests) are not counted; a turn that ends without `Stop` is reported with the next `Stop`; a sub-agent that is resumed is read from the start of its transcript again.
 
-> **`run_id` note:** Claude Code has no "run" concept. `run_id` is always equal to `session_id` for all events.
+> **`run_id` note:** `run_id` is the id of the turn. Claude Code sends it as `prompt_id` on the hooks that fire inside a turn, and it is the same from `UserPromptSubmit` to the `Stop` of that turn, so grouping a session by `run_id` gives its turns. The `prompt_context` / `llm_context` rows take the `prompt_id` of the hook that triggered them (also in `event_data.prompt_id`); `llm_call` rows take the turn the request was made in, read from the transcript. Hooks outside a turn (`SessionStart`, `PostModelSwitch`) and Claude Code versions that do not send `prompt_id` have `run_id` equal to `session_id`.
 
 ## Prerequisites
 
