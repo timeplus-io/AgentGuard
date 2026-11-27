@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { send } from "./timeplus-client.js";
+import { send, sendBatch } from "./timeplus-client.js";
 import type { AgentGuardConfig } from "./config.js";
 import type { HookEvent } from "./timeplus-client.js";
 
@@ -97,6 +97,40 @@ describe("send (timeplus-client)", () => {
     fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
     await expect(send(SAMPLE_EVENT, BASE_CONFIG)).resolves.toBeUndefined();
     expect(stderrWrite).toHaveBeenCalled();
+  });
+});
+
+describe("sendBatch (timeplus-client)", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ ...SAMPLE_EVENT, session_id: `s${i}` }));
+  const bodyRows = (call: number) =>
+    (JSON.parse((fetchMock.mock.calls[call] as [string, RequestInit])[1].body as string) as { data: unknown[][] }).data;
+
+  it("sends several rows in one request", async () => {
+    await sendBatch(rows(3), BASE_CONFIG);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(bodyRows(0).map((r) => r[2])).toEqual(["s0", "s1", "s2"]);
+  });
+
+  it("sends nothing for an empty list", async () => {
+    await sendBatch([], BASE_CONFIG);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("splits a long list into requests of 500 rows", async () => {
+    await sendBatch(rows(1201), BASE_CONFIG);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect([0, 1, 2].map((i) => bodyRows(i).length)).toEqual([500, 500, 201]);
   });
 });
 

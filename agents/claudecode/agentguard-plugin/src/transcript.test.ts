@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFileSync, unlinkSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { readTranscript, readTranscriptUsage } from "./transcript.js";
+import { readTranscript, readTranscriptCalls, readTranscriptUsage } from "./transcript.js";
 
 function makeTmpPath(): string {
   const dir = join(tmpdir(), "agentguard-test");
@@ -243,7 +243,7 @@ describe("readTranscriptUsage", () => {
     expect(result.input_tokens).toBe(100);
     expect(result.output_tokens).toBe(50);
     expect(result.total_tokens).toBe(150);
-    expect(result.duration_ms).toBe(500);
+    expect(result.duration_ms).toBe(0); // the transcript has no request entry
     expect(result.model).toBe("claude-opus-4-5");
     expect(result.llm_calls).toBe(1);
   });
@@ -258,19 +258,28 @@ describe("readTranscriptUsage", () => {
     expect(result.input_tokens).toBe(300);
     expect(result.output_tokens).toBe(130);
     expect(result.total_tokens).toBe(430);
-    expect(result.duration_ms).toBe(500);
     expect(result.llm_calls).toBe(2);
   });
 
-  it("uses the model from the first assistant message that has one", () => {
+  it("reports the model of the last request and splits the counts by model", () => {
     const lines = [
-      usageEntry({ model: "" }),
-      usageEntry({ model: "claude-sonnet-4-6" }),
-      usageEntry({ model: "claude-opus-4-7" }),
+      usageEntry({ model: "claude-sonnet-4-6", inputTokens: 10, outputTokens: 1 }),
+      usageEntry({ model: "claude-opus-4-7", inputTokens: 20, outputTokens: 2 }),
+      usageEntry({ model: "claude-sonnet-4-6", inputTokens: 30, outputTokens: 3 }),
+      usageEntry({ model: "claude-opus-4-7", inputTokens: 40, outputTokens: 4, cacheRead: 500, cacheCreation: 60 }),
     ].join("\n");
     writeFileSync(tmpPath, lines);
     const result = readTranscriptUsage(tmpPath);
-    expect(result.model).toBe("claude-sonnet-4-6");
+    expect(result.scope).toBe("turn");
+    expect(result.model).toBe("claude-opus-4-7");
+    expect(result.input_tokens).toBe(100);
+    expect(result.context_tokens).toBe(600); // last request: 40 + 500 + 60
+    expect(result.models).toEqual([
+      { model: "claude-sonnet-4-6", input_tokens: 40, output_tokens: 4, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0, total_tokens: 44, duration_ms: 0, llm_calls: 2 },
+      { model: "claude-opus-4-7", input_tokens: 60, output_tokens: 6, cache_creation_input_tokens: 60,
+        cache_read_input_tokens: 500, total_tokens: 66, duration_ms: 0, llm_calls: 2 },
+    ]);
   });
 
   it("ignores user and system messages", () => {
@@ -305,17 +314,132 @@ describe("readTranscriptUsage", () => {
     expect(result.total_tokens).toBe(45);
   });
 
-  it("handles assistant messages without a usage field gracefully", () => {
-    const noUsageEntry = JSON.stringify({
-      type: "assistant",
-      timestamp: "2026-01-01T00:00:00.000Z",
-      durationMs: 100,
-      message: { role: "assistant", model: "claude-haiku-4-5" },
-    });
-    writeFileSync(tmpPath, noUsageEntry);
+  it("does not count assistant entries without usage, synthetic messages or request blobs", () => {
+    const lines = [
+      JSON.stringify({ type: "assistant", timestamp: "2026-01-01T00:00:00.000Z",
+        message: { role: "assistant", model: "claude-haiku-4-5" } }),
+      JSON.stringify({ type: "assistant", timestamp: "2026-01-01T00:00:00.000Z",
+        message: { role: "assistant", model: "<synthetic>", usage: { input_tokens: 7, output_tokens: 7 } } }),
+      JSON.stringify({ type: "api-request-blob",
+        message: { role: "assistant", id: "msg_old", usage: { input_tokens: 9, output_tokens: 9 } } }),
+    ].join("\n");
+    writeFileSync(tmpPath, lines);
     const result = readTranscriptUsage(tmpPath);
-    expect(result.llm_calls).toBe(1);
-    expect(result.input_tokens).toBe(0);
-    expect(result.model).toBe("claude-haiku-4-5");
+    expect(result.llm_calls).toBe(0);
+    expect(result.total_tokens).toBe(0);
+  });
+});
+
+/** One transcript entry of an API response, as Claude Code writes one per content block. */
+function block(id: string, opts: {
+  ts: string; model?: string; input?: number; output?: number; cacheRead?: number;
+  requestRef?: string; stopReason?: string | null; sidechain?: boolean;
+}) {
+  return JSON.stringify({
+    type: "assistant",
+    uuid: `${id}-${opts.ts}`,
+    timestamp: opts.ts,
+    requestId: `req_${id}`,
+    requestRef: opts.requestRef,
+    isSidechain: opts.sidechain ?? false,
+    message: {
+      id, role: "assistant", model: opts.model ?? "claude-fable-5-2",
+      stop_reason: opts.stopReason ?? null,
+      usage: { input_tokens: opts.input ?? 0, output_tokens: opts.output ?? 0,
+        cache_read_input_tokens: opts.cacheRead ?? 0, cache_creation_input_tokens: 0 },
+    },
+  });
+}
+const apiRequest = (id: string, ts: string) => JSON.stringify({ type: "api-request", id, timestamp: ts });
+const stopMarker = (subtype = "stop_hook_summary") => JSON.stringify({ type: "system", subtype });
+const userPrompt = (text: string) => JSON.stringify({ type: "user", message: { role: "user", content: text } });
+
+describe("readTranscriptCalls", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath();
+  });
+
+  afterEach(() => {
+    try { unlinkSync(tmpPath); } catch { /* ignore */ }
+  });
+
+  it("returns an empty array for a missing file", () => {
+    expect(readTranscriptCalls("/nonexistent/path/transcript.jsonl")).toEqual([]);
+  });
+
+  it("counts a response written as several entries once", () => {
+    writeFileSync(tmpPath, [
+      block("msg_1", { ts: "2026-01-01T00:00:01.000Z", input: 100, output: 40, cacheRead: 5000 }),
+      block("msg_1", { ts: "2026-01-01T00:00:02.000Z", input: 100, output: 40, cacheRead: 5000 }),
+      block("msg_1", { ts: "2026-01-01T00:00:03.000Z", input: 100, output: 40, cacheRead: 5000, stopReason: "tool_use" }),
+      block("msg_2", { ts: "2026-01-01T00:00:09.000Z", input: 10, output: 4, stopReason: "end_turn" }),
+    ].join("\n"));
+    const calls = readTranscriptCalls(tmpPath);
+    expect(calls.map((c) => c.message_id)).toEqual(["msg_1", "msg_2"]);
+    expect(calls[0]).toMatchObject({
+      request_id: "req_msg_1", model: "claude-fable-5-2", stop_reason: "tool_use",
+      timestamp: "2026-01-01T00:00:03.000Z",
+      input_tokens: 100, output_tokens: 40, cache_read_input_tokens: 5000,
+    });
+    const usage = readTranscriptUsage(tmpPath);
+    expect(usage.llm_calls).toBe(2);
+    expect(usage.cache_read_input_tokens).toBe(5000);
+  });
+
+  it("keeps the largest count when the entries of a response disagree", () => {
+    writeFileSync(tmpPath, [
+      block("msg_1", { ts: "2026-01-01T00:00:01.000Z", input: 100, output: 1 }),
+      block("msg_1", { ts: "2026-01-01T00:00:02.000Z", input: 100, output: 250 }),
+    ].join("\n"));
+    expect(readTranscriptCalls(tmpPath)[0].output_tokens).toBe(250);
+  });
+
+  it("returns only the requests after the previous Stop", () => {
+    writeFileSync(tmpPath, [
+      userPrompt("first"),
+      block("msg_1", { ts: "2026-01-01T00:00:01.000Z", input: 100, output: 40 }),
+      stopMarker("stop_hook_summary"),
+      stopMarker("turn_duration"),
+      userPrompt("second"),
+      block("msg_2", { ts: "2026-01-01T00:01:01.000Z", input: 7, output: 3 }),
+      userPrompt("typed while the turn was running"),
+      block("msg_3", { ts: "2026-01-01T00:01:05.000Z", input: 8, output: 2 }),
+    ].join("\n"));
+    expect(readTranscriptCalls(tmpPath).map((c) => c.message_id)).toEqual(["msg_2", "msg_3"]);
+    expect(readTranscriptUsage(tmpPath)).toMatchObject({ llm_calls: 2, input_tokens: 15, output_tokens: 5 });
+    expect(readTranscriptCalls(tmpPath, { sinceLastStop: false })).toHaveLength(3);
+  });
+
+  it("returns nothing when no request follows the previous Stop", () => {
+    writeFileSync(tmpPath, [
+      block("msg_1", { ts: "2026-01-01T00:00:01.000Z", input: 100, output: 40 }),
+      stopMarker(),
+    ].join("\n"));
+    expect(readTranscriptCalls(tmpPath)).toEqual([]);
+  });
+
+  it("takes the request time from the api-request entry", () => {
+    writeFileSync(tmpPath, [
+      apiRequest("r1", "2026-01-01T00:00:00.500Z"),
+      block("msg_1", { ts: "2026-01-01T00:00:01.000Z", requestRef: "r1" }),
+      block("msg_1", { ts: "2026-01-01T00:00:03.000Z", requestRef: "r1" }),
+      block("msg_2", { ts: "2026-01-01T00:00:09.000Z", requestRef: "unknown" }),
+    ].join("\n"));
+    const calls = readTranscriptCalls(tmpPath);
+    expect(calls[0]).toMatchObject({ started_at: "2026-01-01T00:00:00.500Z", duration_ms: 2500 });
+    expect(calls[1]).toMatchObject({ started_at: "", duration_ms: null });
+    expect(readTranscriptUsage(tmpPath).duration_ms).toBe(2500);
+  });
+
+  it("leaves sidechain requests out of context_tokens", () => {
+    writeFileSync(tmpPath, [
+      block("msg_1", { ts: "2026-01-01T00:00:01.000Z", input: 10, cacheRead: 90 }),
+      block("msg_2", { ts: "2026-01-01T00:00:02.000Z", input: 5, cacheRead: 1, sidechain: true }),
+    ].join("\n"));
+    const usage = readTranscriptUsage(tmpPath);
+    expect(usage.llm_calls).toBe(2);
+    expect(usage.context_tokens).toBe(100);
   });
 });

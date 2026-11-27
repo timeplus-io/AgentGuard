@@ -113,6 +113,8 @@ The `event_type` field collapses each agent's hook vocabulary into a shared set 
 
 > **Virtual events (`prompt_context` / `llm_context`):** The Claude Code plugin synthesizes these by reading the `transcript_path` JSONL file embedded in every hook payload. They are not fired by Claude Code itself. They carry the full conversation in `raw_event_data.messages[]` and are the primary source for full-prompt security analysis (e.g., prompt injection rule `rp-001`).
 
+> **Claude Code token usage (`llm_call`):** the plugin also sends one virtual `llm_call` hook event per model request, read from the transcript on `Stop` (the requests of the turn) and `SubagentStop` (the requests of the sub-agent). `event_data.usage` holds `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` (Anthropic meaning: input excludes cached tokens) and `event_data.duration_ms` the latency when the transcript records the request. These rows are not CIM events (`mv_cim_claudecode` does not include them); they are the source for `llm.*` metrics on the hook path. `_llm_usage` on the `llm_output` row is the sum for the turn, so a metrics view must read one or the other, not both.
+
 > **`llm_request` gap:** OpenClaw fires an `llm_input` hook with the full assembled prompt before sending to the LLM. Claude Code has no equivalent — the closest substitute is the virtual `prompt_context` event. Security rules that need pre-send prompt content should check `event_type IN ('llm_request', 'prompt_context')`.
 
 ### 2.3 Normalization Pipeline
