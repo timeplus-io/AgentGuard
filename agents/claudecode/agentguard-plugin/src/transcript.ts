@@ -24,6 +24,8 @@ export type LlmCall = TokenCounts & {
   request_id: string;
   model: string;
   stop_reason: string;
+  /** Id of the turn (the prompt) the request belongs to; "" when the transcript has none. */
+  prompt_id: string;
   /** ISO time of the last transcript entry of the response. */
   timestamp: string;
   /** ISO time the request was sent; "" when the transcript does not record it. */
@@ -156,6 +158,9 @@ export function readTranscriptCalls(
   const requestTimes = new Map<string, string>();
   const requestRefs = new Map<string, string>();
   let calls = new Map<string, LlmCall>();
+  // User entries (prompts and tool results) carry the id of their turn;
+  // assistant entries do not, so a request takes the id last seen before it.
+  let promptId = "";
   try {
     const raw = readFileSync(resolvePath(transcriptPath), "utf8");
     for (const line of raw.split("\n")) {
@@ -172,6 +177,10 @@ export function readTranscriptCalls(
         }
         if (type === "system" && TURN_END_SUBTYPES.has(toStr(entry["subtype"]))) {
           if (sinceLastStop) calls = new Map();
+          continue;
+        }
+        if (type === "user") {
+          if (toStr(entry["promptId"])) promptId = toStr(entry["promptId"]);
           continue;
         }
         if (type !== "assistant") continue;
@@ -191,6 +200,7 @@ export function readTranscriptCalls(
             request_id: toStr(entry["requestId"]),
             model,
             stop_reason: "",
+            prompt_id: promptId,
             timestamp: "",
             started_at: "",
             duration_ms: null,

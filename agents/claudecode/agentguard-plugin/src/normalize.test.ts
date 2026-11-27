@@ -298,6 +298,7 @@ describe("normalizeContextEvent", () => {
 describe("normalizeLlmCallEvents", () => {
   const call: LlmCall = {
     message_id: "msg_1", request_id: "req_1", model: "claude-fable-5-2", stop_reason: "tool_use",
+    prompt_id: "",
     timestamp: "2026-01-01T00:00:03.000Z", started_at: "2026-01-01T00:00:00.500Z", duration_ms: 2500,
     is_sidechain: false,
     input_tokens: 100, output_tokens: 40, cache_creation_input_tokens: 7, cache_read_input_tokens: 5000,
@@ -346,6 +347,51 @@ describe("normalizeLlmCallEvents", () => {
     expect(JSON.parse(e.event_data)).toMatchObject({
       is_sidechain: true, subagent_id: "a1b2", subagent_type: "Explore",
     });
+  });
+});
+
+describe("run_id is the turn id (#325)", () => {
+  it("uses prompt_id when the hook has one", () => {
+    const e = normalize({ hook_event_name: "PreToolUse", session_id: "s1", prompt_id: "p1" }, BASE_CONFIG);
+    expect(e.run_id).toBe("p1");
+    expect(e.session_id).toBe("s1");
+  });
+
+  it("falls back to session_id without a prompt_id", () => {
+    expect(normalize({ hook_event_name: "SessionStart", session_id: "s1" }, BASE_CONFIG).run_id).toBe("s1");
+    expect(normalize({ hook_event_name: "Stop", session_id: "s1", prompt_id: "" }, BASE_CONFIG).run_id).toBe("s1");
+    expect(normalize({ hook_event_name: "Stop", session_id: "s1", prompt_id: 7 }, BASE_CONFIG).run_id).toBe("s1");
+  });
+
+  it("carries the prompt_id of the triggering hook into context events", () => {
+    const e = normalizeContextEvent(
+      { hook_event_name: "Stop", session_id: "s1", prompt_id: "p1" }, BASE_CONFIG, "llm_context", [],
+    );
+    expect(e.run_id).toBe("p1");
+    expect(JSON.parse(e.event_data)).toEqual({ prompt_id: "p1", message_count: 0, messages: [] });
+
+    const noTurn = normalizeContextEvent(
+      { hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG, "llm_context", [],
+    );
+    expect(noTurn.run_id).toBe("s1");
+    expect("prompt_id" in (JSON.parse(noTurn.event_data) as object)).toBe(false);
+  });
+
+  it("gives llm_call rows the turn of the request, then of the hook, then the session", () => {
+    const call: LlmCall = {
+      message_id: "m", request_id: "r", model: "claude-fable-5-2", stop_reason: "", prompt_id: "p-call",
+      timestamp: "2026-01-01T00:00:03.000Z", started_at: "", duration_ms: null, is_sidechain: false,
+      input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0,
+    };
+    const hook = { hook_event_name: "Stop", session_id: "s1", prompt_id: "p-hook" };
+    const [own, fromHook] = normalizeLlmCallEvents(hook, BASE_CONFIG, [call, { ...call, prompt_id: "" }]);
+    expect(own.run_id).toBe("p-call");
+    expect(JSON.parse(own.event_data)).toMatchObject({ prompt_id: "p-call" });
+    expect(fromHook.run_id).toBe("p-hook");
+    expect(JSON.parse(fromHook.event_data)).toMatchObject({ prompt_id: "p-hook" });
+    const [none] = normalizeLlmCallEvents({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG, [{ ...call, prompt_id: "" }]);
+    expect(none.run_id).toBe("s1");
+    expect("prompt_id" in (JSON.parse(none.event_data) as object)).toBe(false);
   });
 });
 
