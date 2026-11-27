@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { resolveConfig } from "./config.js";
-import { send } from "./timeplus-client.js";
-import { normalize, normalizeContextEvent } from "./normalize.js";
-import { readTranscript, readTranscriptUsage } from "./transcript.js";
+import { send, sendBatch } from "./timeplus-client.js";
+import { normalize, normalizeContextEvent, normalizeLlmCallEvents } from "./normalize.js";
+import { readTranscript, readTranscriptCalls, summarizeCalls, type LlmCall } from "./transcript.js";
 
 // Only these two hooks produce a companion context event carrying the transcript.
 // UserPromptSubmit → prompt_context (context before the new turn begins)
@@ -76,18 +76,36 @@ async function main(): Promise<void> {
     // continue with existing async ingest path below
   }
 
-  // For the Stop hook, accumulate per-call token usage from the transcript and
-  // attach it as _llm_usage in event_data. The mv_cim_metrics_claudecode_cim
-  // MV extracts this to produce LLM metrics without requiring OTel.
+  // Token usage comes from the transcript, one `llm_call` event per model request.
+  //  Stop         → the requests since the previous Stop; their sum also goes on
+  //                 the Stop row as _llm_usage (per turn, split by model).
+  //  SubagentStop → the requests of the sub-agent, which has its own transcript
+  //                 and is not in the main one.
+  let llmCalls: LlmCall[] = [];
+  let subagent: { agent_id: string; agent_type: string } | undefined;
   if (hookEventName === "Stop") {
     const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;
     if (transcriptPath) {
-      input = { ...input, _llm_usage: readTranscriptUsage(transcriptPath) };
+      llmCalls = readTranscriptCalls(transcriptPath);
+      input = { ...input, _llm_usage: summarizeCalls(llmCalls) };
+    }
+  } else if (hookEventName === "SubagentStop") {
+    const agentTranscriptPath = typeof input["agent_transcript_path"] === "string" ? input["agent_transcript_path"] : null;
+    if (agentTranscriptPath) {
+      llmCalls = readTranscriptCalls(agentTranscriptPath, { sinceLastStop: false });
+      subagent = {
+        agent_id:   typeof input["agent_id"] === "string" ? input["agent_id"] : "",
+        agent_type: typeof input["agent_type"] === "string" ? input["agent_type"] : "",
+      };
     }
   }
 
   const event = normalize(input, config);
   await send(event, config);
+
+  if (llmCalls.length > 0) {
+    await sendBatch(normalizeLlmCallEvents(input, config, llmCalls, subagent), config);
+  }
 
   // For the two transcript-bearing hooks, read the transcript file and send a
   // separate context event. All other hooks send no transcript data.

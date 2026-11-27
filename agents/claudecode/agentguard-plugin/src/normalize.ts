@@ -1,6 +1,6 @@
 import type { AgentGuardConfig } from "./config.js";
 import type { HookEvent } from "./timeplus-client.js";
-import type { TranscriptMessage } from "./transcript.js";
+import type { LlmCall, TranscriptMessage } from "./transcript.js";
 
 /**
  * Infers the LLM provider from a Claude Code model identifier.
@@ -60,7 +60,7 @@ export function normalize(input: ClaudeCodeInput, config: AgentGuardConfig): Hoo
     || hookEventName === "PostToolUseFailure";
 
   // For Stop events the index.ts attaches _llm_usage from the transcript,
-  // which includes the model used in the last LLM call.
+  // which includes the model of the last model request of the turn.
   const llmUsage = (input._llm_usage as { model?: string } | undefined) ?? {};
 
   const model = hookEventName === "SessionStart"
@@ -120,4 +120,58 @@ export function normalizeContextEvent(
     event_data:      JSON.stringify({ message_count: transcript.length, messages: transcript }),
     agent_type:      "claudecode",
   };
+}
+
+/**
+ * Builds one synthetic `llm_call` event per model request found in a transcript.
+ * Like the context events these are not fired by Claude Code: they are sent
+ * alongside Stop (the requests of the turn) and SubagentStop (the requests of
+ * the sub-agent), and give the app one row per request with its token usage.
+ *
+ * `event_time` is the time of the response, not of the hook. `usage` keeps the
+ * Anthropic meaning: `input_tokens` does not include cached tokens.
+ * `duration_ms` is left out when the transcript does not record the request.
+ */
+export function normalizeLlmCallEvents(
+  input: ClaudeCodeInput,
+  config: AgentGuardConfig,
+  calls: LlmCall[],
+  subagent?: { agent_id: string; agent_type: string },
+): HookEvent[] {
+  const sessionId = typeof input.session_id === "string" ? input.session_id : "";
+  return calls.map((call) => {
+    const eventTime = Date.parse(call.timestamp);
+    return {
+      hook_name:       "llm_call",
+      event_time:      Number.isFinite(eventTime) ? eventTime : Date.now(),
+      session_id:      sessionId,
+      run_id:          sessionId,
+      agent_id:        config.agentId,
+      deployment_id:   config.deploymentId,
+      deployment_name: config.deploymentName,
+      session_key:     "",
+      tool_name:       "",
+      provider:        call.model ? inferProvider(call.model) : "",
+      model:           call.model,
+      hook_decision:   "observe",
+      block_reason:    "",
+      event_data:      JSON.stringify({
+        message_id:  call.message_id,
+        request_id:  call.request_id,
+        model:       call.model,
+        stop_reason: call.stop_reason,
+        usage: {
+          input_tokens:                call.input_tokens,
+          output_tokens:               call.output_tokens,
+          cache_read_input_tokens:     call.cache_read_input_tokens,
+          cache_creation_input_tokens: call.cache_creation_input_tokens,
+          total_tokens:                call.input_tokens + call.output_tokens,
+        },
+        ...(call.duration_ms !== null ? { duration_ms: call.duration_ms, started_at: call.started_at } : {}),
+        is_sidechain: call.is_sidechain || subagent !== undefined,
+        ...(subagent ? { subagent_id: subagent.agent_id, subagent_type: subagent.agent_type } : {}),
+      }),
+      agent_type:      "claudecode",
+    };
+  });
 }

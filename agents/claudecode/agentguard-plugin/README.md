@@ -13,8 +13,9 @@ Claude Code supports [hooks](https://code.claude.com/docs/en/hooks) — shell co
 For every hook except `PreToolUse`, the plugin:
 1. Reads the event JSON from stdin
 2. Normalizes it to the `HookEvent` schema and POSTs to Timeplus async (fire-and-forget HTTP)
-3. On `UserPromptSubmit` and `Stop`, additionally reads `transcript_path`, parses the JSONL conversation log, and posts a synthetic `prompt_context` or `llm_context` event carrying the full conversation history (truncated to `AGENTGUARD_TRANSCRIPT_MESSAGES`/`AGENTGUARD_TRANSCRIPT_CONTENT_CHARS`)
-4. Exits 0 — never blocks
+3. On `Stop` and `SubagentStop`, additionally reads the transcript and posts one `llm_call` event per model request with its token usage (see [Token usage](#token-usage-llm_call-events-and-_llm_usage))
+4. On `UserPromptSubmit` and `Stop`, additionally reads `transcript_path`, parses the JSONL conversation log, and posts a synthetic `prompt_context` or `llm_context` event carrying the full conversation history (truncated to `AGENTGUARD_TRANSCRIPT_MESSAGES`/`AGENTGUARD_TRANSCRIPT_CONTENT_CHARS`)
+5. Exits 0 — never blocks
 
 `SessionEnd` additionally fires a fire-and-forget `POST /api/holds/_abandon-session/:session_id` to the AgentGuard server so any hold pending for the ending session gets cleaned up cleanly.
 
@@ -71,6 +72,37 @@ If `AGENTGUARD_HOLDS_ENABLED` is `false`, `PreToolUse` writes a permissive `perm
 | `Stop`             | `llm_context`         | `{ message_count, messages[] }` — complete turn including all tool call/result pairs |
 
 `messages[]` contains the parsed transcript in role/content format, truncated to the last `AGENTGUARD_TRANSCRIPT_MESSAGES` messages (default: 50). Text content is truncated to `AGENTGUARD_TRANSCRIPT_CONTENT_CHARS` characters per block (default: 10,000). If `transcript_path` is missing or unreadable the context event is skipped silently.
+
+### Token usage (`llm_call` events and `_llm_usage`)
+
+Claude Code has no hook per model request, so the plugin reads token usage from the transcript:
+
+| Trigger event  | What is sent |
+|----------------|--------------|
+| `Stop`         | One `llm_call` row per model request made since the previous `Stop`, and `_llm_usage` in the `event_data` of the `llm_output` row: the sum of those requests |
+| `SubagentStop` | One `llm_call` row per model request of the sub-agent, read from `agent_transcript_path` (a sub-agent has its own transcript; its requests are not in the main one) |
+
+`llm_call` rows carry the model in the `model` column, the time of the response as `event_time`, and this `event_data`:
+
+```json
+{
+  "message_id": "msg_01…", "request_id": "req_01…",
+  "model": "claude-sonnet-4-6", "stop_reason": "tool_use",
+  "usage": { "input_tokens": 12, "output_tokens": 538, "cache_read_input_tokens": 91230,
+             "cache_creation_input_tokens": 0, "total_tokens": 550 },
+  "duration_ms": 6354, "started_at": "2026-01-01T00:00:00.500Z",
+  "is_sidechain": false
+}
+```
+
+- `usage` has the meaning of the Anthropic API: `input_tokens` does not include cached tokens, and `total_tokens` is `input_tokens + output_tokens`.
+- `duration_ms` is the time from the request to the last part of the response. It needs the `api-request` entries of the transcript; when they are absent (older Claude Code versions) `duration_ms` and `started_at` are left out.
+- Sub-agent rows have `is_sidechain: true`, `subagent_id` and `subagent_type`.
+- A response that the transcript stores as several entries (one per content block) is counted once, by `message.id`.
+
+`_llm_usage` is the usage of the **turn**, not of the session: `{ scope: "turn", input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, total_tokens, duration_ms, llm_calls, model, context_tokens, models[] }`. `model` is the model of the last request, `context_tokens` the prompt size of the last main-thread request (input + cache read + cache write), and `models[]` the same counts per model. To get totals, sum the `llm_call` rows; do not add `_llm_usage` to them.
+
+Limits: requests that Claude Code does not write to the transcript (for example compaction and its small background requests) are not counted; a turn that ends without `Stop` is reported with the next `Stop`; a sub-agent that is resumed is read from the start of its transcript again.
 
 > **`run_id` note:** Claude Code has no "run" concept. `run_id` is always equal to `session_id` for all events.
 
@@ -184,7 +216,7 @@ curl -s -X POST http://localhost:3218/proton/v1/query \
   -d '{"query":"SELECT hook_name, agent_id, tool_name, event_time FROM table(ag.agentguard_hook_events) WHERE agent_type='"'"'claudecode'"'"' ORDER BY event_time DESC LIMIT 10"}'
 ```
 
-You should see rows for `session_start`, `user_prompt_submit`, `prompt_context`, `before_tool_call`, `after_tool_call`, `llm_output`, `llm_context`, etc.
+You should see rows for `session_start`, `user_prompt_submit`, `prompt_context`, `before_tool_call`, `after_tool_call`, `llm_output`, `llm_call`, `llm_context`, etc.
 
 To verify context events carry the full transcript:
 

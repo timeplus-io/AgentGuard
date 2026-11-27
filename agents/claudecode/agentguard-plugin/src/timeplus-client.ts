@@ -46,11 +46,26 @@ export function authHeaders(config: AgentGuardConfig): Record<string, string> {
   return { Authorization: `Basic ${btoa(`${config.username}:${config.password}`)}` };
 }
 
+// Rows per request. A turn rarely has more than a few dozen model requests;
+// the cap only matters for a transcript read from the start.
+const MAX_BATCH_ROWS = 500;
+
 export async function send(event: HookEvent, config: AgentGuardConfig): Promise<void> {
+  await sendBatch([event], config);
+}
+
+/** Sends several events, in as few requests as MAX_BATCH_ROWS allows. */
+export async function sendBatch(events: HookEvent[], config: AgentGuardConfig): Promise<void> {
+  for (let i = 0; i < events.length; i += MAX_BATCH_ROWS) {
+    await post(events.slice(i, i + MAX_BATCH_ROWS), config);
+  }
+}
+
+async function post(events: HookEvent[], config: AgentGuardConfig): Promise<void> {
   const url = buildIngestUrl(config);
   const body = JSON.stringify({
     columns: COLUMNS,
-    data: [COLUMNS.map((col) => event[col])],
+    data: events.map((event) => COLUMNS.map((col) => event[col])),
   });
   try {
     const resp = await fetch(url, {

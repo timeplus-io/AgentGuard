@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { normalize, normalizeContextEvent, inferProvider } from "./normalize.js";
+import { normalize, normalizeContextEvent, normalizeLlmCallEvents, inferProvider } from "./normalize.js";
+import type { LlmCall } from "./transcript.js";
 
 import type { AgentGuardConfig } from "./config.js";
 
@@ -291,6 +292,60 @@ describe("normalizeContextEvent", () => {
       BASE_CONFIG, "llm_context", transcript,
     );
     expect(e.hook_decision).toBe("observe");
+  });
+});
+
+describe("normalizeLlmCallEvents", () => {
+  const call: LlmCall = {
+    message_id: "msg_1", request_id: "req_1", model: "claude-fable-5-2", stop_reason: "tool_use",
+    timestamp: "2026-01-01T00:00:03.000Z", started_at: "2026-01-01T00:00:00.500Z", duration_ms: 2500,
+    is_sidechain: false,
+    input_tokens: 100, output_tokens: 40, cache_creation_input_tokens: 7, cache_read_input_tokens: 5000,
+  };
+  const input = { hook_event_name: "Stop", session_id: "s1" };
+
+  it("builds one llm_call row per request, timed at the response", () => {
+    const events = normalizeLlmCallEvents(input, BASE_CONFIG, [call, { ...call, message_id: "msg_2" }]);
+    expect(events).toHaveLength(2);
+    const e = events[0];
+    expect(e.hook_name).toBe("llm_call");
+    expect(e.event_time).toBe(Date.parse("2026-01-01T00:00:03.000Z"));
+    expect(e.session_id).toBe("s1");
+    expect(e.run_id).toBe("s1");
+    expect(e.model).toBe("claude-fable-5-2");
+    expect(e.provider).toBe("anthropic");
+    expect(e.agent_type).toBe("claudecode");
+    expect(JSON.parse(e.event_data)).toEqual({
+      message_id: "msg_1", request_id: "req_1", model: "claude-fable-5-2", stop_reason: "tool_use",
+      usage: { input_tokens: 100, output_tokens: 40, cache_read_input_tokens: 5000,
+        cache_creation_input_tokens: 7, total_tokens: 140 },
+      duration_ms: 2500, started_at: "2026-01-01T00:00:00.500Z",
+      is_sidechain: false,
+    });
+  });
+
+  it("leaves duration_ms out when the request time is unknown", () => {
+    const [e] = normalizeLlmCallEvents(input, BASE_CONFIG, [{ ...call, duration_ms: null, started_at: "" }]);
+    const data = JSON.parse(e.event_data) as Record<string, unknown>;
+    expect("duration_ms" in data).toBe(false);
+    expect("started_at" in data).toBe(false);
+  });
+
+  it("falls back to the current time when the response has no timestamp", () => {
+    const before = Date.now();
+    const [e] = normalizeLlmCallEvents(input, BASE_CONFIG, [{ ...call, timestamp: "" }]);
+    expect(e.event_time).toBeGreaterThanOrEqual(before);
+  });
+
+  it("marks the requests of a sub-agent", () => {
+    const [e] = normalizeLlmCallEvents(
+      { hook_event_name: "SubagentStop", session_id: "s1" }, BASE_CONFIG, [call],
+      { agent_id: "a1b2", agent_type: "Explore" },
+    );
+    expect(e.session_id).toBe("s1");
+    expect(JSON.parse(e.event_data)).toMatchObject({
+      is_sidechain: true, subagent_id: "a1b2", subagent_type: "Explore",
+    });
   });
 });
 
