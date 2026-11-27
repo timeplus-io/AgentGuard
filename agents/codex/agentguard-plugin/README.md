@@ -3,16 +3,24 @@
 AgentGuard monitoring plugin for [OpenAI Codex](https://github.com/openai/codex).
 
 Codex runs a command hook for each lifecycle event and writes one JSON object
-to stdin. This plugin reads that event, turns it into an OpenTelemetry span
-with the [AgentGuard Python SDK](../../../sdk/python), and exports it to
-the [AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard)'s
-OTLP/HTTP input (default `http://localhost:4318`).
+to stdin. This plugin reads that event and sends it to the
+[AgentGuard Timeplus app](https://github.com/timeplus-io/apps/tree/main/apps/agentguard)
+on one of two export paths:
+
+| Export | What is sent | Where | Needs |
+|---|---|---|---|
+| `otel` (default) | One OpenTelemetry span per hook, through the [AgentGuard Python SDK](../../../sdk/python) | The app's OTLP/HTTP input (default `http://localhost:4318`) | Port 4318 |
+| `hooks` | One row per hook in the `agentguard_hook_events` stream, like the Claude Code, OpenClaw and Hermes plugins | Timeplus ingest (default `http://localhost:3218`) | Port 3218, or port 8000 with the Timeplus REST API |
+
+Exactly one path is active. There is no setting that sends a session on both,
+so the app never sees the same session twice. See
+[Hook-event export](#hook-event-export) for the second path.
 
 ## Requirements
 
 - Python 3.10+
 - A Codex build with hooks enabled
-- The AgentGuard Python SDK ([`timeplus-agentguard`](https://pypi.org/project/timeplus-agentguard/) on PyPI, installed automatically as a dependency)
+- The AgentGuard Python SDK ([`timeplus-agentguard`](https://pypi.org/project/timeplus-agentguard/) on PyPI, installed automatically as a dependency). Only the `otel` export uses it; the `hooks` export uses the standard library alone.
 
 ## Installation
 
@@ -91,7 +99,13 @@ configure the plugin.
 | `--agent-id` | `AGENTGUARD_AGENT_ID` | hostname |
 | `--deployment-id` | `AGENTGUARD_DEPLOYMENT_ID` | `local` |
 | `--deployment-name` | `AGENTGUARD_DEPLOYMENT_NAME` | `Local Dev` |
+| `--export` | `AGENTGUARD_CODEX_EXPORT` | `otel` |
 | `--endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` |
+
+`--export` is `otel` or `hooks`. Any other value (including `both`) is
+reported on stderr and treated as `otel`. `--endpoint` applies to the `otel`
+export only; the `hooks` export has its own settings, listed under
+[Hook-event export](#hook-event-export).
 
 Flags take precedence over environment variables. The plugin resolves every
 setting (flag, then environment variable, then the default above) before
@@ -105,12 +119,80 @@ export AGENTGUARD_DEPLOYMENT_NAME="Production Codex"
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://timeplus.example.com:4318
 ```
 
+## Hook-event export
+
+Use this path when the app's OTLP input (port 4318) is not reachable from the
+agent host, or when you want Codex in the same stream as the other plugins.
+
+```bash
+export AGENTGUARD_CODEX_EXPORT=hooks
+export AGENTGUARD_TIMEPLUS_URL=http://timeplus.example.com:3218
+export AGENTGUARD_USERNAME=<timeplus-user>
+export AGENTGUARD_PASSWORD=<timeplus-password>
+```
+
+| Environment variable | Default | Purpose |
+|---|---|---|
+| `AGENTGUARD_TIMEPLUS_URL` | `http://localhost:3218` | Timeplus base URL |
+| `AGENTGUARD_INGEST_API` | `timeplusd` | `timeplusd` (port 3218) or `rest` (the Timeplus REST API, port 8000) |
+| `AGENTGUARD_WORKSPACE` | `default` | REST API workspace id; `default` is correct for self-hosted |
+| `AGENTGUARD_DATABASE` | `ag` | Database of the AgentGuard app |
+| `AGENTGUARD_STREAM` | `agentguard_hook_events` | Target stream |
+| `AGENTGUARD_USERNAME` | `proton` | Timeplus username (Basic auth) |
+| `AGENTGUARD_PASSWORD` | _(empty)_ | Timeplus password (Basic auth) |
+
+These are the settings the other hook-event plugins use, with the same
+meaning. They have no flags.
+
+Each of the 14 hooks becomes one row:
+
+| Column | Value |
+|---|---|
+| `hook_name` | The hook in snake case: `session_start`, `session_end`, `user_prompt_submit`, `pre_tool_use`, `post_tool_use`, `pre_model_request`, `post_model_request`, `stop`, `interrupt`, `subagent_start`, `permission_request`, `pre_compact`, `post_compact`. `SubagentStop` is written as `subagent_ended`, the name the stream already uses for it. |
+| `agent_type` | `codex` |
+| `session_id` | The Codex session id |
+| `run_id` | The turn id, or the session id on hooks without a turn (`SessionStart`, `SessionEnd`) |
+| `agent_id`, `deployment_id`, `deployment_name` | From the settings above |
+| `tool_name` | The tool, on tool and permission hooks |
+| `model`, `provider` | The model slug; the provider from the session transcript, or `openai` |
+| `hook_decision` | `observe` |
+| `event_data` | The Codex hook payload as received (`prompt`, `last_assistant_message`, `tool_input`, `tool_response`, `tool_use_id`, `token_usage`, `cwd`, `source`, `trigger`, and the subagent's `agent_id` and `agent_type`), plus the two keys below |
+
+Two keys are added to `event_data`:
+
+- `agentguard.export` is always `hooks`. On the `otel` path the app copies
+  some spans into `agentguard_hook_events` with the same `agent_type`; this
+  key is how a view tells a row written by the plugin from a copied one.
+- `agentguard.duration_ms` is on closing events that had an opening event:
+  `post_tool_use`, `post_model_request`, `post_compact`, `subagent_ended` and
+  `session_end`. See [Pairing and timing](#pairing-and-timing).
+
+The rows of one hook process go out in a single request with a 2 second
+timeout, so `SessionEnd` and `Interrupt` finish inside Codex's 3 second limit.
+
+Check what arrived with:
+
+```sql
+SELECT event_time, hook_name, session_id, run_id, tool_name, model
+FROM table(ag.agentguard_hook_events)
+WHERE agent_type = 'codex' AND json_value(event_data, '$."agentguard.export"') = 'hooks'
+ORDER BY event_time DESC
+LIMIT 20;
+```
+
+The app does not turn these rows into `agentguard_cim_event` and
+`agentguard_cim_metrics` rows yet. That is
+[timeplus-io/apps#71](https://github.com/timeplus-io/apps/issues/71); until it
+ships, the `hooks` export fills `agentguard_hook_events` only.
+
 ## What gets captured
 
 The plugin handles all 14 events in the
-[Codex hooks reference](https://developers.openai.com/codex/hooks). Each event
-becomes one span, exported with the OTel service name `codex`, which the
-AgentGuard app reports as the agent type.
+[Codex hooks reference](https://developers.openai.com/codex/hooks). On the
+`otel` export, described in the rest of this section, each event becomes one
+span, exported with the OTel service name `codex`, which the AgentGuard app
+reports as the agent type. The `hooks` export handles the same 14 events; its
+row format is under [Hook-event export](#hook-event-export).
 
 | Codex hook | Emitted span | What it carries |
 |---|---|---|
@@ -236,7 +318,7 @@ status and token usage.
 ## Development
 
 ```bash
-make test    # unit tests; the end-to-end telemetry tests are skipped unless the SDK is installed
+make test    # unit tests; the end-to-end OTel tests are skipped unless the SDK is installed
 make build   # sdist + wheel into dist/ (needs hatch)
 ```
 

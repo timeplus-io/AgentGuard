@@ -223,6 +223,47 @@ Included hooks: `on_session_start`, `on_session_end`, `on_session_finalize`, `on
 | `assistant_message` | `json_value(event_data, '$.assistant_response')` — populated on `post_llm_call` (`llm_response`) events |
 | `raw_event_data` | `event_data` (full original JSON) |
 
+#### Codex (hook-event export)
+
+Source: `agentguard_hook_events WHERE agent_type = 'codex'`, rows whose `event_data` has `"agentguard.export": "hooks"`.
+
+The Codex plugin has two export paths and uses one of them. On the default path it sends OTel spans, which the app's OpenInference views (`mv_cim_openinference`, `mv_cim_openinference_hooks`) turn into CIM events. On the hook-event path (`AGENTGUARD_CODEX_EXPORT=hooks`, plugin 0.3.0 or later) it writes the rows described here.
+
+> **Status:** the plugin writes these rows; the app's `mv_cim_codex` and Codex metrics views that read them are [timeplus-io/apps#71](https://github.com/timeplus-io/apps/issues/71). The tables below are the mapping the rows are shaped for.
+
+> **Why the marker:** on the OTel path the app's bridge views copy some spans into `agentguard_hook_events` with `agent_type = 'codex'` (`llm_input`, `llm_output`, `before_tool_call`, `after_tool_call`, `session_start`, `session_end`, `subagent_ended`, `pre_compact`, `post_compact`, `interrupt`, `permission_request`). Those sessions already have CIM events from the OpenInference views. A view over the hook-event path must take only rows with the `agentguard.export` key, or it would count them twice.
+
+> **`run_id` for Codex:** the Codex `turn_id` when the hook has one, otherwise the `session_id` (`session_start`, `session_end`).
+
+| `hook_name` | Codex hook | CIM `event_type` |
+|-----------|---------|---------|
+| `session_start` | `SessionStart` | `session_start` |
+| `subagent_start` | `SubagentStart` | `session_start` (the sub-agent's `agent_id` and `agent_type` are in `event_data`) |
+| `session_end` | `SessionEnd` | `session_end` |
+| `user_prompt_submit` | `UserPromptSubmit` | `user_input` |
+| `stop` | `Stop` | `llm_response` |
+| `pre_tool_use` | `PreToolUse` | `tool_invoke` |
+| `post_tool_use` | `PostToolUse` | `tool_complete` |
+| `post_model_request` | `PostModelRequest` | LLM call: source of the `llm.*` metrics, one `llm.call` per request attempt |
+| `pre_model_request` | `PreModelRequest` | not in CIM |
+| `subagent_ended`, `pre_compact`, `post_compact`, `interrupt`, `permission_request` | `SubagentStop`, `PreCompact`, `PostCompact`, `Interrupt`, `PermissionRequest` | not in CIM; read from `agentguard_hook_events` by Agent Rooms |
+
+| CIM field | Source in the row |
+|-----------|---------|
+| `agent_type` | `'codex'` |
+| `agent_id`, `deployment_id`, `session_id`, `run_id` | columns |
+| `provider`, `model` | columns (`provider` is read from the session transcript, default `openai`) |
+| `tool_name` | `tool_name` column |
+| `tool_input` | `json_query(event_data, '$.tool_input')` |
+| `tool_result` | `json_query(event_data, '$.tool_response')` |
+| `tool_duration_ms` | `event_data` key `agentguard.duration_ms` on `post_tool_use` |
+| `user_message` | `json_value(event_data, '$.prompt')` |
+| `assistant_message` | `json_value(event_data, '$.last_assistant_message')` |
+| working directory | `json_value(event_data, '$.cwd')` |
+| token usage | `event_data.token_usage` on `post_model_request`: `input_tokens`, `output_tokens`, `total_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `reasoning_output_tokens`. Codex counts cached tokens inside `input_tokens`. |
+| LLM latency | `event_data` key `agentguard.duration_ms` on `post_model_request` |
+| `raw_event_data` | `event_data` (the Codex hook payload plus the two `agentguard.*` keys) |
+
 ---
 
 ## 3. CIM Metrics Layer

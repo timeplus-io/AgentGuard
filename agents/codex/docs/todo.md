@@ -23,7 +23,13 @@ OTLP/HTTP traces  ──►  Timeplus OTLP input :4318  ──►  otel_traces
                                  agentguard_cim_event / agentguard_cim_metrics
 ```
 
-Consequences of this choice:
+From plugin 0.3.0 the hook-event ingest exists as an **alternative** export
+(`AGENTGUARD_CODEX_EXPORT=hooks`, issue #321): one `agentguard_hook_events` row
+per hook with `agent_type = 'codex'`, never together with the OTel export. The
+app views that read those rows are timeplus-io/apps#71. The rest of this
+document describes the default OTel path.
+
+Consequences of this choice (on the OTel path):
 
 - Codex never writes `agentguard_hook_events`; `agent_type`, provider, model and
   hook identity must be encoded in the OTel resource/span attributes.
