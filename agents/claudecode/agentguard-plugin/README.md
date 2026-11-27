@@ -103,6 +103,8 @@ Claude Code has no hook per model request, so the plugin reads token usage from 
 
 `_llm_usage` is the usage of the **turn**, not of the session: `{ scope: "turn", input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, total_tokens, duration_ms, llm_calls, model, context_tokens, models[] }`. `model` is the model of the last request, `context_tokens` the prompt size of the last main-thread request (input + cache read + cache write), and `models[]` the same counts per model. To get totals, sum the `llm_call` rows; do not add `_llm_usage` to them.
 
+Claude Code writes the last response of a turn to the transcript shortly after `Stop` fires (about 100 ms), so on `Stop` the plugin re-reads the transcript until that response is there, for at most 1.5 s. A turn that made no model request waits the full 1.5 s.
+
 Limits: requests that Claude Code does not write to the transcript (for example compaction and its small background requests) are not counted; a turn that ends without `Stop` is reported with the next `Stop`; a sub-agent that is resumed is read from the start of its transcript again.
 
 > **`run_id` note:** `run_id` is the id of the turn. Claude Code sends it as `prompt_id` on the hooks that fire inside a turn, and it is the same from `UserPromptSubmit` to the `Stop` of that turn, so grouping a session by `run_id` gives its turns. The `prompt_context` / `llm_context` rows take the `prompt_id` of the hook that triggered them (also in `event_data.prompt_id`); `llm_call` rows take the turn the request was made in, read from the transcript. Hooks outside a turn (`SessionStart`, `PostModelSwitch`) and Claude Code versions that do not send `prompt_id` have `run_id` equal to `session_id`.

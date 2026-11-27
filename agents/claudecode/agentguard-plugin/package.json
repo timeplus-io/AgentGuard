@@ -1,6 +1,6 @@
 {
   "name": "@timeplus/agentguard-claudecode-plugin",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "AgentGuard security monitoring hook for Claude Code",
   "type": "module",
   "main": "./dist/index.js",

@@ -2,7 +2,7 @@
 import { resolveConfig } from "./config.js";
 import { send, sendBatch } from "./timeplus-client.js";
 import { normalize, normalizeContextEvent, normalizeLlmCallEvents } from "./normalize.js";
-import { readTranscript, readTranscriptCalls, summarizeCalls, type LlmCall } from "./transcript.js";
+import { readTranscript, readTranscriptCalls, readTurnCalls, summarizeCalls, type LlmCall } from "./transcript.js";
 
 // Only these two hooks produce a companion context event carrying the transcript.
 // UserPromptSubmit → prompt_context (context before the new turn begins)
@@ -86,7 +86,9 @@ async function main(): Promise<void> {
   if (hookEventName === "Stop") {
     const transcriptPath = typeof input["transcript_path"] === "string" ? input["transcript_path"] : null;
     if (transcriptPath) {
-      llmCalls = readTranscriptCalls(transcriptPath);
+      // Waits for the last response of the turn to reach the file; the
+      // llm_context event below reads the transcript after this, so it gets it too.
+      llmCalls = await readTurnCalls(transcriptPath);
       input = { ...input, _llm_usage: summarizeCalls(llmCalls) };
     }
   } else if (hookEventName === "SubagentStop") {
