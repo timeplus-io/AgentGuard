@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, unlinkSync, mkdirSync } from "fs";
+import { writeFileSync, appendFileSync, unlinkSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { readTranscript, readTranscriptCalls, readTranscriptUsage } from "./transcript.js";
+import { readTranscript, readTranscriptCalls, readTranscriptUsage, readTurnCalls } from "./transcript.js";
 
 function makeTmpPath(): string {
   const dir = join(tmpdir(), "agentguard-test");
@@ -456,5 +456,49 @@ describe("readTranscriptCalls", () => {
     const usage = readTranscriptUsage(tmpPath);
     expect(usage.llm_calls).toBe(2);
     expect(usage.context_tokens).toBe(100);
+  });
+});
+
+describe("readTurnCalls (the last response is written after Stop fires)", () => {
+  let tmpPath: string;
+
+  beforeEach(() => {
+    tmpPath = makeTmpPath();
+  });
+
+  afterEach(() => {
+    try { unlinkSync(tmpPath); } catch { /* ignore */ }
+  });
+
+  const toolCall = block("msg_1", { ts: "2026-01-01T00:00:01.000Z", output: 5, stopReason: "tool_use" });
+  const finalReply = block("msg_2", { ts: "2026-01-01T00:00:02.000Z", output: 7, stopReason: "end_turn" });
+
+  it("returns at once when the final response is already there", async () => {
+    writeFileSync(tmpPath, [toolCall, finalReply].join("\n"));
+    const started = Date.now();
+    const calls = await readTurnCalls(tmpPath, { waitMs: 2000, pollMs: 10 });
+    expect(calls.map((c) => c.message_id)).toEqual(["msg_1", "msg_2"]);
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it("waits for a final response that arrives late", async () => {
+    writeFileSync(tmpPath, toolCall + "\n");
+    setTimeout(() => appendFileSync(tmpPath, finalReply + "\n"), 80);
+    const calls = await readTurnCalls(tmpPath, { waitMs: 2000, pollMs: 10 });
+    expect(calls.map((c) => c.message_id)).toEqual(["msg_1", "msg_2"]);
+  });
+
+  it("waits for the only response of a turn without tool calls", async () => {
+    writeFileSync(tmpPath, [block("msg_0", { ts: "2026-01-01T00:00:00.000Z", stopReason: "end_turn" }), stopMarker()].join("\n") + "\n");
+    setTimeout(() => appendFileSync(tmpPath, finalReply + "\n"), 80);
+    const calls = await readTurnCalls(tmpPath, { waitMs: 2000, pollMs: 10 });
+    expect(calls.map((c) => c.message_id)).toEqual(["msg_2"]);
+  });
+
+  it("gives up after the wait and returns what is there", async () => {
+    writeFileSync(tmpPath, toolCall + "\n");
+    const calls = await readTurnCalls(tmpPath, { waitMs: 60, pollMs: 10 });
+    expect(calls.map((c) => c.message_id)).toEqual(["msg_1"]);
+    expect(await readTurnCalls("/nonexistent/transcript.jsonl", { waitMs: 30, pollMs: 10 })).toEqual([]);
   });
 });

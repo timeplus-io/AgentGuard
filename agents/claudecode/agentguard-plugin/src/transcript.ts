@@ -287,6 +287,37 @@ export function summarizeCalls(calls: LlmCall[]): TranscriptUsage {
   return result;
 }
 
+// Claude Code buffers transcript writes: when the Stop hook starts, the last
+// response of the turn (the one that ended it) is usually not in the file yet;
+// it lands about 100 ms later. Read too early and that request is lost for
+// good, because the next Stop only reads what follows this turn's end marker.
+const FLUSH_WAIT_MS = 1500;
+const FLUSH_POLL_MS = 50;
+
+/** True once the transcript holds the response that ended the turn. */
+function turnIsComplete(calls: LlmCall[]): boolean {
+  const last = calls[calls.length - 1];
+  return last !== undefined && last.stop_reason !== "tool_use";
+}
+
+/**
+ * The model requests of the turn that is ending, for the Stop hook. Re-reads
+ * the transcript until its last request is the one that ended the turn (any
+ * stop reason but `tool_use`), for at most `waitMs`; then returns what is there.
+ */
+export async function readTurnCalls(
+  transcriptPath: string,
+  opts: { waitMs?: number; pollMs?: number } = {},
+): Promise<LlmCall[]> {
+  const deadline = Date.now() + (opts.waitMs ?? FLUSH_WAIT_MS);
+  const pollMs = opts.pollMs ?? FLUSH_POLL_MS;
+  for (;;) {
+    const calls = readTranscriptCalls(transcriptPath);
+    if (turnIsComplete(calls) || Date.now() >= deadline) return calls;
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+}
+
 /**
  * Token usage of the turn that is ending: the model requests since the previous
  * Stop, counted once each. Returns a zero-value struct if the file cannot be
