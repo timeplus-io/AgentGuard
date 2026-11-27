@@ -7,8 +7,10 @@ collector — a missing SDK is one of the failures the hook must swallow.
 an in-process OTLP/HTTP receiver.
 """
 
+import contextlib
 import http.server
 import importlib.util
+import io
 import json
 import os
 import socket
@@ -385,6 +387,7 @@ class ResolveTests(unittest.TestCase):
         "AGENTGUARD_DEPLOYMENT_ID",
         "AGENTGUARD_DEPLOYMENT_NAME",
         "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "AGENTGUARD_CODEX_EXPORT",
     )
 
     def setUp(self) -> None:
@@ -435,6 +438,26 @@ class ResolveTests(unittest.TestCase):
         self.assertEqual(self.cli.resolve_deployment_id(None), "local")
         self.assertEqual(self.cli.resolve_deployment_name(None), "Local Dev")
         self.assertEqual(self.cli.resolve_endpoint(None), "http://localhost:4318")
+
+    def test_export_defaults_to_otel(self) -> None:
+        self.assertEqual(self.cli.resolve_export(None), "otel")
+        os.environ["AGENTGUARD_CODEX_EXPORT"] = ""
+        self.assertEqual(self.cli.resolve_export(None), "otel")
+
+    def test_export_flag_wins_over_env(self) -> None:
+        os.environ["AGENTGUARD_CODEX_EXPORT"] = "otel"
+        self.assertEqual(self.cli.resolve_export("hooks"), "hooks")
+        os.environ["AGENTGUARD_CODEX_EXPORT"] = " Hooks "
+        self.assertEqual(self.cli.resolve_export(None), "hooks")
+
+    def test_unknown_export_falls_back_to_otel_and_says_so(self) -> None:
+        # No value selects both paths: "both" is as unknown as a typo.
+        for value in ("both", "otel,hooks", "hook"):
+            with self.subTest(value=value):
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    self.assertEqual(self.cli.resolve_export(value), "otel")
+                self.assertIn(value, stderr.getvalue())
 
 
 if __name__ == "__main__":

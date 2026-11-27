@@ -12,14 +12,14 @@ AgentGuard monitors AI coding agents by installing a lightweight hook plugin tha
 
 The AgentGuard app must already be installed on the target Timeplus — it creates the `ag.agentguard_hook_events` stream the plugins write to. If the user has not installed it, point them to https://github.com/timeplus-io/apps/tree/main/apps/agentguard first.
 
-Three hook-event agent types are supported, plus Codex through OTel spans:
+Three hook-event agent types are supported, plus Codex, which exports OTel spans by default and can write hook events instead:
 
 | Agent | Plugin package | Install method |
 |-------|---------------|----------------|
 | Claude Code | `@timeplus/agentguard-claudecode-plugin` (npm) | npm global install + `~/.claude/settings.json` hooks |
 | OpenClaw | `@timeplus/agentguard-openclaw-plugin` (npm) | `openclaw plugins install` + `openclaw.json` config |
 | Hermes | `agentguard-hermes-plugin` (pip) | pip install + `hermes plugins enable` + env vars |
-| Codex | `timeplus-agentguard-codex-plugin` (pip) | pip install + `~/.codex/hooks.json` + env vars (OTel spans) |
+| Codex | `timeplus-agentguard-codex-plugin` (pip) | pip install + `~/.codex/hooks.json` + env vars (OTel spans, or hook events) |
 
 ## Prerequisites
 
@@ -28,7 +28,7 @@ Three hook-event agent types are supported, plus Codex through OTel spans:
 
 ## Shared configuration values
 
-Every hook-event agent (Claude Code, OpenClaw, Hermes) needs these values. Codex only uses `AGENT_ID`, `DEPLOYMENT_ID`, `DEPLOYMENT_NAME`, and an OTLP endpoint — skip the Timeplus URL, ingest mode, and credentials for it. Ask the user to provide all applicable values before running the commands. Use the default value as a hint but ask the user to explicitly confirm or give a different value.
+Every hook-event agent (Claude Code, OpenClaw, Hermes) needs these values. Codex on its default OTel export only uses `AGENT_ID`, `DEPLOYMENT_ID`, `DEPLOYMENT_NAME`, and an OTLP endpoint — skip the Timeplus URL, ingest mode, and credentials for it. Codex on the hook-event export needs the same values as the other agents. Ask the user to provide all applicable values before running the commands. Use the default value as a hint but ask the user to explicitly confirm or give a different value.
 
 | Value | Default | Description |
 |-------|---------|-------------|
@@ -281,7 +281,7 @@ Modify the shell configuration file to set the environment variables by the user
 
 ## Codex
 
-> **Early support.** Codex support exports OTel spans (not `agentguard_hook_events`) and covers all 14 Codex lifecycle hooks (from 0.2.0; earlier versions covered five). Point users at the [plugin README](../../agents/codex/agentguard-plugin/README.md) and [implementation TODO](../../agents/codex/docs/todo.md) for the open items.
+> **Early support.** Codex support exports OTel spans by default, or writes `agentguard_hook_events` when the hook-event export is selected (from 0.3.0), and covers all 14 Codex lifecycle hooks (from 0.2.0; earlier versions covered five). Point users at the [plugin README](../../agents/codex/agentguard-plugin/README.md) and [implementation TODO](../../agents/codex/docs/todo.md) for the open items.
 
 ### 1. Install the plugin
 
@@ -297,7 +297,9 @@ Merge [`agents/codex/agentguard-plugin/hooks.json`](../../agents/codex/agentguar
 
 ### 3. Set environment variables
 
-Codex uses the OTLP endpoint rather than `TIMEPLUS_URL` / `INGEST_API` / `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD`:
+Ask which export the user wants. Use the default (OTel) unless the app's OTLP port `4318` is not reachable from the agent host, or the user asks for hook events. Never configure both: the plugin uses exactly one.
+
+**OTel export (default).** Codex uses the OTLP endpoint rather than `TIMEPLUS_URL` / `INGEST_API` / `TIMEPLUS_USER` / `TIMEPLUS_PASSWORD`:
 
 ```bash
 export AGENTGUARD_AGENT_ID=<AGENT_ID>
@@ -305,6 +307,22 @@ export AGENTGUARD_DEPLOYMENT_ID=<DEPLOYMENT_ID>
 export AGENTGUARD_DEPLOYMENT_NAME="<DEPLOYMENT_NAME>"
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://<timeplus-host>:4318
 ```
+
+**Hook-event export.** Codex writes `ag.agentguard_hook_events` with `agent_type = 'codex'`, using the shared values:
+
+```bash
+export AGENTGUARD_AGENT_ID=<AGENT_ID>
+export AGENTGUARD_DEPLOYMENT_ID=<DEPLOYMENT_ID>
+export AGENTGUARD_DEPLOYMENT_NAME="<DEPLOYMENT_NAME>"
+export AGENTGUARD_CODEX_EXPORT=hooks
+export AGENTGUARD_TIMEPLUS_URL=<TIMEPLUS_URL>
+export AGENTGUARD_INGEST_API=<INGEST_API>
+export AGENTGUARD_USERNAME=<TIMEPLUS_USER>
+export AGENTGUARD_PASSWORD=<TIMEPLUS_PASSWORD>
+export AGENTGUARD_DATABASE=<AGENTGUARD_DATABASE>
+```
+
+Tell the user that the app does not yet turn Codex hook-event rows into CIM events and metrics ([timeplus-io/apps#71](https://github.com/timeplus-io/apps/issues/71)), so on this export the rows are in `agentguard_hook_events` only.
 
 ### 4. Trust the hooks
 

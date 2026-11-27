@@ -1,9 +1,15 @@
-"""Translate Codex hook events into AgentGuard spans.
+"""Translate Codex hook events into AgentGuard telemetry.
 
 Codex invokes one short-lived command per hook event and writes a single
 JSON object to stdin. Every object carries ``hook_event_name`` and
 ``session_id``; turn-scoped events also carry ``turn_id``. This module only
-does the translation — the sink owns span export and start-time bookkeeping.
+does the translation — the sink owns the export and start-time bookkeeping.
+
+The translation is the same on both export paths; only the sink differs. The
+OTel sink (:class:`agentguard_codex.sink.SdkSink`) turns each call into a span.
+The hook-event sink (:class:`agentguard_codex.hookevents.HookEventSink`) turns
+each call into one ``agentguard_hook_events`` row, including ``PreToolUse``,
+which has no span of its own.
 
 Each event becomes at most one span. Three of them carry the kind attributes
 the AgentGuard app's OpenInference views key on:
@@ -31,7 +37,11 @@ DEFAULT_PROVIDER = "openai"
 
 
 class HookSink(Protocol):
-    """What :func:`dispatch` needs: emit a span, and pair Pre/Post events."""
+    """What :func:`dispatch` needs: emit an event, and pair Pre/Post events.
+
+    ``payload`` is the Codex hook payload as received. A span sink ignores it;
+    the hook-event sink stores it as the row's ``event_data``.
+    """
 
     def emit_span(
         self,
@@ -43,7 +53,19 @@ class HookSink(Protocol):
         attributes: dict[str, Any] | None = None,
         start_time_ns: int | None = None,
         error: str | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> None: ...
+
+    def emit_no_span(
+        self,
+        *,
+        session_id: str,
+        run_id: str | None = None,
+        attributes: dict[str, Any] | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        """An event that opens a pair and has no span of its own (``PreToolUse``)."""
+        ...
 
     def mark_start(self, key: str) -> None: ...
 
@@ -154,16 +176,27 @@ def _emit(
     task_id: str | None = None,
     start_time_ns: int | None = None,
     error: str | None = None,
+    span: bool = True,
 ) -> None:
     attributes = {**_common_attributes(event), **(extra or {})}
+    attributes = {k: v for k, v in attributes.items() if v is not None}
+    if not span:
+        hooks.emit_no_span(
+            session_id=event["session_id"],
+            run_id=event.get("turn_id"),
+            attributes=attributes,
+            payload=event,
+        )
+        return
     hooks.emit_span(
         HOOK_SPAN_NAMES[event["hook_event_name"]],
         session_id=event["session_id"],
         run_id=event.get("turn_id"),
         task_id=task_id,
-        attributes={k: v for k, v in attributes.items() if v is not None},
+        attributes=attributes,
         start_time_ns=start_time_ns,
         error=error,
+        payload=event,
     )
 
 
@@ -217,8 +250,18 @@ def _tool_key(event: dict[str, Any]) -> str:
     return _pair_key("tool", event, event.get("tool_use_id"))
 
 
+def _tool_attributes(event: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "tool.name": event.get("tool_name"),
+        "tool.parameters": _as_string(event.get("tool_input")),
+        "tool_use_id": event.get("tool_use_id"),
+    }
+
+
 def _pre_tool_use(event: dict[str, Any], hooks: HookSink) -> None:
     hooks.mark_start(_tool_key(event))
+    # No span: the `tool` span of PostToolUse covers the call from here on.
+    _emit(event, hooks, _tool_attributes(event), span=False)
 
 
 def _post_tool_use(event: dict[str, Any], hooks: HookSink) -> None:
@@ -227,10 +270,8 @@ def _post_tool_use(event: dict[str, Any], hooks: HookSink) -> None:
         hooks,
         {
             "openinference.span.kind": "TOOL",
-            "tool.name": event.get("tool_name"),
-            "tool.parameters": _as_string(event.get("tool_input")),
+            **_tool_attributes(event),
             "output.value": _as_string(event.get("tool_response")),
-            "tool_use_id": event.get("tool_use_id"),
         },
         task_id=event.get("tool_use_id"),
         start_time_ns=hooks.take_start(_tool_key(event)),

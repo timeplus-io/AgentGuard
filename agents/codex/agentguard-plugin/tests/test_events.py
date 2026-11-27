@@ -72,8 +72,10 @@ class SpanTestCase(unittest.TestCase):
         """Dispatch *event* and return the single ``emit_span`` call's kwargs."""
         hooks = hooks or self.hooks
         self.assertTrue(dispatch(event, hooks))
-        self.assertEqual([name for name, _, _ in hooks.calls], ["emit_span"])
-        _, args, kwargs = hooks.calls[0]
+        spans = [call for call in hooks.calls if call[0] == "emit_span"]
+        self.assertEqual(len(spans), 1, hooks.calls)
+        _, args, kwargs = spans[0]
+        self.assertIs(kwargs.pop("payload"), event)
         return {"name": args[0], **kwargs}
 
 
@@ -168,19 +170,39 @@ class CoreEventTests(SpanTestCase):
 
         self.assertEqual(span["attributes"], {"agentguard.hook_name": "user_prompt_submit"})
 
-    def test_pre_tool_use_only_records_the_start(self) -> None:
-        handled = dispatch(
-            {
-                **COMMON,
-                "hook_event_name": "PreToolUse",
-                "tool_use_id": "call_1",
-                "tool_name": "Bash",
-            },
-            self.hooks,
-        )
+    def test_pre_tool_use_records_the_start_and_emits_no_span(self) -> None:
+        event = {
+            **COMMON,
+            "hook_event_name": "PreToolUse",
+            "tool_use_id": "call_1",
+            "tool_name": "Bash",
+            "tool_input": {"command": "ls"},
+        }
 
-        self.assertTrue(handled)
-        self.assertEqual(self.hooks.calls, [])
+        self.assertTrue(dispatch(event, self.hooks))
+
+        # The span sink drops this call; the hook-event sink writes a row.
+        self.assertEqual(
+            self.hooks.calls,
+            [
+                (
+                    "emit_no_span",
+                    (),
+                    {
+                        "session_id": "s1",
+                        "run_id": "t1",
+                        "attributes": {
+                            **COMMON_ATTRIBUTES,
+                            "agentguard.hook_name": "pre_tool_use",
+                            "tool.name": "Bash",
+                            "tool.parameters": '{"command": "ls"}',
+                            "tool_use_id": "call_1",
+                        },
+                        "payload": event,
+                    },
+                )
+            ],
+        )
         self.assertEqual(len(self.hooks.marked), 1)
 
     def test_post_tool_use(self) -> None:

@@ -137,9 +137,10 @@ export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
 
 ## Codex
 
-> **Status: early.** The Codex plugin exports OTel spans instead of writing
-> `agentguard_hook_events`. It covers all 14 Codex lifecycle hooks (from 0.2.0;
-> earlier versions covered five). See the
+> **Status: early.** By default the Codex plugin exports OTel spans instead of
+> writing `agentguard_hook_events`; from 0.3.0 it can write
+> `agentguard_hook_events` instead (step 3). It covers all 14 Codex lifecycle
+> hooks (from 0.2.0; earlier versions covered five). See the
 > [plugin README](../agents/codex/agentguard-plugin/README.md) for the span
 > reference and for upgrading a five-hook configuration, and the
 > [implementation TODO](../agents/codex/docs/todo.md) for the open items.
@@ -161,9 +162,21 @@ export AGENTGUARD_DEPLOYMENT_NAME="Local Dev"
    export OTEL_EXPORTER_OTLP_ENDPOINT=http://<timeplus-host>:4318
    ```
 
+   To write `agentguard_hook_events` instead of exporting spans (for example when port `4318` is not reachable), select the hook-event export and give it the same settings as the other plugins. `OTEL_EXPORTER_OTLP_ENDPOINT` is then not used:
+
+   ```bash
+   export AGENTGUARD_CODEX_EXPORT=hooks
+   export AGENTGUARD_TIMEPLUS_URL=http://<timeplus-host>:3218
+   export AGENTGUARD_USERNAME=<timeplus-user>
+   export AGENTGUARD_PASSWORD=<timeplus-password>
+   # export AGENTGUARD_INGEST_API=rest   # with AGENTGUARD_TIMEPLUS_URL on port 8000
+   ```
+
+   The two exports are alternatives: the plugin uses exactly one, and an unknown `AGENTGUARD_CODEX_EXPORT` value falls back to `otel`. The app does not yet turn Codex hook-event rows into CIM events and metrics ([timeplus-io/apps#71](https://github.com/timeplus-io/apps/issues/71)).
+
 4. Start Codex and run `/hooks` once to review and trust the AgentGuard entries. Codex skips new or changed hooks until you do, so repeat this after adding events on an upgrade.
 
-Codex spans go to the app's OTLP/HTTP input (port `4318`), not to `agentguard_hook_events`, so the Verify query below does not apply to Codex. Check Codex with:
+With the default export, Codex spans go to the app's OTLP/HTTP input (port `4318`), not to `agentguard_hook_events`, so the Verify query below does not apply. (With `AGENTGUARD_CODEX_EXPORT=hooks` it does: look for `agent_type = 'codex'`.) Check the default export with:
 
 ```sql
 SELECT _tp_time, span_name, span_attributes['session.id'] AS session_id
@@ -198,7 +211,8 @@ Rows should appear within a few seconds of agent activity. If nothing arrives, c
 | `AGENTGUARD_AGENT_ID` | — | hostname | Identifies this agent instance (Claude Code, Hermes, Codex) |
 | `AGENTGUARD_DEPLOYMENT_ID` | `deploymentId` | `default` / `local` | Logical deployment group |
 | `AGENTGUARD_DEPLOYMENT_NAME` | `deploymentName` | | Human-readable deployment label |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | `http://localhost:4318` | Codex: OTLP/HTTP endpoint for span export |
+| `AGENTGUARD_CODEX_EXPORT` | — | `otel` | Codex: `otel` (spans to the OTLP input) or `hooks` (rows in `agentguard_hook_events`, using the Timeplus URL, ingest API and credentials above) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | `http://localhost:4318` | Codex: OTLP/HTTP endpoint for span export (`otel` export only) |
 | `AGENTGUARD_FLUSH_MS` / `AGENTGUARD_BATCH_SIZE` | `flushMs` / `batchSize` | `2000` / `50` | OpenClaw batching |
 | `AGENTGUARD_TRANSCRIPT_MESSAGES` / `AGENTGUARD_TRANSCRIPT_CONTENT_CHARS` | — | `50` / `10000` | Claude Code context-event truncation |
 

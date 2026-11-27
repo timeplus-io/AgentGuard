@@ -34,7 +34,7 @@ AgentGuard itself — the streaming pipeline, detection rules, and dashboard —
    | Hermes Agent | `pip install agentguard-hermes-plugin` | [README](agents/hermes/agentguard-plugin/README.md) |
    | OpenAI Codex | `pip install timeplus-agentguard-codex-plugin` | [README](agents/codex/agentguard-plugin/README.md) |
 
-   [`docs/plugin-install.md`](docs/plugin-install.md) covers configuration for all of them. The Codex plugin works differently from the others: it exports OTel spans to the app's OTLP input instead of writing `agentguard_hook_events`. An agent can also do the install for you with the [`skills/agentguard`](skills/agentguard/SKILL.md) skill.
+   [`docs/plugin-install.md`](docs/plugin-install.md) covers configuration for all of them. The Codex plugin works differently from the others: by default it exports OTel spans to the app's OTLP input instead of writing `agentguard_hook_events`, and it can be switched to write `agentguard_hook_events` (`AGENTGUARD_CODEX_EXPORT=hooks`). An agent can also do the install for you with the [`skills/agentguard`](skills/agentguard/SKILL.md) skill.
 3. **Verify** events are arriving:
 
    ```sql

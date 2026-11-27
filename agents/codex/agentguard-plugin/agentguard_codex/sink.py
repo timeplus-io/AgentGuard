@@ -76,6 +76,7 @@ class SdkSink:
         attributes: dict[str, Any] | None = None,
         start_time_ns: int | None = None,
         error: str | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         kwargs: dict[str, Any] = {}
         if start_time_ns is not None:
@@ -96,6 +97,9 @@ class SdkSink:
                 span.set_status(Status(StatusCode.ERROR, error))
         finally:
             span.end()
+
+    def emit_no_span(self, **_: Any) -> None:
+        """Nothing to export: the closing event's span covers the pair."""
 
     def mark_start(self, key: str) -> None:
         self._starts.mark(key)
