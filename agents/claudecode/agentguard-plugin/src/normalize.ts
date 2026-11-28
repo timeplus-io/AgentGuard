@@ -84,6 +84,13 @@ export function normalize(input: ClaudeCodeInput, config: AgentGuardConfig): Hoo
     ? (typeof llmUsage.model === "string" ? llmUsage.model : "")
     : "";
 
+  // Claude Code also fires SubagentStop for its own helpers (e.g. the compaction
+  // summarizer): no SubagentStart, no Agent tool call, empty agent_type. Mark
+  // them so a consumer can leave them out of the sub-agents of a session.
+  const eventData = hookEventName === "SubagentStop" && !input.agent_type
+    ? { ...input, internal_helper: true }
+    : input;
+
   return {
     hook_name:       hookName,
     event_time:      Date.now(),
@@ -98,9 +105,50 @@ export function normalize(input: ClaudeCodeInput, config: AgentGuardConfig): Hoo
     model,
     hook_decision:   "observe",
     block_reason:    "",
-    event_data:      JSON.stringify(input),
+    event_data:      JSON.stringify(eventData),
     agent_type:      "claudecode",
   };
+}
+
+/** The sub-agent an `Agent` tool call ran to its end in the foreground, if any. */
+export function completedSubagent(input: ClaudeCodeInput): { agent_id: string; agent_type: string } | null {
+  if (input.hook_event_name !== "PostToolUse" || input.tool_name !== "Agent") return null;
+  const resp = input.tool_response as Record<string, unknown> | undefined;
+  if (!resp || resp["status"] !== "completed" || typeof resp["agentId"] !== "string" || !resp["agentId"]) return null;
+  return {
+    agent_id:   resp["agentId"],
+    agent_type: typeof resp["agentType"] === "string" ? resp["agentType"] : "",
+  };
+}
+
+/**
+ * Builds a `subagent_ended` event from the result of an `Agent` tool call, for
+ * sub-agents that end without a SubagentStop hook (Claude Code fires none for
+ * some foreground sub-agents, e.g. `web-fetch`). It has the fields of the real
+ * event that consumers read (`agent_id`, `agent_type`, `agent_transcript_path`)
+ * and `"synthetic": true` to tell it apart.
+ */
+export function normalizeSyntheticSubagentEnd(
+  input: ClaudeCodeInput,
+  config: AgentGuardConfig,
+  subagent: { agent_id: string; agent_type: string },
+  agentTranscriptPath: string,
+): HookEvent {
+  const resp = (input.tool_response ?? {}) as Record<string, unknown>;
+  return normalize({
+    session_id:            input.session_id,
+    prompt_id:             input.prompt_id,
+    hook_event_name:       "SubagentStop",
+    agent_id:              subagent.agent_id,
+    agent_type:            subagent.agent_type,
+    agent_transcript_path: agentTranscriptPath,
+    synthetic:             true,
+    source:                "agent_tool_result",
+    tool_use_id:           input.tool_use_id,
+    total_duration_ms:     resp["totalDurationMs"],
+    total_tokens:          resp["totalTokens"],
+    total_tool_use_count:  resp["totalToolUseCount"],
+  }, config);
 }
 
 /**

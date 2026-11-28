@@ -215,6 +215,7 @@ Rows should appear within a few seconds of agent activity. If nothing arrives, c
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | `http://localhost:4318` | Codex: OTLP/HTTP endpoint for span export (`otel` export only) |
 | `AGENTGUARD_FLUSH_MS` / `AGENTGUARD_BATCH_SIZE` | `flushMs` / `batchSize` | `2000` / `50` | OpenClaw batching |
 | `AGENTGUARD_TRANSCRIPT_MESSAGES` / `AGENTGUARD_TRANSCRIPT_CONTENT_CHARS` | — | `50` / `10000` | Claude Code context-event truncation |
+| `AGENTGUARD_STATE_DIR` | — | `<tmp>/agentguard-claudecode` | Claude Code: where the plugin keeps what it already sent for each sub-agent |
 
 ### Legacy hold settings
 

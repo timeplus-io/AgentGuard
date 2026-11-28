@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 import { resolveConfig } from "./config.js";
 import { send, sendBatch } from "./timeplus-client.js";
-import { normalize, normalizeContextEvent, normalizeLlmCallEvents } from "./normalize.js";
+import {
+  normalize, normalizeContextEvent, normalizeLlmCallEvents,
+  completedSubagent, normalizeSyntheticSubagentEnd,
+} from "./normalize.js";
+import { claimSubagentCalls, clearSubagentState } from "./subagent-state.js";
+import type { HookEvent } from "./timeplus-client.js";
 import { readTranscript, readTranscriptCalls, readTurnCalls, summarizeCalls, type LlmCall } from "./transcript.js";
 
 // Only these two hooks produce a companion context event carrying the transcript.
@@ -11,6 +16,10 @@ const CONTEXT_HOOKS: Record<string, "prompt_context" | "llm_context"> = {
   UserPromptSubmit: "prompt_context",
   Stop:             "llm_context",
 };
+
+function sessionIdOf(input: Record<string, unknown>): string {
+  return typeof input["session_id"] === "string" ? input["session_id"] : "";
+}
 
 async function main(): Promise<void> {
   const chunks: Buffer[] = [];
@@ -94,16 +103,39 @@ async function main(): Promise<void> {
   } else if (hookEventName === "SubagentStop") {
     const agentTranscriptPath = typeof input["agent_transcript_path"] === "string" ? input["agent_transcript_path"] : null;
     if (agentTranscriptPath) {
-      llmCalls = readTranscriptCalls(agentTranscriptPath, { sinceLastStop: false });
       subagent = {
         agent_id:   typeof input["agent_id"] === "string" ? input["agent_id"] : "",
         agent_type: typeof input["agent_type"] === "string" ? input["agent_type"] : "",
       };
+      // A resumed sub-agent stops again: send only the requests not sent before.
+      const all = readTranscriptCalls(agentTranscriptPath, { sinceLastStop: false });
+      llmCalls = all.slice(claimSubagentCalls(sessionIdOf(input), subagent.agent_id, all.length) ?? 0);
     }
   }
 
+  // A sub-agent that ran in the foreground ends with the result of its Agent
+  // tool call. Claude Code fires no SubagentStop for some of them (web-fetch),
+  // so nothing above reported it: send a synthetic subagent_ended and its
+  // requests from here, unless SubagentStop already did.
+  let syntheticEnd: HookEvent | undefined;
+  const finished = completedSubagent(input);
+  const mainTranscript = typeof input["transcript_path"] === "string" ? input["transcript_path"] : "";
+  if (finished && mainTranscript) {
+    const agentTranscriptPath = `${mainTranscript.replace(/\.jsonl$/, "")}/subagents/agent-${finished.agent_id}.jsonl`;
+    const all = readTranscriptCalls(agentTranscriptPath, { sinceLastStop: false });
+    const sentBefore = claimSubagentCalls(sessionIdOf(input), finished.agent_id, all.length);
+    subagent = finished;
+    llmCalls = all.slice(sentBefore ?? 0);
+    if (sentBefore === null) {
+      syntheticEnd = normalizeSyntheticSubagentEnd(input, config, finished, agentTranscriptPath);
+    }
+  }
+
+  if (hookEventName === "SessionEnd") clearSubagentState(sessionIdOf(input));
+
   const event = normalize(input, config);
   await send(event, config);
+  if (syntheticEnd) await send(syntheticEnd, config);
 
   if (llmCalls.length > 0) {
     await sendBatch(normalizeLlmCallEvents(input, config, llmCalls, subagent), config);

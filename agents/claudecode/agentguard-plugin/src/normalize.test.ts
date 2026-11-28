@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { normalize, normalizeContextEvent, normalizeLlmCallEvents, inferProvider } from "./normalize.js";
+import {
+  normalize, normalizeContextEvent, normalizeLlmCallEvents, inferProvider,
+  completedSubagent, normalizeSyntheticSubagentEnd,
+} from "./normalize.js";
 import type { LlmCall } from "./transcript.js";
 
 import type { AgentGuardConfig } from "./config.js";
@@ -392,6 +395,52 @@ describe("run_id is the turn id (#325)", () => {
     const [none] = normalizeLlmCallEvents({ hook_event_name: "Stop", session_id: "s1" }, BASE_CONFIG, [{ ...call, prompt_id: "" }]);
     expect(none.run_id).toBe("s1");
     expect("prompt_id" in (JSON.parse(none.event_data) as object)).toBe(false);
+  });
+});
+
+describe("sub-agent start and end (#309)", () => {
+  const agentResult = {
+    hook_event_name: "PostToolUse", session_id: "s1", prompt_id: "p1", tool_name: "Agent", tool_use_id: "toolu_1",
+    tool_response: { status: "completed", agentId: "a1b2", agentType: "web-fetch",
+      totalDurationMs: 4446, totalTokens: 5728, totalToolUseCount: 1 },
+  };
+
+  it("finds the sub-agent of a foreground Agent call that completed", () => {
+    expect(completedSubagent(agentResult)).toEqual({ agent_id: "a1b2", agent_type: "web-fetch" });
+  });
+
+  it("finds none for a background launch, another tool, another hook or a missing id", () => {
+    const launched = { ...agentResult, tool_response: { status: "async_launched", isAsync: true, agentId: "a1b2" } };
+    expect(completedSubagent(launched)).toBeNull();
+    expect(completedSubagent({ ...agentResult, tool_name: "Bash" })).toBeNull();
+    expect(completedSubagent({ ...agentResult, hook_event_name: "PreToolUse" })).toBeNull();
+    expect(completedSubagent({ ...agentResult, tool_response: { status: "completed" } })).toBeNull();
+    expect(completedSubagent({ ...agentResult, tool_response: undefined })).toBeNull();
+  });
+
+  it("builds a subagent_ended row with the fields of the real one, marked synthetic", () => {
+    const e = normalizeSyntheticSubagentEnd(
+      agentResult, BASE_CONFIG, { agent_id: "a1b2", agent_type: "web-fetch" }, "/t/s1/subagents/agent-a1b2.jsonl",
+    );
+    expect(e.hook_name).toBe("subagent_ended");
+    expect(e.session_id).toBe("s1");
+    expect(e.run_id).toBe("p1");
+    expect(e.agent_type).toBe("claudecode");
+    expect(JSON.parse(e.event_data)).toEqual({
+      session_id: "s1", prompt_id: "p1", hook_event_name: "SubagentStop",
+      agent_id: "a1b2", agent_type: "web-fetch", agent_transcript_path: "/t/s1/subagents/agent-a1b2.jsonl",
+      synthetic: true, source: "agent_tool_result", tool_use_id: "toolu_1",
+      total_duration_ms: 4446, total_tokens: 5728, total_tool_use_count: 1,
+    });
+  });
+
+  it("marks the SubagentStop of an internal helper, and only that", () => {
+    const helper = normalize({ hook_event_name: "SubagentStop", session_id: "s1", agent_id: "h1", agent_type: "" }, BASE_CONFIG);
+    expect(JSON.parse(helper.event_data)).toMatchObject({ internal_helper: true });
+    const real = normalize({ hook_event_name: "SubagentStop", session_id: "s1", agent_id: "a1", agent_type: "Explore" }, BASE_CONFIG);
+    expect("internal_helper" in (JSON.parse(real.event_data) as object)).toBe(false);
+    const start = normalize({ hook_event_name: "SubagentStart", session_id: "s1", agent_id: "a1" }, BASE_CONFIG);
+    expect("internal_helper" in (JSON.parse(start.event_data) as object)).toBe(false);
   });
 });
 
