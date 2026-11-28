@@ -81,6 +81,7 @@ Claude Code has no hook per model request, so the plugin reads token usage from 
 |----------------|--------------|
 | `Stop`         | One `llm_call` row per model request made since the previous `Stop`, and `_llm_usage` in the `event_data` of the `llm_output` row: the sum of those requests |
 | `SubagentStop` | One `llm_call` row per model request of the sub-agent, read from `agent_transcript_path` (a sub-agent has its own transcript; its requests are not in the main one) |
+| `PostToolUse` of an `Agent` call that completed | The same, for a sub-agent that ended without a `SubagentStop` hook (see [Sub-agent start and end](#sub-agent-start-and-end)) |
 
 `llm_call` rows carry the model in the `model` column, the time of the response as `event_time`, and this `event_data`:
 
@@ -105,7 +106,30 @@ Claude Code has no hook per model request, so the plugin reads token usage from 
 
 Claude Code writes the last response of a turn to the transcript shortly after `Stop` fires (about 100 ms), so on `Stop` the plugin re-reads the transcript until that response is there, for at most 1.5 s. A turn that made no model request waits the full 1.5 s.
 
-Limits: requests that Claude Code does not write to the transcript (for example compaction and its small background requests) are not counted; a turn that ends without `Stop` is reported with the next `Stop`; a sub-agent that is resumed is read from the start of its transcript again.
+Limits: requests that Claude Code does not write to the transcript (for example compaction and its small background requests) are not counted; a turn that ends without `Stop` is reported with the next `Stop`.
+
+### Sub-agent start and end
+
+Claude Code does not report every sub-agent the same way (checked on 2.1.332):
+
+| Sub-agent | `SubagentStart` | `SubagentStop` | `PostToolUse` of its `Agent` call |
+|---|---|---|---|
+| Run in the background (for example `Explore`) | yes | yes | at launch: `tool_response.status = "async_launched"` |
+| Run in the foreground as `web-fetch` | **no** | **no** | when it ends: `status = "completed"`, with `agentId`, `agentType`, `totalTokens` |
+| Internal helper (for example the compaction summarizer) | no | yes, with an empty `agent_type` | no `Agent` call |
+
+The plugin closes these gaps as follows:
+
+- **End without a hook.** On the `PostToolUse` of an `Agent` call with `status = "completed"`, when no `SubagentStop` was seen for that sub-agent, the plugin sends a `subagent_ended` row built from the tool result, and the sub-agent's `llm_call` rows. The row has `agent_id`, `agent_type` and `agent_transcript_path` like a real one, plus `"synthetic": true`, `"source": "agent_tool_result"`, `tool_use_id`, `total_duration_ms`, `total_tokens` and `total_tool_use_count`.
+- **Internal helpers.** Their `subagent_ended` row has `"internal_helper": true` in `event_data`, so a consumer can leave them out of the sub-agents of a session.
+- **No request twice.** The plugin remembers how many requests it sent for each sub-agent (a small file per sub-agent under `AGENTGUARD_STATE_DIR`, removed on `SessionEnd`). A sub-agent that is resumed and stops again only sends its new requests, and a sub-agent reported by both hooks is sent once.
+
+There is no synthetic start: the id of a sub-agent is not known before it runs. A consumer finds the start and end of a sub-agent like this:
+
+| | Signal |
+|---|---|
+| Start | `subagent_spawning`, or else the first row of the session whose `event_data.agent_id` is that sub-agent (its tool calls carry `agent_id` and `agent_type`) |
+| End | `subagent_ended` (real or synthetic). A sub-agent can be resumed, so the same `agent_id` can become active and end again |
 
 > **`run_id` note:** `run_id` is the id of the turn. Claude Code sends it as `prompt_id` on the hooks that fire inside a turn, and it is the same from `UserPromptSubmit` to the `Stop` of that turn, so grouping a session by `run_id` gives its turns. The `prompt_context` / `llm_context` rows take the `prompt_id` of the hook that triggered them (also in `event_data.prompt_id`); `llm_call` rows take the turn the request was made in, read from the transcript. Hooks outside a turn (`SessionStart`, `PostModelSwitch`) and Claude Code versions that do not send `prompt_id` have `run_id` equal to `session_id`.
 
@@ -145,6 +169,7 @@ Set these environment variables in your shell profile (e.g. `~/.zshrc` or `~/.ba
 | `AGENTGUARD_HOLDS_FAIL_POLICY`        | `deny`                      | What to return when `/api/holds` is unreachable: `deny` blocks, `allow` lets call through |
 | `AGENTGUARD_HOLDS_ENABLED`            | `false`                     | When `true`, `PreToolUse` calls `/api/holds` synchronously and may block. **Opt-in only** — the AgentGuard app's data pipeline is observability-first. |
 | `AGENTGUARD_TRANSCRIPT_MESSAGES`      | `50`                        | Max messages included in context events                                     |
+| `AGENTGUARD_STATE_DIR`                | `<tmp>/agentguard-claudecode` | Where the plugin keeps what it already sent for each sub-agent              |
 | `AGENTGUARD_TRANSCRIPT_CONTENT_CHARS` | `10000`                     | Max chars per content block in transcript                                   |
 
 Example:
